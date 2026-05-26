@@ -1,0 +1,277 @@
+/**
+ * Custom promptfoo provider that pre-fetches a cognitive scaffold from the
+ * Ejentum Logic API for the given mode, then calls OpenAI with the scaffold
+ * stitched into the system message. The baseline provider in the same config
+ * uses plain openai:chat:gpt-5.4-mini so the eval table makes the lift visible.
+ */
+
+// The Ejentum Logic API base URL. Resolved in priority order:
+//   1. `config.apiUrl` from the provider block in promptfooconfig.yaml
+//   2. `EJENTUM_API_URL` environment variable
+//   3. The default published endpoint below
+// This pattern (config -> env -> default) is the transferable lesson:
+// it lets readers point this provider at a staging endpoint, a self-hosted
+// prompt-augmentation service, or any other compatible API without editing code.
+const DEFAULT_EJENTUM_URL = 'https://ejentum-main-ab125c3.zuplo.app/logicv1/';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+function isGpt5Model(model) {
+  return model.startsWith('gpt-5') || model.includes('/gpt-5');
+}
+
+function supportsReasoningEffort(model) {
+  return isReasoningModel(model) || model.includes('gpt-oss');
+}
+
+function isReasoningModel(model) {
+  return (
+    isGpt5Model(model) ||
+    model.startsWith('o1') ||
+    model.startsWith('o3') ||
+    model.startsWith('o4') ||
+    model.includes('/o1') ||
+    model.includes('/o3') ||
+    model.includes('/o4')
+  );
+}
+
+function parseChatMessages(prompt) {
+  const trimmedPrompt = prompt.trim();
+  if (trimmedPrompt.startsWith('- role:')) {
+    // Optional dependency: only YAML chat prompts need a YAML parser.
+    // Install it in a copied example with: npm install js-yaml
+    const yaml = require('js-yaml');
+    const parsed = yaml.load(prompt);
+    return Array.isArray(parsed) ? parsed : [{ role: 'user', content: prompt }];
+  }
+
+  try {
+    const parsed = JSON.parse(prompt);
+    return Array.isArray(parsed) ? parsed : [{ role: 'user', content: prompt }];
+  } catch {
+    return [{ role: 'user', content: prompt }];
+  }
+}
+
+function getOpenAiUrl(config, env) {
+  const apiHost = config.apiHost || env.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
+  if (apiHost) {
+    return `https://${apiHost}/v1/chat/completions`;
+  }
+  const baseUrl =
+    config.apiBaseUrl ||
+    env.OPENAI_API_BASE_URL ||
+    env.OPENAI_BASE_URL ||
+    process.env.OPENAI_API_BASE_URL ||
+    process.env.OPENAI_BASE_URL ||
+    DEFAULT_OPENAI_BASE_URL;
+  return `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+}
+
+function getOpenAiKey(config, env) {
+  return (
+    config.apiKey ||
+    (config.apiKeyEnvar ? process.env[config.apiKeyEnvar] || env[config.apiKeyEnvar] : undefined) ||
+    env.OPENAI_API_KEY ||
+    process.env.OPENAI_API_KEY
+  );
+}
+
+function getOpenAiOrganization(config, env) {
+  return config.organization || env.OPENAI_ORGANIZATION || process.env.OPENAI_ORGANIZATION;
+}
+
+function getEjentumKey(config, env) {
+  return (
+    config.ejentumApiKey ||
+    (config.ejentumApiKeyEnvar
+      ? process.env[config.ejentumApiKeyEnvar] || env[config.ejentumApiKeyEnvar]
+      : undefined) ||
+    env.EJENTUM_API_KEY ||
+    process.env.EJENTUM_API_KEY
+  );
+}
+
+function getNumberOption(config, env, option, envar, defaultValue) {
+  const rawValue =
+    config[option] ??
+    env[envar] ??
+    process.env[envar] ??
+    (config.omitDefaults ? undefined : defaultValue);
+  if (rawValue == null || rawValue === '') {
+    return undefined;
+  }
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+async function getFetchWithCache() {
+  try {
+    const promptfoo = await import('promptfoo');
+    return (promptfoo.cache || promptfoo.default?.cache).fetchWithCache;
+  } catch (error) {
+    // The repository's local TypeScript runner has no built package to import.
+    try {
+      return (await import('../../src/cache.ts')).fetchWithCache;
+    } catch {
+      throw error;
+    }
+  }
+}
+
+async function fetchScaffold(fetchWithCache, config, url, key, prompt, mode, bustCache) {
+  try {
+    const { data, status } = await fetchWithCache(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: prompt, mode }),
+      },
+      undefined,
+      'json',
+      bustCache,
+      config.maxRetries,
+    );
+    if (status < 200 || status >= 300) {
+      return { error: `Ejentum API ${status}: ${JSON.stringify(data)}` };
+    }
+    const scaffold =
+      Array.isArray(data) && typeof data[0]?.[mode] === 'string' ? data[0][mode].trim() : '';
+    return scaffold
+      ? { scaffold }
+      : { error: `Ejentum API response did not include a non-empty "${mode}" scaffold.` };
+  } catch (err) {
+    return { error: `Ejentum fetch failed: ${String(err)}` };
+  }
+}
+
+function buildOpenAiBody(model, messages, scaffold, config, env) {
+  const reasoningModel = isReasoningModel(model);
+  const maxTokens = reasoningModel
+    ? undefined
+    : getNumberOption(config, env, 'max_tokens', 'OPENAI_MAX_TOKENS', 1024);
+  const maxCompletionTokens = reasoningModel
+    ? getNumberOption(config, env, 'max_completion_tokens', 'OPENAI_MAX_COMPLETION_TOKENS')
+    : undefined;
+  const temperature = reasoningModel
+    ? undefined
+    : getNumberOption(config, env, 'temperature', 'OPENAI_TEMPERATURE', 0);
+
+  return {
+    model,
+    messages: [
+      {
+        role: 'system',
+        content:
+          `Apply the cognitive scaffold below, then answer the user's task.\n\n` +
+          `[COGNITIVE SCAFFOLD]\n${scaffold}\n[END SCAFFOLD]`,
+      },
+      ...messages,
+    ],
+    ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+    ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(supportsReasoningEffort(model) && config.reasoning_effort
+      ? { reasoning_effort: config.reasoning_effort }
+      : {}),
+    ...(isGpt5Model(model) && config.verbosity ? { verbosity: config.verbosity } : {}),
+  };
+}
+
+async function fetchCompletion(fetchWithCache, config, env, key, body, bustCache) {
+  try {
+    const organization = getOpenAiOrganization(config, env);
+    const { data, status } = await fetchWithCache(
+      getOpenAiUrl(config, env),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(key ? { Authorization: `Bearer ${key}` } : {}),
+          ...(organization ? { 'OpenAI-Organization': organization } : {}),
+          ...config.headers,
+        },
+        body: JSON.stringify(body),
+      },
+      undefined,
+      'json',
+      bustCache,
+      config.maxRetries,
+    );
+    if (status < 200 || status >= 300 || data.error) {
+      return { error: `OpenAI error: ${data.error?.message || status}` };
+    }
+    const output = data.choices?.[0]?.message?.content;
+    if (typeof output !== 'string' || output.trim() === '') {
+      return { error: 'OpenAI response did not include non-empty assistant content.' };
+    }
+    return {
+      output,
+      tokenUsage: {
+        prompt: data.usage?.prompt_tokens || 0,
+        completion: data.usage?.completion_tokens || 0,
+        total: data.usage?.total_tokens || 0,
+      },
+    };
+  } catch (err) {
+    return { error: `OpenAI fetch failed: ${String(err)}` };
+  }
+}
+
+class EjentumAugmentedProvider {
+  constructor(options = {}) {
+    this.config = options.config || {};
+    this.env = options.env || {};
+    this.providerId = options.id || `ejentum:${this.config.mode || 'reasoning'}`;
+  }
+
+  id() {
+    return this.providerId;
+  }
+
+  async callApi(prompt, context) {
+    const ejentumKey = getEjentumKey(this.config, this.env);
+    const openaiKey = getOpenAiKey(this.config, this.env);
+    if (!ejentumKey) {
+      return {
+        error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
+      };
+    }
+    if (!openaiKey && (this.config.apiKeyRequired ?? true)) {
+      return { error: 'OPENAI_API_KEY is not set.' };
+    }
+
+    const mode = this.config.mode || 'reasoning';
+    const model = this.config.model || 'gpt-5.4-mini';
+    const ejentumUrl =
+      this.config.apiUrl ||
+      this.env.EJENTUM_API_URL ||
+      process.env.EJENTUM_API_URL ||
+      DEFAULT_EJENTUM_URL;
+    const messages = parseChatMessages(prompt);
+    const fetchWithCache = await getFetchWithCache();
+    const bustCache = context?.bustCache ?? context?.debug;
+
+    const scaffoldResult = await fetchScaffold(
+      fetchWithCache,
+      this.config,
+      ejentumUrl,
+      ejentumKey,
+      prompt,
+      mode,
+      bustCache,
+    );
+    if (scaffoldResult.error) {
+      return scaffoldResult;
+    }
+
+    const body = buildOpenAiBody(model, messages, scaffoldResult.scaffold, this.config, this.env);
+    return fetchCompletion(fetchWithCache, this.config, this.env, openaiKey, body, bustCache);
+  }
+}
+
+export default EjentumAugmentedProvider;

@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import { mockProcessEnv } from '../util/utils';
 
@@ -17,6 +18,8 @@ function mockResponse(body: unknown, ok = true, status = 200) {
   return {
     ok,
     status,
+    statusText: ok ? 'OK' : 'Error',
+    headers: new Headers(),
     json: vi.fn().mockResolvedValue(body),
     text: vi.fn().mockResolvedValue(JSON.stringify(body)),
   };
@@ -28,11 +31,12 @@ describe('baseline-vs-ejentum-harness provider', () => {
 
   beforeAll(async () => {
     EjentumAugmentedProvider = (await importModule(
-      path.resolve('examples/baseline-vs-ejentum-harness/provider.js'),
+      path.resolve('examples/baseline-vs-ejentum-harness/provider.mjs'),
     )) as EjentumProviderConstructor;
   });
 
   beforeEach(() => {
+    disableCache();
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
     restoreEnv = mockProcessEnv(
@@ -45,6 +49,7 @@ describe('baseline-vs-ejentum-harness provider', () => {
   });
 
   afterEach(() => {
+    enableCache();
     restoreEnv?.();
     restoreEnv = undefined;
     vi.unstubAllGlobals();
@@ -67,7 +72,9 @@ describe('baseline-vs-ejentum-harness provider', () => {
       .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
       .mockResolvedValueOnce(mockResponse({ choices: [{ message: {} }] }));
 
-    const provider = new EjentumAugmentedProvider();
+    const provider = new EjentumAugmentedProvider({
+      config: { reasoning_effort: 'none', verbosity: 'low' },
+    });
     const result = await provider.callApi('solve this');
 
     expect(result).toEqual({
@@ -86,7 +93,9 @@ describe('baseline-vs-ejentum-harness provider', () => {
         }),
       );
 
-    const provider = new EjentumAugmentedProvider();
+    const provider = new EjentumAugmentedProvider({
+      config: { reasoning_effort: 'none', verbosity: 'low' },
+    });
     const result = await provider.callApi('solve this');
     const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
 
@@ -116,6 +125,21 @@ describe('baseline-vs-ejentum-harness provider', () => {
 
     expect(openaiRequest).not.toHaveProperty('reasoning_effort');
     expect(openaiRequest).not.toHaveProperty('verbosity');
+    expect(openaiRequest).toMatchObject({ max_tokens: 1024, temperature: 0 });
+  });
+
+  it('does not default an o-series model to a GPT-5-only reasoning effort', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
+      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
+
+    const provider = new EjentumAugmentedProvider({ config: { model: 'o3' } });
+    await provider.callApi('solve this');
+    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+
+    expect(openaiRequest).not.toHaveProperty('reasoning_effort');
+    expect(openaiRequest).not.toHaveProperty('max_tokens');
+    expect(openaiRequest).not.toHaveProperty('temperature');
   });
 
   it.each([
@@ -123,11 +147,14 @@ describe('baseline-vs-ejentum-harness provider', () => {
     'OPENAI_BASE_URL',
   ])('honors the standard %s environment variable', async (apiBaseEnvVar) => {
     restoreEnv?.();
-    restoreEnv = mockProcessEnv({
-      EJENTUM_API_KEY: 'ejentum-key',
-      OPENAI_API_KEY: 'openai-key',
-      [apiBaseEnvVar]: 'http://gateway.example.test/openai/v1/',
-    });
+    restoreEnv = mockProcessEnv(
+      {
+        EJENTUM_API_KEY: 'ejentum-key',
+        OPENAI_API_KEY: 'openai-key',
+        [apiBaseEnvVar]: 'http://gateway.example.test/openai/v1/',
+      },
+      { clear: true },
+    );
     fetchMock
       .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
       .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
@@ -142,11 +169,14 @@ describe('baseline-vs-ejentum-harness provider', () => {
 
   it('prefers a configured OpenAI API base URL to environment fallbacks', async () => {
     restoreEnv?.();
-    restoreEnv = mockProcessEnv({
-      EJENTUM_API_KEY: 'ejentum-key',
-      OPENAI_API_KEY: 'openai-key',
-      OPENAI_API_BASE_URL: 'http://environment.example.test/v1',
-    });
+    restoreEnv = mockProcessEnv(
+      {
+        EJENTUM_API_KEY: 'ejentum-key',
+        OPENAI_API_KEY: 'openai-key',
+        OPENAI_API_BASE_URL: 'http://environment.example.test/v1',
+      },
+      { clear: true },
+    );
     fetchMock
       .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
       .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
@@ -251,6 +281,7 @@ describe('baseline-vs-ejentum-harness provider', () => {
     expect(fetchMock.mock.calls[1][1].headers).toMatchObject({
       'OpenAI-Organization': 'org-configured',
       'X-Gateway-Tenant': 'tenant-a',
+      'x-promptfoo-version': expect.any(String),
     });
   });
 

@@ -11,7 +11,7 @@ providers:
       reasoning_effort: none
       verbosity: low
 
-  - id: file://provider.js
+  - id: file://provider.mjs
     label: ejentum-reasoning-gpt-5.4-mini
     config:
       mode: reasoning
