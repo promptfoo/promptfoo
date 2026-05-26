@@ -24,6 +24,7 @@ import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -775,32 +776,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
           metadata: {},
         };
 
-        // Extract search grounding metadata from candidates
-        const candidateWithMetadata = dataWithResponse
-          .map((datum) => getCandidate(datum))
-          .find(
-            (candidate) =>
-              candidate.groundingMetadata ||
-              candidate.groundingChunks ||
-              candidate.groundingSupports ||
-              candidate.webSearchQueries,
-          );
-
-        if (candidateWithMetadata) {
-          response.metadata = {
-            ...(candidateWithMetadata.groundingMetadata && {
-              groundingMetadata: candidateWithMetadata.groundingMetadata,
-            }),
-            ...(candidateWithMetadata.groundingChunks && {
-              groundingChunks: candidateWithMetadata.groundingChunks,
-            }),
-            ...(candidateWithMetadata.groundingSupports && {
-              groundingSupports: candidateWithMetadata.groundingSupports,
-            }),
-            ...(candidateWithMetadata.webSearchQueries && {
-              webSearchQueries: candidateWithMetadata.webSearchQueries,
-            }),
-          };
+        const grounding = collectGroundingMetadata(dataWithResponse);
+        if (Object.keys(grounding).length > 0) {
+          response.metadata = { ...grounding };
         }
 
         if (isCacheEnabled()) {
