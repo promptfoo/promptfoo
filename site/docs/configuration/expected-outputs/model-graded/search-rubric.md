@@ -34,8 +34,8 @@ assert:
     provider: openai:responses:gpt-5.1 # Must configure web search tool
 
   # Using search-rubric (automatically selects a web-search provider)
-      - type: search-rubric
-        value: 'Contains current stock price for Apple (AAPL) within $5'
+  - type: search-rubric
+    value: 'Contains current stock price for Apple (AAPL) within $5'
 ```
 
 Unlike `llm-rubric`, which applies a default score threshold of `0.5`, `search-rubric` only applies a score threshold when you explicitly set `threshold`.
