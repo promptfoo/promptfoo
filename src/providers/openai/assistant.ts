@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
@@ -102,15 +102,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
+    const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);

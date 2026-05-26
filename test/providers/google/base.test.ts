@@ -330,6 +330,20 @@ describe('GoogleGenericProvider', () => {
       expect(fn).toBe(mockFn);
     });
 
+    it('should load named function from Windows-style file paths', async () => {
+      const mockFn = vi.fn().mockReturnValue('result');
+      vi.mocked(importModule).mockResolvedValue({ myFunction: mockFn });
+
+      const provider = new TestGoogleProvider('gemini-2.5-pro');
+      const fn = await provider['loadExternalFunction']('file://C:/path/to/test.js:myFunction');
+
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'C:/path/to/test.js'),
+        'myFunction',
+      );
+      expect(fn).toBe(mockFn);
+    });
+
     it('should throw error when function not found', async () => {
       vi.mocked(importModule).mockResolvedValue({ someOtherFn: vi.fn() });
 
