@@ -1218,10 +1218,10 @@ export const TestSuiteConfigSchema = z.object({
   // Extension that is called at various plugin points
   extensions: z.array(z.string()).nullable().optional(),
 
-  // Reusable assertion templates that can be referenced via $ref: '#/assertionTemplates/<name>'
+  // Reusable assertions or assertion sets that can be referenced via $ref: '#/assertionTemplates/<name>'
   // These are resolved by @apidevtools/json-schema-ref-parser before evaluation.
   // Example: { containsPirate: { type: 'icontains', value: 'arrr' } }
-  assertionTemplates: z.record(z.string(), AssertionSchema).optional(),
+  assertionTemplates: z.record(z.string(), AssertionOrSetSchema).optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),

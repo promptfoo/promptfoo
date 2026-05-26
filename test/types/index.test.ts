@@ -606,12 +606,17 @@ describe('JSON Schema validation (AJV)', () => {
           type: 'icontains',
           value: 'arrr',
         },
+        groupedChecks: {
+          type: 'assert-set',
+          assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
+        },
       },
       tests: [
         {
           vars: { input: 'test' },
           assert: [
             { $ref: '#/assertionTemplates/containsPirate' },
+            { $ref: '#/assertionTemplates/groupedChecks' },
             {
               type: 'assert-set',
               assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
@@ -656,27 +661,40 @@ describe('JSON Schema validation (AJV)', () => {
 
     expect(refAlternativePaths).toHaveLength(2);
 
-    const assertionArrayItems = refAlternativePaths[0]
-      .split('.')
-      .reduce<unknown>(
-        (node, key) =>
-          node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined,
-        schema,
-      );
-    const anyOf = (assertionArrayItems as { anyOf?: unknown[] }).anyOf;
-    const acceptsAssertion = anyOf?.some(
-      (option) =>
-        option &&
-        typeof option === 'object' &&
-        typeof (option as { $ref?: unknown }).$ref === 'string',
+    const definitions = schema.definitions as Record<string, { required?: unknown[] }>;
+    const getRequired = (option: unknown): unknown[] => {
+      if (!option || typeof option !== 'object') {
+        return [];
+      }
+      if (Array.isArray((option as { required?: unknown }).required)) {
+        return (option as { required: unknown[] }).required;
+      }
+      const ref = (option as { $ref?: unknown }).$ref;
+      if (typeof ref === 'string') {
+        return definitions[ref.split('/').pop()!]?.required ?? [];
+      }
+      return [];
+    };
+    const refAlternativeNodes = refAlternativePaths.map((refPath) =>
+      refPath
+        .split('.')
+        .reduce<unknown>(
+          (node, key) =>
+            node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined,
+          schema,
+        ),
     );
-    const acceptsAssertionSet = anyOf?.some(
-      (option) =>
-        option &&
-        typeof option === 'object' &&
-        Array.isArray((option as { required?: unknown }).required) &&
-        ((option as { required: unknown[] }).required as unknown[]).includes('assert'),
+    const assertionArrayItems = refAlternativeNodes.find((node) =>
+      (node as { anyOf?: unknown[] }).anyOf?.some((option) =>
+        getRequired(option).includes('assert'),
+      ),
     );
+    const anyOf = (assertionArrayItems as { anyOf?: unknown[] } | undefined)?.anyOf;
+    const acceptsAssertion = anyOf?.some((option) => {
+      const required = getRequired(option);
+      return required.includes('type') && !required.includes('assert');
+    });
+    const acceptsAssertionSet = anyOf?.some((option) => getRequired(option).includes('assert'));
 
     expect(acceptsAssertion).toBe(true);
     expect(acceptsAssertionSet).toBe(true);
@@ -1024,6 +1042,45 @@ describe('TestSuiteConfigSchema', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('assertionTemplates field', () => {
+    it('should accept referenced assert-set templates after dereferencing', async () => {
+      const config = {
+        providers: ['echo'],
+        prompts: ['hello'],
+        assertionTemplates: {
+          containsHello: {
+            type: 'contains',
+            value: 'hello',
+          },
+          groupedChecks: {
+            type: 'assert-set',
+            assert: [{ $ref: '#/assertionTemplates/containsHello' }],
+          },
+        },
+        tests: [{ assert: [{ $ref: '#/assertionTemplates/groupedChecks' }] }],
+      };
+
+      const dereferencedConfig = await dereferenceConfig(config as unknown as TestSuiteConfig);
+      const result = TestSuiteConfigSchema.safeParse(dereferencedConfig);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject({
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [{ type: 'contains', value: 'hello' }],
+                },
+              ],
+            },
+          ],
+        });
+      }
     });
   });
 
