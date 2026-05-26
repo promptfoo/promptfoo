@@ -114,6 +114,71 @@ describe('evalConfig store', () => {
       });
     });
 
+    it('redacts credentials from aliased and nested provider placements', () => {
+      const provider = (secret: string) => ({
+        id: 'http',
+        config: { apiKey: secret, endpoint: 'https://example.com' },
+      });
+
+      useStore.getState().setConfig({
+        targets: [provider('target-secret')],
+        defaultTest: {
+          provider: provider('default-provider-secret'),
+          options: { provider: provider('default-grader-secret') },
+          assert: [{ type: 'llm-rubric', value: 'correct', provider: provider('assert-secret') }],
+        },
+        tests: [
+          {
+            provider: provider('test-provider-secret'),
+            options: { provider: provider('test-grader-secret') },
+            vars: { payload: { provider: { apiKey: 'ordinary-input-value' } } },
+            assert: [{ type: 'equals', value: { provider: { apiKey: 'expected-output-value' } } }],
+          },
+        ],
+        scenarios: [
+          {
+            config: [{ provider: provider('scenario-default-secret') }],
+            tests: [{ provider: provider('scenario-test-secret') }],
+          },
+        ],
+        redteam: { provider: provider('redteam-secret') },
+      } as any);
+
+      const persistedConfig = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persistedConfig.targets[0].config).toEqual({ endpoint: 'https://example.com' });
+      expect(persistedConfig.defaultTest.provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.defaultTest.options.provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.defaultTest.assert[0].provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.tests[0].provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.tests[0].options.provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.tests[0].vars.payload).toEqual({
+        provider: { apiKey: 'ordinary-input-value' },
+      });
+      expect(persistedConfig.tests[0].assert[0].value).toEqual({
+        provider: { apiKey: 'expected-output-value' },
+      });
+      expect(persistedConfig.scenarios[0].config[0].provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.scenarios[0].tests[0].provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.redteam.provider.config).toEqual({
+        endpoint: 'https://example.com',
+      });
+      expect(JSON.stringify(persistedConfig)).not.toContain('-secret');
+    });
+
     it('removes sensitive environment values from previously persisted browser state on rehydrate', async () => {
       localStorage.setItem(
         'promptfoo',
@@ -332,6 +397,63 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persistedState)).not.toContain('computed-signature-secret');
       expect(JSON.stringify(persistedState)).not.toContain('inline-private-key');
       expect(JSON.stringify(persistedState)).not.toContain('inline-client-key');
+    });
+
+    it('redacts inline auth and certificate material while retaining signing configuration', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              auth: {
+                type: 'api_key',
+                value: 'auth-secret',
+                placement: 'header',
+                keyName: 'X-API-Key',
+              },
+              tls: {
+                pfx: 'tls-pfx-secret',
+                pfxPath: '/var/run/certs/client.p12',
+                jksContent: 'tls-jks-secret',
+                jksPath: '/var/run/certs/client.jks',
+                passphrase: 'tls-passphrase-secret',
+              },
+              signatureAuth: {
+                type: 'pfx',
+                pfxContent: 'signature-pfx-secret',
+                keystoreContent: 'signature-keystore-secret',
+                certificateContent: 'signature-certificate-secret',
+                pfxPassword: 'signature-password-secret',
+                pfxPath: '/var/run/certs/signing.p12',
+                signatureAlgorithm: 'SHA256',
+                signatureDataTemplate: '{{body}}',
+                signatureValidityMs: 300_000,
+              },
+            } as any,
+          },
+        ],
+      });
+
+      const persistedConfig = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persistedConfig.providers[0].config).toEqual({
+        auth: {
+          type: 'api_key',
+          placement: 'header',
+          keyName: 'X-API-Key',
+        },
+        tls: {
+          pfxPath: '/var/run/certs/client.p12',
+          jksPath: '/var/run/certs/client.jks',
+        },
+        signatureAuth: {
+          type: 'pfx',
+          pfxPath: '/var/run/certs/signing.p12',
+          signatureAlgorithm: 'SHA256',
+          signatureDataTemplate: '{{body}}',
+          signatureValidityMs: 300_000,
+        },
+      });
+      expect(JSON.stringify(persistedConfig)).not.toContain('-secret');
     });
   });
 

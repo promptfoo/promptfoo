@@ -28,17 +28,19 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
-// Names that look like credentials in any casing convention — camelCase
-// (apiKey, bearerToken, privateKey, pfxPassword), snake_case (api_key,
-// refresh_token, keystore_passphrase), kebab-case / SCREAMING_SNAKE
-// (x-api-key, OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY), and all-uppercase
-// acronyms that lose their casing boundary on normalization (SSHKey,
-// IDToken, JWTToken, XAPIKey). The trailing `s?` matches plural names
-// (secrets, passwords, accessTokens, cookies). Used for both provider
-// config fields and env-var keys. A few runtime selectors contain these words
-// without storing secret material, so they are allowlisted below.
+// Names that look like credentials in any casing convention. A few runtime
+// selectors contain these words without storing secret material, so they are
+// allowlisted below.
 const CREDENTIAL_TOKEN_PATTERN =
   /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
+
+const INLINE_CREDENTIAL_MATERIAL_NAMES = new Set([
+  'certificate_content',
+  'jks_content',
+  'keystore_content',
+  'pfx',
+  'pfx_content',
+]);
 
 const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)api_key_envar$/,
@@ -51,6 +53,7 @@ const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)token_url$/,
   /(?:^|_)azure_token_scope$/,
   /(?:^|_)max(?:_output|_completion)?_tokens?$/,
+  /(?:^|_)signature_auth$/,
   /(?:^|_)signature_(?:algorithm|validity_ms|data_template|refresh_buffer_ms)$/,
 ];
 
@@ -69,23 +72,108 @@ const looksLikeCredential = (name: string): boolean => {
   if (NON_SECRET_CREDENTIAL_NAME_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return false;
   }
-  return CREDENTIAL_TOKEN_PATTERN.test(normalized);
+  return (
+    CREDENTIAL_TOKEN_PATTERN.test(normalized) || INLINE_CREDENTIAL_MATERIAL_NAMES.has(normalized)
+  );
 };
 
-const omitProviderCredentials = (value: unknown): unknown => {
+const omitProviderCredentials = (value: unknown, parentKey?: string): unknown => {
   if (Array.isArray(value)) {
-    return value.map(omitProviderCredentials);
+    return value.map((item) => omitProviderCredentials(item, parentKey));
   }
 
   if (!value || typeof value !== 'object') {
     return value;
   }
 
+  const isApiKeyAuth =
+    parentKey === 'auth' && (value as Record<string, unknown>).type === 'api_key';
+
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, nestedValue]) =>
-      looksLikeCredential(key) ? [] : [[key, omitProviderCredentials(nestedValue)]],
+      looksLikeCredential(key) || (isApiKeyAuth && key === 'value')
+        ? []
+        : [[key, omitProviderCredentials(nestedValue, key)]],
     ),
   );
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
+  if (!Array.isArray(assertions)) {
+    return assertions;
+  }
+
+  return assertions.map((assertion) => {
+    if (!isRecord(assertion)) {
+      return assertion;
+    }
+
+    return {
+      ...assertion,
+      ...(Object.hasOwn(assertion, 'provider')
+        ? { provider: omitProviderCredentials(assertion.provider) }
+        : {}),
+      ...(Object.hasOwn(assertion, 'assert')
+        ? { assert: omitAssertionProviderCredentials(assertion.assert) }
+        : {}),
+    };
+  });
+};
+
+const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
+  if (!isRecord(testCase)) {
+    return testCase;
+  }
+
+  const options = isRecord(testCase.options)
+    ? {
+        ...testCase.options,
+        ...(Object.hasOwn(testCase.options, 'provider')
+          ? { provider: omitProviderCredentials(testCase.options.provider) }
+          : {}),
+      }
+    : testCase.options;
+
+  return {
+    ...testCase,
+    ...(Object.hasOwn(testCase, 'provider')
+      ? { provider: omitProviderCredentials(testCase.provider) }
+      : {}),
+    ...(Object.hasOwn(testCase, 'options') ? { options } : {}),
+    ...(Object.hasOwn(testCase, 'assert')
+      ? { assert: omitAssertionProviderCredentials(testCase.assert) }
+      : {}),
+  };
+};
+
+const omitScenarioProviderCredentials = (scenario: unknown): unknown => {
+  if (!isRecord(scenario)) {
+    return scenario;
+  }
+
+  return {
+    ...scenario,
+    ...(Array.isArray(scenario.config)
+      ? { config: scenario.config.map(omitTestCaseProviderCredentials) }
+      : {}),
+    ...(Array.isArray(scenario.tests)
+      ? { tests: scenario.tests.map(omitTestCaseProviderCredentials) }
+      : {}),
+  };
+};
+
+const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
+  if (!isRecord(redteam) || !Object.hasOwn(redteam, 'provider')) {
+    return redteam;
+  }
+
+  return {
+    ...redteam,
+    provider: omitProviderCredentials(redteam.provider),
+  };
 };
 
 const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedConfig>['env'] => {
@@ -98,11 +186,26 @@ const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedCo
   return filtered as Partial<UnifiedConfig>['env'];
 };
 
-const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => ({
-  ...config,
-  env: omitSensitiveEnv(config.env),
-  providers: omitProviderCredentials(config.providers) as UnifiedConfig['providers'],
-});
+const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
+  return {
+    ...config,
+    env: omitSensitiveEnv(config.env),
+    providers: omitProviderCredentials(config.providers) as Partial<UnifiedConfig>['providers'],
+    targets: omitProviderCredentials(config.targets) as Partial<UnifiedConfig>['targets'],
+    defaultTest: omitTestCaseProviderCredentials(
+      config.defaultTest,
+    ) as Partial<UnifiedConfig>['defaultTest'],
+    tests: Array.isArray(config.tests)
+      ? (config.tests.map(omitTestCaseProviderCredentials) as Partial<UnifiedConfig>['tests'])
+      : config.tests,
+    scenarios: Array.isArray(config.scenarios)
+      ? (config.scenarios.map(
+          omitScenarioProviderCredentials,
+        ) as Partial<UnifiedConfig>['scenarios'])
+      : config.scenarios,
+    redteam: omitRedteamProviderCredentials(config.redteam) as Partial<UnifiedConfig>['redteam'],
+  };
+};
 
 export const useStore = create<EvalConfigState>()(
   persist(
