@@ -9,6 +9,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -433,6 +434,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         };
       }
 
+      const grounding = collectGroundingMetadata(dataWithResponse);
+
       const tokenUsage = cached
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
@@ -483,20 +486,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: {
-          ...(finalCandidate.groundingChunks && {
-            groundingChunks: finalCandidate.groundingChunks,
-          }),
-          ...(finalCandidate.groundingMetadata && {
-            groundingMetadata: finalCandidate.groundingMetadata,
-          }),
-          ...(finalCandidate.groundingSupports && {
-            groundingSupports: finalCandidate.groundingSupports,
-          }),
-          ...(finalCandidate.webSearchQueries && {
-            webSearchQueries: finalCandidate.webSearchQueries,
-          }),
-        },
+        metadata: { ...grounding },
       };
     } catch (err) {
       return {
