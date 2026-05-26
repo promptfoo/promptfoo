@@ -59,6 +59,45 @@ describe('handleAgentRubric', () => {
     );
   });
 
+  it('uses a structured rubric prompt when no assertion value is rendered', async () => {
+    const rubricPrompt = [{ role: 'system', content: 'Inspect the artifact' }];
+    const structuredParams: AssertionParams = {
+      ...params,
+      assertion: {
+        ...params.assertion,
+        value: undefined,
+      },
+      renderedValue: undefined,
+      test: {
+        vars: {},
+        options: { rubricPrompt },
+      },
+    };
+    mockMatchesAgentRubric.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'verified',
+    });
+
+    await expect(handleAgentRubric(structuredParams)).resolves.toEqual({
+      pass: true,
+      score: 1,
+      reason: 'verified',
+    });
+
+    const serializedPrompt = JSON.stringify(rubricPrompt);
+    expect(structuredParams.test.options?.rubricPrompt).toBe(serializedPrompt);
+    expect(structuredParams.assertion.value).toBe(serializedPrompt);
+    expect(mockMatchesAgentRubric).toHaveBeenCalledWith(
+      '',
+      'Implemented',
+      { rubricPrompt: serializedPrompt },
+      {},
+      structuredParams.assertion,
+      undefined,
+    );
+  });
+
   it('inverts successful verdicts and scores', async () => {
     mockMatchesAgentRubric.mockResolvedValue({
       pass: true,
