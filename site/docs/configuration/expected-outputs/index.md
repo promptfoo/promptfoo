@@ -27,6 +27,8 @@ In machine learning, "Accuracy" is a metric that measures the proportion of corr
 
 To use assertions in your test cases, add an `assert` property to the test case with an array of assertion objects. Each assertion object should have a `type` property indicating the assertion type and any additional properties required for that assertion type.
 
+For a quick reference to available checks, jump to [Assertion types](#assertion-types).
+
 Example:
 
 ```yaml
