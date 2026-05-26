@@ -790,7 +790,7 @@ export default function ResultsView({
             return;
           }
           updateConfig(config);
-          navigate(ROUTES.SETUP);
+          navigate(ROUTES.SETUP, { state: { sourceEvalId: evalId } });
         }}
       >
         <Play className="size-4 mr-2" />
