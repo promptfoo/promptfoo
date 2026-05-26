@@ -34,10 +34,21 @@ function createAzureBlobUriError(uri: string, detail: string): Error {
   );
 }
 
+function sanitizeAzureBlobErrorDetail(uri: string, detail: string): string {
+  const queryStart = uri.indexOf('?');
+  if (queryStart < 0) {
+    return detail;
+  }
+
+  const fragmentStart = uri.indexOf('#', queryStart);
+  const query = uri.slice(queryStart, fragmentStart >= 0 ? fragmentStart : undefined);
+  return detail.split(query).join('?<redacted>');
+}
+
 function formatAzureBlobReadError(uri: string, error: unknown): Error {
   const detail = error instanceof Error ? error.message : String(error);
   return new Error(
-    `Failed to read Azure Blob Storage URI "${sanitizeAzureBlobUriForError(uri)}": ${detail}`,
+    `Failed to read Azure Blob Storage URI "${sanitizeAzureBlobUriForError(uri)}": ${sanitizeAzureBlobErrorDetail(uri, detail)}`,
   );
 }
 
@@ -92,7 +103,9 @@ export function parseAzureBlobUri(uri: string): AzureBlobUriParts {
 }
 
 function isAzureBlobSasToken(queryString: string): boolean {
-  const searchParams = new URLSearchParams(queryString.startsWith('?') ? queryString.slice(1) : queryString);
+  const searchParams = new URLSearchParams(
+    queryString.startsWith('?') ? queryString.slice(1) : queryString,
+  );
   return searchParams.has('sig');
 }
 
