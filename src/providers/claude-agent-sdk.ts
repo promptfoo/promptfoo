@@ -1592,16 +1592,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return response;
           }
 
-          // Surface the last assistant error code (`model_not_found`,
-          // `rate_limit`, etc.) alongside the subtype so callers can tell
-          // apart "ran out of turns" from "model doesn't exist" without
-          // digging into metadata.
-          const lastAssistantError =
-            assistantErrors.length > 0
-              ? assistantErrors[assistantErrors.length - 1].error
-              : undefined;
-          const errorMessage = lastAssistantError
-            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
+          // Only a main-agent assistant error can explain the selected main
+          // result. Background subagent messages are interleaved in the same
+          // stream and remain available in metadata for callers that need them.
+          const lastMainAssistantError = assistantErrors
+            .slice()
+            .reverse()
+            .find(({ parentToolUseId }) => parentToolUseId === null)?.error;
+          const errorMessage = lastMainAssistantError
+            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastMainAssistantError})`
             : `Claude Agent SDK call failed: ${finalMsg.subtype}`;
           return {
             error: errorMessage,

@@ -1084,11 +1084,16 @@ describe('ClaudeCodeSDKProvider', () => {
     describe('assistant errors and api_error_status (SDK >= 0.3.144)', () => {
       const buildAssistantMessage = (
         error: SDKAssistantMessageError | undefined,
-        opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
+        opts: {
+          uuid?: string;
+          request_id?: string;
+          subagent_type?: string;
+          parent_tool_use_id?: string;
+        } = {},
       ): Partial<SDKMessage> => ({
         type: 'assistant',
         message: createMockBetaMessage([{ type: 'text', text: 'hello' }]) as any,
-        parent_tool_use_id: null,
+        parent_tool_use_id: opts.parent_tool_use_id ?? null,
         uuid: (opts.uuid ??
           '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
         session_id: 'test-session-123',
@@ -1249,6 +1254,49 @@ describe('ClaudeCodeSDKProvider', () => {
             error: 'model_not_found',
             uuid: '33333333-3333-3333-3333-333333333333',
             parentToolUseId: null,
+          },
+        ]);
+      });
+
+      it('does not annotate a main terminal error with a background subagent error', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            buildAssistantMessage('model_not_found', {
+              uuid: '44444444-4444-4444-4444-444444444444',
+              parent_tool_use_id: 'task-tool-1',
+              subagent_type: 'Explore',
+            }),
+            {
+              type: 'result',
+              subtype: 'error_max_turns',
+              session_id: 'main-error-session',
+              uuid: '99999999-9999-9999-9999-999999999999' as `${string}-${string}-${string}-${string}-${string}`,
+              usage: createMockUsage(10, 0),
+              total_cost_usd: 0,
+              duration_ms: 500,
+              duration_api_ms: 400,
+              is_error: true,
+              num_turns: 2,
+              permission_denials: [],
+              modelUsage: {},
+              errors: [],
+              origin: { kind: 'human' },
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
+        expect(result.metadata?.assistantErrors).toEqual([
+          {
+            error: 'model_not_found',
+            uuid: '44444444-4444-4444-4444-444444444444',
+            parentToolUseId: 'task-tool-1',
+            subagent_type: 'Explore',
           },
         ]);
       });
