@@ -167,8 +167,8 @@ export class EvalQueries {
       acc[r.eval_id].push(r.key);
       return acc;
     }, {});
-    // Legacy evals have no persisted display order, so backfill a stable one
-    // per eval to match getVarsFromEval.
+    // Legacy evals have no persisted display order, so backfill a stable
+    // (lexicographic) order per eval; keep in sync with getVarsFromEval.
     for (const list of Object.values(vars)) {
       list.sort();
     }

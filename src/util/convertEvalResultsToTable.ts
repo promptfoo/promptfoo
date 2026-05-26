@@ -1,3 +1,4 @@
+import logger from '../logger';
 import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
@@ -16,9 +17,20 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
   );
   const results = eval_.results;
-  // Guard against malformed payloads where `vars` is present but not an array.
-  const persistedVars = Array.isArray(eval_.vars) ? eval_.vars : [];
-  const persistedVarSet = new Set(persistedVars);
+  // Guard against malformed payloads where `vars` is present but not an array
+  // (corrupt store, schema skew across server versions). Warn so the bad
+  // writer is visible instead of silently rendering an alphabetized fallback.
+  const rawPersistedVars = eval_.vars;
+  if (rawPersistedVars !== undefined && !Array.isArray(rawPersistedVars)) {
+    logger.warn(
+      `[convertResultsToTable] eval.vars is ${typeof rawPersistedVars}, not string[]; falling back to alphabetical ordering`,
+    );
+  }
+  // Dedup via Set construction. Persisted vars should already be unique
+  // (Eval.setVars and the evaluator's Set guarantee this), but a corrupt
+  // payload would otherwise render duplicate header columns and row cells.
+  const persistedVarSet = new Set<string>(Array.isArray(rawPersistedVars) ? rawPersistedVars : []);
+  const persistedVars = Array.from(persistedVarSet);
   const varsForHeader = new Set<string>(persistedVars);
   const varValuesForRow = new Map<number, Record<string, string>>();
 
@@ -29,7 +41,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       varsForHeader.add(varName);
     }
 
-    // row.vars is populated by the orderedVars loop below; initialize empty.
+    // row.vars is reassigned later from `orderedVars`; initialize empty.
     const row = rowMap[result.testIdx] || {
       description: result.description || undefined,
       outputs: [],
@@ -88,6 +100,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         if (!(key in result.vars)) {
           result.vars[key] = value;
           varsForHeader.add(key);
+        } else if (result.vars[key] !== value) {
+          // Leave a breadcrumb for users debugging a "missing" display var.
+          logger.debug(
+            `[convertResultsToTable] transformDisplayVars key '${key}' collides with result.vars; preserving original value`,
+          );
         }
       }
     }

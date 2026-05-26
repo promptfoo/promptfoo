@@ -1143,6 +1143,24 @@ describe('evaluator', () => {
 
       expect(vars).toEqual({});
     });
+
+    it('omits evals whose test_case has no $.vars from the result map', async () => {
+      const evalWithVars = await EvalFactory.create({ numResults: 1 });
+      const evalWithoutVars = await EvalFactory.create({ numResults: 1 });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"foo":"f"}}') WHERE eval_id = '${evalWithVars.id}'`,
+      );
+      // Strip $.vars so json_each(t.vars) yields no rows for this eval_id.
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{}') WHERE eval_id = '${evalWithoutVars.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([evalWithVars, evalWithoutVars]);
+
+      expect(vars[evalWithVars.id]).toEqual(['foo']);
+      expect(vars).not.toHaveProperty(evalWithoutVars.id);
+    });
   });
 
   describe('queryTestIndices', () => {

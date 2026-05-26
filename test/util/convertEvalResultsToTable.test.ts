@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
 import { createCompletedPrompt } from '../factories/eval';
 
@@ -1371,7 +1371,11 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].vars).toEqual(['p1', 'a1', 'z1']);
   });
 
-  it('does not overwrite a falsy result.vars value with transformDisplayVars', () => {
+  it.each([
+    ['empty string', '', ''],
+    ['zero', 0, '0'],
+    ['false', false, 'false'],
+  ])('does not overwrite a falsy result.vars value (%s) with transformDisplayVars', (_label, falsyValue, expectedRendered) => {
     const resultsFile: ResultsFile = {
       version: 4,
       prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
@@ -1382,9 +1386,9 @@ describe('convertResultsToTable', () => {
             id: 'test1',
             testIdx: 0,
             promptIdx: 0,
-            // Empty-string value for `prompt` must be preserved, not silently
+            // Falsy value for `prompt` must be preserved, not silently
             // replaced by transformDisplayVars.prompt.
-            vars: { prompt: '' },
+            vars: { prompt: falsyValue } as unknown as Record<string, string>,
             prompt: { raw: 'test prompt', label: 'Test Prompt' },
             response: {
               output: 'test output',
@@ -1406,7 +1410,7 @@ describe('convertResultsToTable', () => {
 
     const result = convertResultsToTable(resultsFile);
     expect(result.head.vars).toEqual(['prompt']);
-    expect(result.body[0].vars).toEqual(['']);
+    expect(result.body[0].vars).toEqual([expectedRendered]);
   });
 
   it('treats a malformed non-array vars field as if no order were persisted', () => {
@@ -1439,5 +1443,79 @@ describe('convertResultsToTable', () => {
     } as unknown as ResultsFile;
 
     expect(convertResultsToTable(resultsFile).head.vars).toEqual(['apple', 'zebra']);
+  });
+
+  it('logs a debug breadcrumb when transformDisplayVars collides with a different result.vars value', async () => {
+    const logger = (await import('../../src/logger')).default;
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['prompt'],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: { prompt: 'original' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: {
+              output: 'test output',
+              metadata: { transformDisplayVars: { prompt: 'shadowed' } },
+            },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+
+    expect(result.body[0].vars).toEqual(['original']);
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining("key 'prompt' collides"));
+    debugSpy.mockRestore();
+  });
+
+  it('dedups a corrupt persisted vars list so duplicate header columns are not rendered', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['prompt', 'prompt', 'foo'],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: { prompt: 'p', foo: 'f' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: { output: 'test output' },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.head.vars).toEqual(['prompt', 'foo']);
+    expect(result.body[0].vars).toEqual(['p', 'f']);
   });
 });
