@@ -1,5 +1,7 @@
 ---
+title: Tuning Engines Gateway
 sidebar_label: Tuning Engines
+sidebar_position: 48
 description: 'Use Tuning Engines as an OpenAI-compatible gateway for governed model routing, access control, and usage-aware evaluations.'
 ---
 
@@ -51,7 +53,7 @@ If your role does not allow `llama-3.3-70b-fp8`, replace it with a model enabled
 
 You can evaluate multiple enabled Tuning Engines models side by side, including models backed by different providers or routing policies. Replace the provider IDs below with names enabled for your tenant.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:your-fast-model
     label: tuning-engines-fast
