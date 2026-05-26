@@ -808,6 +808,128 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('distinguishes parallel tool calls in the same turn from sequential calls', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'turn-1',
+                name: 'chat gpt-5',
+                startTime: 1000,
+                endTime: 1500,
+                attributes: { 'promptfoo.provider.id': 'openai:gpt-5' },
+              },
+              {
+                spanId: 'tool-1',
+                parentSpanId: 'turn-1',
+                name: 'tool.call',
+                startTime: 1100,
+                endTime: 1250,
+                attributes: { 'tool.name': 'search_orders' },
+              },
+              {
+                spanId: 'tool-2',
+                parentSpanId: 'turn-1',
+                name: 'tool.call',
+                startTime: 1110,
+                endTime: 1260,
+                attributes: { 'tool.name': 'search_orders' },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-sequence',
+        assertion: {
+          type: 'trajectory:tool-sequence',
+          value: {
+            mode: 'exact',
+            steps: [['search_orders', 'search_orders']],
+          },
+        },
+        renderedValue: {
+          mode: 'exact',
+          steps: [['search_orders', 'search_orders']],
+        },
+      };
+
+      const result = handleTrajectoryToolSequence(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Observed exact tool sequence: [tool:search_orders + tool:search_orders]',
+        assertion: params.assertion,
+      });
+    });
+
+    it('fails a parallel exact sequence when identical tool calls happen in separate turns', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'turn-1',
+                name: 'chat gpt-5',
+                startTime: 1000,
+                endTime: 1300,
+                attributes: { 'promptfoo.provider.id': 'openai:gpt-5' },
+              },
+              {
+                spanId: 'tool-1',
+                parentSpanId: 'turn-1',
+                name: 'tool.call',
+                startTime: 1100,
+                endTime: 1200,
+                attributes: { 'tool.name': 'search_orders' },
+              },
+              {
+                spanId: 'turn-2',
+                name: 'chat gpt-5',
+                startTime: 1400,
+                endTime: 1700,
+                attributes: { 'promptfoo.provider.id': 'openai:gpt-5' },
+              },
+              {
+                spanId: 'tool-2',
+                parentSpanId: 'turn-2',
+                name: 'tool.call',
+                startTime: 1500,
+                endTime: 1600,
+                attributes: { 'tool.name': 'search_orders' },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-sequence',
+        assertion: {
+          type: 'trajectory:tool-sequence',
+          value: {
+            mode: 'exact',
+            steps: [['search_orders', 'search_orders']],
+          },
+        },
+        renderedValue: {
+          mode: 'exact',
+          steps: [['search_orders', 'search_orders']],
+        },
+      };
+
+      const result = handleTrajectoryToolSequence(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason:
+          'Expected exact tool sequence of search_orders + search_orders, but actual tools were tool:search_orders, tool:search_orders',
+        assertion: params.assertion,
+      });
+    });
+
     it('fails when an in-order sequence is not observed', () => {
       const params: AssertionParams = {
         ...defaultParams,

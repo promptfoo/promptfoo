@@ -8,6 +8,7 @@ import {
   matchesTrajectoryStep,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
+  type TrajectoryStep,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
 
@@ -18,9 +19,12 @@ interface TrajectoryCountValue extends TrajectoryStepMatcher {
   min?: number;
 }
 
+type TrajectorySequenceStepValue = string | TrajectoryStepMatcher;
+type TrajectorySequenceStepGroup = TrajectorySequenceStepValue[];
+
 interface TrajectorySequenceValue {
   mode?: 'exact' | 'in_order';
-  steps: Array<string | TrajectoryStepMatcher>;
+  steps: Array<TrajectorySequenceStepValue | TrajectorySequenceStepGroup>;
 }
 
 interface TrajectoryGoalSuccessValue {
@@ -232,6 +236,87 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
   throw new Error('trajectory:tool-sequence assertion must have an array or object value');
 }
 
+function isTrajectorySequenceStepGroup(
+  step: TrajectorySequenceValue['steps'][number],
+): step is TrajectorySequenceStepGroup {
+  return Array.isArray(step);
+}
+
+function resolveSequenceMatcherGroups(
+  steps: TrajectorySequenceValue['steps'],
+): TrajectoryStepMatcher[][] {
+  return steps.map((step, groupIndex) => {
+    const group = isTrajectorySequenceStepGroup(step) ? step : [step];
+    return group.map((groupStep, stepIndex) => {
+      const matcher = normalizeTrajectoryMatcher(groupStep, 'tool');
+      requireNamedTrajectoryMatcher(
+        matcher,
+        'trajectory:tool-sequence',
+        isTrajectorySequenceStepGroup(step) ? stepIndex : groupIndex,
+      );
+      return matcher;
+    });
+  });
+}
+
+function flattenMatcherGroups(groups: TrajectoryStepMatcher[][]): TrajectoryStepMatcher[] {
+  return groups.flat();
+}
+
+function formatMatcherGroups(groups: TrajectoryStepMatcher[][]): string {
+  return groups
+    .map((group) => group.map((matcher) => matcher.pattern || matcher.name || '*').join(' + '))
+    .join(', ');
+}
+
+function getTrajectoryStepGroupKey(step: TrajectoryStep): string | undefined {
+  if (step.parentSpanId) {
+    return `parent:${step.parentSpanId}`;
+  }
+
+  if (step.endTime === undefined) {
+    return undefined;
+  }
+
+  return `overlap:${step.startTime}:${step.endTime}`;
+}
+
+function groupToolStepsByTurn(toolSteps: TrajectoryStep[]): TrajectoryStep[][] {
+  const groups: TrajectoryStep[][] = [];
+
+  for (const step of toolSteps) {
+    const lastGroup = groups[groups.length - 1];
+    const lastStep = lastGroup?.[lastGroup.length - 1];
+    const stepGroupKey = getTrajectoryStepGroupKey(step);
+    const lastGroupKey = lastStep ? getTrajectoryStepGroupKey(lastStep) : undefined;
+
+    if (
+      lastGroup &&
+      ((stepGroupKey !== undefined && stepGroupKey === lastGroupKey) ||
+        (step.parentSpanId === undefined &&
+          lastStep?.parentSpanId === undefined &&
+          lastStep.endTime !== undefined &&
+          step.startTime < lastStep.endTime))
+    ) {
+      lastGroup.push(step);
+      continue;
+    }
+
+    groups.push([step]);
+  }
+
+  return groups;
+}
+
+function formatToolStepGroups(groups: TrajectoryStep[][]): string {
+  return groups
+    .map((group) => {
+      const formattedGroup = group.map(formatTrajectoryStep);
+      return group.length > 1 ? `[${formattedGroup.join(' + ')}]` : formattedGroup[0];
+    })
+    .join(', ');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -315,31 +400,35 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
   const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
-  const expectedMatchers = value.steps.map((step, index) => {
-    const matcher = normalizeTrajectoryMatcher(step, 'tool');
-    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-sequence', index);
-    return matcher;
-  });
+  const expectedMatcherGroups = resolveSequenceMatcherGroups(value.steps);
+  const expectedMatchers = flattenMatcherGroups(expectedMatcherGroups);
 
   if (expectedMatchers.length === 0) {
     throw new Error('trajectory:tool-sequence assertion requires at least one expected step');
   }
 
   const actualTools = toolSteps.map(formatTrajectoryStep);
+  const actualToolGroups = groupToolStepsByTurn(toolSteps);
   let basePass = false;
   let reason = '';
 
   if (value.mode === 'exact') {
     basePass =
-      toolSteps.length === expectedMatchers.length &&
-      expectedMatchers.every((matcher, index) => matchesTrajectoryStep(toolSteps[index], matcher));
+      actualToolGroups.length === expectedMatcherGroups.length &&
+      expectedMatcherGroups.every((matcherGroup, groupIndex) => {
+        const actualGroup = actualToolGroups[groupIndex];
+        return (
+          actualGroup.length === matcherGroup.length &&
+          matcherGroup.every((matcher, stepIndex) =>
+            matchesTrajectoryStep(actualGroup[stepIndex], matcher),
+          )
+        );
+      });
 
     if (basePass) {
-      reason = `Observed exact tool sequence: ${formatStepList(actualTools)}`;
+      reason = `Observed exact tool sequence: ${formatToolStepGroups(actualToolGroups)}`;
     } else {
-      reason = `Expected exact tool sequence of ${expectedMatchers
-        .map((matcher) => matcher.pattern || matcher.name || '*')
-        .join(', ')}, but actual tools were ${formatStepList(actualTools)}`;
+      reason = `Expected exact tool sequence of ${formatMatcherGroups(expectedMatcherGroups)}, but actual tools were ${formatToolStepGroups(actualToolGroups) || '(none)'}`;
     }
   } else {
     let expectedIndex = 0;
