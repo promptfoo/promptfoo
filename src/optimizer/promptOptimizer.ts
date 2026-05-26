@@ -491,6 +491,25 @@ function buildCandidateDefaultTest(
   };
 }
 
+function buildCandidateScenarios(
+  scenarios: TestSuite['scenarios'],
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): TestSuite['scenarios'] {
+  return scenarios?.map((scenario) => ({
+    ...scenario,
+    config: scenario.config.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+    tests: scenario.tests.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+  }));
+}
+
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -528,7 +547,12 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
+    scenarios: buildCandidateScenarios(
+      testSuite.scenarios,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
   };
 }
 
@@ -625,6 +649,9 @@ export async function optimizePromptTestSuite(
   }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(testSuite, options);
+  if (selectedTestSuite.prompts[0].function) {
+    throw new Error('Prompt optimization currently supports literal string prompts only.');
+  }
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(selectedTestSuite, options.validationSplit);
 
