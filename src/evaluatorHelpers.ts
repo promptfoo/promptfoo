@@ -215,12 +215,29 @@ async function loadNestedFileRef(
 
 function collectNestedContainers(value: object, containers: WeakSet<object>): void {
   const pending: object[] = [value];
+  const addNestedContainer = (nestedValue: unknown): void => {
+    if (typeof nestedValue === 'object' && nestedValue !== null) {
+      pending.push(nestedValue);
+    }
+  };
+
   while (pending.length > 0) {
     const container = pending.pop()!;
     if (containers.has(container)) {
       continue;
     }
     containers.add(container);
+
+    if (container instanceof Map) {
+      for (const [key, nestedValue] of container.entries()) {
+        addNestedContainer(key);
+        addNestedContainer(nestedValue);
+      }
+    } else if (container instanceof Set) {
+      for (const nestedValue of container.values()) {
+        addNestedContainer(nestedValue);
+      }
+    }
 
     for (const key of Reflect.ownKeys(container)) {
       const descriptor = Object.getOwnPropertyDescriptor(container, key);
@@ -230,7 +247,7 @@ function collectNestedContainers(value: object, containers: WeakSet<object>): vo
         typeof descriptor.value === 'object' &&
         descriptor.value !== null
       ) {
-        pending.push(descriptor.value);
+        addNestedContainer(descriptor.value);
       }
     }
   }

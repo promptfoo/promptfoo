@@ -719,6 +719,23 @@ describe('evaluatorHelpers', () => {
       expect(readFile).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['Map', (shared: { report: string }) => new Map([['child', shared]])],
+      ['Set', (shared: { report: string }) => new Set([shared])],
+    ])('should not dereference skipped refs reached through %s entries (issue #1613)', async (_kind, createPayload) => {
+      const shared = { report: 'file:///path/to/skipped.txt' };
+      const vars: Record<string, any> = {
+        payload: createPayload(shared),
+        context: shared,
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
+
+      expect(vars.context.report).toBe('file:///path/to/skipped.txt');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
     it('should not dereference file refs from runtime conversation history (issue #1613)', async () => {
       const vars: Record<string, any> = {
         _conversation: [{ output: 'file:///path/to/provider-output.txt' }],
