@@ -229,6 +229,9 @@ Try it yourself by using the [full example config](https://github.com/promptfoo/
 When a prompt references `_conversation` as a Nunjucks variable, steps that share the
 same conversation history run sequentially. Different `conversationId` values can run
 in parallel up to your configured max concurrency.
+
+A step with `options.disableConversationVar: true` does not receive the history variable,
+but its response remains part of the conversation for later turns.
 :::
 
 ## Separating Chat Conversations

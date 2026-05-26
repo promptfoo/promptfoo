@@ -2688,11 +2688,31 @@ function shouldSerializeByConversation(evalOption: RunEvalOptions): boolean {
 function groupConcurrentRunEvalOptions(
   concurrentRunEvalOptions: RunEvalOptions[],
 ): ConcurrentRunEvalGroup[] {
+  const serializedConversationKeys = new Set(
+    concurrentRunEvalOptions
+      .filter(shouldSerializeByConversation)
+      .map((evalOption) =>
+        buildConversationKey(
+          evalOption.provider,
+          evalOption.prompt,
+          evalOption.test,
+          evalOption.repeatIndex,
+        ),
+      ),
+  );
   const groups = new Map<string, ConcurrentRunEvalGroup>();
   let independentIndex = 0;
 
   for (const evalOption of concurrentRunEvalOptions) {
-    if (!shouldSerializeByConversation(evalOption)) {
+    const conversationKey = buildConversationKey(
+      evalOption.provider,
+      evalOption.prompt,
+      evalOption.test,
+      evalOption.repeatIndex,
+    );
+    // Disabled turns still become part of conversation history for later turns.
+    // If any step reads this key, all writers must remain in source order.
+    if (!serializedConversationKeys.has(conversationKey)) {
       const key = `independent:${independentIndex++}`;
       groups.set(key, {
         serializesConversation: false,
@@ -2701,17 +2721,11 @@ function groupConcurrentRunEvalOptions(
       continue;
     }
 
-    const key = buildConversationKey(
-      evalOption.provider,
-      evalOption.prompt,
-      evalOption.test,
-      evalOption.repeatIndex,
-    );
-    const existingGroup = groups.get(key);
+    const existingGroup = groups.get(conversationKey);
     if (existingGroup) {
       existingGroup.steps.push(evalOption);
     } else {
-      groups.set(key, {
+      groups.set(conversationKey, {
         serializesConversation: true,
         steps: [evalOption],
       });
