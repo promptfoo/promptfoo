@@ -221,6 +221,27 @@ describe('evaluator', () => {
       expect(stored?.isRedteam).toBe(true);
     });
 
+    it.each([
+      { label: 'redteam: {}', config: { redteam: {} as any }, expected: true },
+      { label: 'redteam: null', config: { redteam: null as any }, expected: true },
+      { label: 'no redteam key', config: {}, expected: false },
+    ])('classifies $label as isRedteam=$expected on create', async ({ config, expected }) => {
+      const eval_ = await Eval.create(config, []);
+      const stored = getDb()
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, eval_.id))
+        .get();
+      expect(stored?.isRedteam).toBe(expected);
+
+      const redteamSummaries = await getEvalSummaries(undefined, 'redteam');
+      const evalSummaries = await getEvalSummaries(undefined, 'eval');
+      const presentInRedteam = redteamSummaries.some((s) => s.evalId === eval_.id);
+      const presentInEval = evalSummaries.some((s) => s.evalId === eval_.id);
+      expect(presentInRedteam).toBe(expected);
+      expect(presentInEval).toBe(!expected);
+    });
+
     it('should correctly deserialize all provider types', async () => {
       // Test different provider formats
       const testCases = [
