@@ -34,28 +34,68 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
 const CREDENTIAL_TOKEN_PATTERN =
   /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
 
+// Field names whose value is always credential material (inline cert/keystore
+// bytes), even when the name itself does not match the credential token regex.
 const INLINE_CREDENTIAL_MATERIAL_NAMES = new Set([
+  'ca',
+  'cert',
+  'cert_content',
   'certificate_content',
   'jks_content',
+  'key_content',
   'keystore_content',
   'pfx',
   'pfx_content',
 ]);
 
+// Header names that look like auth carriers but escape the main regex (e.g. a
+// bare `Auth` or `X-Auth` header). Only checked when the parent key is the
+// well-known `headers` bag.
+const HEADER_CREDENTIAL_NAMES = new Set([
+  'auth',
+  'x_auth',
+  'proxy_authorization',
+  'x_amz_security_token',
+]);
+
+// Common header-name prefixes for secrets in raw HTTP request strings.
+const RAW_HTTP_SECRET_HEADERS =
+  /^([ \t]*)(authorization|proxy[-_]authorization|cookie|set[-_]cookie|x[-_]api[-_]key|x[-_]auth[-_]token|x[-_]auth|x[-_]amz[-_]security[-_]token|api[-_]key|bearer)([ \t]*:[ \t]*)(.+)$/gim;
+
 const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
+  /(?:^|_)api_bearer_token_envar$/,
   /(?:^|_)api_key_envar$/,
+  /(?:^|_)api_key_required$/,
+  /(?:^|_)azure_token_scope$/,
   /(?:^|_)key_alias$/,
+  /(?:^|_)key_filename$/,
   /(?:^|_)key_name$/,
   /(?:^|_)key_path$/,
+  // `max_tokens`, `max_completion_tokens`, `max_new_tokens`,
+  // `max_tokens_to_sample`, `max_response_tokens`, `max_thinking_tokens`, ...
+  /(?:^|_)max(?:_[a-z0-9]+)*_tokens?(?:_[a-z0-9]+)*$/,
+  /(?:^|_)pay_per_token$/,
   /(?:^|_)private_key_path$/,
+  /(?:^|_)prompt_cache_key$/,
   /(?:^|_)session_key$/,
-  /(?:^|_)token_estimation$/,
-  /(?:^|_)token_url$/,
-  /(?:^|_)azure_token_scope$/,
-  /(?:^|_)max(?:_output|_completion)?_tokens?$/,
   /(?:^|_)signature_auth$/,
   /(?:^|_)signature_(?:algorithm|validity_ms|data_template|refresh_buffer_ms)$/,
+  /(?:^|_)token_estimation$/,
+  /(?:^|_)token_url$/,
 ];
+
+// Provider-config subtrees that are model-facing contracts, not credentials.
+// Walking them would corrupt JSON schemas (e.g. a tool parameter literally
+// named `password`). The check fires at the entry point — children of an
+// opaque key are protected transitively.
+const OPAQUE_PROVIDER_CONFIG_KEYS = new Set([
+  'tools',
+  'functions',
+  'tool_choice',
+  'response_format',
+  'output_schema',
+  'json_schema',
+]);
 
 const normalizeCredentialName = (name: string): string =>
   name
@@ -77,7 +117,28 @@ const looksLikeCredential = (name: string): boolean => {
   );
 };
 
+const looksLikeCredentialHeader = (headerName: string): boolean => {
+  const normalized = normalizeCredentialName(headerName);
+  return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
+};
+
+// Scrub `Authorization: Bearer …` and similar lines from raw HTTP request
+// strings persisted under HTTP provider `config.request`. Returns the original
+// string unchanged when nothing matches.
+const scrubRawHttpRequest = (raw: string): string =>
+  raw.replace(RAW_HTTP_SECRET_HEADERS, (_match, indent, name, sep) => `${indent}${name}${sep}[REDACTED]`);
+
+const isMultipartFieldPart = (value: Record<string, unknown>): boolean =>
+  value.kind === 'field' && typeof value.name === 'string';
+
 const omitProviderCredentials = (value: unknown, parentKey?: string): unknown => {
+  if (typeof value === 'string') {
+    if (parentKey === 'request') {
+      return scrubRawHttpRequest(value);
+    }
+    return value;
+  }
+
   if (Array.isArray(value)) {
     return value.map((item) => omitProviderCredentials(item, parentKey));
   }
@@ -86,15 +147,36 @@ const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
     return value;
   }
 
-  const isApiKeyAuth =
-    parentKey === 'auth' && (value as Record<string, unknown>).type === 'api_key';
+  const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+
+  if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+    // Model-facing schema; do not redact field names inside.
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  // HTTP multipart parts: `{ kind: 'field', name: 'api_key', value: '…' }`.
+  // The credential indicator lives in `name`, not the object's own key.
+  if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
+    return Object.fromEntries(
+      Object.entries(record).flatMap(([key, nested]) =>
+        key === 'value' ? [] : [[key, omitProviderCredentials(nested, key)]],
+      ),
+    );
+  }
+
+  const isApiKeyAuth = normalizedParent === 'auth' && record.type === 'api_key';
+  const isHeaders = normalizedParent === 'headers';
 
   return Object.fromEntries(
-    Object.entries(value).flatMap(([key, nestedValue]) =>
-      looksLikeCredential(key) || (isApiKeyAuth && key === 'value')
-        ? []
-        : [[key, omitProviderCredentials(nestedValue, key)]],
-    ),
+    Object.entries(record).flatMap(([key, nestedValue]) => {
+      const credential = isHeaders ? looksLikeCredentialHeader(key) : looksLikeCredential(key);
+      if (credential || (isApiKeyAuth && key === 'value')) {
+        return [];
+      }
+      return [[key, omitProviderCredentials(nestedValue, key)]];
+    }),
   );
 };
 
@@ -126,26 +208,27 @@ const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
   });
 };
 
+// `test.options` is merged into provider config at runtime, so any field on it
+// (`headers`, `transform`, etc.) can end up holding credential material. We
+// walk it the same way we walk a provider config.
+const omitTestOptionsCredentials = (options: unknown): unknown => {
+  if (!isRecord(options)) {
+    return options;
+  }
+  return omitProviderCredentials(options);
+};
+
 const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
   if (!isRecord(testCase)) {
     return testCase;
   }
-
-  const options = isRecord(testCase.options)
-    ? {
-        ...testCase.options,
-        ...(hasOwn(testCase.options, 'provider')
-          ? { provider: omitProviderCredentials(testCase.options.provider) }
-          : {}),
-      }
-    : testCase.options;
 
   return {
     ...testCase,
     ...(hasOwn(testCase, 'provider')
       ? { provider: omitProviderCredentials(testCase.provider) }
       : {}),
-    ...(hasOwn(testCase, 'options') ? { options } : {}),
+    ...(hasOwn(testCase, 'options') ? { options: omitTestOptionsCredentials(testCase.options) } : {}),
     ...(hasOwn(testCase, 'assert')
       ? { assert: omitAssertionProviderCredentials(testCase.assert) }
       : {}),
@@ -179,6 +262,50 @@ const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
   };
 };
 
+// Prompts can be either strings or `{ raw, label, config }` objects whose
+// `config` is merged into provider config at runtime. Walk the embedded
+// configs so we do not bypass redaction via the prompt slot.
+const omitPromptCredentials = (prompts: unknown): unknown => {
+  if (typeof prompts === 'string' || prompts === undefined || prompts === null) {
+    return prompts;
+  }
+  if (Array.isArray(prompts)) {
+    return prompts.map(omitPromptCredentials);
+  }
+  if (!isRecord(prompts)) {
+    return prompts;
+  }
+  if (!hasOwn(prompts, 'config')) {
+    return prompts;
+  }
+  return {
+    ...prompts,
+    config: omitProviderCredentials(prompts.config),
+  };
+};
+
+// OTLP trace forwarding can carry an `Authorization` header. The rest of the
+// tracing block is non-secret runtime config.
+const omitTracingCredentials = (tracing: unknown): unknown => {
+  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+    return tracing;
+  }
+  const forwarding = tracing.forwarding;
+  if (!isRecord(forwarding.headers)) {
+    return tracing;
+  }
+  const headers = Object.fromEntries(
+    Object.entries(forwarding.headers).filter(([key]) => !looksLikeCredentialHeader(key)),
+  );
+  return {
+    ...tracing,
+    forwarding: {
+      ...forwarding,
+      headers,
+    },
+  };
+};
+
 const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedConfig>['env'] => {
   if (!env || typeof env !== 'object') {
     return env;
@@ -195,6 +322,7 @@ const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<U
     env: omitSensitiveEnv(config.env),
     providers: omitProviderCredentials(config.providers) as Partial<UnifiedConfig>['providers'],
     targets: omitProviderCredentials(config.targets) as Partial<UnifiedConfig>['targets'],
+    prompts: omitPromptCredentials(config.prompts) as Partial<UnifiedConfig>['prompts'],
     defaultTest: omitTestCaseProviderCredentials(
       config.defaultTest,
     ) as Partial<UnifiedConfig>['defaultTest'],
@@ -207,6 +335,11 @@ const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<U
         ) as Partial<UnifiedConfig>['scenarios'])
       : config.scenarios,
     redteam: omitRedteamProviderCredentials(config.redteam) as Partial<UnifiedConfig>['redteam'],
+    ...(hasOwn(config, 'tracing')
+      ? {
+          tracing: omitTracingCredentials(config.tracing) as Partial<UnifiedConfig>['tracing'],
+        }
+      : {}),
   };
 };
 

@@ -399,6 +399,285 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persistedState)).not.toContain('inline-client-key');
     });
 
+    it('preserves additional non-secret provider selectors and behavior flags', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              keyFilename: '/var/run/secrets/service-account.json',
+              googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
+              apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
+              apiKeyRequired: false,
+              isPayPerToken: true,
+              prompt_cache_key: 'partition-a',
+              max_new_tokens: 32,
+              max_tokens_to_sample: 64,
+              maxResponseTokens: 128,
+              max_thinking_tokens: 4096,
+              endpoint: 'https://example.com',
+            } as any,
+          },
+        ],
+        env: {
+          LANGFUSE_PUBLIC_KEY: 'pk-langfuse-public-id',
+          LANGFUSE_SECRET_KEY: 'sk-langfuse-secret',
+        } as any,
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].config).toEqual({
+        keyFilename: '/var/run/secrets/service-account.json',
+        googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
+        apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
+        apiKeyRequired: false,
+        isPayPerToken: true,
+        prompt_cache_key: 'partition-a',
+        max_new_tokens: 32,
+        max_tokens_to_sample: 64,
+        maxResponseTokens: 128,
+        max_thinking_tokens: 4096,
+        endpoint: 'https://example.com',
+      });
+      expect(persisted.env.LANGFUSE_SECRET_KEY).toBeUndefined();
+      // LANGFUSE_PUBLIC_KEY ends in `_KEY`; we treat it as a secret-by-default
+      // because the regex cannot tell a "public" key from a "secret" key.
+      expect(persisted.env.LANGFUSE_PUBLIC_KEY).toBeUndefined();
+    });
+
+    it('redacts credentials living in test options and prompts[].config', () => {
+      useStore.getState().setConfig({
+        prompts: [
+          'Plain string prompt',
+          {
+            raw: 'Hello {{name}}',
+            label: 'Inline prompt',
+            config: {
+              apiKey: 'prompt-leak-apikey',
+              headers: { Authorization: 'Bearer prompt-leak-token', 'x-trace-id': 'visible' },
+              temperature: 0.1,
+            },
+          } as any,
+        ],
+        defaultTest: {
+          options: {
+            headers: { Authorization: 'Bearer default-options-token', 'x-debug-id': 'visible-id' },
+            transform: 'json.output',
+            maxResponseTokens: 256,
+          } as any,
+        },
+        tests: [
+          {
+            options: {
+              headers: { 'x-api-key': 'test-options-key', 'X-Trace-Id': 'visible-trace' },
+            } as any,
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.prompts[0]).toBe('Plain string prompt');
+      expect(persisted.prompts[1]).toEqual({
+        raw: 'Hello {{name}}',
+        label: 'Inline prompt',
+        config: {
+          headers: { 'x-trace-id': 'visible' },
+          temperature: 0.1,
+        },
+      });
+      expect(persisted.defaultTest.options).toEqual({
+        headers: { 'x-debug-id': 'visible-id' },
+        transform: 'json.output',
+        maxResponseTokens: 256,
+      });
+      expect(persisted.tests[0].options).toEqual({
+        headers: { 'X-Trace-Id': 'visible-trace' },
+      });
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('prompt-leak-apikey');
+      expect(serialized).not.toContain('prompt-leak-token');
+      expect(serialized).not.toContain('default-options-token');
+      expect(serialized).not.toContain('test-options-key');
+    });
+
+    it('redacts tracing forwarding headers without dropping non-auth tracing config', () => {
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          forwarding: {
+            enabled: true,
+            endpoint: 'https://otel.example.com/v1/traces',
+            headers: {
+              Authorization: 'Bearer tracing-leak-token',
+              'X-Auth': 'tracing-leak-x-auth',
+              'X-Service': 'visible-service',
+              'X-Request-Id': 'visible-request-id',
+            },
+          },
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.enabled).toBe(true);
+      expect(persisted.tracing.forwarding.endpoint).toBe('https://otel.example.com/v1/traces');
+      expect(persisted.tracing.forwarding.headers).toEqual({
+        'X-Service': 'visible-service',
+        'X-Request-Id': 'visible-request-id',
+      });
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('tracing-leak-token');
+      expect(serialized).not.toContain('tracing-leak-x-auth');
+    });
+
+    it('redacts raw HTTP request strings and multipart form-field values', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/v1/predict',
+              request: [
+                'POST /v1/predict HTTP/1.1',
+                'Host: api.example.com',
+                'Authorization: Bearer raw-request-secret',
+                'X-Api-Key: raw-request-apikey',
+                'Cookie: session=raw-request-cookie',
+                'Content-Type: application/json',
+                '',
+                '{"prompt":"{{message}}"}',
+              ].join('\r\n'),
+              body: {
+                parts: [
+                  { kind: 'field', name: 'api_key', value: 'multipart-leak-apikey' },
+                  { kind: 'field', name: 'authorization', value: 'multipart-leak-auth' },
+                  { kind: 'field', name: 'prompt', value: '{{message}}' },
+                  {
+                    kind: 'file',
+                    name: 'document',
+                    source: { type: 'path', path: '/tmp/doc.pdf' },
+                  },
+                ],
+              },
+            } as any,
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const cfg = persisted.providers[0].config;
+      expect(cfg.url).toBe('https://api.example.com/v1/predict');
+      expect(cfg.request).toContain('Authorization: [REDACTED]');
+      expect(cfg.request).toContain('X-Api-Key: [REDACTED]');
+      expect(cfg.request).toContain('Cookie: [REDACTED]');
+      expect(cfg.request).toContain('Host: api.example.com');
+      expect(cfg.request).toContain('{"prompt":"{{message}}"}');
+      expect(cfg.body.parts).toEqual([
+        { kind: 'field', name: 'api_key' },
+        { kind: 'field', name: 'authorization' },
+        { kind: 'field', name: 'prompt', value: '{{message}}' },
+        { kind: 'file', name: 'document', source: { type: 'path', path: '/tmp/doc.pdf' } },
+      ]);
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('raw-request-secret');
+      expect(serialized).not.toContain('raw-request-apikey');
+      expect(serialized).not.toContain('raw-request-cookie');
+      expect(serialized).not.toContain('multipart-leak-apikey');
+      expect(serialized).not.toContain('multipart-leak-auth');
+    });
+
+    it('redacts inline TLS cert/ca/key material while preserving file paths', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              tls: {
+                cert: '-----BEGIN CERTIFICATE-----inline-cert-pem-secret-----END CERTIFICATE-----',
+                certContent: 'base64-cert-content-secret',
+                ca: '-----BEGIN CERTIFICATE-----inline-ca-secret-----END CERTIFICATE-----',
+                keyContent: 'base64-key-content-secret',
+                certPath: '/var/run/certs/client.crt',
+                caPath: '/var/run/certs/ca.crt',
+                keyPath: '/var/run/certs/client.key',
+              },
+            } as any,
+          },
+        ],
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].config.tls).toEqual({
+        certPath: '/var/run/certs/client.crt',
+        caPath: '/var/run/certs/ca.crt',
+        keyPath: '/var/run/certs/client.key',
+      });
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('inline-cert-pem-secret');
+      expect(serialized).not.toContain('base64-cert-content-secret');
+      expect(serialized).not.toContain('inline-ca-secret');
+      expect(serialized).not.toContain('base64-key-content-secret');
+    });
+
+    it('does not corrupt JSON schemas inside provider tools/functions', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'openai:gpt-4o',
+            config: {
+              apiKey: 'tool-test-secret',
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'authenticate_user',
+                    description: 'Authenticate with API key and password',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        api_key: { type: 'string', description: 'User API key' },
+                        password: { type: 'string', description: 'User password' },
+                        token: { type: 'string' },
+                        cert: { type: 'string' },
+                      },
+                      required: ['api_key', 'password'],
+                    },
+                  },
+                },
+              ],
+              response_format: {
+                type: 'json_schema',
+                json_schema: {
+                  name: 'creds',
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      secret: { type: 'string' },
+                      authorization: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            } as any,
+          },
+        ],
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const providerCfg = persisted.providers[0].config;
+      expect(providerCfg.apiKey).toBeUndefined();
+      expect(providerCfg.tools[0].function.parameters.properties).toEqual({
+        api_key: { type: 'string', description: 'User API key' },
+        password: { type: 'string', description: 'User password' },
+        token: { type: 'string' },
+        cert: { type: 'string' },
+      });
+      expect(providerCfg.tools[0].function.parameters.required).toEqual(['api_key', 'password']);
+      expect(providerCfg.response_format.json_schema.schema.properties).toEqual({
+        secret: { type: 'string' },
+        authorization: { type: 'string' },
+      });
+    });
+
     it('redacts inline auth and certificate material while retaining signing configuration', () => {
       useStore.getState().updateConfig({
         providers: [
