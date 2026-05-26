@@ -184,7 +184,8 @@ export class EvalQueries {
     `;
 
     const results = await db.all<VarKeyResult>(query);
-    const vars = results.map((r) => r.key);
+    // Legacy evals have no persisted display order, so backfill a stable one.
+    const vars = results.map((r) => r.key).sort();
 
     return vars;
   }

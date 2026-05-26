@@ -1993,6 +1993,24 @@ describe('evaluator', () => {
   });
 
   describe('getTablePage sessionId header detection', () => {
+    it('sorts legacy backfilled vars before appending metadata-only sessionId', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET
+          metadata = json('{"sessionId":"session-123"}'),
+          test_case = json('{"vars":{"zebra":"z","apple":"a"}}')
+        WHERE eval_id = '${eval_.id}'`,
+      );
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval_.id}'`);
+
+      const reloadedEval = await Eval.findById(eval_.id);
+      const result = await reloadedEval!.getTablePage({ filters: [] });
+
+      expect(reloadedEval!.vars).toEqual(['apple', 'zebra']);
+      expect(result.head.vars).toEqual(['apple', 'zebra', 'sessionId']);
+    });
+
     it('should add sessionId to vars header when metadata.sessionId exists but not in vars', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 

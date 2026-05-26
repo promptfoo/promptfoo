@@ -17,7 +17,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const varsForHeader = new Set<string>(eval_.vars);
+  const persistedVars = eval_.vars ?? [];
+  const persistedVarSet = new Set(persistedVars);
+  const varsForHeader = new Set<string>(persistedVars);
   const varValuesForRow = new Map<number, Record<string, string>>();
 
   const rowMap: Record<number, EvaluateTableRow> = {};
@@ -175,10 +177,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
 
   const rows = Object.values(rowMap);
-  // Current result payloads carry the configured display order from the eval record.
-  // Keep alphabetical ordering for older payloads that cannot provide a stable order.
+  // Preserve the configured prefix and deterministically append runtime/display-only columns.
+  // Legacy result payloads do not have a persisted prefix, so all columns are sorted.
+  const additionalVars = [...varsForHeader].filter((name) => !persistedVarSet.has(name)).sort();
   const orderedVars =
-    eval_.vars && eval_.vars.length > 0 ? [...varsForHeader] : [...varsForHeader].sort();
+    persistedVars.length > 0 ? [...persistedVars, ...additionalVars] : additionalVars;
   for (const row of rows) {
     row.vars = orderedVars.map((varName) => {
       const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';

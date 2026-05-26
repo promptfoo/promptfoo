@@ -1257,6 +1257,55 @@ describe('convertResultsToTable', () => {
     expect(result.body[1].vars).toEqual(['z-row2', 'a-row2', 'm-row2', 'b-row2']);
   });
 
+  it('sorts metadata-only display columns after the persisted variable prefix', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['prompt'],
+      results: {
+        results: [
+          {
+            id: 'test2',
+            testIdx: 1,
+            promptIdx: 0,
+            vars: { prompt: 'row2' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: { output: 'test output', metadata: { transformDisplayVars: { zebra: 'z' } } },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: { prompt: 'row1' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: { output: 'test output', metadata: { transformDisplayVars: { apple: 'a' } } },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.head.vars).toEqual(['prompt', 'apple', 'zebra']);
+  });
+
   it('keeps alphabetical fallback ordering for legacy result files without persisted vars', () => {
     const resultsFile: ResultsFile = {
       version: 4,
