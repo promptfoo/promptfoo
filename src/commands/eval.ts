@@ -1128,7 +1128,6 @@ export async function doEval(
           }
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
       }
     }
     if (testSuite.redteam) {

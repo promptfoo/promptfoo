@@ -785,6 +785,31 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('findManyByEvalIdBatched', () => {
+    it('continues streaming after gaps in persisted test indices', async () => {
+      const evalId = 'test-eval-id-batched-sparse';
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 5,
+        testCase: mockTestCase,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 8,
+        testCase: mockTestCase,
+      });
+
+      const batches: number[][] = [];
+      for await (const batch of EvalResult.findManyByEvalIdBatched(evalId, { batchSize: 2 })) {
+        batches.push(batch.map((result) => result.testIdx));
+      }
+
+      expect(batches).toEqual([[5], [8]]);
+    });
+  });
+
   describe('save', () => {
     it('should save new results', async () => {
       const result = new EvalResult({

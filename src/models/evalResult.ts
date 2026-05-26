@@ -1,10 +1,9 @@
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import { clearCountCache } from './evalPerformance';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import {
@@ -22,6 +21,7 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
+import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -521,24 +521,33 @@ export default class EvalResult {
     let offset = 0;
 
     while (true) {
+      const [nextResult] = await db
+        .select({ testIdx: evalResultsTable.testIdx })
+        .from(evalResultsTable)
+        .where(and(eq(evalResultsTable.evalId, evalId), gte(evalResultsTable.testIdx, offset)))
+        .orderBy(asc(evalResultsTable.testIdx))
+        .limit(1)
+        .all();
+
+      if (!nextResult) {
+        break;
+      }
+
+      const lowerBound = nextResult.testIdx;
       const results = await db
         .select()
         .from(evalResultsTable)
         .where(
           and(
             eq(evalResultsTable.evalId, evalId),
-            gte(evalResultsTable.testIdx, offset),
-            lt(evalResultsTable.testIdx, offset + batchSize),
+            gte(evalResultsTable.testIdx, lowerBound),
+            lt(evalResultsTable.testIdx, lowerBound + batchSize),
           ),
         )
         .all();
 
-      if (results.length === 0) {
-        break;
-      }
-
       yield results.map((result) => new EvalResult({ ...result, persisted: true }));
-      offset += batchSize;
+      offset = lowerBound + batchSize;
     }
   }
 
