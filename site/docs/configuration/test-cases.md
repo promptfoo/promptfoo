@@ -571,6 +571,19 @@ providers:
 tests: file://evals.json
 ```
 
+To run several skill suites together, put JSON paths or a glob in the `tests` list:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - openai:chat:gpt-4o-mini
+
+tests:
+  - file://skills/*/evals.json
+```
+
 The mapping is:
 
 | `evals.json` field     | Promptfoo test case             |
