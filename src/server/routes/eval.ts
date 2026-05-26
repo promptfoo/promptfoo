@@ -808,10 +808,9 @@ evalRouter.post(
       const previousScore = result.score;
       const previousCategory = getResultMetricCategory(result.success, result.failureReason);
       const previousAssertions = countGradingAssertions(result.gradingResult);
+      // Score and comment edits must not turn execution errors into assertion failures.
       const hasOutcomeOverride =
-        result.success !== gradingResult.pass ||
-        result.score !== gradingResult.score ||
-        hasManualRating(gradingResult);
+        result.success !== gradingResult.pass || hasManualRating(gradingResult);
 
       // Update the result
       result.gradingResult = gradingResult;

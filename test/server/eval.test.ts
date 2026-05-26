@@ -494,6 +494,37 @@ describe('eval routes', () => {
       expect(updatedMetrics?.testErrorCount).toBe(1);
     });
 
+    it('should preserve an error category when a rating submission changes only the score', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+
+      await markResultAsError(eval_, result);
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Prompt metrics are required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createScoreOnlyRatingPayload(result, 0.4));
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(updatedResult?.score).toBe(0.4);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.score).toBeCloseTo(originalMetrics.score + 0.4);
+      expect(updatedMetrics?.testPassCount).toBe(1);
+      expect(updatedMetrics?.testFailCount).toBe(0);
+      expect(updatedMetrics?.testErrorCount).toBe(1);
+    });
+
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
