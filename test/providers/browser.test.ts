@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
 import type { Page } from 'playwright';
 import type { Mock, Mocked } from 'vitest';
@@ -61,6 +62,23 @@ describe('BrowserProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it('should log page close failures while clearing persisted sessions', async () => {
+    const error = new Error('failed to close page');
+    const close = vi.fn().mockRejectedValue(error);
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    (BrowserProvider as any).pageCache.set('session', { close });
+
+    BrowserProvider.clearSessionCache();
+    await Promise.resolve();
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(debugSpy).toHaveBeenCalledWith(
+      '[Browser] Failed to close page during session cache cleanup',
+      { error },
+    );
+    expect((BrowserProvider as any).pageCache.size).toBe(0);
   });
 
   it('should execute navigate action', async () => {

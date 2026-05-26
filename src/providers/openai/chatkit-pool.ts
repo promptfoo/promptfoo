@@ -62,6 +62,21 @@ export class ChatKitBrowserPool {
     this.config = config;
   }
 
+  private static shutdownInstance(event: 'cleanup' | 'beforeExit'): void {
+    if (!ChatKitBrowserPool.instance) {
+      return;
+    }
+
+    const message =
+      event === 'cleanup'
+        ? '[ChatKitPool] Failed to shut down browser pool during cleanup'
+        : '[ChatKitPool] Failed to shut down browser pool on beforeExit';
+    ChatKitBrowserPool.instance.shutdown().catch((err) => {
+      logger.debug(message, { error: err });
+    });
+    ChatKitBrowserPool.instance = null;
+  }
+
   /**
    * Register process exit handlers to clean up browser resources
    */
@@ -72,28 +87,13 @@ export class ChatKitBrowserPool {
     ChatKitBrowserPool.cleanupRegistered = true;
 
     const cleanup = () => {
-      if (ChatKitBrowserPool.instance) {
-        // Synchronous cleanup - close browser immediately
-        ChatKitBrowserPool.instance.shutdown().catch((err) => {
-          logger.debug('[ChatKitPool] Failed to shut down browser pool during cleanup', {
-            error: err,
-          });
-        });
-        ChatKitBrowserPool.instance = null;
-      }
+      ChatKitBrowserPool.shutdownInstance('cleanup');
     };
 
     // beforeExit fires when event loop is empty - allows cleanup of browser
     // which otherwise keeps the event loop alive
     process.on('beforeExit', () => {
-      if (ChatKitBrowserPool.instance) {
-        ChatKitBrowserPool.instance.shutdown().catch((err) => {
-          logger.debug('[ChatKitPool] Failed to shut down browser pool on beforeExit', {
-            error: err,
-          });
-        });
-        ChatKitBrowserPool.instance = null;
-      }
+      ChatKitBrowserPool.shutdownInstance('beforeExit');
     });
 
     process.on('exit', cleanup);

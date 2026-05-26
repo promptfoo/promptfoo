@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 
 // Create hoisted mocks to access them in tests
@@ -112,6 +113,24 @@ describe('ChatKitBrowserPool', () => {
 
       expect(instance1).not.toBe(instance2);
       expect((instance2 as any).config.maxConcurrency).toBe(10);
+    });
+  });
+
+  describe('process cleanup', () => {
+    it.each([
+      ['cleanup', '[ChatKitPool] Failed to shut down browser pool during cleanup'],
+      ['beforeExit', '[ChatKitPool] Failed to shut down browser pool on beforeExit'],
+    ] as const)('should log %s shutdown failures and release the singleton', async (event, message) => {
+      const error = new Error('browser shutdown failed');
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      const instance = ChatKitBrowserPool.getInstance();
+      vi.spyOn(instance, 'shutdown').mockRejectedValueOnce(error);
+
+      (ChatKitBrowserPool as any).shutdownInstance(event);
+      await Promise.resolve();
+
+      expect(debugSpy).toHaveBeenCalledWith(message, { error });
+      expect((ChatKitBrowserPool as any).instance).toBeNull();
     });
   });
 
