@@ -41,6 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../util/repeatPassRateThreshold';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -217,6 +218,7 @@ export class EvalQueries {
             AND json_valid(metadata)
           LIMIT 10000
         ) t, json_each(t.metadata) j
+        WHERE j.key != ${REPEAT_PASS_RATE_GROUP_METADATA_KEY}
         ORDER BY j.key
         LIMIT 1000
       `;
@@ -240,7 +242,7 @@ export class EvalQueries {
   static getMetadataValuesFromEval(evalId: string, key: string): string[] {
     const db = getDb();
     const trimmedKey = key.trim();
-    if (!trimmedKey) {
+    if (!trimmedKey || trimmedKey === REPEAT_PASS_RATE_GROUP_METADATA_KEY) {
       return [];
     }
 

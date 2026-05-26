@@ -12,6 +12,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateThreshold';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
@@ -581,11 +582,58 @@ describeEvaluator('evaluator execution control', () => {
           failureReason: ResultFailureReason.ERROR,
         }),
       );
-
       expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps repeated timeout grouping internal in stored and public results', async () => {
+    vi.useFakeTimers();
+    const timers: NodeJS.Timeout[] = [];
+    const slowProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('repeated-timeout-provider'),
+      callApi: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            timers.push(
+              setTimeout(
+                () =>
+                  resolve({
+                    output: 'Late output',
+                    tokenUsage: createEmptyTokenUsage(),
+                  }),
+                5000,
+              ),
+            );
+          }),
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [slowProvider],
+      prompts: [toPrompt('Repeated timeout prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, { repeat: 2, timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(50);
+      const completedEval = await evalPromise;
+      const storedResults = await completedEval.getResults();
+      const publicSummary = await completedEval.toEvaluateSummary();
+
+      expect(storedResults).toHaveLength(2);
+      expect(
+        storedResults.map((result) => result.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY]),
+      ).toEqual([0, 0]);
+      expect(JSON.stringify(publicSummary)).not.toContain(REPEAT_PASS_RATE_GROUP_METADATA_KEY);
+    } finally {
+      for (const timer of timers) {
+        clearTimeout(timer);
       }
       vi.useRealTimers();
     }

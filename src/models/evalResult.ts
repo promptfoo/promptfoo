@@ -19,6 +19,10 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
+import {
+  addStoredRepeatPassRateMetadata,
+  removeStoredRepeatPassRateMetadata,
+} from '../util/repeatPassRateThreshold';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { clearCountCache } from './evalPerformance';
@@ -377,7 +381,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(metadata),
+      metadata: sanitizeForDb(addStoredRepeatPassRateMetadata(metadata, result)),
       failureReason,
     };
     if (persist) {
@@ -420,7 +424,9 @@ export default class EvalResult {
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),
           gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
+          metadata: sanitizeMetadataForDb(
+            sanitizeForDb(addStoredRepeatPassRateMetadata(result.metadata, result)),
+          ),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db
@@ -678,7 +684,7 @@ export default class EvalResult {
       testCase,
       testIdx: this.testIdx,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      metadata: shouldStripMetadata ? {} : removeStoredRepeatPassRateMetadata(this.metadata),
       failureReason: this.failureReason,
     };
   }

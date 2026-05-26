@@ -10,6 +10,10 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import {
+  REPEAT_PASS_RATE_GROUP_METADATA_KEY,
+  tagRepeatPassRateResult,
+} from '../../src/util/repeatPassRateThreshold';
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
@@ -866,6 +870,22 @@ describe('EvalResult', () => {
           },
         }),
       );
+    });
+
+    it('stores repeat grouping internally without exposing it in public results', async () => {
+      const taggedResult = tagRepeatPassRateResult(
+        createEvaluateResult({ metadata: { visible: 'metadata' } }),
+        7,
+      );
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', taggedResult, {
+        persist: false,
+      });
+
+      expect(result.metadata).toMatchObject({
+        visible: 'metadata',
+        [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7,
+      });
+      expect(result.toEvaluateResult().metadata).toEqual({ visible: 'metadata' });
     });
 
     it('should preserve the original response object when response stripping is disabled', () => {

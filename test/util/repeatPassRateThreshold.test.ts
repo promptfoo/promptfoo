@@ -22,13 +22,11 @@ function makeResult(opts: {
     promptIdx: opts.promptIdx,
     success: opts.success,
     description: opts.description ?? null,
-    testCase:
-      opts.testCase ??
-      (opts.repeatGroupTestIdx === undefined
-        ? ({} as AtomicTestCase)
-        : ({
-            metadata: { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: opts.repeatGroupTestIdx },
-          } as AtomicTestCase)),
+    metadata:
+      opts.repeatGroupTestIdx === undefined
+        ? {}
+        : { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: opts.repeatGroupTestIdx },
+    testCase: opts.testCase ?? ({} as AtomicTestCase),
   };
 }
 

@@ -1,7 +1,45 @@
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
+import type { EvaluateResult } from '../types';
 
 export const REPEAT_PASS_RATE_GROUP_METADATA_KEY = '__promptfooRepeatGroupTestIdx';
+export const REPEAT_PASS_RATE_GROUP_RESULT_KEY = Symbol('promptfooRepeatGroupTestIdx');
+
+type TaggedRepeatResult = {
+  [REPEAT_PASS_RATE_GROUP_RESULT_KEY]?: number;
+};
+
+export function tagRepeatPassRateResult(result: EvaluateResult, testIdx: number | undefined) {
+  if (testIdx !== undefined) {
+    Object.defineProperty(result, REPEAT_PASS_RATE_GROUP_RESULT_KEY, {
+      configurable: false,
+      enumerable: false,
+      value: testIdx,
+      writable: false,
+    });
+  }
+  return result;
+}
+
+export function addStoredRepeatPassRateMetadata(
+  metadata: Record<string, any> | undefined,
+  result: EvaluateResult,
+) {
+  const repeatGroupTestIdx = (result as EvaluateResult & TaggedRepeatResult)[
+    REPEAT_PASS_RATE_GROUP_RESULT_KEY
+  ];
+  return repeatGroupTestIdx === undefined
+    ? metadata
+    : { ...metadata, [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: repeatGroupTestIdx };
+}
+
+export function removeStoredRepeatPassRateMetadata(metadata: Record<string, any> | undefined) {
+  if (!metadata || !(REPEAT_PASS_RATE_GROUP_METADATA_KEY in metadata)) {
+    return metadata;
+  }
+  const { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: _internalTestIdx, ...publicMetadata } = metadata;
+  return publicMetadata;
+}
 
 /**
  * A single per-test repeat pass-rate violation.
@@ -21,7 +59,7 @@ export interface RepeatPassRateViolation {
 
 type RepeatPassRateResult = Pick<
   EvalResult,
-  'testIdx' | 'promptIdx' | 'success' | 'description' | 'testCase'
+  'testIdx' | 'promptIdx' | 'success' | 'description' | 'metadata' | 'testCase'
 >;
 
 type Bucket = {
@@ -32,8 +70,8 @@ type Bucket = {
   description?: string;
 };
 
-function getRepeatGroupTestIdx(result: Pick<RepeatPassRateResult, 'testIdx' | 'testCase'>) {
-  const repeatGroupTestIdx = result.testCase.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY];
+function getRepeatGroupTestIdx(result: Pick<RepeatPassRateResult, 'testIdx' | 'metadata'>) {
+  const repeatGroupTestIdx = result.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY];
   return typeof repeatGroupTestIdx === 'number' && Number.isSafeInteger(repeatGroupTestIdx)
     ? repeatGroupTestIdx
     : result.testIdx;
