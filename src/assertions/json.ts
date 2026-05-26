@@ -31,7 +31,7 @@ function getJsonSchemaValidator({
       return { validate: getAjv().compile(renderedValue as object | boolean) };
     }
 
-    throw new Error(`${assertion.type} assertion must have a string or object value`);
+    throw new Error(`${assertion.type} assertion must have a string, boolean, or object value`);
   } catch (error) {
     return {
       failure: {
@@ -103,7 +103,7 @@ export function handleContainsJson({
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   let validate: ValidateFunction | undefined;
 
-  if (renderedValue !== undefined && renderedValue !== null) {
+  if (jsonObjects.length > 0 && renderedValue !== undefined && renderedValue !== null) {
     const validatorResult = getJsonSchemaValidator({ renderedValue, valueFromScript, assertion });
     if ('failure' in validatorResult) {
       return validatorResult.failure;

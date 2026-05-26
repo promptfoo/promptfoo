@@ -1495,6 +1495,48 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should not evaluate a malformed contains-json schema when no JSON is present', async () => {
+    const output = 'here is the answer with no JSON whatsoever';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'contains-json',
+        value: 'type: object\nproperties:\n  value: [',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Expected output to contain valid JSON',
+    });
+  });
+
+  it('should not evaluate a malformed not-contains-json schema when no JSON is present', async () => {
+    const output = 'here is the answer with no JSON whatsoever';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: 'type: object\nproperties:\n  value: [',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should pass when the javascript assertion passes', async () => {
     const output = 'Expected output';
 
