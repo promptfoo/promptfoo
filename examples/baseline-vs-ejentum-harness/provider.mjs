@@ -35,12 +35,12 @@ function isReasoningModel(model) {
   );
 }
 
-function parseChatMessages(prompt) {
+async function parseChatMessages(prompt) {
   const trimmedPrompt = prompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     // Optional dependency: only YAML chat prompts need a YAML parser.
     // Install it in a copied example with: npm install js-yaml
-    const yaml = require('js-yaml');
+    const yaml = await import('js-yaml');
     const parsed = yaml.load(prompt);
     return Array.isArray(parsed) ? parsed : [{ role: 'user', content: prompt }];
   }
@@ -105,39 +105,19 @@ function getNumberOption(config, env, option, envar, defaultValue) {
   return Number.isFinite(value) ? value : undefined;
 }
 
-async function getFetchWithCache() {
+async function fetchScaffold(url, key, prompt, mode) {
   try {
-    const promptfoo = await import('promptfoo');
-    return (promptfoo.cache || promptfoo.default?.cache).fetchWithCache;
-  } catch (error) {
-    // The repository's local TypeScript runner has no built package to import.
-    try {
-      return (await import('../../src/cache.ts')).fetchWithCache;
-    } catch {
-      throw error;
-    }
-  }
-}
-
-async function fetchScaffold(fetchWithCache, config, url, key, prompt, mode, bustCache) {
-  try {
-    const { data, status } = await fetchWithCache(
-      url,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: prompt, mode }),
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
       },
-      undefined,
-      'json',
-      bustCache,
-      config.maxRetries,
-    );
-    if (status < 200 || status >= 300) {
-      return { error: `Ejentum API ${status}: ${JSON.stringify(data)}` };
+      body: JSON.stringify({ query: prompt, mode }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { error: `Ejentum API ${response.status}: ${JSON.stringify(data)}` };
     }
     const scaffold =
       Array.isArray(data) && typeof data[0]?.[mode] === 'string' ? data[0][mode].trim() : '';
@@ -182,40 +162,54 @@ function buildOpenAiBody(model, messages, scaffold, config, env) {
   };
 }
 
-async function fetchCompletion(fetchWithCache, config, env, key, body, bustCache) {
+async function fetchCompletion(config, env, key, body) {
   try {
     const organization = getOpenAiOrganization(config, env);
-    const { data, status } = await fetchWithCache(
-      getOpenAiUrl(config, env),
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(key ? { Authorization: `Bearer ${key}` } : {}),
-          ...(organization ? { 'OpenAI-Organization': organization } : {}),
-          ...config.headers,
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(getOpenAiUrl(config, env), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(key ? { Authorization: `Bearer ${key}` } : {}),
+        ...(organization ? { 'OpenAI-Organization': organization } : {}),
+        ...config.headers,
       },
-      undefined,
-      'json',
-      bustCache,
-      config.maxRetries,
-    );
-    if (status < 200 || status >= 300 || data.error) {
-      return { error: `OpenAI error: ${data.error?.message || status}` };
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      return { error: `OpenAI error: ${data.error?.message || response.status}` };
     }
-    const output = data.choices?.[0]?.message?.content;
+    const choice = data.choices?.[0];
+    const output = choice?.message?.content;
+    const tokenUsage = {
+      prompt: data.usage?.prompt_tokens || 0,
+      completion: data.usage?.completion_tokens || 0,
+      total: data.usage?.total_tokens || 0,
+    };
+    if (typeof choice?.message?.refusal === 'string' && choice.message.refusal.trim()) {
+      return {
+        output: choice.message.refusal,
+        tokenUsage,
+        isRefusal: true,
+        ...(choice.finish_reason ? { finishReason: choice.finish_reason } : {}),
+        guardrails: { flagged: true },
+      };
+    }
+    if (choice?.finish_reason === 'content_filter') {
+      return {
+        output: output || 'Content filtered by provider',
+        tokenUsage,
+        isRefusal: true,
+        finishReason: 'content_filter',
+        guardrails: { flagged: true },
+      };
+    }
     if (typeof output !== 'string' || output.trim() === '') {
       return { error: 'OpenAI response did not include non-empty assistant content.' };
     }
     return {
       output,
-      tokenUsage: {
-        prompt: data.usage?.prompt_tokens || 0,
-        completion: data.usage?.completion_tokens || 0,
-        total: data.usage?.total_tokens || 0,
-      },
+      tokenUsage,
     };
   } catch (err) {
     return { error: `OpenAI fetch failed: ${String(err)}` };
@@ -234,43 +228,34 @@ class EjentumAugmentedProvider {
   }
 
   async callApi(prompt, context) {
-    const ejentumKey = getEjentumKey(this.config, this.env);
-    const openaiKey = getOpenAiKey(this.config, this.env);
+    const config = { ...this.config, ...(context?.prompt?.config || {}) };
+    const ejentumKey = getEjentumKey(config, this.env);
+    const openaiKey = getOpenAiKey(config, this.env);
     if (!ejentumKey) {
       return {
         error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
       };
     }
-    if (!openaiKey && (this.config.apiKeyRequired ?? true)) {
+    if (!openaiKey && (config.apiKeyRequired ?? true)) {
       return { error: 'OPENAI_API_KEY is not set.' };
     }
 
-    const mode = this.config.mode || 'reasoning';
-    const model = this.config.model || 'gpt-5.4-mini';
+    const mode = config.mode || 'reasoning';
+    const model = config.model || 'gpt-5.4-mini';
     const ejentumUrl =
-      this.config.apiUrl ||
+      config.apiUrl ||
       this.env.EJENTUM_API_URL ||
       process.env.EJENTUM_API_URL ||
       DEFAULT_EJENTUM_URL;
-    const messages = parseChatMessages(prompt);
-    const fetchWithCache = await getFetchWithCache();
-    const bustCache = context?.bustCache ?? context?.debug;
+    const messages = await parseChatMessages(prompt);
 
-    const scaffoldResult = await fetchScaffold(
-      fetchWithCache,
-      this.config,
-      ejentumUrl,
-      ejentumKey,
-      prompt,
-      mode,
-      bustCache,
-    );
+    const scaffoldResult = await fetchScaffold(ejentumUrl, ejentumKey, prompt, mode);
     if (scaffoldResult.error) {
       return scaffoldResult;
     }
 
-    const body = buildOpenAiBody(model, messages, scaffoldResult.scaffold, this.config, this.env);
-    return fetchCompletion(fetchWithCache, this.config, this.env, openaiKey, body, bustCache);
+    const body = buildOpenAiBody(model, messages, scaffoldResult.scaffold, config, this.env);
+    return fetchCompletion(config, this.env, openaiKey, body);
   }
 }
 

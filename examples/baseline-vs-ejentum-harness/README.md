@@ -42,7 +42,9 @@ The Ejentum base URL is configurable so you can target staging or a self-hosted 
     apiUrl: https://your-endpoint.example.com/logicv1/
 ```
 
-The OpenAI completion endpoint follows the built-in provider's routing options: set `config.apiHost`, `OPENAI_API_HOST`, `config.apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` when using an OpenAI-compatible gateway or local endpoint. Authentication configuration such as `apiKey`, `apiKeyEnvar`, `apiKeyRequired`, `organization`, and `headers` is also forwarded by the augmented provider so both comparison arms can use the same gateway or account setup. Both external calls use Promptfoo's standard cached, proxy-aware transport, including its proxy and custom CA/TLS configuration.
+The OpenAI completion endpoint follows the built-in provider's routing options: set `config.apiHost`, `OPENAI_API_HOST`, `config.apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` when using an OpenAI-compatible gateway or local endpoint. Authentication configuration such as `apiKey`, `apiKeyEnvar`, `apiKeyRequired`, `organization`, and `headers` is also forwarded by the augmented provider so both comparison arms can use the same gateway or account setup.
+
+Because `provider.mjs` is a standalone example, its two external requests use the standard JavaScript `fetch` API rather than Promptfoo's internal cached transport. If your deployment relies on custom proxy or TLS transport settings, adapt this provider to your network client or expose compatible gateway URLs for both comparison arms.
 
 ## How the custom provider works
 

@@ -1,7 +1,6 @@
 import path from 'node:path';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import { mockProcessEnv } from '../util/utils';
 
@@ -9,7 +8,10 @@ type EjentumProviderConstructor = new (options?: {
   config?: Record<string, unknown>;
   env?: Record<string, string | undefined>;
 }) => {
-  callApi(prompt: string): Promise<unknown>;
+  callApi(
+    prompt: string,
+    context?: { prompt?: { config?: Record<string, unknown> } },
+  ): Promise<unknown>;
 };
 
 let EjentumAugmentedProvider: EjentumProviderConstructor;
@@ -36,7 +38,6 @@ describe('baseline-vs-ejentum-harness provider', () => {
   });
 
   beforeEach(() => {
-    disableCache();
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
     restoreEnv = mockProcessEnv(
@@ -49,7 +50,6 @@ describe('baseline-vs-ejentum-harness provider', () => {
   });
 
   afterEach(() => {
-    enableCache();
     restoreEnv?.();
     restoreEnv = undefined;
     vi.unstubAllGlobals();
@@ -281,7 +281,59 @@ describe('baseline-vs-ejentum-harness provider', () => {
     expect(fetchMock.mock.calls[1][1].headers).toMatchObject({
       'OpenAI-Organization': 'org-configured',
       'X-Gateway-Tenant': 'tenant-a',
-      'x-promptfoo-version': expect.any(String),
+    });
+  });
+
+  it('applies prompt-level provider config overrides like the baseline provider', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
+      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
+
+    const provider = new EjentumAugmentedProvider({ config: { model: 'gpt-4o-mini' } });
+    await provider.callApi('solve this', {
+      prompt: { config: { temperature: 0.7, max_tokens: 77 } },
+    });
+    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+
+    expect(openaiRequest).toMatchObject({ temperature: 0.7, max_tokens: 77 });
+  });
+
+  it('returns OpenAI refusal responses as guarded successful outputs', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
+      .mockResolvedValueOnce(
+        mockResponse({
+          choices: [{ message: { refusal: 'I cannot assist with that.' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
+        }),
+      );
+
+    const result = await new EjentumAugmentedProvider().callApi('solve this');
+
+    expect(result).toEqual({
+      output: 'I cannot assist with that.',
+      tokenUsage: { prompt: 7, completion: 3, total: 10 },
+      isRefusal: true,
+      finishReason: 'stop',
+      guardrails: { flagged: true },
+    });
+  });
+
+  it('returns filtered completions as guarded successful outputs', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
+      .mockResolvedValueOnce(
+        mockResponse({ choices: [{ message: {}, finish_reason: 'content_filter' }] }),
+      );
+
+    const result = await new EjentumAugmentedProvider().callApi('solve this');
+
+    expect(result).toEqual({
+      output: 'Content filtered by provider',
+      tokenUsage: { prompt: 0, completion: 0, total: 0 },
+      isRefusal: true,
+      finishReason: 'content_filter',
+      guardrails: { flagged: true },
     });
   });
 
