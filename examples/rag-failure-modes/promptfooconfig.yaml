@@ -40,8 +40,22 @@ tests:
         Employees are eligible for a laptop replacement every three years.
       answer: According to equipment-policy.md#laptops, employees are eligible for a laptop replacement every three years.
     assert:
-      - type: icontains
-        value: 'employees are eligible for a laptop replacement every three years'
+      - type: javascript
+        value: |
+          const supportedClaim = 'employees are eligible for a laptop replacement every three years';
+          const normalized = output.toLowerCase();
+          const deniedClaims = [
+            `not true that ${supportedClaim}`,
+            `false that ${supportedClaim}`,
+            `incorrect that ${supportedClaim}`,
+            `untrue that ${supportedClaim}`,
+            `denies that ${supportedClaim}`,
+            `rejects that ${supportedClaim}`,
+            'employees are not eligible for a laptop replacement every three years',
+            'employees are never eligible for a laptop replacement every three years',
+          ];
+          return normalized.includes(supportedClaim)
+            && deniedClaims.every((claim) => !normalized.includes(claim));
       - type: contains
         value: 'equipment-policy.md#laptops'
 
@@ -122,8 +136,14 @@ tests:
             && citations.every((citation) => sources.includes(citation));
       - type: javascript
         value: |
-          return /\b(?:conflict|disagree|contradict)/i.test(output)
-            && !/\b(?:do not|does not|don't|doesn't|no|not)\b.{0,12}\b(?:conflict|disagree|contradict)/i.test(output);
+          const acknowledgesConflict =
+            /\b(?:sources?|policies|documents?)\s+(?:conflict|disagree|contradict)\b/i.test(output)
+            || /\b(?:conflict|disagreement|contradiction)\s+between\s+(?:the\s+)?(?:sources?|policies|documents?)\b/i.test(output);
+          const dismissesConflict =
+            /\b(?:no|not|without)\s+(?:real\s+|actual\s+)?(?:conflict|disagreement|contradiction)\b/i.test(output)
+            || /\b(?:conflict|disagreement|contradiction)\s+(?:is|was)\s+(?:a\s+)?(?:misunderstanding|absent|resolved)\b/i.test(output)
+            || /\b(?:sources?|policies|documents?)\s+(?:conflict|disagree|contradict)\b.{0,16}\b(?:no|not|false|mistaken|agree)\b/i.test(output);
+          return acknowledgesConflict && !dismissesConflict;
 
   - description: Model should not refuse when sufficient context exists
     vars:
@@ -133,11 +153,13 @@ tests:
         Employees are eligible for a laptop replacement every three years.
       answer: Employees are eligible for a laptop replacement every three years.
     assert:
-      - type: not-icontains
-        value: "I don't know"
-      - type: not-icontains
-        value: 'not enough information'
-      - type: not-icontains
-        value: 'insufficient information'
-      - type: contains
-        value: 'three years'
+      - type: javascript
+        value: |
+          const refusalPatterns = [
+            /\bi\s+(?:do not|don't|cannot|can't)\s+(?:know|(?:provide\s+)?(?:an?\s+)?answer)\b/i,
+            /\b(?:not enough|insufficient)\s+information\b/i,
+            /\b(?:unable to|cannot|can't)\s+(?:provide\s+)?(?:an?\s+)?(?:answer|determine)\b/i,
+          ];
+          return refusalPatterns.every((pattern) => !pattern.test(output));
+      - type: icontains
+        value: 'employees are eligible for a laptop replacement every three years'

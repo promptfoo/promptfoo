@@ -12,12 +12,12 @@ The runnable config uses deterministic `answer` fixtures for response checks and
 | ---------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Missing retrieved context          | The retrieved context does not contain the information needed to answer the question. | Check `context.vars.context` deterministically, or use `context-recall` with real model output.          |
 | Irrelevant retrieved context       | The retrieved chunks are on the wrong topic or too weak to support the answer.        | Check retrieved source text deterministically, or use `context-relevance` with real model output.        |
-| Answer ignores available context   | The context contains the answer, but the model answers incorrectly or generically.    | Check for expected answer details with `contains`, `contains-all`, or `llm-rubric`.                      |
+| Answer ignores available context   | The context contains the answer, but the model answers incorrectly or generically.    | Require the supported relationship and reject negated claims, or use `llm-rubric`.                       |
 | Answer overclaims beyond context   | The model adds details that are not present in the retrieved context.                 | Use `llm-rubric` for judgment-based checks, or deterministic `not-contains` checks for known overclaims. |
 | Fabricated citation or source      | The answer cites a source ID or document that was not retrieved.                      | Use JavaScript to verify that every cited source appears in the retrieved context.                       |
 | Metadata/source not preserved      | The answer gives a plausible response but drops required source/page metadata.        | Use deterministic assertions for required metadata patterns.                                             |
-| Conflicting context not surfaced   | Retrieved chunks disagree, but the answer silently chooses one.                       | Require conflict language with `icontains`, or use a rubric for broader uncertainty handling.            |
-| Refusal despite sufficient context | The model refuses or says it lacks information even though the context is enough.     | Use `not-icontains` for refusal phrases and `contains` for expected answer details.                      |
+| Conflicting context not surfaced   | Retrieved chunks disagree, but the answer silently chooses one.                       | Require affirmative conflict language with JavaScript, or use a rubric for broader uncertainty handling. |
+| Refusal despite sufficient context | The model refuses or says it lacks information even though the context is enough.     | Reject common refusal wording and require the supported answer relationship.                             |
 
 ## How to run
 
@@ -48,7 +48,7 @@ Expected result:
 0 errors
 ```
 
-The two failures are intentional. The missing and irrelevant retrieval cases run JavaScript assertions directly against `context.vars.context`, so they fail even though their answer fixtures responsibly acknowledge that evidence is absent. The remaining cases test answer behavior. In a real project, replace the fixtures with your pipeline output and consider `context-recall` or `context-relevance` when model-graded retrieval checks are appropriate.
+The two failures are intentional. The missing and irrelevant retrieval cases run JavaScript assertions directly against `context.vars.context`, so they fail even though their answer fixtures responsibly acknowledge that evidence is absent. The remaining cases test answer behavior, including rejected policy negations, dismissed source conflicts, and common refusal wording. In a real project, replace the fixtures with your pipeline output and consider `context-recall` or `context-relevance` when model-graded retrieval checks are appropriate.
 
 `PROMPTFOO_PASS_RATE_THRESHOLD=0` keeps this intentional-failure demonstration from exiting nonzero before you can inspect the report. Remove it in CI when failures should fail the build.
 
@@ -71,6 +71,6 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 
 - `context-recall` and `context-relevance` are useful when evaluating retrieved context quality with a configured grading provider.
 - Deterministic JavaScript checks over `context.vars.context` let you validate required retrieved evidence without a grading provider.
-- Deterministic checks such as `contains`, `contains-all`, and `not-icontains` are useful for required answer strings, source IDs, or refusal phrases.
+- Deterministic checks such as `contains`, `contains-all`, and JavaScript guards are useful for required answer relationships, source IDs, negations, or refusal phrases.
 - `llm-rubric` is useful when the failure mode requires judgment, such as overclaiming beyond context or failing to surface conflicting sources.
 - This example intentionally avoids adding new Promptfoo internals or new assertion semantics.
