@@ -735,6 +735,17 @@ tests:
             citations:
               - doc_1
               - doc_2
+
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          mode: exact
+          args:
+            status: Q
+          exclude:
+            - page: 1
+            - page_size: 5
+            - request_id
 ```
 
 `value` must be an object with:
@@ -742,8 +753,13 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
+- optional `exclude`, an array of argument keys to ignore or key/value pairs to ignore only when the value matches
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+Use `exclude` with `mode: exact` when tool calls may include safe defaults that should not hide hallucinated arguments. A string entry, such as `request_id` or `idempotency_key`, always ignores that top-level key. An object entry, such as `{ page: 1 }`, ignores the top-level key only when the observed or expected value is deeply equal to `1`; `page: 2` still fails exact matching. Object entries must contain exactly one key, so write `[{ page: 1 }, { page_size: 5 }]` rather than `[{ page: 1, page_size: 5 }]`.
+
+Exclude entries apply only to top-level keys of the tool arguments. To conditionally ignore a nested object, match the whole top-level value, for example `{ pagination: { page: 1, page_size: 5 } }`.
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 

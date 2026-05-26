@@ -926,6 +926,37 @@ describe('trajectory assertions', () => {
   });
 
   describe('trajectory:tool-args-match', () => {
+    const makeToolArgsMatchParams = (
+      toolArgs: Record<string, unknown>,
+      value: Record<string, unknown>,
+    ): AssertionParams => ({
+      ...defaultParams,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'orders-tool-call',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': JSON.stringify(toolArgs),
+              },
+            },
+          ],
+        },
+      },
+      baseType: 'trajectory:tool-args-match',
+      assertion: {
+        type: 'trajectory:tool-args-match',
+        value,
+      },
+      renderedValue: value,
+    });
+
     it('passes when a tool call contains the expected argument subset', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -1021,6 +1052,193 @@ describe('trajectory assertions', () => {
           'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
         assertion: params.assertion,
       });
+    });
+
+    it('supports exact mode with conditional default argument excludes', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', page: 1, page_size: 5 },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }, { page_size: 5 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('supports exact mode when excluded defaults appear in expected args but not actual args', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q' },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+            page: 1,
+          },
+          exclude: [{ page: 1 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('fails exact mode when a conditionally excluded argument has a non-default value', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', page: 2 },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(
+        'No call to tool "orders" matched expected arguments (exact): {"status":"Q"}. Observed args: {"status":"Q","page":2}',
+      );
+    });
+
+    it('fails exact mode with excluded defaults when an unexpected argument is present', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', page: 1, delete_database: true },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(
+        'No call to tool "orders" matched expected arguments (exact): {"status":"Q"}. Observed args: {"status":"Q","page":1,"delete_database":true}',
+      );
+    });
+
+    it('supports string excludes that always ignore a key', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', request_id: 'run-123' },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: ['request_id'],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('supports partial mode with excludes', () => {
+      const params = makeToolArgsMatchParams(
+        { filters: { status: 'Q' }, page: 1 },
+        {
+          name: 'orders',
+          args: {
+            filters: { status: 'Q' },
+          },
+          exclude: [{ page: 1 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('supports pattern matchers with excludes', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', page: 1 },
+        {
+          pattern: 'ord*',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('treats empty exclude arrays as no excludes', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', page: 1 },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+            page: 1,
+          },
+          exclude: [],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('matches object exclude values using deep equality on top-level keys', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', pagination: { page: 1, page_size: 5 } },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ pagination: { page: 1, page_size: 5 } }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('does not exclude nested keys by path or name', () => {
+      const params = makeToolArgsMatchParams(
+        { status: 'Q', pagination: { page: 1 } },
+        {
+          name: 'orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }],
+        },
+      );
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(
+        'No call to tool "orders" matched expected arguments (exact): {"status":"Q"}. Observed args: {"status":"Q","pagination":{"page":1}}',
+      );
     });
 
     it('matches Vercel AI SDK spans end-to-end against expected args', () => {
@@ -1281,6 +1499,62 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
         'trajectory:tool-args-match assertion mode must be "partial" or "exact"',
+      );
+    });
+
+    it('rejects invalid exclude values', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            args: {
+              order_id: '123',
+            },
+            exclude: [1],
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: {
+            order_id: '123',
+          },
+          exclude: [1],
+        },
+      };
+
+      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+        'trajectory:tool-args-match assertion exclude entry at index 0 must be a string or object',
+      );
+    });
+
+    it('rejects multi-key exclude objects', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            args: {
+              order_id: '123',
+            },
+            exclude: [{ page: 1, page_size: 5 }],
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: {
+            order_id: '123',
+          },
+          exclude: [{ page: 1, page_size: 5 }],
+        },
+      };
+
+      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+        'trajectory:tool-args-match assertion exclude object at index 0 must contain exactly one key',
       );
     });
 
