@@ -162,14 +162,22 @@ The model invents a document name, link, or citation span.
 assert:
   - type: javascript
     value: |
-      const allowed = ['handbook.md', 'benefits.pdf'];
-      const cited = Array.from(output.matchAll(/[\w.-]+\.(?:md|pdf)/g)).map((m) => m[0]);
-      return cited.length > 0 && cited.every((name) => allowed.includes(name));
+      const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
+      const allowedUrls = new Set(['https://kb.example.com/benefits']);
+      const files = Array.from(output.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
+      const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>,"']+/g), (m) =>
+        m[0].replace(/[.,;:!?]+$/, ''),
+      );
+      return (
+        files.length + urls.length > 0 &&
+        files.every((name) => allowedFiles.has(name)) &&
+        urls.every((url) => allowedUrls.has(url))
+      );
 ```
 
 **Debug hint**
 
-If you require citations, test them directly instead of treating them as a side effect of answer quality.
+If you require citations, test them directly instead of treating them as a side effect of answer quality. Adapt the allowlists and extraction logic to your citation fields, URLs, or span format.
 
 ### 6. Metadata or source attribution is not preserved
 
