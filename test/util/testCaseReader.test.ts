@@ -1474,7 +1474,7 @@ describe('readTests', () => {
     );
   });
 
-  it('should preserve provider schema refs in external YAML test files', async () => {
+  it('should preserve provider and test option schema refs in external YAML test files', async () => {
     const mockProvider = createMockProvider({ id: 'openai:chat:gpt-4o' });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
@@ -1494,6 +1494,17 @@ describe('readTests', () => {
                   properties:
                     status:
                       $ref: '#/$defs/Status'
+        options:
+          response_format:
+            type: json_schema
+            schema:
+              type: object
+              $defs:
+                Status:
+                  type: string
+              properties:
+                status:
+                  $ref: '#/$defs/Status'
         assert:
           - type: contains
             value: ready
@@ -1503,6 +1514,14 @@ describe('readTests', () => {
     const result = await readTests(['test.yaml']);
 
     expect(result[0].provider).toBe(mockProvider);
+    expect(result[0].options?.response_format).toEqual({
+      type: 'json_schema',
+      schema: {
+        type: 'object',
+        $defs: { Status: { type: 'string' } },
+        properties: { status: { $ref: '#/$defs/Status' } },
+      },
+    });
     expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
       basePath: '.',
       options: expect.objectContaining({

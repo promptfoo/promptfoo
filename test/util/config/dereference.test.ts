@@ -132,4 +132,52 @@ describe('dereferenceConfig JSON Schema isolation', () => {
       result.tests[0].assert[0].provider.config.functions[0].parameters.properties.status,
     ).toEqual({ $ref: '#/$defs/Status' });
   });
+
+  it('preserves response_format schemas in prompt config and test options', async () => {
+    const result = (await dereferenceConfig({
+      prompts: [
+        {
+          raw: 'hello world',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              schema: statusSchema(),
+            },
+          },
+        },
+      ],
+      providers: ['openai:chat:gpt-4o'],
+      tests: [
+        {
+          options: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'status',
+                schema: statusSchema(),
+              },
+            },
+          },
+        },
+      ],
+    } as unknown as UnifiedConfig)) as unknown as {
+      prompts: Array<{
+        config: { response_format: { schema: { properties: { status: { $ref: string } } } } };
+      }>;
+      tests: Array<{
+        options: {
+          response_format: {
+            json_schema: { schema: { properties: { status: { $ref: string } } } };
+          };
+        };
+      }>;
+    };
+
+    expect(result.prompts[0].config.response_format.schema.properties.status).toEqual({
+      $ref: '#/$defs/Status',
+    });
+    expect(result.tests[0].options.response_format.json_schema.schema.properties.status).toEqual({
+      $ref: '#/$defs/Status',
+    });
+  });
 });

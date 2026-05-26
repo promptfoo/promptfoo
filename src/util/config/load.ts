@@ -46,7 +46,7 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { isProviderJsonSchemaPath } from './jsonSchema';
+import { isStandaloneJsonSchemaPath } from './jsonSchema';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -151,7 +151,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   }
 
   return (await $RefParser.dereference(rawConfig, {
-    dereference: { excludedPathMatcher: isProviderJsonSchemaPath },
+    dereference: { excludedPathMatcher: isStandaloneJsonSchemaPath },
   })) as unknown as UnifiedConfig;
 }
 

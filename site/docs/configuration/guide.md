@@ -387,7 +387,7 @@ assertionTemplates:
 
 :::info
 
-`tools`, `functions`, and structured-output `response_format` schemas in provider or target config are _not_ dereferenced. They are standalone JSON Schemas that may contain their own internal references.
+Standalone JSON Schemas in provider or target `tools` and `functions`, and structured-output `response_format` schemas in provider, target, prompt, or test options, are _not_ dereferenced. They may contain their own internal references.
 
 :::
 

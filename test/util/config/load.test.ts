@@ -1535,7 +1535,7 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(rawConfig);
   });
 
-  it('should configure ref parser to skip supported provider JSON Schema paths only', async () => {
+  it('should configure ref parser to skip supported standalone JSON Schema paths only', async () => {
     const rawConfig = {
       prompts: [{ $ref: '#/definitions/prompt' }],
       providers: [
@@ -1619,6 +1619,18 @@ describe('dereferenceConfig', () => {
         '#/tests/0/assert/0/provider/config/functions/0/parameters/properties/status',
       ),
     ).toBe(true);
+    expect(
+      excludedPathMatcher(
+        '#/prompts/0/config/response_format/json_schema/schema/properties/status',
+      ),
+    ).toBe(true);
+    expect(
+      excludedPathMatcher('#/defaultTest/options/response_format/schema/properties/status'),
+    ).toBe(true);
+    expect(excludedPathMatcher('#/tests/0/options/response_format/schema/properties/status')).toBe(
+      true,
+    );
+    expect(excludedPathMatcher('#/0/options/response_format/schema/properties/status')).toBe(true);
     expect(excludedPathMatcher('#/providers/0/config/model')).toBe(false);
     expect(excludedPathMatcher('#/providers/0/config/response_format/type')).toBe(false);
     expect(excludedPathMatcher('#/targets/0/config/model')).toBe(false);
