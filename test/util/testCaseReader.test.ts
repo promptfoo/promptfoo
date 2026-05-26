@@ -1474,6 +1474,55 @@ describe('readTests', () => {
     );
   });
 
+  it('should preserve provider schema refs in external YAML test files', async () => {
+    const mockProvider = createMockProvider({ id: 'openai:chat:gpt-4o' });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      - description: External structured output schema
+        provider:
+          id: openai:chat:gpt-4o
+          config:
+            response_format:
+              type: json_schema
+              json_schema:
+                name: status
+                schema:
+                  type: object
+                  $defs:
+                    Status:
+                      type: string
+                  properties:
+                    status:
+                      $ref: '#/$defs/Status'
+        assert:
+          - type: contains
+            value: ready
+    `);
+    vi.mocked(globSync).mockReturnValue(['test.yaml']);
+
+    const result = await readTests(['test.yaml']);
+
+    expect(result[0].provider).toBe(mockProvider);
+    expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
+      basePath: '.',
+      options: expect.objectContaining({
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'status',
+              schema: {
+                type: 'object',
+                $defs: { Status: { type: 'string' } },
+                properties: { status: { $ref: '#/$defs/Status' } },
+              },
+            },
+          },
+        },
+      }),
+    });
+  });
+
   it('should warn when assert is found in vars', async () => {
     const testWithAssertInVars = [
       {

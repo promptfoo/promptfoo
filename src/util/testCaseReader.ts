@@ -18,6 +18,7 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
+import { isProviderJsonSchemaPath } from './config/jsonSchema';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -491,7 +492,9 @@ export async function loadTestsFromGlob(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases)) as TestCase[];
+    return (await $RefParser.dereference(testCases, {
+      dereference: { excludedPathMatcher: isProviderJsonSchemaPath },
+    })) as TestCase[];
   };
 
   const ret: TestCase[] = [];

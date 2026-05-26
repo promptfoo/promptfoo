@@ -46,6 +46,7 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+import { isProviderJsonSchemaPath } from './jsonSchema';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -144,38 +145,13 @@ export function resolveCliProvidersWithConfig(
   });
 }
 
-/**
- * JSON Schema locations in promptfoo configs that should be excluded from
- * config-level $ref dereferencing.
- *
- * These schemas may contain internal refs (e.g. #/$defs/Type) that are
- * relative to the schema root, not the config root. The LLM API expects
- * these refs to be preserved as-is.
- *
- * @see https://github.com/promptfoo/promptfoo/issues/364
- */
-const PROVIDER_CONFIG_PATH_PATTERNS: readonly RegExp[] = [
-  /^#\/(?:providers|targets)\/\d+\/(?:[^/]+\/)?config(?:\/|$)/,
-  /^#\/(?:[^/]+\/)*provider\/(?:[^/]+\/)?config(?:\/|$)/,
-] as const;
-
-const STANDALONE_JSON_SCHEMA_PATH_PATTERN =
-  /\/(?:tools\/\d+\/function\/parameters|functions\/\d+\/parameters|response_format\/(?:json_schema\/)?schema)(?:\/.*)?$/;
-
-function isJsonSchemaPath(refPath: string): boolean {
-  return (
-    STANDALONE_JSON_SCHEMA_PATH_PATTERN.test(refPath) &&
-    PROVIDER_CONFIG_PATH_PATTERNS.some((pattern) => pattern.test(refPath))
-  );
-}
-
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
   }
 
   return (await $RefParser.dereference(rawConfig, {
-    dereference: { excludedPathMatcher: isJsonSchemaPath },
+    dereference: { excludedPathMatcher: isProviderJsonSchemaPath },
   })) as unknown as UnifiedConfig;
 }
 
