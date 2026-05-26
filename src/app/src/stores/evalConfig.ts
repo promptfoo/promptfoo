@@ -113,6 +113,8 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
 
 const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
 const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
+const URL_PATH_SEGMENT = /\/([^/?#\s]+)/g;
+const URL_PROTOCOL = /^[a-z][a-z0-9+.-]*:\/\//i;
 const NUNJUCKS_REFERENCE = /\{\{[^{}]*\}\}/g;
 const NUNJUCKS_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SAFE_CREDENTIAL_TEMPLATE_FILTERS = new Set(['trim', 'urlencode']);
@@ -144,7 +146,7 @@ const recordCredentialTemplatePaths = (value: string, paths?: Set<string>): void
   }
   for (const match of value.matchAll(NUNJUCKS_REFERENCE)) {
     const path = getSafeNunjucksPath(match[0]);
-    if (path && !path.startsWith('env.')) {
+    if (path) {
       paths.add(path);
     }
   }
@@ -192,10 +194,20 @@ const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
   return normalizeCredentialName(name) === 'sig' || looksLikeCredentialHeader(name);
 };
 
+const looksLikeCredentialPathSegment = (rawValue: string): boolean => {
+  let value = rawValue;
+  try {
+    value = decodeURIComponent(rawValue);
+  } catch {
+    // Keep malformed segments unchanged for conservative matching.
+  }
+  return looksLikeSecret(value);
+};
+
 // Operate on URL text so Nunjucks placeholders remain intact and safe query
 // settings retain their exact representation.
-const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
-  value
+const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string => {
+  const scrubbed = value
     .replace(URL_USERINFO, (match, prefix, userinfo) =>
       isTemplatedUrlUserinfo(userinfo, templatePaths) ? match : `${prefix}[REDACTED]@`,
     )
@@ -205,6 +217,12 @@ const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
         ? `${separator}${name}=[REDACTED]`
         : match,
     );
+  return URL_PROTOCOL.test(scrubbed)
+    ? scrubbed.replace(URL_PATH_SEGMENT, (match, segment) =>
+        looksLikeCredentialPathSegment(segment) ? '/[REDACTED]' : match,
+      )
+    : scrubbed;
+};
 
 const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
   !isTemplatedCredentialReference(value) &&
@@ -541,23 +559,12 @@ const omitRedteamProviderCredentials = (redteam: unknown, templatePaths?: Set<st
     ...(Array.isArray(redteam.strategies)
       ? {
           strategies: redteam.strategies.map((strategy) => {
-            if (!isRecord(strategy) || !isRecord(strategy.config)) {
+            if (!isRecord(strategy) || !hasOwn(strategy, 'config')) {
               return strategy;
             }
             return {
               ...strategy,
-              config: {
-                ...strategy.config,
-                ...(hasOwn(strategy.config, 'redteamProvider')
-                  ? {
-                      redteamProvider: omitProviderCredentials(
-                        strategy.config.redteamProvider,
-                        undefined,
-                        templatePaths,
-                      ),
-                    }
-                  : {}),
-              },
+              config: omitProviderCredentials(strategy.config, undefined, templatePaths),
             };
           }),
         }
@@ -652,10 +659,24 @@ const omitReferencedCredentialVars = (vars: unknown, templatePaths: Set<string>)
   if (!isRecord(vars) || templatePaths.size === 0) {
     return vars;
   }
-  return Array.from(templatePaths).reduce(
-    (sanitized, path) => omitNestedPath(sanitized, path.split('.')),
-    vars,
-  );
+  return Array.from(templatePaths)
+    .filter((path) => !path.startsWith('env.'))
+    .reduce((sanitized, path) => omitNestedPath(sanitized, path.split('.')), vars);
+};
+
+const omitReferencedCredentialEnv = (
+  env: Partial<UnifiedConfig>['env'],
+  templatePaths: Set<string>,
+): Partial<UnifiedConfig>['env'] => {
+  if (!isRecord(env) || templatePaths.size === 0) {
+    return env;
+  }
+  return Array.from(templatePaths)
+    .filter((path) => path.startsWith('env.'))
+    .reduce(
+      (sanitized, path) => omitNestedPath(sanitized, path.slice('env.'.length).split('.')),
+      env,
+    ) as Partial<UnifiedConfig>['env'];
 };
 
 const omitTestCaseCredentialVars = (testCase: unknown, templatePaths: Set<string>): unknown => {
@@ -733,6 +754,7 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
   };
   return {
     ...sanitized,
+    env: omitReferencedCredentialEnv(sanitized.env, templatePaths),
     defaultTest: omitTestCaseCredentialVars(
       sanitized.defaultTest,
       templatePaths,

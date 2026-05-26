@@ -246,6 +246,16 @@ describe('evalConfig store', () => {
               },
             },
           ],
+          strategies: [
+            {
+              id: 'file://custom-strategy.js',
+              config: {
+                headers: { Authorization: 'Bearer strategy-header-secret' },
+                endpoint: 'https://strategy.example.com?token=strategy-url-secret',
+                stateful: true,
+              },
+            },
+          ],
         },
       } as any);
 
@@ -259,18 +269,29 @@ describe('evalConfig store', () => {
         endpoint: 'https://plugin.example.com?api_key=[REDACTED]',
         purpose: 'visible-purpose',
       });
+      expect(persisted.redteam.strategies[0].config).toEqual({
+        headers: {},
+        endpoint: 'https://strategy.example.com?token=[REDACTED]',
+        stateful: true,
+      });
       expect(JSON.stringify(persisted)).not.toContain('assertion-config-secret');
       expect(JSON.stringify(persisted)).not.toContain('plugin-header-secret');
       expect(JSON.stringify(persisted)).not.toContain('plugin-url-secret');
+      expect(JSON.stringify(persisted)).not.toContain('strategy-header-secret');
+      expect(JSON.stringify(persisted)).not.toContain('strategy-url-secret');
     });
 
     it('redacts test vars used by credential templates without walking ordinary payloads', () => {
       useStore.getState().setConfig({
+        env: { SERVICE_AUTH: 'short-secret', NORMAL_ENV: 'visible-env' },
         providers: [
           {
             id: 'http',
             config: {
-              headers: { Authorization: 'Bearer {{ api_token }}' },
+              headers: {
+                Authorization: 'Bearer {{ api_token }}',
+                'X-Remote-Authorization': 'Bearer {{ env.SERVICE_AUTH }}',
+              },
               url: 'https://api.example.com?api_key={{ auth.key | urlencode }}',
               body: 'prompt={{ prompt }}&client_secret={{ api_token }}',
             },
@@ -292,6 +313,7 @@ describe('evalConfig store', () => {
       } as any);
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.env).toEqual({ NORMAL_ENV: 'visible-env' });
       expect(persisted.defaultTest.vars).toEqual({ visible: 'default-visible' });
       expect(persisted.tests[0].vars).toEqual({
         auth: { visible: 'nested-visible' },
@@ -300,6 +322,28 @@ describe('evalConfig store', () => {
       });
       expect(JSON.stringify(persisted)).not.toContain('default-test-token-secret');
       expect(JSON.stringify(persisted)).not.toContain('nested-test-token-secret');
+      expect(JSON.stringify(persisted)).not.toContain('short-secret');
+    });
+
+    it('redacts token-shaped path segments in provider URLs', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              url: 'https://hooks.example.test/services/T/B/sk-abcdefghijklmnopqrstuvwxyz1234567890',
+              label: 'literal example /sk-zyxwvutsrqponmlkjihgfedcba0987654321 is not a URL',
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].config.url).toContain('/services/T/B/[REDACTED]');
+      expect(persisted.providers[0].config.label).toContain(
+        '/sk-zyxwvutsrqponmlkjihgfedcba0987654321',
+      );
+      expect(JSON.stringify(persisted)).not.toContain('sk-abcdefghijklmnopqrstuvwxyz1234567890');
     });
 
     it('redacts Azure SAS credentials from persisted test file references', () => {
