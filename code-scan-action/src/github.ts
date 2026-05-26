@@ -145,6 +145,137 @@ function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges)
   };
 }
 
+function buildFindingBody(comment: Comment): string {
+  let body = comment.finding || '';
+  if (comment.fix) {
+    body += `\n\n<details>\n<summary>Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
+  }
+  return body;
+}
+
+function commentLocation(comment: Comment): string | null {
+  if (!comment.file) {
+    return null;
+  }
+  if (comment.startLine != null && comment.line != null && comment.startLine !== comment.line) {
+    return `${comment.file}:${comment.startLine}-${comment.line}`;
+  }
+  return comment.line == null ? comment.file : `${comment.file}:${comment.line}`;
+}
+
+function toReviewComment(comment: Comment) {
+  return {
+    path: comment.file!,
+    line: comment.line || undefined,
+    start_line:
+      comment.startLine && comment.line && comment.startLine < comment.line
+        ? comment.startLine
+        : undefined,
+    side: 'RIGHT' as const,
+    start_side:
+      comment.startLine && comment.line && comment.startLine < comment.line
+        ? ('RIGHT' as const)
+        : undefined,
+    body: buildFindingBody(comment),
+  };
+}
+
+async function postLineComments(
+  octokit: Octokit,
+  context: PullRequestContext,
+  lineComments: Comment[],
+): Promise<void> {
+  if (lineComments.length === 0) {
+    return;
+  }
+  core.info(`Posting ${lineComments.length} line-specific review comments...`);
+
+  try {
+    await octokit.pulls.createReview({
+      owner: context.owner,
+      repo: context.repo,
+      pull_number: context.number,
+      event: 'COMMENT',
+      comments: lineComments.map(toReviewComment),
+    });
+    core.info(`✅ Posted ${lineComments.length} line comments successfully`);
+  } catch (error) {
+    core.warning(
+      `Failed to post inline comments: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    core.info('Posting as summary comment instead...');
+    const summaryBody = lineComments
+      .map((comment) => `**${commentLocation(comment)}**\n\n${buildFindingBody(comment)}`)
+      .join('\n\n---\n\n');
+    await octokit.issues.createComment({
+      owner: context.owner,
+      repo: context.repo,
+      issue_number: context.number,
+      body: `## LLM Security Scan Results\n\n${summaryBody}`,
+    });
+    core.info('✅ Posted summary comment');
+  }
+}
+
+async function postGeneralComments(
+  octokit: Octokit,
+  context: PullRequestContext,
+  generalComments: Comment[],
+): Promise<void> {
+  if (generalComments.length === 0) {
+    return;
+  }
+  core.info(`Posting ${generalComments.length} general PR comment(s)...`);
+  for (const comment of generalComments) {
+    try {
+      const location = commentLocation(comment);
+      const body = location
+        ? `**${location}**\n\n${buildFindingBody(comment)}`
+        : buildFindingBody(comment);
+      await octokit.issues.createComment({
+        owner: context.owner,
+        repo: context.repo,
+        issue_number: context.number,
+        body,
+      });
+    } catch (error) {
+      core.warning(
+        `Failed to post general comment: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  core.info(`✅ Posted ${generalComments.length} general comment(s) successfully`);
+}
+
+async function postInvalidLineComments(
+  octokit: Octokit,
+  context: PullRequestContext,
+  invalidLineComments: Comment[],
+): Promise<void> {
+  if (invalidLineComments.length === 0) {
+    return;
+  }
+  core.info(
+    `Posting ${invalidLineComments.length} comment(s) that couldn't be placed in diff as general comments...`,
+  );
+  for (const comment of invalidLineComments) {
+    try {
+      const body = `**${commentLocation(comment)}**\n\n> *This comment references code outside the visible diff context*\n\n${buildFindingBody(comment)}`;
+      await octokit.issues.createComment({
+        owner: context.owner,
+        repo: context.repo,
+        issue_number: context.number,
+        body,
+      });
+    } catch (error) {
+      core.warning(
+        `Failed to post fallback comment: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  core.info(`✅ Posted ${invalidLineComments.length} fallback comment(s)`);
+}
+
 /**
  * Post review comments on the PR
  * @param token GitHub token
@@ -190,137 +321,12 @@ export async function postReviewComments(
   }
 
   // Separate line-specific comments from general PR comments
-  const lineComments = processedComments.filter((c) => c.file && c.finding);
-  const generalComments = processedComments.filter((c) => !c.file && c.finding);
+  const lineComments = processedComments.filter((c) => c.file && c.line != null && c.finding);
+  const generalComments = processedComments.filter((c) => (!c.file || c.line == null) && c.finding);
 
-  // Post line-specific review comments
-  if (lineComments.length > 0) {
-    core.info(`Posting ${lineComments.length} line-specific review comments...`);
-
-    try {
-      await octokit.pulls.createReview({
-        owner: context.owner,
-        repo: context.repo,
-        pull_number: context.number,
-        event: 'COMMENT',
-        comments: lineComments.map((c) => {
-          // Combine finding and fix into comment body
-          let body = c.finding;
-          if (c.fix) {
-            body += `\n\n<details>\n<summary>Suggested Fix</summary>\n\n${c.fix}\n</details>`;
-          }
-
-          return {
-            path: c.file!,
-            line: c.line || undefined,
-            start_line: c.startLine && c.line && c.startLine < c.line ? c.startLine : undefined,
-            side: 'RIGHT' as const,
-            start_side:
-              c.startLine && c.line && c.startLine < c.line ? ('RIGHT' as const) : undefined,
-            body,
-          };
-        }),
-      });
-
-      core.info(`✅ Posted ${lineComments.length} line comments successfully`);
-    } catch (error) {
-      core.warning(
-        `Failed to post inline comments: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      core.info('Posting as summary comment instead...');
-
-      const summaryBody = lineComments
-        .map((c) => {
-          const lineRange =
-            c.startLine && c.line && c.startLine !== c.line
-              ? `${c.file}:${c.startLine}-${c.line}`
-              : c.line
-                ? `${c.file}:${c.line}`
-                : c.file;
-
-          let commentText = c.finding;
-          if (c.fix) {
-            commentText += `\n\n<details>\n<summary>Suggested Fix</summary>\n\n${c.fix}\n</details>`;
-          }
-
-          return `**${lineRange}**\n\n${commentText}`;
-        })
-        .join('\n\n---\n\n');
-
-      await octokit.issues.createComment({
-        owner: context.owner,
-        repo: context.repo,
-        issue_number: context.number,
-        body: `## LLM Security Scan Results\n\n${summaryBody}`,
-      });
-
-      core.info('✅ Posted summary comment');
-    }
-  }
-
-  // Post general PR comments
-  if (generalComments.length > 0) {
-    core.info(`Posting ${generalComments.length} general PR comment(s)...`);
-
-    for (const comment of generalComments) {
-      try {
-        // Combine finding and fix for general comments too
-        let body = comment.finding;
-        if (comment.fix) {
-          body += `\n\n<details>\n<summary>Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
-        }
-
-        await octokit.issues.createComment({
-          owner: context.owner,
-          repo: context.repo,
-          issue_number: context.number,
-          body,
-        });
-      } catch (error) {
-        core.warning(
-          `Failed to post general comment: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    core.info(`✅ Posted ${generalComments.length} general comment(s) successfully`);
-  }
-
-  // Post comments that couldn't be placed in diff as general comments with a note
-  if (invalidLineComments.length > 0) {
-    core.info(
-      `Posting ${invalidLineComments.length} comment(s) that couldn't be placed in diff as general comments...`,
-    );
-
-    for (const comment of invalidLineComments) {
-      try {
-        const lineRange =
-          comment.startLine && comment.line && comment.startLine !== comment.line
-            ? `${comment.file}:${comment.startLine}-${comment.line}`
-            : comment.line
-              ? `${comment.file}:${comment.line}`
-              : comment.file;
-
-        let body = `**${lineRange}**\n\n> *This comment references code outside the visible diff context*\n\n${comment.finding}`;
-        if (comment.fix) {
-          body += `\n\n<details>\n<summary>Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
-        }
-
-        await octokit.issues.createComment({
-          owner: context.owner,
-          repo: context.repo,
-          issue_number: context.number,
-          body,
-        });
-      } catch (error) {
-        core.warning(
-          `Failed to post fallback comment: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    core.info(`✅ Posted ${invalidLineComments.length} fallback comment(s)`);
-  }
+  await postLineComments(octokit, context, lineComments);
+  await postGeneralComments(octokit, context, generalComments);
+  await postInvalidLineComments(octokit, context, invalidLineComments);
 
   if (
     lineComments.length === 0 &&

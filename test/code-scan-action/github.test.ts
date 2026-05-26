@@ -375,6 +375,38 @@ describe('GitHub API Client', () => {
       );
     });
 
+    it('should post file-scoped comments without a line as general comments with context', async () => {
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      const mockCreateComment = vi.fn().mockResolvedValue({});
+      mocks.Octokit.mockImplementation(function () {
+        return {
+          pulls: {
+            createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
+          },
+          issues: {
+            createComment: mockCreateComment,
+          },
+        } as unknown as Octokit;
+      });
+
+      await postReviewComments('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          line: null,
+          finding: 'File-only issue',
+        },
+      ]);
+
+      expect(mockCreateReview).not.toHaveBeenCalled();
+      expect(mockCreateComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        issue_number: 123,
+        body: '**src/auth.ts**\n\nFile-only issue',
+      });
+    });
+
     it('should post summary comment on error', async () => {
       const mockCreateReview = vi.fn().mockRejectedValue(new Error('API error'));
       const mockCreateComment = vi.fn().mockResolvedValue({});
