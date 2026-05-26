@@ -8,6 +8,7 @@ import { getRequestTimeoutMs } from './shared';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
@@ -205,7 +206,7 @@ function getN8nError(data: any): unknown | undefined {
     return undefined;
   }
 
-  if ('error' in data && data.error !== undefined) {
+  if ('error' in data && data.error) {
     return data.error;
   }
 
@@ -285,8 +286,8 @@ export class N8nProvider implements ApiProvider {
   private getTemplateVars(prompt: string, context?: CallApiContextParams): Record<string, any> {
     const vars = context?.vars || {};
     return {
-      prompt,
       ...vars,
+      prompt,
       sessionId: this.getRequestSessionId(context),
     };
   }
@@ -442,7 +443,11 @@ export class N8nProvider implements ApiProvider {
     }
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const method = this.config.method || 'POST';
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
@@ -450,9 +455,10 @@ export class N8nProvider implements ApiProvider {
     const url = method === 'GET' ? this.buildGetUrl(body) : this.getUrl();
     const headers = this.buildHeaders(prompt, context);
     const renderedBody = typeof body === 'string' ? body : JSON.stringify(body);
-    const fetchOptions: { method: string; headers: Record<string, string>; body?: string } = {
+    const fetchOptions: RequestInit = {
       method,
       headers,
+      ...(callOptions?.abortSignal && { signal: callOptions.abortSignal }),
     };
 
     if (method !== 'GET') {
@@ -473,7 +479,8 @@ export class N8nProvider implements ApiProvider {
     let latencyMs: number | undefined;
 
     try {
-      const response = await fetchWithCache<string>(url, fetchOptions, timeout, 'text');
+      // Webhook URLs and session-bearing requests can be sensitive and stateful.
+      const response = await fetchWithCache<string>(url, fetchOptions, timeout, 'text', true);
 
       rawText =
         typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
@@ -489,7 +496,6 @@ export class N8nProvider implements ApiProvider {
 
       const responseError = getN8nError(data);
       if (responseError !== undefined) {
-        await response.deleteFromCache?.();
         return {
           error: `n8n webhook response error: ${formatN8nError(responseError)}`,
         };

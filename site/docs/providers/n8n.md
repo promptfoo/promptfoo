@@ -71,9 +71,10 @@ The provider handles these n8n response patterns:
 [{ "json": { "output": "Result" } }]
 ```
 
-Successful HTTP responses containing an `error` field, including n8n item responses such as
-`[{ "json": { "error": "Workflow failed" } }]`, are reported as provider errors instead of
-evaluation output.
+Successful HTTP responses containing a non-empty `error` value, including n8n item responses
+such as `[{ "json": { "error": "Workflow failed" } }]`, are reported as provider errors instead
+of evaluation output. Empty status values such as `false` or `null` do not turn a successful
+response into an error.
 
 ## Tool Calls
 
@@ -118,9 +119,10 @@ For client-generated sessions, supply `sessionId` in test variables or through `
 
 Webhook URLs and responses can contain sensitive workflow data. Put authentication values in
 templated headers rather than URL query strings or paths, and treat local eval result exports and
-debug logs as sensitive. The provider hides webhook URLs in its display identifier and its own
-status log, but request-level debug logging can include endpoint paths. URLs also remain part of
-your configuration and the outbound request.
+debug logs as sensitive. The provider hides webhook URLs in its display identifier and does not
+cache webhook requests or responses, so tokenized URLs and session-bearing payloads do not enter
+Promptfoo response-cache diagnostics or storage. URLs remain part of your configuration and the
+outbound request.
 
 :::
 

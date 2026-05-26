@@ -85,7 +85,7 @@ describe('N8nProvider', () => {
   });
 
   describe('callApi', () => {
-    it('should call n8n webhook with default body structure', async () => {
+    it('should call n8n webhook with default body structure without response caching', async () => {
       const mockResponse = createMockResponse({ output: 'Hello from n8n!' }, { latencyMs: 100 });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -101,6 +101,7 @@ describe('N8nProvider', () => {
         },
         expect.any(Number),
         'text',
+        true,
       );
 
       expect(result).toEqual({
@@ -197,6 +198,38 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
+      );
+    });
+
+    it('should not allow context vars to override the rendered prompt in body templates', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: {
+            message: '{{prompt}}',
+            auxiliary: '{{note}}',
+          },
+        },
+      });
+
+      await provider.callApi('Rendered prompt', {
+        vars: { prompt: 'stale variable value', note: 'visible note' },
+        prompt: { raw: 'Rendered prompt', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: 'Rendered prompt',
+            auxiliary: 'visible note',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        true,
       );
     });
 
@@ -219,6 +252,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
       );
     });
 
@@ -252,6 +286,23 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
+      );
+    });
+
+    it('should forward abort signals to the webhook request', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+      const abortController = new AbortController();
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+
+      await provider.callApi('Hello', undefined, { abortSignal: abortController.signal });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({ signal: abortController.signal }),
+        expect.any(Number),
+        'text',
+        true,
       );
     });
 
@@ -273,6 +324,7 @@ describe('N8nProvider', () => {
         },
         expect.any(Number),
         'text',
+        true,
       );
     });
 
@@ -293,6 +345,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
       );
     });
 
@@ -387,6 +440,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
       );
     });
 
@@ -416,6 +470,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
       );
     });
 
@@ -447,6 +502,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
+        true,
       );
     });
 
@@ -465,12 +521,8 @@ describe('N8nProvider', () => {
       });
     });
 
-    it('should treat n8n error payloads as provider errors and evict them from cache', async () => {
-      const deleteFromCache = vi.fn();
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        ...createMockResponse({ error: 'Workflow failed' }),
-        deleteFromCache,
-      });
+    it('should treat n8n error payloads as provider errors', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ error: 'Workflow failed' }));
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -478,15 +530,12 @@ describe('N8nProvider', () => {
       expect(result).toEqual({
         error: 'n8n webhook response error: Workflow failed',
       });
-      expect(deleteFromCache).toHaveBeenCalledTimes(1);
     });
 
     it('should treat nested n8n item error payloads as provider errors', async () => {
-      const deleteFromCache = vi.fn();
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        ...createMockResponse([{ json: { error: 'Nested workflow failed' } }]),
-        deleteFromCache,
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockResponse([{ json: { error: 'Nested workflow failed' } }]),
+      );
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -494,7 +543,21 @@ describe('N8nProvider', () => {
       expect(result).toEqual({
         error: 'n8n webhook response error: Nested workflow failed',
       });
-      expect(deleteFromCache).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      false,
+      null,
+      '',
+      0,
+    ])('should accept successful responses with a falsey error status (%j)', async (error) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'ok', error }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Hello');
+
+      expect(result.output).toBe('ok');
+      expect(result.error).toBeUndefined();
     });
 
     it('should avoid putting webhook credentials or rendered prompt content in provider logs', async () => {
@@ -513,6 +576,13 @@ describe('N8nProvider', () => {
       expect(debugLogs).not.toContain('webhook-secret-token');
       expect(debugLogs).not.toContain('private customer content');
       expect(debugLogs).not.toContain('sensitive reply');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent?token=webhook-secret-token',
+        expect.any(Object),
+        expect.any(Number),
+        'text',
+        true,
+      );
     });
 
     it('should handle fetch errors', async () => {
@@ -549,6 +619,7 @@ describe('N8nProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'text',
+        true,
       );
     });
   });

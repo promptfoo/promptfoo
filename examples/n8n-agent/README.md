@@ -54,8 +54,9 @@ npx promptfoo view
 
 For multi-turn runs, pass `sessionId` in test variables or use a multi-turn strategy so sessions
 remain scoped to one conversation. Keep webhook credentials in environment-backed headers rather
-than embedding them in webhook URLs. The provider uses a fingerprinted display ID; treat debug
-logs as sensitive because request-level logging can include endpoint paths.
+than embedding them in webhook URLs. The provider uses a fingerprinted display ID and skips
+response caching so tokenized URLs and session-bearing requests do not enter response-cache
+diagnostics or storage; URLs still remain in configuration and outbound requests.
 
 ## Response Formats
 
