@@ -536,9 +536,10 @@ def create_tests(config):
 Promptfoo automatically detects the
 [AgentSkills `evals.json`](https://agentskills.io/skill-creation/evaluating-skills)
 format when a JSON test file includes a non-empty top-level `skill_name` and an
-`evals` array. Each valid prompt-bearing eval is converted into a promptfoo
-test case so you can run the same suite that ships alongside a skill without
-rewriting it. Malformed entries and entries with blank prompts are ignored.
+`evals` array. Each eval with a non-blank prompt and at least one usable
+`expected_output` or `assertions` rubric is converted into a promptfoo test case
+so you can run the same suite that ships alongside a skill without rewriting
+it. Other entries are ignored.
 
 ```json title="evals.json"
 {
@@ -588,17 +589,22 @@ The mapping is:
 
 | `evals.json` field     | Promptfoo test case             |
 | ---------------------- | ------------------------------- |
-| `prompt`               | `vars.prompt`                   |
+| `prompt`               | Literal `vars.prompt`           |
 | `expected_output`      | `assert: llm-rubric` (first)    |
 | `assertions[]`         | Additional `llm-rubric` asserts |
-| `files`                | `vars.files`                    |
+| `files`                | `vars.files` and prompt context |
 | `id`                   | `description` and `metadata.id` |
 | top-level `skill_name` | `metadata.skill_name`           |
 
 Each `llm-rubric` assertion is graded independently, so all of
 `expected_output` and every entry in `assertions` must pass for the test case
 to succeed. Pair this format with a `defaultTest.options.provider` to choose
-the grader model.
+the grader model. Declared file paths are listed in the rendered task so an
+agent provider with file access can retrieve them; plain chat providers receive
+the paths, not uploaded file bytes. Multiple declared files remain inputs to
+one eval rather than expanding into separate runs. Imported prompt text is
+treated as literal input rather than as Nunjucks template syntax. Rubrics
+retain Promptfoo's normal variable interpolation behavior.
 
 ## Loading Media Files
 
