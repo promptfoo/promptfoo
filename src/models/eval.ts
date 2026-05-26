@@ -41,7 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../util/repeatPassRateThreshold';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../util/repeatPassRateMetadata';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';

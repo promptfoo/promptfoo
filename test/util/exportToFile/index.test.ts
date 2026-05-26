@@ -5,7 +5,7 @@ import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
 } from '../../../src/util/exportToFile/index';
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../../src/util/repeatPassRateThreshold';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../../src/util/repeatPassRateMetadata';
 
 import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';

@@ -13,7 +13,7 @@ import {
 import {
   REPEAT_PASS_RATE_GROUP_METADATA_KEY,
   tagRepeatPassRateResult,
-} from '../../src/util/repeatPassRateThreshold';
+} from '../../src/util/repeatPassRateMetadata';
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';

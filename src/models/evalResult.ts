@@ -22,7 +22,7 @@ import { safeJsonStringify } from '../util/json';
 import {
   addStoredRepeatPassRateMetadata,
   removeStoredRepeatPassRateMetadata,
-} from '../util/repeatPassRateThreshold';
+} from '../util/repeatPassRateMetadata';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { clearCountCache } from './evalPerformance';

@@ -12,7 +12,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateThreshold';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateMetadata';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';

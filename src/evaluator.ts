@@ -82,7 +82,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { tagRepeatPassRateResult } from './util/repeatPassRateThreshold';
+import { tagRepeatPassRateResult } from './util/repeatPassRateMetadata';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';

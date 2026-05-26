@@ -1,4 +1,4 @@
-import { removeStoredRepeatPassRateMetadata } from '../repeatPassRateThreshold';
+import { removeStoredRepeatPassRateMetadata } from '../repeatPassRateMetadata';
 
 import type EvalResult from '../../models/evalResult';
 import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';

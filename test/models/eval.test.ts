@@ -13,7 +13,7 @@ import Eval, {
   getEvalSummaries,
 } from '../../src/models/eval';
 import { TraceStore } from '../../src/tracing/store';
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateThreshold';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateMetadata';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
