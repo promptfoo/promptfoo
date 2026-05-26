@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApi } from '@app/utils/api';
+import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -14,33 +14,30 @@ describe('EvalsTable search', () => {
   });
 
   it('searches displayed descriptions when the first row has no description', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        data: [
-          {
-            evalId: 'eval-newest',
-            createdAt: 2,
-            description: null,
-            datasetId: null,
-            isRedteam: false,
-            label: 'eval-newest',
-            numTests: 1,
-            passRate: 100,
-          },
-          {
-            evalId: 'eval-target',
-            createdAt: 1,
-            description: 'Persistent Python worker smoke test',
-            datasetId: null,
-            isRedteam: false,
-            label: 'Persistent Python worker smoke test (eval-target)',
-            numTests: 1,
-            passRate: 100,
-          },
-        ],
-      }),
-    } as unknown as Response);
+    mockCallApiResponse({
+      data: [
+        {
+          evalId: 'eval-newest',
+          createdAt: 2,
+          description: null,
+          datasetId: null,
+          isRedteam: false,
+          label: 'eval-newest',
+          numTests: 1,
+          passRate: 100,
+        },
+        {
+          evalId: 'eval-target',
+          createdAt: 1,
+          description: 'Persistent Python worker smoke test',
+          datasetId: null,
+          isRedteam: false,
+          label: 'Persistent Python worker smoke test (eval-target)',
+          numTests: 1,
+          passRate: 100,
+        },
+      ],
+    });
 
     render(
       <TooltipProvider delayDuration={0}>
