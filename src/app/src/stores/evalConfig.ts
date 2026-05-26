@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret, sanitizeObject } from '../../../util/sanitizer';
+import { looksLikeSecret } from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -144,12 +144,23 @@ const looksLikeHeaderCredential = (headerName: string, value: unknown): boolean 
   (typeof value === 'string' && looksLikeCredentialValue(value));
 
 const scrubHttpBodyString = (body: string): string => {
-  const sanitizedBody = sanitizeObject(body, { context: 'persisted HTTP request body' }) as string;
-  if (!sanitizedBody.includes('=')) {
-    return sanitizedBody;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      return JSON.stringify(walkValue(parsed, 'body', new WeakSet<object>(), 0));
+    }
+  } catch {
+    // Handle non-JSON request bodies below.
   }
 
-  const params = new URLSearchParams(sanitizedBody);
+  if (looksLikeCredentialValue(body)) {
+    return '[REDACTED]';
+  }
+  if (!body.includes('=')) {
+    return body;
+  }
+
+  const params = new URLSearchParams(body);
   let changed = false;
   for (const [key, value] of params.entries()) {
     if (looksLikeCredential(key) || looksLikeCredentialValue(value)) {
@@ -157,7 +168,7 @@ const scrubHttpBodyString = (body: string): string => {
       changed = true;
     }
   }
-  return changed ? params.toString() : sanitizedBody;
+  return changed ? params.toString() : body;
 };
 
 // Only scan the header block, so body content that happens to resemble a

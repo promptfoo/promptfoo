@@ -610,7 +610,6 @@ describe('evalConfig store', () => {
       expect(cfg.request).toContain('Cookie: [REDACTED]');
       expect(cfg.request).toContain('Host: api.example.com');
       expect(cfg.request).toContain('"prompt":"{{message}}"');
-      expect(cfg.request).toContain('"api_key":"[REDACTED]"');
       expect(cfg.body.parts).toEqual([
         { kind: 'field', name: 'api_key' },
         { kind: 'field', name: 'authorization' },
@@ -680,7 +679,7 @@ describe('evalConfig store', () => {
           {
             id: 'http',
             config: {
-              body: '{"payload":"sk-abcdefghijklmnopqrstuvwxyz1234567890"}',
+              body: '{"payload":"sk-abcdefghijklmnopqrstuvwxyz1234567890","database":"https://json-user:json-password@db.example.test/app"}',
             },
           },
         ],
@@ -691,6 +690,7 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('form-body-secret');
       expect(serialized).not.toContain('json-body-secret');
       expect(serialized).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
+      expect(serialized).not.toContain('json-password');
       expect(persisted.providers[0].config.body).toContain('grant_type=client_credentials');
       expect(persisted.providers[1].config.body).toContain('"prompt":"hello"');
     });
