@@ -522,7 +522,7 @@ describe('prompt optimizer', () => {
     });
   });
 
-  it('extends prompt filters for explicit and default tests when candidates are added', async () => {
+  it('extends prompt filters for explicit, default, and scenario tests when candidates are added', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
       response: optimizerResponse('Optimized Seed'),
@@ -560,6 +560,12 @@ describe('prompt optimizer', () => {
       prompts: [{ raw: 'Seed', label: 'Seed' }],
       defaultTest: { prompts: ['Seed'] },
       tests: [{ prompts: ['Seed'] }],
+      scenarios: [
+        {
+          config: [{ prompts: ['Seed'] }],
+          tests: [{ prompts: ['Seed'] }],
+        },
+      ],
     };
 
     await optimizePromptTestSuite({}, testSuite);
@@ -571,6 +577,8 @@ describe('prompt optimizer', () => {
         ? candidateSuite.defaultTest.prompts
         : undefined,
     ).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(candidateSuite.scenarios?.[0].config[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(candidateSuite.scenarios?.[0].tests[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
   });
 
   it('rejects validation splits for scenario-based optimization instead of pretending they are held out', async () => {
@@ -727,6 +735,20 @@ describe('prompt optimizer', () => {
     );
     // Fails fast after the baseline search + validation evals, before rounds.
     expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects function-backed prompts before evaluating unchanged function output', async () => {
+    vi.mocked(evaluate).mockRejectedValue(new Error('baseline evaluation should not run'));
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed', function: async () => 'Seed' }],
+      tests: [{}],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization currently supports literal string prompts only.',
+    );
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {
