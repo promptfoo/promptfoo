@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret } from '../../../util/sanitizer';
+import { looksLikeSecret, redactAzureBlobSasTokens } from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -32,12 +32,9 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
 const CREDENTIAL_TOKEN_PATTERN =
   /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
 
-// Field names whose value is always credential material (inline cert/keystore
+// Field names whose value is always credential material (inline key/keystore
 // bytes), even when the name itself does not match the credential token regex.
 const INLINE_CREDENTIAL_MATERIAL_NAMES = new Set([
-  'ca',
-  'cert',
-  'cert_content',
   'certificate_content',
   'jks_content',
   'key_content',
@@ -120,17 +117,38 @@ const NUNJUCKS_REFERENCE = /\{\{[^{}]*\}\}/g;
 const NUNJUCKS_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SAFE_CREDENTIAL_TEMPLATE_FILTERS = new Set(['trim', 'urlencode']);
 
+const getSafeNunjucksPath = (reference: string): string | undefined => {
+  const [path, ...filters] = reference
+    .slice(2, -2)
+    .split('|')
+    .map((part) => part.trim());
+  const safePath =
+    path.length > 0 && path.split('.').every((part) => NUNJUCKS_NAME.test(part.trim()));
+  const safeFilters = filters.every((filter) => SAFE_CREDENTIAL_TEMPLATE_FILTERS.has(filter));
+  return safePath && safeFilters
+    ? path
+        .split('.')
+        .map((part) => part.trim())
+        .join('.')
+    : undefined;
+};
+
 const stripSafeNunjucksReferences = (value: string): string =>
-  value.replace(NUNJUCKS_REFERENCE, (reference) => {
-    const [path, ...filters] = reference
-      .slice(2, -2)
-      .split('|')
-      .map((part) => part.trim());
-    const safePath =
-      path.length > 0 && path.split('.').every((part) => NUNJUCKS_NAME.test(part.trim()));
-    const safeFilters = filters.every((filter) => SAFE_CREDENTIAL_TEMPLATE_FILTERS.has(filter));
-    return safePath && safeFilters ? '' : reference;
-  });
+  value.replace(NUNJUCKS_REFERENCE, (reference) =>
+    getSafeNunjucksPath(reference) === undefined ? reference : '',
+  );
+
+const recordCredentialTemplatePaths = (value: string, paths?: Set<string>): void => {
+  if (!paths) {
+    return;
+  }
+  for (const match of value.matchAll(NUNJUCKS_REFERENCE)) {
+    const path = getSafeNunjucksPath(match[0]);
+    if (path && !path.startsWith('env.')) {
+      paths.add(path);
+    }
+  }
+};
 
 const isTemplatedCredentialReference = (value: unknown): boolean => {
   if (typeof value !== 'string' || !value.includes('{{')) {
@@ -144,12 +162,24 @@ const isTemplatedCredentialReference = (value: unknown): boolean => {
   return trimmedLiteral === '' || /^(?:bearer|basic|token|api[-_]?key)$/i.test(trimmedLiteral);
 };
 
-const isTemplatedUrlUserinfo = (value: string): boolean => {
+const preserveCredentialTemplate = (value: unknown, paths?: Set<string>): boolean => {
+  if (!isTemplatedCredentialReference(value)) {
+    return false;
+  }
+  recordCredentialTemplatePaths(value as string, paths);
+  return true;
+};
+
+const isTemplatedUrlUserinfo = (value: string, paths?: Set<string>): boolean => {
   if (!value.includes('{{')) {
     return false;
   }
   const literal = stripSafeNunjucksReferences(value);
-  return literal !== value && /^:?$/.test(literal.trim());
+  const templated = literal !== value && /^:?$/.test(literal.trim());
+  if (templated) {
+    recordCredentialTemplatePaths(value, paths);
+  }
+  return templated;
 };
 
 const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
@@ -164,59 +194,60 @@ const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
 
 // Operate on URL text so Nunjucks placeholders remain intact and safe query
 // settings retain their exact representation.
-const scrubProviderUrl = (value: string): string =>
+const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
   value
     .replace(URL_USERINFO, (match, prefix, userinfo) =>
-      isTemplatedUrlUserinfo(userinfo) ? match : `${prefix}[REDACTED]@`,
+      isTemplatedUrlUserinfo(userinfo, templatePaths) ? match : `${prefix}[REDACTED]@`,
     )
     .replace(URL_QUERY_PARAMETER, (match, separator, name, parameterValue) =>
-      looksLikeUrlCredentialParameter(name) && !isTemplatedCredentialReference(parameterValue)
+      looksLikeUrlCredentialParameter(name) &&
+      !preserveCredentialTemplate(parameterValue, templatePaths)
         ? `${separator}${name}=[REDACTED]`
         : match,
     );
 
-const looksLikeCredentialValue = (value: string): boolean =>
+const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
   !isTemplatedCredentialReference(value) &&
-  (looksLikeSecret(value.trim()) || scrubProviderUrl(value) !== value);
+  (looksLikeSecret(value.trim()) || scrubProviderUrl(value, templatePaths) !== value);
 
-const looksLikeHeaderCredential = (headerName: string, value: unknown): boolean =>
+const looksLikeHeaderCredential = (
+  headerName: string,
+  value: unknown,
+  templatePaths?: Set<string>,
+): boolean =>
   looksLikeCredentialHeader(headerName) ||
-  (typeof value === 'string' && looksLikeCredentialValue(value));
+  (typeof value === 'string' && looksLikeCredentialValue(value, templatePaths));
 
-const scrubHttpBodyString = (body: string): string => {
+const FORM_PARAMETER = /(^|&)([^=&#]+)=([^&]*)/g;
+
+const scrubHttpBodyString = (body: string, templatePaths?: Set<string>): string => {
   try {
     const parsed = JSON.parse(body) as unknown;
     if (parsed && typeof parsed === 'object') {
-      return JSON.stringify(walkValue(parsed, 'body', new WeakSet<object>(), 0));
+      return JSON.stringify(walkValue(parsed, 'body', new WeakSet<object>(), 0, templatePaths));
     }
   } catch {
     // Handle non-JSON request bodies below.
   }
 
   if (!body.includes('=')) {
-    return looksLikeCredentialValue(body) ? '[REDACTED]' : body;
+    return looksLikeCredentialValue(body, templatePaths) ? '[REDACTED]' : body;
   }
 
-  const params = new URLSearchParams(body);
-  let changed = false;
-  for (const [key, value] of params.entries()) {
-    if (
-      (looksLikeCredential(key) || looksLikeCredentialValue(value)) &&
-      !isTemplatedCredentialReference(value)
-    ) {
-      params.set(key, '[REDACTED]');
-      changed = true;
-    }
-  }
-  if (changed) {
-    return params.toString();
-  }
-  return looksLikeCredentialValue(body) ? '[REDACTED]' : body;
+  const scrubbed = body.replace(FORM_PARAMETER, (match, separator, key, value) =>
+    (looksLikeUrlCredentialParameter(key) || looksLikeCredentialValue(value, templatePaths)) &&
+    !preserveCredentialTemplate(value, templatePaths)
+      ? `${separator}${key}=[REDACTED]`
+      : match,
+  );
+  return scrubbed !== body || !looksLikeCredentialValue(body, templatePaths)
+    ? scrubbed
+    : '[REDACTED]';
 };
 
 // Only scan the header block, so body content that happens to resemble a
 // credential header is not rewritten during persistence.
-const scrubRawHttpRequest = (raw: string): string => {
+const scrubRawHttpRequest = (raw: string, templatePaths?: Set<string>): string => {
   const boundary = raw.match(/\r?\n\r?\n/);
   const headerEnd = boundary?.index ?? raw.length;
   const headerBlock = raw.slice(0, headerEnd);
@@ -229,15 +260,17 @@ const scrubRawHttpRequest = (raw: string): string => {
     headerBlock
       .replace(
         requestLine,
-        (_match, method, target, protocol) => `${method}${scrubProviderUrl(target)}${protocol}`,
+        (_match, method, target, protocol) =>
+          `${method}${scrubProviderUrl(target, templatePaths)}${protocol}`,
       )
       .replace(headerLine, (match, indent, name, headerSeparator, value) =>
-        looksLikeHeaderCredential(name, value) && !isTemplatedCredentialReference(value)
+        looksLikeHeaderCredential(name, value, templatePaths) &&
+        !preserveCredentialTemplate(value, templatePaths)
           ? `${indent}${name}${headerSeparator}[REDACTED]`
           : match,
       ) +
     separator +
-    (boundary ? scrubHttpBodyString(body) : body)
+    (boundary ? scrubHttpBodyString(body, templatePaths) : body)
   );
 };
 
@@ -255,7 +288,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const hasOwn = (value: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
 
-const omitOpaqueToolCredentials = (tool: unknown): unknown => {
+const omitOpaqueToolCredentials = (tool: unknown, templatePaths?: Set<string>): unknown => {
   if (!isRecord(tool) || tool.type !== 'mcp') {
     return tool;
   }
@@ -263,18 +296,19 @@ const omitOpaqueToolCredentials = (tool: unknown): unknown => {
   const { authorization: _authorization, ...toolWithoutAuthorization } = tool;
   return {
     ...toolWithoutAuthorization,
-    ...(isTemplatedCredentialReference(tool.authorization)
+    ...(preserveCredentialTemplate(tool.authorization, templatePaths)
       ? { authorization: tool.authorization }
       : {}),
     ...(typeof tool.server_url === 'string'
-      ? { server_url: scrubProviderUrl(tool.server_url) }
+      ? { server_url: scrubProviderUrl(tool.server_url, templatePaths) }
       : {}),
     ...(isRecord(tool.headers)
       ? {
           headers: Object.fromEntries(
             Object.entries(tool.headers).filter(
               ([key, value]) =>
-                !looksLikeHeaderCredential(key, value) || isTemplatedCredentialReference(value),
+                !looksLikeHeaderCredential(key, value, templatePaths) ||
+                preserveCredentialTemplate(value, templatePaths),
             ),
           ),
         }
@@ -287,15 +321,16 @@ const walkValue = (
   parentKey: string | undefined,
   seen: WeakSet<object>,
   depth: number,
+  templatePaths?: Set<string>,
 ): unknown => {
   if (typeof value === 'string') {
     if (parentKey === 'request') {
-      return scrubRawHttpRequest(value);
+      return scrubRawHttpRequest(value, templatePaths);
     }
     if (parentKey === 'body') {
-      return scrubHttpBodyString(value);
+      return scrubHttpBodyString(value, templatePaths);
     }
-    const scrubbedUrl = scrubProviderUrl(value);
+    const scrubbedUrl = scrubProviderUrl(value, templatePaths);
     return scrubbedUrl !== value || !looksLikeSecret(value.trim()) ? scrubbedUrl : '[REDACTED]';
   }
 
@@ -313,15 +348,17 @@ const walkValue = (
     const normalizedParent =
       parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
 
-    if (Array.isArray(value)) {
+    if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
       if (normalizedParent === 'tools') {
-        return value.map(omitOpaqueToolCredentials);
+        return Array.isArray(value)
+          ? value.map((tool) => omitOpaqueToolCredentials(tool, templatePaths))
+          : omitOpaqueToolCredentials(value, templatePaths);
       }
-      return value.map((item) => walkValue(item, parentKey, seen, depth + 1));
+      return value;
     }
 
-    if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
-      return value;
+    if (Array.isArray(value)) {
+      return value.map((item) => walkValue(item, parentKey, seen, depth + 1, templatePaths));
     }
 
     const record = value as Record<string, unknown>;
@@ -330,18 +367,12 @@ const walkValue = (
     // The credential indicator lives in `name`, not the object's own key.
     if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
       return Object.fromEntries(
-        Object.entries(record).flatMap(([key, nested]) =>
-          (key === 'value' || looksLikeCredential(key)) && !isTemplatedCredentialReference(nested)
-            ? []
-            : [
-                [
-                  key,
-                  isTemplatedCredentialReference(nested)
-                    ? nested
-                    : walkValue(nested, key, seen, depth + 1),
-                ],
-              ],
-        ),
+        Object.entries(record).flatMap(([key, nested]) => {
+          if (key === 'value' || looksLikeCredential(key)) {
+            return preserveCredentialTemplate(nested, templatePaths) ? [[key, nested]] : [];
+          }
+          return [[key, walkValue(nested, key, seen, depth + 1, templatePaths)]];
+        }),
       );
     }
 
@@ -353,16 +384,10 @@ const walkValue = (
         const credential = isHeaders
           ? looksLikeHeaderCredential(key, nestedValue)
           : looksLikeCredential(key);
-        if (
-          (credential || (isApiKeyAuth && key === 'value')) &&
-          !isTemplatedCredentialReference(nestedValue)
-        ) {
-          return [];
+        if (credential || (isApiKeyAuth && key === 'value')) {
+          return preserveCredentialTemplate(nestedValue, templatePaths) ? [[key, nestedValue]] : [];
         }
-        if (isTemplatedCredentialReference(nestedValue)) {
-          return [[key, nestedValue]];
-        }
-        return [[key, walkValue(nestedValue, key, seen, depth + 1)]];
+        return [[key, walkValue(nestedValue, key, seen, depth + 1, templatePaths)]];
       }),
     );
   } finally {
@@ -370,10 +395,16 @@ const walkValue = (
   }
 };
 
-const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
-  walkValue(value, parentKey, new WeakSet<object>(), 0);
+const omitProviderCredentials = (
+  value: unknown,
+  parentKey?: string,
+  templatePaths?: Set<string>,
+): unknown => walkValue(value, parentKey, new WeakSet<object>(), 0, templatePaths);
 
-const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
+const omitAssertionProviderCredentials = (
+  assertions: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
   if (!Array.isArray(assertions)) {
     return assertions;
   }
@@ -386,10 +417,13 @@ const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
     return {
       ...assertion,
       ...(hasOwn(assertion, 'provider')
-        ? { provider: omitProviderCredentials(assertion.provider) }
+        ? { provider: omitProviderCredentials(assertion.provider, undefined, templatePaths) }
+        : {}),
+      ...(hasOwn(assertion, 'config')
+        ? { config: omitProviderCredentials(assertion.config, undefined, templatePaths) }
         : {}),
       ...(hasOwn(assertion, 'assert')
-        ? { assert: omitAssertionProviderCredentials(assertion.assert) }
+        ? { assert: omitAssertionProviderCredentials(assertion.assert, templatePaths) }
         : {}),
     };
   });
@@ -398,14 +432,17 @@ const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
 // `test.options` is merged into provider config at runtime, so any field on it
 // (`headers`, `transform`, etc.) can end up holding credential material. We
 // walk it the same way we walk a provider config.
-const omitTestOptionsCredentials = (options: unknown): unknown => {
+const omitTestOptionsCredentials = (options: unknown, templatePaths?: Set<string>): unknown => {
   if (!isRecord(options)) {
     return options;
   }
-  return omitProviderCredentials(options);
+  return omitProviderCredentials(options, undefined, templatePaths);
 };
 
-const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
+const omitTestCaseProviderCredentials = (
+  testCase: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
   if (!isRecord(testCase)) {
     return testCase;
   }
@@ -413,38 +450,51 @@ const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
   return {
     ...testCase,
     ...(hasOwn(testCase, 'provider')
-      ? { provider: omitProviderCredentials(testCase.provider) }
+      ? { provider: omitProviderCredentials(testCase.provider, undefined, templatePaths) }
       : {}),
     ...(hasOwn(testCase, 'options')
-      ? { options: omitTestOptionsCredentials(testCase.options) }
+      ? { options: omitTestOptionsCredentials(testCase.options, templatePaths) }
       : {}),
     ...(hasOwn(testCase, 'assert')
-      ? { assert: omitAssertionProviderCredentials(testCase.assert) }
+      ? { assert: omitAssertionProviderCredentials(testCase.assert, templatePaths) }
       : {}),
   };
 };
 
-const omitTestGeneratorCredentials = (testGenerator: unknown): unknown => {
+const omitTestGeneratorCredentials = (
+  testGenerator: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
   if (!isRecord(testGenerator) || typeof testGenerator.path !== 'string') {
-    return omitTestCaseProviderCredentials(testGenerator);
+    return omitTestCaseProviderCredentials(testGenerator, templatePaths);
   }
 
   return {
     ...testGenerator,
     ...(hasOwn(testGenerator, 'config')
-      ? { config: omitProviderCredentials(testGenerator.config) }
+      ? { config: omitProviderCredentials(testGenerator.config, undefined, templatePaths) }
       : {}),
   };
 };
 
-const omitTestsCredentials = (tests: unknown): unknown => {
-  if (Array.isArray(tests)) {
-    return tests.map(omitTestGeneratorCredentials);
+const omitTestsCredentials = (tests: unknown, templatePaths?: Set<string>): unknown => {
+  if (typeof tests === 'string') {
+    return redactAzureBlobSasTokens(tests);
   }
-  return omitTestGeneratorCredentials(tests);
+  if (Array.isArray(tests)) {
+    return tests.map((test) =>
+      typeof test === 'string'
+        ? redactAzureBlobSasTokens(test)
+        : omitTestGeneratorCredentials(test, templatePaths),
+    );
+  }
+  return omitTestGeneratorCredentials(tests, templatePaths);
 };
 
-const omitScenarioProviderCredentials = (scenario: unknown): unknown => {
+const omitScenarioProviderCredentials = (
+  scenario: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
   if (!isRecord(scenario)) {
     return scenario;
   }
@@ -452,22 +502,42 @@ const omitScenarioProviderCredentials = (scenario: unknown): unknown => {
   return {
     ...scenario,
     ...(Array.isArray(scenario.config)
-      ? { config: scenario.config.map(omitTestCaseProviderCredentials) }
+      ? {
+          config: scenario.config.map((test) =>
+            omitTestCaseProviderCredentials(test, templatePaths),
+          ),
+        }
       : {}),
     ...(Array.isArray(scenario.tests)
-      ? { tests: scenario.tests.map(omitTestCaseProviderCredentials) }
+      ? {
+          tests: scenario.tests.map((test) => omitTestCaseProviderCredentials(test, templatePaths)),
+        }
       : {}),
   };
 };
 
-const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
+const omitRedteamProviderCredentials = (redteam: unknown, templatePaths?: Set<string>): unknown => {
   if (!isRecord(redteam)) {
     return redteam;
   }
 
   return {
     ...redteam,
-    ...(hasOwn(redteam, 'provider') ? { provider: omitProviderCredentials(redteam.provider) } : {}),
+    ...(hasOwn(redteam, 'provider')
+      ? { provider: omitProviderCredentials(redteam.provider, undefined, templatePaths) }
+      : {}),
+    ...(Array.isArray(redteam.plugins)
+      ? {
+          plugins: redteam.plugins.map((plugin) =>
+            isRecord(plugin) && hasOwn(plugin, 'config')
+              ? {
+                  ...plugin,
+                  config: omitProviderCredentials(plugin.config, undefined, templatePaths),
+                }
+              : plugin,
+          ),
+        }
+      : {}),
     ...(Array.isArray(redteam.strategies)
       ? {
           strategies: redteam.strategies.map((strategy) => {
@@ -480,7 +550,11 @@ const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
                 ...strategy.config,
                 ...(hasOwn(strategy.config, 'redteamProvider')
                   ? {
-                      redteamProvider: omitProviderCredentials(strategy.config.redteamProvider),
+                      redteamProvider: omitProviderCredentials(
+                        strategy.config.redteamProvider,
+                        undefined,
+                        templatePaths,
+                      ),
                     }
                   : {}),
               },
@@ -494,12 +568,12 @@ const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
 // Prompts can be either strings or `{ raw, label, config }` objects whose
 // `config` is merged into provider config at runtime. Walk the embedded
 // configs so we do not bypass redaction via the prompt slot.
-const omitPromptCredentials = (prompts: unknown): unknown => {
+const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): unknown => {
   if (typeof prompts === 'string' || prompts === undefined || prompts === null) {
     return prompts;
   }
   if (Array.isArray(prompts)) {
-    return prompts.map(omitPromptCredentials);
+    return prompts.map((prompt) => omitPromptCredentials(prompt, templatePaths));
   }
   if (!isRecord(prompts)) {
     return prompts;
@@ -509,13 +583,13 @@ const omitPromptCredentials = (prompts: unknown): unknown => {
   }
   return {
     ...prompts,
-    config: omitProviderCredentials(prompts.config),
+    config: omitProviderCredentials(prompts.config, undefined, templatePaths),
   };
 };
 
 // OTLP trace forwarding can carry an `Authorization` header. The rest of the
 // tracing block is non-secret runtime config.
-const omitTracingCredentials = (tracing: unknown): unknown => {
+const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
   if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
     return tracing;
   }
@@ -525,14 +599,15 @@ const omitTracingCredentials = (tracing: unknown): unknown => {
     forwarding: {
       ...forwarding,
       ...(typeof forwarding.endpoint === 'string'
-        ? { endpoint: scrubProviderUrl(forwarding.endpoint) }
+        ? { endpoint: scrubProviderUrl(forwarding.endpoint, templatePaths) }
         : {}),
       ...(isRecord(forwarding.headers)
         ? {
             headers: Object.fromEntries(
               Object.entries(forwarding.headers).filter(
                 ([key, value]) =>
-                  !looksLikeHeaderCredential(key, value) || isTemplatedCredentialReference(value),
+                  !looksLikeHeaderCredential(key, value, templatePaths) ||
+                  preserveCredentialTemplate(value, templatePaths),
               ),
             ),
           }
@@ -555,24 +630,124 @@ const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedCo
   return filtered as Partial<UnifiedConfig>['env'];
 };
 
-const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => ({
-  ...config,
-  env: omitSensitiveEnv(config.env),
-  providers: omitProviderCredentials(config.providers) as Partial<UnifiedConfig>['providers'],
-  targets: omitProviderCredentials(config.targets) as Partial<UnifiedConfig>['targets'],
-  prompts: omitPromptCredentials(config.prompts) as Partial<UnifiedConfig>['prompts'],
-  defaultTest: omitTestCaseProviderCredentials(
-    config.defaultTest,
-  ) as Partial<UnifiedConfig>['defaultTest'],
-  tests: omitTestsCredentials(config.tests) as Partial<UnifiedConfig>['tests'],
-  scenarios: Array.isArray(config.scenarios)
-    ? (config.scenarios.map(omitScenarioProviderCredentials) as Partial<UnifiedConfig>['scenarios'])
-    : config.scenarios,
-  redteam: omitRedteamProviderCredentials(config.redteam) as Partial<UnifiedConfig>['redteam'],
-  ...(hasOwn(config, 'tracing')
-    ? { tracing: omitTracingCredentials(config.tracing) as Partial<UnifiedConfig>['tracing'] }
-    : {}),
-});
+const omitNestedPath = (
+  record: Record<string, unknown>,
+  path: string[],
+): Record<string, unknown> => {
+  const [head, ...tail] = path;
+  if (!head || !hasOwn(record, head)) {
+    return record;
+  }
+  if (tail.length === 0) {
+    const { [head]: _removed, ...rest } = record;
+    return rest;
+  }
+  if (!isRecord(record[head])) {
+    return record;
+  }
+  return { ...record, [head]: omitNestedPath(record[head], tail) };
+};
+
+const omitReferencedCredentialVars = (vars: unknown, templatePaths: Set<string>): unknown => {
+  if (!isRecord(vars) || templatePaths.size === 0) {
+    return vars;
+  }
+  return Array.from(templatePaths).reduce(
+    (sanitized, path) => omitNestedPath(sanitized, path.split('.')),
+    vars,
+  );
+};
+
+const omitTestCaseCredentialVars = (testCase: unknown, templatePaths: Set<string>): unknown => {
+  if (!isRecord(testCase) || !hasOwn(testCase, 'vars')) {
+    return testCase;
+  }
+  return { ...testCase, vars: omitReferencedCredentialVars(testCase.vars, templatePaths) };
+};
+
+const omitTestsCredentialVars = (tests: unknown, templatePaths: Set<string>): unknown =>
+  Array.isArray(tests)
+    ? tests.map((test) => omitTestCaseCredentialVars(test, templatePaths))
+    : omitTestCaseCredentialVars(tests, templatePaths);
+
+const omitScenarioCredentialVars = (scenario: unknown, templatePaths: Set<string>): unknown => {
+  if (!isRecord(scenario)) {
+    return scenario;
+  }
+  return {
+    ...scenario,
+    ...(Array.isArray(scenario.config)
+      ? { config: scenario.config.map((test) => omitTestCaseCredentialVars(test, templatePaths)) }
+      : {}),
+    ...(Array.isArray(scenario.tests)
+      ? { tests: scenario.tests.map((test) => omitTestCaseCredentialVars(test, templatePaths)) }
+      : {}),
+  };
+};
+
+const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
+  const templatePaths = new Set<string>();
+  const configWithoutAzureSas = redactAzureBlobSasTokens(config);
+  const sanitized = {
+    ...configWithoutAzureSas,
+    env: omitSensitiveEnv(configWithoutAzureSas.env),
+    providers: omitProviderCredentials(
+      configWithoutAzureSas.providers,
+      undefined,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['providers'],
+    targets: omitProviderCredentials(
+      configWithoutAzureSas.targets,
+      undefined,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['targets'],
+    prompts: omitPromptCredentials(
+      configWithoutAzureSas.prompts,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['prompts'],
+    defaultTest: omitTestCaseProviderCredentials(
+      configWithoutAzureSas.defaultTest,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['defaultTest'],
+    tests: omitTestsCredentials(
+      configWithoutAzureSas.tests,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['tests'],
+    scenarios: Array.isArray(configWithoutAzureSas.scenarios)
+      ? (configWithoutAzureSas.scenarios.map((scenario) =>
+          omitScenarioProviderCredentials(scenario, templatePaths),
+        ) as Partial<UnifiedConfig>['scenarios'])
+      : configWithoutAzureSas.scenarios,
+    redteam: omitRedteamProviderCredentials(
+      configWithoutAzureSas.redteam,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['redteam'],
+    ...(hasOwn(configWithoutAzureSas, 'tracing')
+      ? {
+          tracing: omitTracingCredentials(
+            configWithoutAzureSas.tracing,
+            templatePaths,
+          ) as Partial<UnifiedConfig>['tracing'],
+        }
+      : {}),
+  };
+  return {
+    ...sanitized,
+    defaultTest: omitTestCaseCredentialVars(
+      sanitized.defaultTest,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['defaultTest'],
+    tests: omitTestsCredentialVars(
+      sanitized.tests,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['tests'],
+    scenarios: Array.isArray(sanitized.scenarios)
+      ? (sanitized.scenarios.map((scenario) =>
+          omitScenarioCredentialVars(scenario, templatePaths),
+        ) as Partial<UnifiedConfig>['scenarios'])
+      : sanitized.scenarios,
+  };
+};
 
 // Fail closed: if redaction throws (e.g. on a pathological config) we must
 // never let zustand persist the raw state instead. Returning the defaults

@@ -220,6 +220,107 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persistedConfig)).not.toContain('-secret');
     });
 
+    it('redacts assertion and redteam plugin configuration credentials', () => {
+      useStore.getState().setConfig({
+        defaultTest: {
+          assert: [
+            {
+              type: 'javascript',
+              value: 'file://assertion.js',
+              config: {
+                apiKey: 'assertion-config-secret',
+                endpoint: 'https://grader.example.com?token=assertion-url-secret',
+                mode: 'strict',
+              },
+            },
+          ],
+        },
+        redteam: {
+          plugins: [
+            {
+              id: 'file://custom-plugin.js',
+              config: {
+                headers: { Authorization: 'Bearer plugin-header-secret' },
+                endpoint: 'https://plugin.example.com?api_key=plugin-url-secret',
+                purpose: 'visible-purpose',
+              },
+            },
+          ],
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.assert[0].config).toEqual({
+        endpoint: 'https://grader.example.com?token=[REDACTED]',
+        mode: 'strict',
+      });
+      expect(persisted.redteam.plugins[0].config).toEqual({
+        headers: {},
+        endpoint: 'https://plugin.example.com?api_key=[REDACTED]',
+        purpose: 'visible-purpose',
+      });
+      expect(JSON.stringify(persisted)).not.toContain('assertion-config-secret');
+      expect(JSON.stringify(persisted)).not.toContain('plugin-header-secret');
+      expect(JSON.stringify(persisted)).not.toContain('plugin-url-secret');
+    });
+
+    it('redacts test vars used by credential templates without walking ordinary payloads', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              headers: { Authorization: 'Bearer {{ api_token }}' },
+              url: 'https://api.example.com?api_key={{ auth.key | urlencode }}',
+              body: 'prompt={{ prompt }}&client_secret={{ api_token }}',
+            },
+          },
+        ],
+        defaultTest: {
+          vars: { api_token: 'default-test-token-secret', visible: 'default-visible' },
+        },
+        tests: [
+          {
+            vars: {
+              api_token: 'test-token-secret',
+              auth: { key: 'nested-test-token-secret', visible: 'nested-visible' },
+              prompt: 'ordinary-prompt-input',
+              payload: { provider: { apiKey: 'ordinary-input-value' } },
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.vars).toEqual({ visible: 'default-visible' });
+      expect(persisted.tests[0].vars).toEqual({
+        auth: { visible: 'nested-visible' },
+        prompt: 'ordinary-prompt-input',
+        payload: { provider: { apiKey: 'ordinary-input-value' } },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('default-test-token-secret');
+      expect(JSON.stringify(persisted)).not.toContain('nested-test-token-secret');
+    });
+
+    it('redacts Azure SAS credentials from persisted test file references', () => {
+      useStore.getState().setConfig({
+        prompts: ['az://account/container/prompts.txt?sig=prompt-reference-secret&sp=r'],
+        tests: [
+          'az://account/container/tests.yaml?sp=r&sig=file-reference-secret&se=2026-06-01',
+          { vars: { prompt: 'visible' } },
+        ],
+        scenarios: ['az://account/container/scenarios.yaml?sig=scenario-reference-secret&sp=r'],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.prompts[0]).not.toContain('prompt-reference-secret');
+      expect(persisted.tests[0]).toContain('az://account/container/tests.yaml?sp=r&sig=');
+      expect(persisted.tests[0]).toContain('se=2026-06-01');
+      expect(persisted.tests[0]).not.toContain('file-reference-secret');
+      expect(persisted.tests[1]).toEqual({ vars: { prompt: 'visible' } });
+      expect(persisted.scenarios[0]).not.toContain('scenario-reference-secret');
+    });
+
     it('removes sensitive environment values from previously persisted browser state on rehydrate', async () => {
       localStorage.setItem(
         'promptfoo',
@@ -754,7 +855,7 @@ describe('evalConfig store', () => {
       expect(config.headers).toEqual({ Authorization: 'Bearer {{ env.API_TOKEN | trim }}' });
       expect(config.request).toContain('api_key={{ api_token | urlencode }}');
       expect(config.request).toContain('Authorization: Bearer {{ env.API_TOKEN | trim }}');
-      expect(config.request).toContain('client_secret=%7B%7B+client_secret+%7D%7D');
+      expect(config.request).toContain('client_secret={{ client_secret }}');
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('literal-auth-secret');
       expect(serialized).not.toContain('literal-header-secret');
@@ -762,7 +863,7 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('embedded-default-secret');
     });
 
-    it('redacts inline TLS cert/ca/key material while preserving file paths', () => {
+    it('preserves public TLS certificate material while redacting private material', () => {
       useStore.getState().setConfig({
         providers: [
           {
@@ -770,7 +871,6 @@ describe('evalConfig store', () => {
             config: {
               tls: {
                 cert: '-----BEGIN CERTIFICATE-----inline-cert-pem-secret-----END CERTIFICATE-----',
-                certContent: 'base64-cert-content-secret',
                 ca: '-----BEGIN CERTIFICATE-----inline-ca-secret-----END CERTIFICATE-----',
                 keyContent: 'base64-key-content-secret',
                 certPath: '/var/run/certs/client.crt',
@@ -784,14 +884,13 @@ describe('evalConfig store', () => {
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
       expect(persisted.providers[0].config.tls).toEqual({
+        cert: '-----BEGIN CERTIFICATE-----inline-cert-pem-secret-----END CERTIFICATE-----',
+        ca: '-----BEGIN CERTIFICATE-----inline-ca-secret-----END CERTIFICATE-----',
         certPath: '/var/run/certs/client.crt',
         caPath: '/var/run/certs/ca.crt',
         keyPath: '/var/run/certs/client.key',
       });
       const serialized = JSON.stringify(persisted);
-      expect(serialized).not.toContain('inline-cert-pem-secret');
-      expect(serialized).not.toContain('base64-cert-content-secret');
-      expect(serialized).not.toContain('inline-ca-secret');
       expect(serialized).not.toContain('base64-key-content-secret');
     });
 
@@ -887,6 +986,19 @@ describe('evalConfig store', () => {
                   },
                 },
               },
+              functions: [
+                {
+                  name: 'legacy_authenticate_user',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      password: { type: 'string' },
+                      api_key: { type: 'string' },
+                    },
+                    required: ['password'],
+                  },
+                },
+              ],
             } as any,
           },
         ],
@@ -916,6 +1028,11 @@ describe('evalConfig store', () => {
         secret: { type: 'string' },
         authorization: { type: 'string' },
       });
+      expect(providerCfg.functions[0].parameters.properties).toEqual({
+        password: { type: 'string' },
+        api_key: { type: 'string' },
+      });
+      expect(providerCfg.functions[0].parameters.required).toEqual(['password']);
     });
 
     it('redacts inline auth and certificate material while retaining signing configuration', () => {
