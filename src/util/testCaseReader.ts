@@ -346,11 +346,8 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
 function parseJsonTestCases(fileContent: string): TestCase[] {
   const jsonData = yaml.load(fileContent) as unknown;
 
-  const agentSkillsCases = parseAgentSkillsEvalsJson(jsonData);
+  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData);
   if (agentSkillsCases) {
-    telemetry.record('feature_used', {
-      feature: 'agent-skills evals.json tests file',
-    });
     return agentSkillsCases;
   }
 
@@ -361,6 +358,16 @@ function parseJsonTestCases(fileContent: string): TestCase[] {
     ...item,
     description: item.description || `Row #${idx + 1}`,
   }));
+}
+
+function maybeConvertAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
+  const testCases = parseAgentSkillsEvalsJson(input);
+  if (testCases) {
+    telemetry.record('feature_used', {
+      feature: 'agent-skills evals.json tests file',
+    });
+  }
+  return testCases;
 }
 
 type AgentSkillsEvalCase = {
@@ -654,7 +661,9 @@ export async function loadTestsFromGlob(
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases =
+        maybeConvertAgentSkillsEvalsJson(rawContent) ??
+        (maybeLoadConfigFromExternalFile(rawContent) as TestCase[]);
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);

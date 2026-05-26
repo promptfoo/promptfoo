@@ -1481,6 +1481,27 @@ describe('readTests', () => {
     expect(result).toEqual(expectedTests);
   });
 
+  it('loads AgentSkills evals.json through an array glob source', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        skill_name: 'summarizer',
+        evals: [{ id: 'case-1', prompt: 'Summarize this input.', assertions: ['Is concise'] }],
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['/skills/summarizer/evals.json']);
+
+    const result = await readTests(['file://skills/*/evals.json']);
+
+    expect(result).toEqual([
+      {
+        description: 'eval case-1',
+        vars: { prompt: 'Summarize this input.' },
+        assert: [{ type: 'llm-rubric', value: 'Is concise' }],
+        metadata: { id: 'case-1', skill_name: 'summarizer' },
+      },
+    ]);
+  });
+
   it('should handle file read errors gracefully', async () => {
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error('File read error');
