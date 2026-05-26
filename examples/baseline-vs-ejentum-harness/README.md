@@ -42,7 +42,7 @@ The Ejentum base URL is configurable so you can target staging or a self-hosted 
     apiUrl: https://your-endpoint.example.com/logicv1/
 ```
 
-The OpenAI completion endpoint follows the built-in provider's base URL options: set `config.apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` when using an OpenAI-compatible gateway or local endpoint.
+The OpenAI completion endpoint follows the built-in provider's routing options: set `config.apiHost`, `OPENAI_API_HOST`, `config.apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` when using an OpenAI-compatible gateway or local endpoint. Authentication configuration such as `apiKey`, `apiKeyEnvar`, `apiKeyRequired`, `organization`, and `headers` is also forwarded by the augmented provider so both comparison arms can use the same gateway or account setup.
 
 ## How the custom provider works
 
@@ -54,14 +54,22 @@ The OpenAI completion endpoint follows the built-in provider's base URL options:
 
 Provider config options (set in `promptfooconfig.yaml`):
 
-| Option             | Default                 | Notes                                                                                       |
-| ------------------ | ----------------------- | ------------------------------------------------------------------------------------------- |
-| `mode`             | `reasoning`             | One of `reasoning`, `code`, `anti-deception`, `memory`.                                     |
-| `model`            | `gpt-5.4-mini`          | Any OpenAI chat-completion model.                                                           |
-| `reasoning_effort` | `none`                  | Included for reasoning or GPT-5-compatible chat models only.                                |
-| `verbosity`        | `low`                   | Included for GPT-5 chat models only.                                                        |
-| `apiUrl`           | Ejentum public endpoint | Override the Ejentum base URL. Falls back to `EJENTUM_API_URL`, then the default published. |
-| `apiBaseUrl`       | OpenAI public endpoint  | Override the OpenAI base URL. Falls back to `OPENAI_API_BASE_URL`, then `OPENAI_BASE_URL`.  |
+| Option               | Default                 | Notes                                                                                       |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
+| `mode`               | `reasoning`             | One of `reasoning`, `code`, `anti-deception`, `memory`.                                     |
+| `model`              | `gpt-5.4-mini`          | Any OpenAI chat-completion model.                                                           |
+| `reasoning_effort`   | `none`                  | Included for reasoning or GPT-5-compatible chat models only.                                |
+| `verbosity`          | `low`                   | Included for GPT-5 chat models only.                                                        |
+| `apiUrl`             | Ejentum public endpoint | Override the Ejentum base URL. Falls back to `EJENTUM_API_URL`, then the default published. |
+| `ejentumApiKey`      | `EJENTUM_API_KEY`       | Set an Ejentum key in local provider config; prefer environment variables in shared files.  |
+| `ejentumApiKeyEnvar` | -                       | Read the Ejentum key from a named environment variable.                                     |
+| `apiHost`            | -                       | Override the OpenAI host, matching the baseline provider and `OPENAI_API_HOST`.             |
+| `apiBaseUrl`         | OpenAI public endpoint  | Override the OpenAI base URL. Falls back to `OPENAI_API_BASE_URL`, then `OPENAI_BASE_URL`.  |
+| `apiKey`             | `OPENAI_API_KEY`        | Override the OpenAI key for the augmented provider.                                         |
+| `apiKeyEnvar`        | -                       | Read the OpenAI key from a named environment override.                                      |
+| `apiKeyRequired`     | `true`                  | Set `false` for local OpenAI-compatible endpoints that do not require authentication.       |
+| `organization`       | `OPENAI_ORGANIZATION`   | Forward the OpenAI organization header.                                                     |
+| `headers`            | -                       | Forward custom request headers to the OpenAI completion endpoint.                           |
 
 To test a different harness (for example, the anti-deception mode), copy the `file://provider.js` provider block, change `mode: reasoning` to `mode: anti-deception`, and update the label.
 

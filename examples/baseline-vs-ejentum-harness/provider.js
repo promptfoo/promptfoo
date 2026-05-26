@@ -38,28 +38,61 @@ function parseChatMessages(prompt) {
     // Optional dependency: only YAML chat prompts need a YAML parser.
     // Install it in a copied example with: npm install js-yaml
     const yaml = require('js-yaml');
-    return yaml.load(prompt);
+    const parsed = yaml.load(prompt);
+    return Array.isArray(parsed) ? parsed : [{ role: 'user', content: prompt }];
   }
 
   try {
-    return JSON.parse(prompt);
+    const parsed = JSON.parse(prompt);
+    return Array.isArray(parsed) ? parsed : [{ role: 'user', content: prompt }];
   } catch {
     return [{ role: 'user', content: prompt }];
   }
 }
 
-function getOpenAiUrl(config) {
+function getOpenAiUrl(config, env) {
+  const apiHost = config.apiHost || env.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
+  if (apiHost) {
+    return `https://${apiHost}/v1/chat/completions`;
+  }
   const baseUrl =
     config.apiBaseUrl ||
+    env.OPENAI_API_BASE_URL ||
+    env.OPENAI_BASE_URL ||
     process.env.OPENAI_API_BASE_URL ||
     process.env.OPENAI_BASE_URL ||
     DEFAULT_OPENAI_BASE_URL;
   return `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 }
 
+function getOpenAiKey(config, env) {
+  return (
+    config.apiKey ||
+    (config.apiKeyEnvar ? process.env[config.apiKeyEnvar] || env[config.apiKeyEnvar] : undefined) ||
+    env.OPENAI_API_KEY ||
+    process.env.OPENAI_API_KEY
+  );
+}
+
+function getOpenAiOrganization(config, env) {
+  return config.organization || env.OPENAI_ORGANIZATION || process.env.OPENAI_ORGANIZATION;
+}
+
+function getEjentumKey(config, env) {
+  return (
+    config.ejentumApiKey ||
+    (config.ejentumApiKeyEnvar
+      ? process.env[config.ejentumApiKeyEnvar] || env[config.ejentumApiKeyEnvar]
+      : undefined) ||
+    env.EJENTUM_API_KEY ||
+    process.env.EJENTUM_API_KEY
+  );
+}
+
 class EjentumAugmentedProvider {
   constructor(options = {}) {
     this.config = options.config || {};
+    this.env = options.env || {};
     this.providerId = options.id || `ejentum:${this.config.mode || 'reasoning'}`;
   }
 
@@ -68,14 +101,14 @@ class EjentumAugmentedProvider {
   }
 
   async callApi(prompt) {
-    const ejentumKey = process.env.EJENTUM_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
+    const ejentumKey = getEjentumKey(this.config, this.env);
+    const openaiKey = getOpenAiKey(this.config, this.env);
     if (!ejentumKey) {
       return {
         error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
       };
     }
-    if (!openaiKey) {
+    if (!openaiKey && (this.config.apiKeyRequired ?? true)) {
       return { error: 'OPENAI_API_KEY is not set.' };
     }
 
@@ -83,7 +116,11 @@ class EjentumAugmentedProvider {
     const model = this.config.model || 'gpt-5.4-mini';
     const reasoningEffort = this.config.reasoning_effort || 'none';
     const verbosity = this.config.verbosity || 'low';
-    const ejentumUrl = this.config.apiUrl || process.env.EJENTUM_API_URL || DEFAULT_EJENTUM_URL;
+    const ejentumUrl =
+      this.config.apiUrl ||
+      this.env.EJENTUM_API_URL ||
+      process.env.EJENTUM_API_URL ||
+      DEFAULT_EJENTUM_URL;
     const messages = parseChatMessages(prompt);
 
     // Step 1: fetch the cognitive scaffold for this task.
@@ -114,11 +151,14 @@ class EjentumAugmentedProvider {
 
     // Step 2: call OpenAI with the scaffold as a prefix to the system message.
     try {
-      const r = await fetch(getOpenAiUrl(this.config), {
+      const organization = getOpenAiOrganization(this.config, this.env);
+      const r = await fetch(getOpenAiUrl(this.config, this.env), {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${openaiKey}`,
           'Content-Type': 'application/json',
+          ...(openaiKey ? { Authorization: `Bearer ${openaiKey}` } : {}),
+          ...(organization ? { 'OpenAI-Organization': organization } : {}),
+          ...this.config.headers,
         },
         body: JSON.stringify({
           model,
