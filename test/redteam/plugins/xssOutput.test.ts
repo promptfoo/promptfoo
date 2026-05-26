@@ -659,6 +659,11 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('![pixel](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<div title="<javascript:alert(1)>">safe text</div>')).toEqual([]);
     expect(detectXssOutput('<textarea><javascript:alert(1)></textarea>')).toEqual([]);
+    expect(detectXssOutput('<javascript:alert(1) not-a-link>')).toEqual([]);
+    expect(detectXssOutput('<javascript :alert(1)>')).toEqual([]);
+    expect(
+      detectXssOutput('<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E not-a-link>'),
+    ).toEqual([]);
     expect(detectXssOutput('<!-- [click](javascript:alert(1)) -->')).toEqual([]);
     expect(detectXssOutput('<!-- data:text/html,<script>alert(1)</script> -->')).toEqual([]);
     expect(detectXssOutput('`[click](javascript:alert(1))`')).toEqual([]);

@@ -292,20 +292,21 @@ const DATA_HTML_URL_BARE_PATTERN = new RegExp(
   String.raw`\bdata\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`,
   'gi',
 );
+const MARKDOWN_AUTOLINK_URI_TAIL_PATTERN = String.raw`[^\s>]*`;
 const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN = new RegExp(
-  String.raw`<${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>`,
+  String.raw`<javascript:${MARKDOWN_AUTOLINK_URI_TAIL_PATTERN}>`,
   'gi',
 );
 const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN = new RegExp(
-  String.raw`^<${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>$`,
+  String.raw`^<javascript:${MARKDOWN_AUTOLINK_URI_TAIL_PATTERN}>$`,
   'i',
 );
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`<(?<url>data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^>\r\n]*)\s*>`,
+  String.raw`<(?<url>data:${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}${MARKDOWN_AUTOLINK_URI_TAIL_PATTERN})>`,
   'gi',
 );
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
-  String.raw`^<data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^>\r\n]*>$`,
+  String.raw`^<data:${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}${MARKDOWN_AUTOLINK_URI_TAIL_PATTERN}>$`,
   'i',
 );
 const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
