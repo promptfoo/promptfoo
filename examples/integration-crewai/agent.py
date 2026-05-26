@@ -5,7 +5,7 @@ import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, LLM, Task
+from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
