@@ -222,12 +222,13 @@ function collectNestedContainers(value: object, containers: WeakSet<object>): vo
     }
     containers.add(container);
 
-    for (const key of Object.keys(container)) {
+    for (const key of Reflect.ownKeys(container)) {
       const descriptor = Object.getOwnPropertyDescriptor(container, key);
       if (
         descriptor &&
         'value' in descriptor &&
-        (Array.isArray(descriptor.value) || isPlainObject(descriptor.value))
+        typeof descriptor.value === 'object' &&
+        descriptor.value !== null
       ) {
         pending.push(descriptor.value);
       }
@@ -294,7 +295,7 @@ async function resolveNestedFileRefs(
   return resolvedFileRefs;
 }
 
-function resolveNestedFileRefVariables(
+function preserveSkippedNestedFileRefVariables(
   resolvedFileRefs: ResolvedNestedFileRef[],
   vars: Record<string, VarValue>,
   skipRenderVars: string[] | undefined,
@@ -319,11 +320,13 @@ function resolveNestedFileRefVariables(
     const nestedVars = { ...vars, [nestedFileRefKey]: descriptor.value };
     const nestedResolvedFromSkipped = new Set(varsResolvedFromSkipped);
     resolveVariables(nestedVars, skipRenderVars, nestedResolvedFromSkipped);
-    Object.defineProperty(target.container, target.key, {
-      ...descriptor,
-      value: nestedVars[nestedFileRefKey],
-    });
     target.resolvedFromSkipped = nestedResolvedFromSkipped.has(nestedFileRefKey);
+    if (target.resolvedFromSkipped) {
+      Object.defineProperty(target.container, target.key, {
+        ...descriptor,
+        value: nestedVars[nestedFileRefKey],
+      });
+    }
   }
 }
 
@@ -332,23 +335,48 @@ function renderNestedFileRefTemplates(
   vars: Record<string, VarValue>,
   nunjucks: ReturnType<typeof getNunjucksEngine>,
 ): void {
-  for (const target of resolvedFileRefs) {
-    const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
-    if (
-      !descriptor ||
-      !('value' in descriptor) ||
-      descriptor.writable !== true ||
-      typeof descriptor.value !== 'string' ||
-      target.resolvedFromSkipped ||
-      referencesUndefinedVariables(descriptor.value, vars)
-    ) {
-      continue;
-    }
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return;
+  }
 
-    Object.defineProperty(target.container, target.key, {
-      ...descriptor,
-      value: nunjucks.renderString(autoWrapRawIfPartialNunjucks(descriptor.value), vars),
-    });
+  const templates = resolvedFileRefs.flatMap((target) => {
+    const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
+    return descriptor &&
+      'value' in descriptor &&
+      descriptor.writable === true &&
+      typeof descriptor.value === 'string'
+      ? [{ target, template: descriptor.value }]
+      : [];
+  });
+
+  for (let iteration = 0; iteration <= templates.length; iteration++) {
+    let changed = false;
+    for (const { target, template } of templates) {
+      const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
+      if (
+        !descriptor ||
+        !('value' in descriptor) ||
+        descriptor.writable !== true ||
+        typeof descriptor.value !== 'string' ||
+        target.resolvedFromSkipped ||
+        referencesUndefinedVariables(template, vars)
+      ) {
+        continue;
+      }
+
+      const rendered = nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), vars);
+      if (rendered === descriptor.value) {
+        continue;
+      }
+      Object.defineProperty(target.container, target.key, {
+        ...descriptor,
+        value: rendered,
+      });
+      changed = true;
+    }
+    if (!changed) {
+      return;
+    }
   }
 }
 
@@ -455,7 +483,8 @@ export async function renderPrompt(
   for (const [varName, value] of Object.entries(vars)) {
     if (
       (varName === '_conversation' || skipRenderVars?.includes(varName)) &&
-      (Array.isArray(value) || isPlainObject(value))
+      typeof value === 'object' &&
+      value !== null
     ) {
       collectNestedContainers(value, protectedNestedContainers);
     }
@@ -637,12 +666,13 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
-  resolveNestedFileRefVariables(
+  preserveSkippedNestedFileRefVariables(
     resolvedNestedFileRefs,
     vars,
     skipRenderVars,
     varsResolvedFromSkipped,
   );
+  renderNestedFileRefTemplates(resolvedNestedFileRefs, vars, nunjucks);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -731,7 +761,6 @@ export async function renderPrompt(
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
     // Vars values can be template strings, so we need to render them first:
-    renderNestedFileRefTemplates(resolvedNestedFileRefs, vars, nunjucks);
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => {
         if (

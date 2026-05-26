@@ -481,6 +481,67 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ message: 'Hello Alice' }, null, 2));
     });
 
+    it('should render filtered templates loaded from nested files in JSON prompts (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"message": "{{ context.message }}"}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ message: 'Hello ALICE' }, null, 2));
+    });
+
+    it('should stabilize dependent nested file templates regardless of traversal order (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: {
+          summary: 'file:///path/to/summary.txt',
+          greeting: 'file:///path/to/greeting.txt',
+        },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).includes('summary.txt')
+          ? '{{ context.greeting }}'
+          : 'Hello {{ name | upper }}',
+      );
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.summary }}'), vars, {});
+
+      expect(vars.context.greeting).toBe('Hello ALICE');
+      expect(vars.context.summary).toBe('Hello ALICE');
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
+    it('should preserve raw nested template output across stabilization passes (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: {
+          literal: 'file:///path/to/literal.txt',
+          rendered: 'file:///path/to/rendered.txt',
+        },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).includes('literal.txt')
+          ? '{% raw %}{{ name }}{% endraw %}'
+          : 'Hello {{ name | upper }}',
+      );
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.literal }}'), vars, {});
+
+      expect(vars.context.rendered).toBe('Hello ALICE');
+      expect(vars.context.literal).toBe('{{ name }}');
+      expect(renderedPrompt).toBe('{{ name }}');
+    });
+
     it('should not modify nested non-file:// strings in object vars (issue #1613)', async () => {
       const vars: Record<string, any> = {
         context: {
@@ -604,6 +665,33 @@ describe('evaluatorHelpers', () => {
       await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
 
       expect(vars.payload.report).toBe('file:///path/to/skipped.txt');
+      expect(vars.context.report).toBe('file:///path/to/skipped.txt');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should not dereference skipped refs reached through class instance wrappers (issue #1613)', async () => {
+      class Box {
+        declare child: { report: string };
+
+        constructor(child: { report: string }) {
+          Object.defineProperty(this, 'child', {
+            configurable: true,
+            enumerable: false,
+            value: child,
+            writable: true,
+          });
+        }
+      }
+      const shared = { report: 'file:///path/to/skipped.txt' };
+      const vars: Record<string, any> = {
+        payload: new Box(shared),
+        context: shared,
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
+
+      expect(vars.payload.child.report).toBe('file:///path/to/skipped.txt');
       expect(vars.context.report).toBe('file:///path/to/skipped.txt');
       expect(readFile).not.toHaveBeenCalled();
     });
@@ -776,6 +864,18 @@ describe('evaluatorHelpers', () => {
         const prompt = toPrompt('Test prompt {{ var1 }}');
         const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
         expect(renderedPrompt).toBe('Test prompt {{ var1 }}');
+      });
+
+      it('should not render templates loaded from nested files when templating is disabled', async () => {
+        const vars: Record<string, any> = {
+          name: 'Alice',
+          context: { message: 'file:///path/to/message.txt' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+        await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+        expect(vars.context.message).toBe('Hello {{ name | upper }}');
       });
     });
 
