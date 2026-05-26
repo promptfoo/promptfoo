@@ -768,15 +768,15 @@ tests:
 
 With the configuration above:
 
-| Observed tool arguments                  | Outcome | Reason                                                             |
-| ---------------------------------------- | ------- | ------------------------------------------------------------------ |
-| `{ status: 'Q' }`                        | pass    | matches expected exactly                                           |
-| `{ status: 'Q', page: 1 }`               | pass    | `page: 1` equals the declared default, stripped before matching    |
-| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both defaults stripped                                             |
-| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` is not the declared default, kept, treated as unexpected |
-| `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                   |
+| Observed tool arguments                  | Outcome | Reason                                                                                                                        |
+| ---------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                                                                                      |
+| `{ status: 'Q', page: 1 }`               | pass    | `page: 1` equals the declared default, stripped before matching                                                               |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both defaults stripped                                                                                                        |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
+| `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
 
-`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped.
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 

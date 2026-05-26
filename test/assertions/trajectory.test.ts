@@ -1586,7 +1586,7 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(true);
       });
 
-      it('does not change partial-mode behavior when defaults are set', () => {
+      it('still passes in partial mode when defaults are set', () => {
         const params: AssertionParams = {
           ...defaultParams,
           baseType: 'trajectory:tool-args-match',
@@ -1631,6 +1631,214 @@ describe('trajectory assertions', () => {
         expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
           'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
         );
+      });
+
+      it('matches the documented outcome table row "status:Q, page:1" using the example config', () => {
+        const docsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-docs-row-2',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('matches the documented outcome table row "status:Q, page:2" using the example config', () => {
+        const docsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-docs-row-4',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":2}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('strips a null default value when actual emits null for that key', () => {
+        const nullTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-null-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","cursor":null}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: nullTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { cursor: null },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { cursor: null },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('strips a key listed in defaults even when args also declares it (defaults applied first)', () => {
+        const collisionTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-collision',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: collisionTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q', page: 2 },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q', page: 2 },
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('does not recurse into nested objects when stripping defaults (top-level only)', () => {
+        const nestedTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-nested-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","pagination":{"page":1}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: nestedTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
       });
 
       it('inverts correctly when defaults allow an otherwise-forbidden match', () => {

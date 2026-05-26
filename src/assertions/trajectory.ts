@@ -27,11 +27,13 @@ interface TrajectoryGoalSuccessValue {
   goal: string;
 }
 
+type ToolArgsDefaults = Record<string, unknown>;
+
 interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
   arguments?: unknown;
   mode?: 'exact' | 'partial';
-  defaults?: Record<string, unknown>;
+  defaults?: ToolArgsDefaults;
 }
 
 function getTraceOrThrow(params: AssertionParams) {
@@ -261,10 +263,7 @@ function matchesExpectedArgsPartial(actual: unknown, expected: unknown): boolean
   return isDeepStrictEqual(actual, expected);
 }
 
-function stripDefaults(
-  actual: unknown,
-  defaults: Record<string, unknown> | undefined,
-): unknown {
+function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined): unknown {
   if (!defaults || !isRecord(actual)) {
     return actual;
   }
@@ -286,7 +285,7 @@ function matchesToolArgs(
   actual: unknown,
   expected: unknown,
   mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
-  defaults: Record<string, unknown> | undefined,
+  defaults: ToolArgsDefaults | undefined,
 ): boolean {
   const cleanedActual = stripDefaults(actual, defaults);
 
@@ -311,9 +310,7 @@ function resolveToolArgsMatchMode(
   throw new Error('trajectory:tool-args-match assertion mode must be "partial" or "exact"');
 }
 
-function resolveToolArgsMatchDefaults(
-  defaults: unknown,
-): Record<string, unknown> | undefined {
+function resolveToolArgsMatchDefaults(defaults: unknown): ToolArgsDefaults | undefined {
   if (defaults === undefined) {
     return undefined;
   }
