@@ -800,9 +800,24 @@ describe('evaluator', () => {
         config: eval1.config,
         author: null,
         prompts: eval1.getPrompts(),
+        ...(eval1.vars.length > 0 && { vars: eval1.vars }),
         datasetId: null,
         results: await eval1.toEvaluateSummary(),
       });
+    });
+
+    it('should include persisted variable display order', async () => {
+      const eval1 = new Eval({}, { vars: ['zebra', 'apple'] });
+
+      expect((await eval1.toResultsFile()).vars).toEqual(['zebra', 'apple']);
+    });
+
+    it('omits the vars field entirely when no variable order is persisted', async () => {
+      const eval1 = new Eval({});
+
+      const results = await eval1.toResultsFile();
+
+      expect(results).not.toHaveProperty('vars');
     });
 
     it('should handle null author and datasetId', async () => {
@@ -1102,6 +1117,49 @@ describe('evaluator', () => {
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
+    });
+  });
+
+  describe('EvalQueries.getVarsFromEvals', () => {
+    it('returns each evaluations var keys sorted alphabetically for stable list output', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const eval2 = await EvalFactory.create({ numResults: 1 });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"zebra":"z","apple":"a","mango":"m"}}') WHERE eval_id = '${eval1.id}'`,
+      );
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"yellow":"y","banana":"b"}}') WHERE eval_id = '${eval2.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([eval1, eval2]);
+
+      expect(vars[eval1.id]).toEqual(['apple', 'mango', 'zebra']);
+      expect(vars[eval2.id]).toEqual(['banana', 'yellow']);
+    });
+
+    it('returns an empty object for an empty evals list', async () => {
+      const vars = await EvalQueries.getVarsFromEvals([]);
+
+      expect(vars).toEqual({});
+    });
+
+    it('omits evals whose test_case has no $.vars from the result map', async () => {
+      const evalWithVars = await EvalFactory.create({ numResults: 1 });
+      const evalWithoutVars = await EvalFactory.create({ numResults: 1 });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"foo":"f"}}') WHERE eval_id = '${evalWithVars.id}'`,
+      );
+      // Strip $.vars so json_each(t.vars) yields no rows for this eval_id.
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{}') WHERE eval_id = '${evalWithoutVars.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([evalWithVars, evalWithoutVars]);
+
+      expect(vars[evalWithVars.id]).toEqual(['foo']);
+      expect(vars).not.toHaveProperty(evalWithoutVars.id);
     });
   });
 
@@ -1986,6 +2044,24 @@ describe('evaluator', () => {
   });
 
   describe('getTablePage sessionId header detection', () => {
+    it('sorts legacy backfilled vars before appending metadata-only sessionId', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET
+          metadata = json('{"sessionId":"session-123"}'),
+          test_case = json('{"vars":{"zebra":"z","apple":"a"}}')
+        WHERE eval_id = '${eval_.id}'`,
+      );
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval_.id}'`);
+
+      const reloadedEval = await Eval.findById(eval_.id);
+      const result = await reloadedEval!.getTablePage({ filters: [] });
+
+      expect(reloadedEval!.vars).toEqual(['apple', 'zebra']);
+      expect(result.head.vars).toEqual(['apple', 'zebra', 'sessionId']);
+    });
+
     it('should add sessionId to vars header when metadata.sessionId exists but not in vars', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
