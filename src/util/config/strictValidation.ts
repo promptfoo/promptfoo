@@ -1,9 +1,4 @@
-import {
-  type AssertionOrSet,
-  type TestCase,
-  type TestSuite,
-  TestSuiteConfigSchema,
-} from '../../types/index';
+import { type AssertionOrSet, type TestCase, TestSuiteConfigSchema } from '../../types/index';
 
 /**
  * Top-level config keys accepted by the unified config schema, including the deprecated aliases
@@ -72,35 +67,4 @@ function hasEffectiveAssertions(assertions: AssertionOrSet[] | undefined): boole
       (assertion) => assertion.type !== 'assert-set' || hasEffectiveAssertions(assertion.assert),
     )
   );
-}
-
-/**
- * Return indices for each effective eval row that has no assertion after evaluator-style
- * expansion of implicit and scenario tests.
- */
-export function findTestSuiteRowsWithoutAssertions(
-  testSuite: Pick<TestSuite, 'defaultTest' | 'scenarios' | 'tests'>,
-): number[] {
-  const defaultTest = typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
-  const directTests =
-    testSuite.tests && testSuite.tests.length > 0
-      ? testSuite.tests
-      : testSuite.scenarios
-        ? []
-        : ([{}] as TestCase[]);
-  const scenarioTests =
-    testSuite.scenarios?.flatMap((scenario) =>
-      scenario.config.flatMap((data) =>
-        (scenario.tests || ([{}] as TestCase[])).map((test) => ({
-          ...test,
-          options: {
-            ...(defaultTest?.options || {}),
-            ...(test.options || {}),
-          },
-          assert: [...(data.assert || []), ...(test.assert || [])],
-        })),
-      ),
-    ) || [];
-
-  return findTestsWithoutAssertions([...directTests, ...scenarioTests], defaultTest);
 }

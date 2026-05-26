@@ -65,6 +65,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { findTestsWithoutAssertions } from './util/config/strictValidation';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
@@ -1992,6 +1993,27 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
 
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
+}
+
+function enforceStrictAssertionsOnEvaluatedRows(tests: AtomicTestCase[], testSuite: TestSuite) {
+  if (!getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
+    return;
+  }
+  const offenders = findTestsWithoutAssertions(tests, getDefaultTest(testSuite));
+  if (offenders.length === 0) {
+    return;
+  }
+  const previewIndices = offenders.slice(0, 5);
+  const indexList = previewIndices.join(', ');
+  const more =
+    offenders.length > previewIndices.length
+      ? ` (and ${offenders.length - previewIndices.length} more)`
+      : '';
+  throw new Error(
+    `Strict config: ${offenders.length} evaluated test row${offenders.length === 1 ? '' : 's'} ` +
+      `[indices ${indexList}${more}] have no effective assertions. ` +
+      'Add an `assert:` block to each test or `defaultTest.assert`, or unset PROMPTFOO_STRICT_CONFIG.',
+  );
 }
 
 function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
@@ -4366,6 +4388,7 @@ class Evaluator {
 
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    enforceStrictAssertionsOnEvaluatedRows(tests, testSuite);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

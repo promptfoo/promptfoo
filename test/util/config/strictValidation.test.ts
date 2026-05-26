@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  findTestSuiteRowsWithoutAssertions,
   findTestsWithoutAssertions,
   findUnknownTopLevelKeys,
 } from '../../../src/util/config/strictValidation';
 
-import type { TestCase, TestSuite } from '../../../src/types/index';
+import type { TestCase } from '../../../src/types/index';
 
 describe('findUnknownTopLevelKeys', () => {
   it('returns [] for a config with only known keys', () => {
@@ -152,43 +151,5 @@ describe('findTestsWithoutAssertions', () => {
     ];
 
     expect(findTestsWithoutAssertions(tests)).toEqual([]);
-  });
-});
-
-describe('findTestSuiteRowsWithoutAssertions', () => {
-  it('flags the implicit eval row when no tests or scenarios have assertions', () => {
-    const suite = { defaultTest: {}, tests: [], scenarios: undefined } as unknown as TestSuite;
-
-    expect(findTestSuiteRowsWithoutAssertions(suite)).toEqual([0]);
-  });
-
-  it('checks scenario rows and honors data assertions', () => {
-    const suite = {
-      defaultTest: {},
-      tests: [],
-      scenarios: [
-        {
-          config: [{ vars: { input: 'missing assertion' } }, { assert: [{ type: 'is-json' }] }],
-          tests: [{}],
-        },
-      ],
-    } as unknown as TestSuite;
-
-    expect(findTestSuiteRowsWithoutAssertions(suite)).toEqual([0]);
-  });
-
-  it('flags scenario tests that disable inherited assertions', () => {
-    const suite = {
-      defaultTest: { assert: [{ type: 'is-json' }] },
-      tests: [],
-      scenarios: [
-        {
-          config: [{}],
-          tests: [{ options: { disableDefaultAsserts: true } }],
-        },
-      ],
-    } as unknown as TestSuite;
-
-    expect(findTestSuiteRowsWithoutAssertions(suite)).toEqual([0]);
   });
 });

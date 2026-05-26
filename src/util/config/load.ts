@@ -47,7 +47,7 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { findTestSuiteRowsWithoutAssertions, findUnknownTopLevelKeys } from './strictValidation';
+import { findUnknownTopLevelKeys } from './strictValidation';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -74,31 +74,6 @@ export function logConfigResolutionError(error: ConfigResolutionError, prefix?: 
 
 function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
   throw new ConfigResolutionError(message, options);
-}
-
-/**
- * In strict mode (PROMPTFOO_STRICT_CONFIG=true), fail the run if any test has no assertions.
- * This catches typoed or missing `assert` blocks that would otherwise produce silent passes.
- */
-function enforceStrictConfigAssertions(testSuite: TestSuite): void {
-  if (!getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
-    return;
-  }
-  const offenders = findTestSuiteRowsWithoutAssertions(testSuite);
-  if (offenders.length === 0) {
-    return;
-  }
-  const previewIndices = offenders.slice(0, 5);
-  const indexList = previewIndices.join(', ');
-  const more =
-    offenders.length > previewIndices.length
-      ? ` (and ${offenders.length - previewIndices.length} more)`
-      : '';
-  failConfigResolution(
-    `Strict config: ${offenders.length} evaluated test row${offenders.length === 1 ? '' : 's'} ` +
-      `[indices ${indexList}${more}] have no effective assertions. ` +
-      'Add an `assert:` block to each test or `defaultTest.assert`, or unset PROMPTFOO_STRICT_CONFIG.',
-  );
 }
 
 /**
@@ -1006,8 +981,6 @@ export async function resolveConfigs(
     testSuite.tests || [],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
-
-  enforceStrictConfigAssertions(testSuite);
 
   // Validate provider references in tests and scenarios
   validateTestProviderReferences(
