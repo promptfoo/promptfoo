@@ -635,6 +635,14 @@ function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvalua
   };
 }
 
+function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
+  if (evalRecord?.results.length === 0) {
+    throw new Error(
+      `No eval test cases ran for ${scope} — check filters and other test scoping options.`,
+    );
+  }
+}
+
 export async function optimizePromptTestSuite(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
@@ -666,6 +674,7 @@ export async function optimizePromptTestSuite(
     new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
@@ -673,6 +682,7 @@ export async function optimizePromptTestSuite(
         createEvaluationOptions(config),
       )
     : undefined;
+  assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,
