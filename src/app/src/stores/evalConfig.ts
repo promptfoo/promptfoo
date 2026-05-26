@@ -101,6 +101,9 @@ const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+const hasOwn = (value: object, key: PropertyKey): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
 const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
   if (!Array.isArray(assertions)) {
     return assertions;
@@ -113,10 +116,10 @@ const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
 
     return {
       ...assertion,
-      ...(Object.hasOwn(assertion, 'provider')
+      ...(hasOwn(assertion, 'provider')
         ? { provider: omitProviderCredentials(assertion.provider) }
         : {}),
-      ...(Object.hasOwn(assertion, 'assert')
+      ...(hasOwn(assertion, 'assert')
         ? { assert: omitAssertionProviderCredentials(assertion.assert) }
         : {}),
     };
@@ -131,7 +134,7 @@ const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
   const options = isRecord(testCase.options)
     ? {
         ...testCase.options,
-        ...(Object.hasOwn(testCase.options, 'provider')
+        ...(hasOwn(testCase.options, 'provider')
           ? { provider: omitProviderCredentials(testCase.options.provider) }
           : {}),
       }
@@ -139,11 +142,11 @@ const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
 
   return {
     ...testCase,
-    ...(Object.hasOwn(testCase, 'provider')
+    ...(hasOwn(testCase, 'provider')
       ? { provider: omitProviderCredentials(testCase.provider) }
       : {}),
-    ...(Object.hasOwn(testCase, 'options') ? { options } : {}),
-    ...(Object.hasOwn(testCase, 'assert')
+    ...(hasOwn(testCase, 'options') ? { options } : {}),
+    ...(hasOwn(testCase, 'assert')
       ? { assert: omitAssertionProviderCredentials(testCase.assert) }
       : {}),
   };
@@ -166,7 +169,7 @@ const omitScenarioProviderCredentials = (scenario: unknown): unknown => {
 };
 
 const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
-  if (!isRecord(redteam) || !Object.hasOwn(redteam, 'provider')) {
+  if (!isRecord(redteam) || !hasOwn(redteam, 'provider')) {
     return redteam;
   }
 
