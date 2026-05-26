@@ -151,6 +151,21 @@ describe('Eval Routes - Sharing behavior', () => {
     });
   });
 
+  it('flips status to error when toEvaluateSummary rejects', async () => {
+    mockedEvaluateWithSource.mockResolvedValueOnce({
+      id: 'eval-result-id',
+      toEvaluateSummary: vi.fn().mockRejectedValue(new Error('summary boom')),
+    } as any);
+
+    const createResponse = await postJob(minimalTestSuite);
+    const jobId = createResponse.body.id;
+
+    await vi.waitFor(async () => {
+      const response = await api.get(`/api/eval/job/${jobId}`);
+      expect(response.body.status).toBe('error');
+    });
+  });
+
   it('should not log the raw job body on evaluation failure', async () => {
     mockedEvaluateWithSource.mockRejectedValueOnce(new Error('boom'));
 
