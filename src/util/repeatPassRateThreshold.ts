@@ -1,6 +1,8 @@
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 
+export const REPEAT_PASS_RATE_GROUP_METADATA_KEY = '__promptfooRepeatGroupTestIdx';
+
 /**
  * A single per-test repeat pass-rate violation.
  *
@@ -17,53 +19,49 @@ export interface RepeatPassRateViolation {
   description?: string;
 }
 
-/**
- * Group results by their `(testIdx, promptIdx)` pair and compute the pass rate for each group.
- * Returns groups whose pass rate falls strictly below `threshold` (percent, 0–100).
- *
- * Errors and assertion failures both count as non-passes (mirroring the existing aggregate
- * `PROMPTFOO_PASS_RATE_THRESHOLD` semantics, which also count errors as non-passes).
- */
-export function computeRepeatPassRateViolations(
-  results: Pick<EvalResult, 'testIdx' | 'promptIdx' | 'success' | 'description' | 'testCase'>[],
-  threshold: number,
-): RepeatPassRateViolation[] {
-  if (!Number.isFinite(threshold)) {
-    return [];
-  }
+type RepeatPassRateResult = Pick<
+  EvalResult,
+  'testIdx' | 'promptIdx' | 'success' | 'description' | 'testCase'
+>;
 
-  type Bucket = {
-    testIdx: number;
-    promptIdx: number;
-    successes: number;
-    total: number;
-    description?: string;
-  };
-  const buckets = new Map<string, Bucket>();
-  for (const result of results) {
-    const key = `${result.testIdx}:${result.promptIdx}`;
-    let bucket = buckets.get(key);
-    if (!bucket) {
-      bucket = {
-        testIdx: result.testIdx,
-        promptIdx: result.promptIdx,
-        successes: 0,
-        total: 0,
-        description: result.description ?? result.testCase?.description,
-      };
-      buckets.set(key, bucket);
-    }
-    if (result.success) {
-      bucket.successes += 1;
-    }
-    bucket.total += 1;
-  }
+type Bucket = {
+  testIdx: number;
+  promptIdx: number;
+  successes: number;
+  total: number;
+  description?: string;
+};
 
+function getRepeatGroupTestIdx(result: Pick<RepeatPassRateResult, 'testIdx' | 'testCase'>) {
+  const repeatGroupTestIdx = result.testCase.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY];
+  return typeof repeatGroupTestIdx === 'number' && Number.isSafeInteger(repeatGroupTestIdx)
+    ? repeatGroupTestIdx
+    : result.testIdx;
+}
+
+function addResultToBuckets(buckets: Map<string, Bucket>, result: RepeatPassRateResult) {
+  const testIdx = getRepeatGroupTestIdx(result);
+  const key = `${testIdx}:${result.promptIdx}`;
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = {
+      testIdx,
+      promptIdx: result.promptIdx,
+      successes: 0,
+      total: 0,
+      description: result.description ?? result.testCase?.description,
+    };
+    buckets.set(key, bucket);
+  }
+  if (result.success) {
+    bucket.successes += 1;
+  }
+  bucket.total += 1;
+}
+
+function collectViolations(buckets: Map<string, Bucket>, threshold: number) {
   const violations: RepeatPassRateViolation[] = [];
   for (const bucket of buckets.values()) {
-    if (bucket.total === 0) {
-      continue;
-    }
     const passRate = (bucket.successes / bucket.total) * 100;
     if (passRate < threshold) {
       violations.push({
@@ -77,9 +75,30 @@ export function computeRepeatPassRateViolations(
     }
   }
 
-  // Sort for deterministic logging across runs.
   violations.sort((a, b) => a.testIdx - b.testIdx || a.promptIdx - b.promptIdx);
   return violations;
+}
+
+/**
+ * Group results by their repeat-stable test identity and `promptIdx`, then compute pass rates.
+ * Returns groups whose pass rate falls strictly below `threshold` (percent, 0–100).
+ *
+ * Errors and assertion failures both count as non-passes (mirroring the existing aggregate
+ * `PROMPTFOO_PASS_RATE_THRESHOLD` semantics, which also count errors as non-passes).
+ */
+export function computeRepeatPassRateViolations(
+  results: RepeatPassRateResult[],
+  threshold: number,
+): RepeatPassRateViolation[] {
+  if (!Number.isFinite(threshold)) {
+    return [];
+  }
+
+  const buckets = new Map<string, Bucket>();
+  for (const result of results) {
+    addResultToBuckets(buckets, result);
+  }
+  return collectViolations(buckets, threshold);
 }
 
 /**
@@ -98,55 +117,13 @@ export async function findRepeatPassRateViolations(
     return computeRepeatPassRateViolations(evalRecord.results, threshold);
   }
 
-  type Bucket = {
-    testIdx: number;
-    promptIdx: number;
-    successes: number;
-    total: number;
-    description?: string;
-  };
   const buckets = new Map<string, Bucket>();
   for await (const batch of evalRecord.fetchResultsBatched()) {
     for (const result of batch) {
-      const key = `${result.testIdx}:${result.promptIdx}`;
-      let bucket = buckets.get(key);
-      if (!bucket) {
-        bucket = {
-          testIdx: result.testIdx,
-          promptIdx: result.promptIdx,
-          successes: 0,
-          total: 0,
-          description: result.description ?? result.testCase?.description,
-        };
-        buckets.set(key, bucket);
-      }
-      if (result.success) {
-        bucket.successes += 1;
-      }
-      bucket.total += 1;
+      addResultToBuckets(buckets, result);
     }
   }
-
-  const violations: RepeatPassRateViolation[] = [];
-  for (const bucket of buckets.values()) {
-    if (bucket.total === 0) {
-      continue;
-    }
-    const passRate = (bucket.successes / bucket.total) * 100;
-    if (passRate < threshold) {
-      violations.push({
-        testIdx: bucket.testIdx,
-        promptIdx: bucket.promptIdx,
-        successes: bucket.successes,
-        total: bucket.total,
-        passRate,
-        description: bucket.description,
-      });
-    }
-  }
-
-  violations.sort((a, b) => a.testIdx - b.testIdx || a.promptIdx - b.promptIdx);
-  return violations;
+  return collectViolations(buckets, threshold);
 }
 
 /**

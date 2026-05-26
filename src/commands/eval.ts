@@ -1095,6 +1095,7 @@ export async function doEval(
       let repeatViolations: Awaited<ReturnType<typeof findRepeatPassRateViolations>> = [];
       if (
         isCliInvocation &&
+        repeat > 1 &&
         repeatPassRateThreshold !== undefined &&
         Number.isFinite(repeatPassRateThreshold)
       ) {

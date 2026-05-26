@@ -82,6 +82,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from './util/repeatPassRateThreshold';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2266,9 +2267,11 @@ function appendRunEvalOptionsForTestCase({
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
+  const firstRepeatTestIdx = nextTestIdx;
+  const isRepeated = (options.repeat || 1) > 1;
 
   for (let repeatIndex = 0; repeatIndex < (options.repeat || 1); repeatIndex++) {
-    for (const vars of varCombinations) {
+    for (const [varIndex, vars] of varCombinations.entries()) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
@@ -2282,6 +2285,7 @@ function appendRunEvalOptionsForTestCase({
         rateLimitRegistry,
         registers,
         repeatIndex,
+        repeatGroupTestIdx: isRepeated ? firstRepeatTestIdx + varIndex : undefined,
         runEvalOptions,
         testCase,
         testIdx: nextTestIdx,
@@ -2308,6 +2312,7 @@ function appendRunEvalOptionsForVars({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatGroupTestIdx,
   runEvalOptions,
   testCase,
   testIdx,
@@ -2326,6 +2331,7 @@ function appendRunEvalOptionsForVars({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatGroupTestIdx?: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2350,6 +2356,7 @@ function appendRunEvalOptionsForVars({
       rateLimitRegistry,
       registers,
       repeatIndex,
+      repeatGroupTestIdx,
       runEvalOptions,
       testCase,
       testIdx,
@@ -2373,6 +2380,7 @@ function appendRunEvalOptionsForProvider({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatGroupTestIdx,
   runEvalOptions,
   testCase,
   testIdx,
@@ -2392,6 +2400,7 @@ function appendRunEvalOptionsForProvider({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatGroupTestIdx?: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2427,6 +2436,7 @@ function appendRunEvalOptionsForProvider({
         rateLimitRegistry,
         registers,
         repeatIndex,
+        repeatGroupTestIdx,
         testCase,
         testIdx,
         testSuite,
@@ -2462,6 +2472,7 @@ function createRunEvalOption({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatGroupTestIdx,
   testCase,
   testIdx,
   testSuite,
@@ -2480,6 +2491,7 @@ function createRunEvalOption({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatGroupTestIdx?: number;
   testCase: AtomicTestCase;
   testIdx: number;
   testSuite: TestSuite;
@@ -2494,7 +2506,7 @@ function createRunEvalOption({
       template: prompt.template ?? prompt.raw,
     },
     testSuite,
-    test: createRunEvalTest(testSuite, testCase, vars, evalId),
+    test: createRunEvalTest(testSuite, testCase, vars, evalId, repeatGroupTestIdx),
     nunjucksFilters: testSuite.nunjucksFilters,
     testIdx,
     promptIdx,
@@ -2515,6 +2527,7 @@ function createRunEvalTest(
   testCase: AtomicTestCase,
   vars: Vars | undefined,
   evalId: string,
+  repeatGroupTestIdx?: number,
 ): AtomicTestCase {
   const globalGraderExamples = testSuite.redteam?.graderExamples;
   const testOptions = globalGraderExamples
@@ -2522,6 +2535,14 @@ function createRunEvalTest(
     : testCase.options;
   const baseTest = {
     ...testCase,
+    ...(repeatGroupTestIdx === undefined
+      ? {}
+      : {
+          metadata: {
+            ...testCase.metadata,
+            [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: repeatGroupTestIdx,
+          },
+        }),
     vars,
     options: testOptions,
   };
@@ -2532,7 +2553,7 @@ function createRunEvalTest(
   return {
     ...baseTest,
     metadata: {
-      ...testCase.metadata,
+      ...baseTest.metadata,
       tracingEnabled: true,
       evaluationId: evalId,
     },

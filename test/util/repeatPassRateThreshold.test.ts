@@ -3,6 +3,7 @@ import {
   computeRepeatPassRateViolations,
   findRepeatPassRateViolations,
   formatRepeatPassRateViolation,
+  REPEAT_PASS_RATE_GROUP_METADATA_KEY,
 } from '../../src/util/repeatPassRateThreshold';
 
 import type Eval from '../../src/models/eval';
@@ -12,6 +13,7 @@ function makeResult(opts: {
   testIdx: number;
   promptIdx: number;
   success: boolean;
+  repeatGroupTestIdx?: number;
   description?: string;
   testCase?: AtomicTestCase;
 }) {
@@ -20,7 +22,13 @@ function makeResult(opts: {
     promptIdx: opts.promptIdx,
     success: opts.success,
     description: opts.description ?? null,
-    testCase: opts.testCase ?? ({} as AtomicTestCase),
+    testCase:
+      opts.testCase ??
+      (opts.repeatGroupTestIdx === undefined
+        ? ({} as AtomicTestCase)
+        : ({
+            metadata: { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: opts.repeatGroupTestIdx },
+          } as AtomicTestCase)),
   };
 }
 
@@ -98,6 +106,27 @@ describe('computeRepeatPassRateViolations', () => {
     ]);
   });
 
+  it('groups evaluator rows by stable repeat identity when display test indices change', () => {
+    const results = [
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 2, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 3, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 4, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+    ];
+
+    expect(computeRepeatPassRateViolations(results, 80)).toEqual([]);
+    expect(computeRepeatPassRateViolations(results, 81)).toMatchObject([
+      {
+        testIdx: 0,
+        promptIdx: 0,
+        successes: 4,
+        total: 5,
+        passRate: 80,
+      },
+    ]);
+  });
+
   it('uses the test case description when available', () => {
     const results = [
       makeResult({
@@ -152,8 +181,7 @@ describe('computeRepeatPassRateViolations', () => {
     ]);
   });
 
-  it('ignores empty buckets and handles a single failing repeat', () => {
-    // A test that ran once and failed (e.g., --repeat 1) should still be flagged at 100%.
+  it('computes a violation for a single supplied failing result', () => {
     const violations = computeRepeatPassRateViolations(
       [makeResult({ testIdx: 0, promptIdx: 0, success: false })],
       100,
@@ -206,12 +234,18 @@ describe('findRepeatPassRateViolations', () => {
   it('streams batched results for persisted evals', async () => {
     async function* fetchResultsBatched() {
       yield [
-        makeResult({ testIdx: 0, promptIdx: 0, success: true }),
-        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+        makeResult({ testIdx: 1, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
       ];
       yield [
-        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
-        makeResult({ testIdx: 1, promptIdx: 0, success: true, description: 'OK test' }),
+        makeResult({ testIdx: 2, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+        makeResult({
+          testIdx: 3,
+          repeatGroupTestIdx: 3,
+          promptIdx: 0,
+          success: true,
+          description: 'OK test',
+        }),
       ];
     }
     const evalRecord = {
