@@ -327,12 +327,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Handle fork PR auth rejection as success — the server has already posted a helpful PR
-    // comment. Machine-readable modes must still emit a structured ScanResponse so consumers
-    // (e.g. the GitHub Action) don't choke on empty stdout. See issue #9424.
+    // Handle fork PR auth rejection as success for interactive and JSON consumers — the
+    // server has already posted a helpful PR comment. SARIF is different: an empty SARIF
+    // report would look like a completed clean scan if a workflow uploads it.
     if (errorMessage.includes('Fork PR scanning not authorized')) {
       const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
-      if (outputFormat !== CodeScanOutputFormat.TEXT) {
+      if (outputFormat === CodeScanOutputFormat.JSON) {
         // commentsPosted is intentionally omitted — the scanner has no signal that the
         // server actually posted the PR comment, only that authorization was rejected.
         // Consumers should branch on skipReason instead.
@@ -345,6 +345,15 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           format: outputFormat,
           githubPr: options.githubPr,
         });
+      } else if (outputFormat === CodeScanOutputFormat.SARIF) {
+        logger.error(
+          `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
+        );
+        cliState.postActionCallback = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          process.exitCode = 1;
+        };
+        return;
       } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
