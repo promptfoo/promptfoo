@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret, sanitizeUrl } from '../../../util/sanitizer';
+import { looksLikeSecret, sanitizeObject } from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -114,29 +114,76 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
   return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
 };
 
+const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
+const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
+
+const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
+  let name = rawName;
+  try {
+    name = decodeURIComponent(rawName);
+  } catch {
+    // Keep malformed parameter names unchanged for conservative matching.
+  }
+  return normalizeCredentialName(name) === 'sig' || looksLikeCredentialHeader(name);
+};
+
+// Operate on URL text so Nunjucks placeholders remain intact and safe query
+// settings retain their exact representation.
+const scrubProviderUrl = (value: string): string =>
+  value
+    .replace(URL_USERINFO, '$1[REDACTED]@')
+    .replace(URL_QUERY_PARAMETER, (match, separator, name) =>
+      looksLikeUrlCredentialParameter(name) ? `${separator}${name}=[REDACTED]` : match,
+    );
+
+const looksLikeCredentialValue = (value: string): boolean =>
+  looksLikeSecret(value.trim()) || scrubProviderUrl(value) !== value;
+
 const looksLikeHeaderCredential = (headerName: string, value: unknown): boolean =>
   looksLikeCredentialHeader(headerName) ||
-  (typeof value === 'string' && looksLikeSecret(value.trim()));
+  (typeof value === 'string' && looksLikeCredentialValue(value));
 
-const URL_CREDENTIAL_MARKER =
-  /(?:^[a-z][a-z0-9+.-]*:\/\/[^/?#\s@]*:[^/?#\s@]*@)|(?:[?&](?:api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)=)/i;
+const scrubHttpBodyString = (body: string): string => {
+  const sanitizedBody = sanitizeObject(body, { context: 'persisted HTTP request body' }) as string;
+  if (!sanitizedBody.includes('=')) {
+    return sanitizedBody;
+  }
 
-const scrubProviderUrl = (value: string): string =>
-  URL_CREDENTIAL_MARKER.test(value) ? sanitizeUrl(value) : value;
+  const params = new URLSearchParams(sanitizedBody);
+  let changed = false;
+  for (const [key, value] of params.entries()) {
+    if (looksLikeCredential(key) || looksLikeCredentialValue(value)) {
+      params.set(key, '[REDACTED]');
+      changed = true;
+    }
+  }
+  return changed ? params.toString() : sanitizedBody;
+};
 
 // Only scan the header block, so body content that happens to resemble a
 // credential header is not rewritten during persistence.
 const scrubRawHttpRequest = (raw: string): string => {
-  const headerBoundary = raw.search(/\r?\n\r?\n/);
-  const headerEnd = headerBoundary === -1 ? raw.length : headerBoundary;
+  const boundary = raw.match(/\r?\n\r?\n/);
+  const headerEnd = boundary?.index ?? raw.length;
   const headerBlock = raw.slice(0, headerEnd);
-  const rest = raw.slice(headerEnd);
+  const separator = boundary?.[0] ?? '';
+  const body = boundary ? raw.slice(headerEnd + separator.length) : '';
+  const requestLine = /^(\S+[ \t]+)(\S+)([ \t]+HTTP\/\d(?:\.\d)?[^\r\n]*)$/im;
   const headerLine = /^([ \t]*)([^:\r\n]+)([ \t]*:[ \t]*)(.*)$/gm;
 
   return (
-    headerBlock.replace(headerLine, (match, indent, name, separator, value) =>
-      looksLikeHeaderCredential(name, value) ? `${indent}${name}${separator}[REDACTED]` : match,
-    ) + rest
+    headerBlock
+      .replace(
+        requestLine,
+        (_match, method, target, protocol) => `${method}${scrubProviderUrl(target)}${protocol}`,
+      )
+      .replace(headerLine, (match, indent, name, headerSeparator, value) =>
+        looksLikeHeaderCredential(name, value)
+          ? `${indent}${name}${headerSeparator}[REDACTED]`
+          : match,
+      ) +
+    separator +
+    (boundary ? scrubHttpBodyString(body) : body)
   );
 };
 
@@ -158,7 +205,11 @@ const walkValue = (
     if (parentKey === 'request') {
       return scrubRawHttpRequest(value);
     }
-    return scrubProviderUrl(value);
+    if (parentKey === 'body') {
+      return scrubHttpBodyString(value);
+    }
+    const scrubbedUrl = scrubProviderUrl(value);
+    return scrubbedUrl !== value || !looksLikeSecret(value.trim()) ? scrubbedUrl : '[REDACTED]';
   }
 
   if (!value || typeof value !== 'object') {
@@ -332,19 +383,22 @@ const omitTracingCredentials = (tracing: unknown): unknown => {
     return tracing;
   }
   const forwarding = tracing.forwarding;
-  if (!isRecord(forwarding.headers)) {
-    return tracing;
-  }
-  const headers = Object.fromEntries(
-    Object.entries(forwarding.headers).filter(
-      ([key, value]) => !looksLikeHeaderCredential(key, value),
-    ),
-  );
   return {
     ...tracing,
     forwarding: {
       ...forwarding,
-      headers,
+      ...(typeof forwarding.endpoint === 'string'
+        ? { endpoint: scrubProviderUrl(forwarding.endpoint) }
+        : {}),
+      ...(isRecord(forwarding.headers)
+        ? {
+            headers: Object.fromEntries(
+              Object.entries(forwarding.headers).filter(
+                ([key, value]) => !looksLikeHeaderCredential(key, value),
+              ),
+            ),
+          }
+        : {}),
     },
   };
 };
@@ -356,7 +410,8 @@ const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedCo
   const filtered = Object.fromEntries(
     Object.entries(env).filter(
       ([key, value]) =>
-        !looksLikeCredential(key) && !(typeof value === 'string' && looksLikeSecret(value)),
+        !looksLikeCredential(key) &&
+        !(typeof value === 'string' && looksLikeCredentialValue(value)),
     ),
   );
   return filtered as Partial<UnifiedConfig>['env'];

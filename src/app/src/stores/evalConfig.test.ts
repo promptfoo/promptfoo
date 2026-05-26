@@ -89,14 +89,22 @@ describe('evalConfig store', () => {
         env: {
           SERVICE_AUTH: 'Bearer neutral-service-token-1234567890',
           CONFIG_VALUE: 'sk-abcdefghijklmnopqrstuvwxyz1234567890',
+          DATABASE_URL: 'https://db-user:db-password@db.example.test/app',
+          SERVICE_URL: 'https://api.example.test/v1?token=url-env-secret',
           SERVICE_REGION: 'us-east-1',
+          PUBLIC_URL: 'https://api.example.test/v1',
         },
       });
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
-      expect(persisted.env).toEqual({ SERVICE_REGION: 'us-east-1' });
+      expect(persisted.env).toEqual({
+        SERVICE_REGION: 'us-east-1',
+        PUBLIC_URL: 'https://api.example.test/v1',
+      });
       expect(JSON.stringify(persisted)).not.toContain('neutral-service-token');
       expect(JSON.stringify(persisted)).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
+      expect(JSON.stringify(persisted)).not.toContain('db-password');
+      expect(JSON.stringify(persisted)).not.toContain('url-env-secret');
     });
 
     it('does not persist inline provider API keys used for the current evaluation', () => {
@@ -526,7 +534,8 @@ describe('evalConfig store', () => {
           enabled: true,
           forwarding: {
             enabled: true,
-            endpoint: 'https://otel.example.com/v1/traces',
+            endpoint:
+              'https://collector-user:collector-password@otel.example.com/v1/traces?token=tracing-url-secret',
             headers: {
               Authorization: 'Bearer tracing-leak-token',
               'X-Auth': 'tracing-leak-x-auth',
@@ -541,7 +550,7 @@ describe('evalConfig store', () => {
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
       expect(persisted.tracing.enabled).toBe(true);
-      expect(persisted.tracing.forwarding.endpoint).toBe('https://otel.example.com/v1/traces');
+      expect(persisted.tracing.forwarding.endpoint).toContain('otel.example.com/v1/traces');
       expect(persisted.tracing.forwarding.headers).toEqual({
         'X-Service': 'visible-service',
         'X-Request-Id': 'visible-request-id',
@@ -551,6 +560,8 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('tracing-leak-x-auth');
       expect(serialized).not.toContain('honeycomb-ingest-key');
       expect(serialized).not.toContain('neutral-tracing-token');
+      expect(serialized).not.toContain('collector-password');
+      expect(serialized).not.toContain('tracing-url-secret');
     });
 
     it('redacts raw HTTP request strings and multipart form-field values', () => {
@@ -561,7 +572,7 @@ describe('evalConfig store', () => {
             config: {
               url: 'https://api.example.com/v1/predict',
               request: [
-                'POST /v1/predict HTTP/1.1',
+                'POST /v1/predict?api_key=raw-target-secret HTTP/1.1',
                 'Host: api.example.com',
                 'Authorization: Bearer raw-request-secret',
                 'X-Api-Key: raw-request-apikey',
@@ -570,7 +581,7 @@ describe('evalConfig store', () => {
                 'Cookie: session=raw-request-cookie',
                 'Content-Type: application/json',
                 '',
-                '{"prompt":"{{message}}"}',
+                '{"prompt":"{{message}}","api_key":"raw-body-secret"}',
               ].join('\r\n'),
               body: {
                 parts: [
@@ -598,7 +609,8 @@ describe('evalConfig store', () => {
       expect(cfg.request).toContain('X-Session-Token: [REDACTED]');
       expect(cfg.request).toContain('Cookie: [REDACTED]');
       expect(cfg.request).toContain('Host: api.example.com');
-      expect(cfg.request).toContain('{"prompt":"{{message}}"}');
+      expect(cfg.request).toContain('"prompt":"{{message}}"');
+      expect(cfg.request).toContain('"api_key":"[REDACTED]"');
       expect(cfg.body.parts).toEqual([
         { kind: 'field', name: 'api_key' },
         { kind: 'field', name: 'authorization' },
@@ -611,6 +623,8 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('raw-request-client-secret');
       expect(serialized).not.toContain('raw-request-session-token');
       expect(serialized).not.toContain('raw-request-cookie');
+      expect(serialized).not.toContain('raw-target-secret');
+      expect(serialized).not.toContain('raw-body-secret');
       expect(serialized).not.toContain('multipart-leak-apikey');
       expect(serialized).not.toContain('multipart-leak-auth');
     });
@@ -622,9 +636,16 @@ describe('evalConfig store', () => {
           {
             id: 'http',
             config: {
-              url: 'https://api.example.com/v1?token=config-url-secret&region=us',
+              url: 'https://api.example.com/v1?token=config-url-secret&max_tokens=128&region=us',
             },
           },
+          {
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/{{ path }}?x-api-key=templated-url-secret&region=us',
+            },
+          },
+          'https://templated-user:templated-password@api.example.com/{{ model }}',
         ],
       } as any);
 
@@ -634,8 +655,44 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('browser-password');
       expect(serialized).not.toContain('provider-url-secret');
       expect(serialized).not.toContain('config-url-secret');
+      expect(serialized).not.toContain('templated-url-secret');
+      expect(serialized).not.toContain('templated-password');
       expect(persisted.providers[0]).toContain('region=us');
       expect(persisted.providers[1].config.url).toContain('region=us');
+      expect(persisted.providers[1].config.url).toContain('max_tokens=128');
+    });
+
+    it('redacts credentials in HTTP body strings', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              body: 'client_secret=form-body-secret&grant_type=client_credentials',
+            },
+          },
+          {
+            id: 'http',
+            config: {
+              body: '{"api_key":"json-body-secret","prompt":"hello"}',
+            },
+          },
+          {
+            id: 'http',
+            config: {
+              body: '{"payload":"sk-abcdefghijklmnopqrstuvwxyz1234567890"}',
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('form-body-secret');
+      expect(serialized).not.toContain('json-body-secret');
+      expect(serialized).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
+      expect(persisted.providers[0].config.body).toContain('grant_type=client_credentials');
+      expect(persisted.providers[1].config.body).toContain('"prompt":"hello"');
     });
 
     it('redacts inline TLS cert/ca/key material while preserving file paths', () => {
