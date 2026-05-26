@@ -8,7 +8,7 @@ providers:
   - id: 'file://./agent.py'
     label: 'CrewAI Recruitment Agent'
     config:
-      model: 'openai:gpt-4.1'
+      model: 'gpt-4.1'
 
 # It's a good practice to have a defaultTest that applies to all test cases.
 defaultTest:
@@ -18,6 +18,9 @@ defaultTest:
     # We expect the output to contain a "candidates" key
     - type: javascript
       value: 'output.hasOwnProperty("candidates")'
+    # We expect a summary explaining the recommendations
+    - type: javascript
+      value: 'typeof output.summary === "string" && output.summary.length > 0'
 
 tests:
   - description: 'Senior Full-Stack Engineer'

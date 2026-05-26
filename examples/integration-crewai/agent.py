@@ -5,39 +5,40 @@ import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, Task
+from crewai import Agent, Crew, LLM, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
-def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
+def get_recruitment_agent(model: str = "gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent's goal: find the best Ruby on Rails + React candidates.
     """
+    llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
         role="Senior Recruiter specializing in technical roles",
-        goal="Find the best candidates for a given set of job requirements and return the results in a valid JSON format.",
+        goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
         backstory=textwrap.dedent("""
             You are an expert recruiter with years of experience in sourcing top talent for the tech industry.
             You have a keen eye for detail and are a master at following instructions to the letter, especially when it comes to output formats.
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        model=model,
-        api_key=OPENAI_API_KEY,  # ✅ Make sure to pass the API key
+        llm=llm,
     )
 
     task = Task(
         description="Find the top 3 candidates based on the following job requirements: {job_requirements}",
         expected_output=textwrap.dedent("""
-            A single valid JSON object. The JSON object must have a single key called "candidates".
+            A single valid JSON object with "candidates" and "summary" keys.
             The value of the "candidates" key must be an array of JSON objects.
             Each object in the array must have the following keys: "name", "experience", and "skills".
             - "name" must be a string representing the candidate's name.
             - "experience" must be a string summarizing the candidate's relevant experience.
             - "skills" must be an array of strings listing the candidate's skills.
+            - "summary" must be a short string explaining the recommendation.
 
             Example of the expected final output:
             {
@@ -47,7 +48,8 @@ def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
                   "experience": "8 years of experience in Ruby on Rails and React, with a strong focus on building scalable web applications.",
                   "skills": ["Ruby on Rails", "React", "JavaScript", "PostgreSQL", "TDD"]
                 }
-              ]
+              ],
+              "summary": "Jane Doe is a strong match based on her extensive Rails and React experience."
             }
         """).strip(),
         agent=agent,
@@ -58,7 +60,7 @@ def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
     return crew
 
 
-async def run_recruitment_agent(prompt, model="openai:gpt-4.1"):
+async def run_recruitment_agent(prompt, model="gpt-4.1"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -72,7 +74,7 @@ async def run_recruitment_agent(prompt, model="openai:gpt-4.1"):
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        crew.kickoff(inputs={"job_requirements": prompt})
+        result = crew.kickoff(inputs={"job_requirements": prompt})
 
         # The result might be a string, or an object with a 'raw' attribute.
         output_text = ""
@@ -118,7 +120,7 @@ def call_api(
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-4.1")
+        model = config.get("model", "gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:

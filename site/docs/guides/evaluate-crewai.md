@@ -197,16 +197,17 @@ import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, Task
+from crewai import Agent, Crew, LLM, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
+def get_recruitment_agent(model: str = "gpt-5") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
     """
+    llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
         role="Senior Recruiter specializing in technical roles",
         goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
@@ -216,8 +217,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        model=model,
-        api_key=OPENAI_API_KEY  # ✅ Make sure to pass the API key
+        llm=llm,
     )
 
     task = Task(
@@ -250,7 +250,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='openai:gpt-5'):
+async def run_recruitment_agent(prompt, model='gpt-5'):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -311,7 +311,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-5")
+        model = config.get("model", "gpt-5")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
