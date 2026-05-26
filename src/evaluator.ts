@@ -1206,6 +1206,8 @@ async function gradeRunEvalResponse({
     ...processedResponse,
     providerTransformedOutput,
   };
+  // Provider-scoped assertion behavior applies to the target selected for this test.
+  const assertionProvider = isApiProvider(test.provider) ? test.provider : provider;
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
@@ -1215,7 +1217,7 @@ async function gradeRunEvalResponse({
       () =>
         runAssertions({
           prompt: renderedPrompt,
-          provider,
+          provider: assertionProvider,
           providerResponse: assertionProviderResponse,
           test,
           vars,
@@ -1235,7 +1237,7 @@ async function gradeRunEvalResponse({
     () =>
       runAssertions({
         prompt: renderedPrompt,
-        provider,
+        provider: assertionProvider,
         providerResponse: assertionProviderResponse,
         test,
         vars,
