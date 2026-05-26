@@ -190,6 +190,42 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
       expect(screen.queryByTestId('row-eval-3')).toBeNull();
     });
+    expect(callApi).toHaveBeenCalledWith(
+      '/results',
+      expect.objectContaining({
+        cache: 'no-store',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it('should request only the focused dataset for comparison when its datasetId is known', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable
+          onEvalSelected={vi.fn()}
+          focusedEvalId="eval-1"
+          focusedDatasetId="dataset-1"
+          filterByDatasetId={true}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith(
+        '/results?datasetId=dataset-1',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
   });
 
   it('should call onEvalSelected when a row is clicked', async () => {

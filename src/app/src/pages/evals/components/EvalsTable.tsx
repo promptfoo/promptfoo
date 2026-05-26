@@ -27,6 +27,7 @@ interface EvalsTableProps {
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
+  focusedDatasetId?: string | null;
   deletionEnabled?: boolean;
 }
 
@@ -35,6 +36,7 @@ export default function EvalsTable({
   focusedEvalId,
   showUtilityButtons = false,
   filterByDatasetId = false,
+  focusedDatasetId,
   deletionEnabled = false,
 }: EvalsTableProps) {
   if (filterByDatasetId) {
@@ -50,26 +52,33 @@ export default function EvalsTable({
   const location = useLocation();
 
   // Fetch evals from the API
-  const fetchEvals = useCallback(async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
+        const query =
+          filterByDatasetId && focusedDatasetId
+            ? `?datasetId=${encodeURIComponent(focusedDatasetId)}`
+            : '';
+        const response = await callApi(`/results${query}`, { cache: 'no-store', signal });
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+        const body = (await response.json()) as { data: EvalSummary[] };
+        setEvals(body.data);
+        setError(null);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setEvals(body.data);
-      setError(null);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError((err as Error).message);
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [filterByDatasetId, focusedDatasetId],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -237,7 +246,8 @@ export default function EvalsTable({
           ]
         : []),
       {
-        accessorKey: 'description',
+        id: 'description',
+        accessorFn: (row) => row.description || row.label,
         header: 'Description',
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;

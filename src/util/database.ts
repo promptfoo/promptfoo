@@ -54,6 +54,7 @@ export async function writeResultsToDatabase(
         description: config.description,
         config,
         results,
+        isRedteam: config.redteam !== undefined,
       })
       .onConflictDoNothing()
       .run(),

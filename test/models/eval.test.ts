@@ -1,8 +1,8 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
-import { evalResultsTable, spansTable, tracesTable } from '../../src/database/tables';
+import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -13,6 +13,7 @@ import Eval, {
   getEvalSummaries,
 } from '../../src/models/eval';
 import { TraceStore } from '../../src/tracing/store';
+import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
@@ -141,6 +142,9 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       const eval3 = await EvalFactory.create();
+      getDb().update(evalsTable).set({ createdAt: 1 }).where(eq(evalsTable.id, eval1.id)).run();
+      getDb().update(evalsTable).set({ createdAt: 2 }).where(eq(evalsTable.id, eval2.id)).run();
+      getDb().update(evalsTable).set({ createdAt: 3 }).where(eq(evalsTable.id, eval3.id)).run();
 
       const evaluations = await getEvalSummaries();
 
@@ -148,6 +152,73 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
+    });
+
+    it('should sort timestamp ties consistently in full and filtered summaries', async () => {
+      const eval1 = await Eval.create({}, []);
+      const eval2 = await Eval.create({}, []);
+      const createdAt = Date.now();
+
+      getDb().update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval1.id)).run();
+      getDb().update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval2.id)).run();
+
+      const expectedIds = [eval1.id, eval2.id].sort().reverse();
+      const allIds = (await getEvalSummaries()).map(({ evalId }) => evalId);
+      const filteredIds = (await getEvalSummaries(undefined, 'eval')).map(({ evalId }) => evalId);
+
+      expect(allIds).toEqual(expectedIds);
+      expect(filteredIds).toEqual(expectedIds);
+    });
+
+    it('should update redteam classification when a persisted config changes type', async () => {
+      const redteamEvaluation = await Eval.create({ redteam: {} as any }, []);
+      const regularEvaluation = await Eval.create({}, []);
+
+      await updateResult(redteamEvaluation.id, {});
+      await updateResult(regularEvaluation.id, { redteam: {} as any });
+
+      const stored = getDb()
+        .select({ id: evalsTable.id, isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .all();
+      const redteamSummaries = await getEvalSummaries(undefined, 'redteam');
+      const evalSummaries = await getEvalSummaries(undefined, 'eval');
+
+      expect(stored).toContainEqual({ id: redteamEvaluation.id, isRedteam: false });
+      expect(stored).toContainEqual({ id: regularEvaluation.id, isRedteam: true });
+      expect(redteamSummaries).not.toContainEqual(
+        expect.objectContaining({ evalId: redteamEvaluation.id }),
+      );
+      expect(redteamSummaries).toContainEqual(
+        expect.objectContaining({ evalId: regularEvaluation.id, isRedteam: true }),
+      );
+      expect(evalSummaries).toContainEqual(
+        expect.objectContaining({ evalId: redteamEvaluation.id, isRedteam: false }),
+      );
+      expect(evalSummaries).not.toContainEqual(
+        expect.objectContaining({ evalId: regularEvaluation.id }),
+      );
+    });
+
+    it('should persist the redteam flag for legacy result writes', async () => {
+      const evalId = await writeResultsToDatabase(
+        {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: [],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0 },
+        } as any,
+        { redteam: {} as any },
+      );
+
+      const stored = getDb()
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, evalId))
+        .get();
+
+      expect(stored?.isRedteam).toBe(true);
     });
 
     it('should correctly deserialize all provider types', async () => {
