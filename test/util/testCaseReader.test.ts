@@ -346,6 +346,29 @@ describe('readStandaloneTestsFile', () => {
       ]);
     });
 
+    it('resolves standard evals/evals.json file entries from the skill root', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'csv-analyzer',
+          evals: [
+            {
+              prompt: 'Analyze the CSV.',
+              files: ['evals/files/sales_2025.csv'],
+              assertions: ['Reports the total revenue'],
+            },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('/skills/csv-analyzer/evals/evals.json');
+      const salesFile = path.resolve('/skills/csv-analyzer/evals/files/sales_2025.csv');
+
+      expect(result[0].vars).toEqual({
+        prompt: `Analyze the CSV.\n\nFiles available for this eval:\n- ${salesFile}`,
+        files: [salesFile],
+      });
+    });
+
     it('does not hijack prompt-bearing JSON files without an AgentSkills skill name', async () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({
@@ -1501,10 +1524,10 @@ describe('readTests', () => {
         ],
       }),
     );
-    vi.mocked(globSync).mockReturnValue(['/skills/summarizer/evals.json']);
+    vi.mocked(globSync).mockReturnValue(['/skills/summarizer/evals/evals.json']);
 
-    const result = await readTests(['file://skills/*/evals.json']);
-    const inputFile = path.resolve('/skills/summarizer', 'evals/files/input.txt');
+    const result = await readTests(['file://skills/*/evals/evals.json']);
+    const inputFile = path.resolve('/skills/summarizer/evals/files/input.txt');
 
     expect(result).toEqual([
       {

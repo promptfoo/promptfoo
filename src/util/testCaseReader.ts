@@ -396,7 +396,7 @@ type AgentSkillsEvalsFile = {
  *   - `prompt`           -> literal `vars.prompt`
  *   - `expected_output`  -> `llm-rubric` assertion (first)
  *   - `assertions[i]`    -> additional `llm-rubric` assertions
- *   - `files`            -> absolute paths resolved from the source JSON directory
+ *   - `files`            -> absolute paths resolved from the AgentSkills skill root
  *   - `id`               -> `metadata.id` and `description`
  *   - top-level `skill_name` -> `metadata.skill_name`
  */
@@ -441,6 +441,10 @@ function agentSkillsEvalToTestCase(
   const idValue =
     typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
 
+  const sourceRoot =
+    sourceDirectory && path.basename(sourceDirectory) === 'evals'
+      ? path.dirname(sourceDirectory)
+      : sourceDirectory;
   const files = (
     Array.isArray(entry.files)
       ? entry.files.filter(
@@ -448,7 +452,7 @@ function agentSkillsEvalToTestCase(
         )
       : []
   ).map((file) =>
-    sourceDirectory && !file.startsWith('file://') ? path.resolve(sourceDirectory, file) : file,
+    sourceRoot && !file.startsWith('file://') ? path.resolve(sourceRoot, file) : file,
   );
   const prompt =
     files.length > 0
