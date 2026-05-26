@@ -291,6 +291,17 @@ async function exportBlobAssets(
  * JSON writer with improved error handling for large datasets.
  * Provides helpful error messages when memory limits are exceeded.
  */
+export function isStringSizeError(error: unknown): error is RangeError {
+  if (!(error instanceof RangeError)) {
+    return false;
+  }
+
+  return (
+    (error as NodeJS.ErrnoException).code === 'ERR_STRING_TOO_LONG' ||
+    /Invalid string length|Cannot create a string longer than/i.test(error.message)
+  );
+}
+
 async function writeJsonOutputSafely(
   outputPath: string,
   evalRecord: Eval,
@@ -305,11 +316,8 @@ async function writeJsonOutputSafely(
     await fsPromises.writeFile(outputPath, jsonString);
   } catch (error) {
     const msg = (error as Error)?.message ?? '';
-    const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
-    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(
-      msg,
-    );
-    if (isStringLen || isHeapOOM) {
+    const isHeapOOM = /heap out of memory|Array buffer allocation failed/i.test(msg);
+    if (isStringSizeError(error) || isHeapOOM) {
       // The dataset is too large to load into memory at once
       const resultCount = await evalRecord.getResultsCount();
       logger.error(`Dataset too large for JSON export (${resultCount} results).`);

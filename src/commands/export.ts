@@ -7,7 +7,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { getLogDirectory, getLogFiles } from '../util/logs';
-import { createOutputData, writeOutput } from '../util/output';
+import { createOutputData, isStringSizeError, writeOutput } from '../util/output';
 import type { Command } from 'commander';
 
 /**
@@ -116,17 +116,6 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
   });
 }
 
-function isStringSizeRangeError(error: unknown): error is RangeError {
-  if (!(error instanceof RangeError)) {
-    return false;
-  }
-
-  return (
-    (error as NodeJS.ErrnoException).code === 'ERR_STRING_TOO_LONG' ||
-    /Invalid string length|Cannot create a string longer than/i.test(error.message)
-  );
-}
-
 export function exportCommand(program: Command) {
   const exportCmd = program.command('export').description('Export eval records or logs');
 
@@ -167,7 +156,7 @@ export function exportCommand(program: Command) {
             );
             logger.info(jsonData);
           } catch (error) {
-            if (isStringSizeRangeError(error)) {
+            if (isStringSizeError(error)) {
               logger.error(
                 `Eval too large to output to console. Use -o to export to a file instead:\n\n  promptfoo export eval ${evalId} -o output.jsonl\n`,
               );
