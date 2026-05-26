@@ -928,6 +928,9 @@ describe('evalCommand', () => {
 
       expect(result.persisted).toBe(false);
       expect(process.exitCode).toBe(1);
+      expect(checkProviderApiKeys).toHaveBeenCalledWith(expect.any(Array), {
+        useDescriptions: true,
+      });
       // Ensures the per-key list, the empty-line spacers, and the --env-file
       // hint all reach the user. A regression that strips any of these would
       // have been silent before this test.
