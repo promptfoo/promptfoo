@@ -485,10 +485,8 @@ class TestHandleCall(unittest.TestCase):
                     "test_func",
                 )
 
-        # response_file could not be parsed, so emitting "DONE|None" would only
-        # waste a control-channel cycle: Node's path match against the in-flight
-        # response file would fail and the call would still resolve via timeout.
-        # The stderr ERROR line is the real signal here.
+        # No response_file means no useful DONE| can be emitted; the stderr is
+        # the real signal and Node will resolve the call via timeout.
         self.assertNotIn("DONE", stdout_capture.getvalue())
         self.assertIn("Invalid CALL command format", stderr_capture.getvalue())
 
