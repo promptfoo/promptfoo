@@ -247,6 +247,9 @@ export default function EvalsTable({
         : []),
       {
         id: 'description',
+        // accessorFn (not accessorKey) ensures every row is searched. TanStack Table
+        // infers column types from the first row, so a leading row with description:
+        // null would silently drop this column from global search.
         accessorFn: (row) => row.description || row.label,
         header: 'Description',
         cell: ({ row }) => {
