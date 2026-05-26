@@ -742,8 +742,41 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
+- optional `defaults`, a map of argument names to their default values
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+#### Tolerating default arguments {#trajectory-tool-args-match-defaults}
+
+Use `defaults` when an agent may or may not include arguments whose values match the tool's documented defaults (for example, pagination parameters that the API would fill in anyway). Before matching, any actual argument whose value equals its declared default is stripped from the payload.
+
+This lets you pair `mode: exact` — which catches hallucinated extra arguments — with a tolerance for harmless optional defaults. An actual argument with a non-default value is still treated as an unexpected extra.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
+```
+
+With the configuration above:
+
+| Observed tool arguments                  | Outcome | Reason                                                             |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------ |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                           |
+| `{ status: 'Q', page: 1 }`               | pass    | `page: 1` equals the declared default, stripped before matching    |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both defaults stripped                                             |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` is not the declared default, kept, treated as unexpected |
+| `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                   |
+
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped.
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 

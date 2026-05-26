@@ -1323,6 +1323,343 @@ describe('trajectory assertions', () => {
         'trajectory:tool-args-match assertion object must include a name or pattern property',
       );
     });
+
+    describe('defaults', () => {
+      it('passes in exact mode when an unexpected actual key matches a declared default', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result).toEqual({
+          pass: true,
+          score: 1,
+          reason:
+            'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: {"order_id":"123","include_history":false}',
+          assertion: params.assertion,
+        });
+      });
+
+      it('fails in exact mode when an actual key value differs from the declared default', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: true },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: true },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('No call to tool "search_orders" matched expected arguments');
+      });
+
+      it('passes in exact mode when actual contains multiple keys all matching declared defaults', () => {
+        const allDefaultsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-all-defaults',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"page_size":5}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: allDefaultsTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('passes in exact mode when actual omits a key listed in defaults', () => {
+        const traceWithoutDefault: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-no-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q"}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: traceWithoutDefault,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('fails in exact mode when actual contains a hallucinated key not in args or defaults', () => {
+        const hallucinatedTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-hallucinated',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"delete_database":true}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: hallucinatedTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('delete_database');
+      });
+
+      it('treats empty defaults the same as no defaults', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: {},
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: {},
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('supports defaults with structured values via deep equality', () => {
+        const structuredTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-structured',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","sort":{"field":"created","order":"desc"}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: structuredTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { sort: { field: 'created', order: 'desc' } },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { sort: { field: 'created', order: 'desc' } },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('does not change partial-mode behavior when defaults are set', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('rejects malformed defaults (array)', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: ['include_history'] as unknown as Record<string, unknown>,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: ['include_history'] as unknown as Record<string, unknown>,
+          },
+        };
+
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+        );
+      });
+
+      it('inverts correctly when defaults allow an otherwise-forbidden match', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          inverse: true,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'not-trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('Forbidden argument match');
+      });
+    });
   });
 
   describe('trajectory:step-count', () => {

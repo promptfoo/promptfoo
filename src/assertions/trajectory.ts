@@ -31,6 +31,7 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
   arguments?: unknown;
   mode?: 'exact' | 'partial';
+  defaults?: Record<string, unknown>;
 }
 
 function getTraceOrThrow(params: AssertionParams) {
@@ -260,16 +261,40 @@ function matchesExpectedArgsPartial(actual: unknown, expected: unknown): boolean
   return isDeepStrictEqual(actual, expected);
 }
 
+function stripDefaults(
+  actual: unknown,
+  defaults: Record<string, unknown> | undefined,
+): unknown {
+  if (!defaults || !isRecord(actual)) {
+    return actual;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(actual)) {
+    if (
+      Object.prototype.hasOwnProperty.call(defaults, key) &&
+      isDeepStrictEqual(value, defaults[key])
+    ) {
+      continue;
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
 function matchesToolArgs(
   actual: unknown,
   expected: unknown,
   mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
+  defaults: Record<string, unknown> | undefined,
 ): boolean {
+  const cleanedActual = stripDefaults(actual, defaults);
+
   if (mode === 'exact') {
-    return isDeepStrictEqual(actual, expected);
+    return isDeepStrictEqual(cleanedActual, expected);
   }
 
-  return matchesExpectedArgsPartial(actual, expected);
+  return matchesExpectedArgsPartial(cleanedActual, expected);
 }
 
 function resolveToolArgsMatchMode(
@@ -284,6 +309,22 @@ function resolveToolArgsMatchMode(
   }
 
   throw new Error('trajectory:tool-args-match assertion mode must be "partial" or "exact"');
+}
+
+function resolveToolArgsMatchDefaults(
+  defaults: unknown,
+): Record<string, unknown> | undefined {
+  if (defaults === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(defaults)) {
+    throw new Error(
+      'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+    );
+  }
+
+  return defaults;
 }
 
 function resolveToolArgsMatchValue(value: unknown) {
@@ -308,6 +349,7 @@ function resolveToolArgsMatchValue(value: unknown) {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
+    defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
   } as const;
 }
 
@@ -385,14 +427,16 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode } = resolveToolArgsMatchValue(
+  const { matcher, expectedArgs, mode, defaults } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
-  const matchedStep = stepsWithArgs.find((step) => matchesToolArgs(step.args, expectedArgs, mode));
+  const matchedStep = stepsWithArgs.find((step) =>
+    matchesToolArgs(step.args, expectedArgs, mode, defaults),
+  );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
   const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);
