@@ -15,9 +15,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     eval_.prompts,
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
   );
-  // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const persistedVars = eval_.vars ?? [];
+  // Guard against malformed payloads where `vars` is present but not an array.
+  const persistedVars = Array.isArray(eval_.vars) ? eval_.vars : [];
   const persistedVarSet = new Set(persistedVars);
   const varsForHeader = new Set<string>(persistedVars);
   const varValuesForRow = new Map<number, Record<string, string>>();
@@ -29,20 +29,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       varsForHeader.add(varName);
     }
 
+    // row.vars is populated by the orderedVars loop below; initialize empty.
     const row = rowMap[result.testIdx] || {
       description: result.description || undefined,
       outputs: [],
-      vars: result.vars
-        ? Object.values(varsForHeader)
-            .map((varName) => {
-              const varValue = result.vars?.[varName] ?? '';
-              if (typeof varValue === 'string') {
-                return varValue;
-              }
-              return JSON.stringify(varValue, null, 2);
-            })
-            .flat()
-        : [],
+      vars: [],
       test: result.testCase,
     };
 
@@ -92,7 +83,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     if (transformDisplayVars) {
       result.vars = result.vars || {};
       for (const [key, value] of Object.entries(transformDisplayVars)) {
-        if (!result.vars[key]) {
+        // Use `key in` so a legitimate falsy value (empty string, 0, false)
+        // is not silently overwritten by the transform display value.
+        if (!(key in result.vars)) {
           result.vars[key] = value;
           varsForHeader.add(key);
         }

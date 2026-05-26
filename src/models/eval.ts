@@ -167,6 +167,11 @@ export class EvalQueries {
       acc[r.eval_id].push(r.key);
       return acc;
     }, {});
+    // Match getVarsFromEval: SELECT DISTINCT has no ORDER BY, so sort each
+    // list for a stable display order across hosts/SQLite versions.
+    for (const evalId of Object.keys(vars)) {
+      vars[evalId].sort();
+    }
     return vars;
   }
 

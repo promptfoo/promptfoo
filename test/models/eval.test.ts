@@ -812,6 +812,14 @@ describe('evaluator', () => {
       expect((await eval1.toResultsFile()).vars).toEqual(['zebra', 'apple']);
     });
 
+    it('omits the vars field entirely when no variable order is persisted', async () => {
+      const eval1 = new Eval({});
+
+      const results = await eval1.toResultsFile();
+
+      expect(results).not.toHaveProperty('vars');
+    });
+
     it('should handle null author and datasetId', async () => {
       const eval1 = new Eval({});
       const results = await eval1.toResultsFile();
@@ -1109,6 +1117,31 @@ describe('evaluator', () => {
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
+    });
+  });
+
+  describe('EvalQueries.getVarsFromEvals', () => {
+    it('returns each evaluations var keys sorted alphabetically for stable list output', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const eval2 = await EvalFactory.create({ numResults: 1 });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"zebra":"z","apple":"a","mango":"m"}}') WHERE eval_id = '${eval1.id}'`,
+      );
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"yellow":"y","banana":"b"}}') WHERE eval_id = '${eval2.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([eval1, eval2]);
+
+      expect(vars[eval1.id]).toEqual(['apple', 'mango', 'zebra']);
+      expect(vars[eval2.id]).toEqual(['banana', 'yellow']);
+    });
+
+    it('returns an empty object for an empty evals list', async () => {
+      const vars = await EvalQueries.getVarsFromEvals([]);
+
+      expect(vars).toEqual({});
     });
   });
 

@@ -1335,4 +1335,109 @@ describe('convertResultsToTable', () => {
 
     expect(convertResultsToTable(resultsFile).head.vars).toEqual(['apple', 'zebra']);
   });
+
+  it('appends runtime-only result.vars keys after the persisted prefix in sorted order', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['prompt'],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            // `zeta`/`alpha` are NOT in persistedVars and NOT transformDisplayVars.
+            // They should be appended after `prompt` in alphabetical order.
+            vars: { prompt: 'p1', zeta: 'z1', alpha: 'a1' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: { output: 'test output' },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.head.vars).toEqual(['prompt', 'alpha', 'zeta']);
+    expect(result.body[0].vars).toEqual(['p1', 'a1', 'z1']);
+  });
+
+  it('does not overwrite a falsy result.vars value with transformDisplayVars', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['prompt'],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            // Empty-string value for `prompt` must be preserved, not silently
+            // replaced by transformDisplayVars.prompt.
+            vars: { prompt: '' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: {
+              output: 'test output',
+              metadata: { transformDisplayVars: { prompt: 'from-transform' } },
+            },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.head.vars).toEqual(['prompt']);
+    expect(result.body[0].vars).toEqual(['']);
+  });
+
+  it('treats a malformed non-array vars field as if no order were persisted', () => {
+    // Bogus payload from a corrupt store / older writer. Cast via unknown
+    // because the malformed shape intentionally does not match the type.
+    const resultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: 'not-an-array',
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: { zebra: 'z', apple: 'a' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: { output: 'test output' },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    } as unknown as ResultsFile;
+
+    expect(convertResultsToTable(resultsFile).head.vars).toEqual(['apple', 'zebra']);
+  });
 });
