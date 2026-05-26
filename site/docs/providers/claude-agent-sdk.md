@@ -1084,7 +1084,7 @@ When the SDK reports a model-call failure, the provider surfaces it in two place
 - `metadata.assistantErrors` — array of `{ error, uuid, parentToolUseId, request_id?, subagent_type?, task_description? }` entries collected from `SDKAssistantMessage.error`. The `error` field uses the SDK's discriminated codes (`'model_not_found'`, `'rate_limit'`, `'authentication_failed'`, `'billing_error'`, `'oauth_org_not_allowed'`, `'server_error'`, `'invalid_request'`, `'max_output_tokens'`, `'unknown'`). Requires `@anthropic-ai/claude-agent-sdk` 0.3.144 or newer for `model_not_found`; older SDKs collapse it into `'invalid_request'`.
 - `metadata.apiErrorStatus` — HTTP status code reported on successful result messages when an upstream API call hit a transient error (e.g., `529` during overload). Only present when the SDK populates it.
 
-When a run ends in a non-success subtype and the stream included an assistant error, the provider appends the code to the error string: `Claude Agent SDK call failed: error_during_execution (model_not_found)`. Example assertion:
+When a main-agent run ends in a non-success subtype and its assistant messages included an error, the provider appends the code to the error string: `Claude Agent SDK call failed: error_during_execution (model_not_found)`. Background subagent errors remain in `metadata.assistantErrors` but do not label the main-agent error string. Example assertion:
 
 ```yaml
 assert:
