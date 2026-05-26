@@ -43,6 +43,19 @@ const TRIG_FNS = [
   'sqrt',
 ];
 
+const ADDITIONAL_ASSIGNMENT_PATTERN =
+  /(?:,|;|\band\b)\s*(?:[A-Za-z_]\w*|P\([^)]*\))\s*(?:=|\u2248|\\approx\b)/i;
+const EXPLICIT_NEGATION_PATTERN =
+  /\b(?:is|are)\s+(?:not\b|unequal\s+to\b)|\b(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b|\bnot\s+(?=[-+\\($\dA-Za-z])|\\text\s*\{\s*(?:not\b|unequal\s+to\b|(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b)|(?:!=|!==|\u2260|\\ne(?:q)?\b)/i;
+
+function hasAdditionalAssignment(text: string): boolean {
+  return ADDITIONAL_ASSIGNMENT_PATTERN.test(text);
+}
+
+function hasExplicitNegation(text: string): boolean {
+  return EXPLICIT_NEGATION_PATTERN.test(text);
+}
+
 let _enginePromise: Promise<ComputeEngine> | undefined;
 
 function normalizeTopLevelNumericCommas(text: string): string {
@@ -115,8 +128,12 @@ export function normalizeLatex(text: string): string {
 
   // Strip answer labels such as "V = ", "x_0 = ", and probability labels
   // such as "P(Safe|F) = ". Ordinary function equations (`sin(x) = 1`) must
-  // remain equalities so they cannot be accepted as scalar answers.
-  s = s.trim().replace(/^(?:[A-Za-z_]\w*|P\([^)]*\))\s*=\s*/, '');
+  // remain equalities so they cannot be accepted as scalar answers. Likewise,
+  // keep systems such as `x = 1, y = 2` intact instead of selecting `x = 1`.
+  s = s.trim();
+  if (!hasAdditionalAssignment(s)) {
+    s = s.replace(/^(?:[A-Za-z_]\w*|P\([^)]*\))\s*=\s*/, '');
+  }
 
   // Normalize numeric commas outside parenthesized/bracketed list values.
   // This preserves coordinates such as `(23,53)` while still accepting
@@ -286,6 +303,11 @@ export function cleanMathText(text: string): string {
   return s.trim();
 }
 
+function cleanBoxedAnswer(content: string): string {
+  const trimmed = content.trim();
+  return hasExplicitNegation(trimmed) ? trimmed : cleanMathText(trimmed);
+}
+
 function isEqualityExpr(expr: BoxedExpression): boolean {
   if ((expr as { operator?: string }).operator === 'Equal') {
     return true;
@@ -323,6 +345,9 @@ function looksLikeProse(normalized: string): boolean {
  * dynamic `import()` (see `getEngine`).
  */
 export async function parseMathExpression(text: string): Promise<BoxedExpression | undefined> {
+  if (hasExplicitNegation(text) || hasAdditionalAssignment(text)) {
+    return undefined;
+  }
   const normalized = normalizeLatex(text.trim());
   if (!normalized) {
     return undefined;
@@ -347,28 +372,43 @@ export async function parseMathExpression(text: string): Promise<BoxedExpression
 
 /**
  * For "A = B = C" chains (including approximation chains "A ≈ B" and
- * "A \approx B" — the docs treat ≈/\approx as equality), try parsing each
- * segment right-to-left and return the first that succeeds.
+ * "A \approx B" — the docs treat ≈/\approx as equality), accept the final
+ * expression only when every stated step is symbolically equivalent.
  */
 export async function tryParseEachSegment(text: string): Promise<BoxedExpression | undefined> {
-  // Equation chains can communicate a computed final value (`x = 2`, or
-  // `1/2 = 0.5`), but a function equation is a constraint, not the scalar on
-  // its right-hand side. Do not turn `sin(x) = 1` or `f(x) = 2` into `1`/`2`.
-  if (/^\\?[A-Za-z_]\w*\s*\([^)]*\)\s*=/.test(normalizeLatex(text.trim()))) {
+  if (hasExplicitNegation(text) || hasAdditionalAssignment(text)) {
     return undefined;
   }
-  const segments = text.split(/=|\u2248|\\approx\b/).map((s) => s.trim());
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const seg = segments[i];
-    if (!seg) {
-      continue;
-    }
-    const result = await parseMathExpression(seg);
-    if (result) {
-      return result;
-    }
+  const segments = text
+    .split(/=|\u2248|\\approx\b/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length < 2) {
+    return undefined;
   }
-  return undefined;
+
+  const expressions: BoxedExpression[] = [];
+  for (const segment of segments) {
+    const expression = await parseMathExpression(segment);
+    if (!expression) {
+      return undefined;
+    }
+    expressions.push(expression);
+  }
+
+  try {
+    const ce = await getEngine();
+    for (let i = 1; i < expressions.length; i++) {
+      const diff = ce.box(['Subtract', expressions[i - 1], expressions[i]]).simplify();
+      if (!diff.is(0)) {
+        return undefined;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+
+  return expressions[expressions.length - 1];
 }
 
 const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
@@ -595,6 +635,12 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   if (finalPrefixMatch) {
     candidate = finalPrefixMatch[1].trim();
   }
+  if (hasExplicitNegation(candidate)) {
+    return candidate;
+  }
+  if (hasAdditionalAssignment(candidate)) {
+    return candidate;
+  }
   candidate = stripTopLevelTrailingProse(candidate);
   candidate = candidate.trim();
   if (!candidate) {
@@ -628,6 +674,14 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   return cleanMathText(candidate);
 }
 
+function extractPreservedNegation(line: string): string | undefined {
+  if (!hasExplicitNegation(line)) {
+    return undefined;
+  }
+  const candidate = extractFromLastLine([line]);
+  return !candidate || hasExplicitNegation(candidate) ? (candidate ?? line) : undefined;
+}
+
 async function extractFromDisplayBlocks(text: string): Promise<string | undefined> {
   // DISPLAY_BLOCK_PATTERN is `$$...$$` OR `\[...\]`; pick whichever capture
   // group fired so both forms feed the fallback equivalently.
@@ -636,7 +690,10 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
     const block = blocks[i];
     const boxed = findAllBoxed(block);
     if (boxed.length > 0) {
-      return cleanMathText(boxed[boxed.length - 1].trim());
+      return cleanBoxedAnswer(boxed[boxed.length - 1]);
+    }
+    if (hasExplicitNegation(block)) {
+      return block.trim();
     }
     const candidate = cleanMathText(block.trim());
     if (!candidate) {
@@ -651,6 +708,25 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
     const expr = (await parseMathExpression(candidate)) ?? (await tryParseEachSegment(candidate));
     if (expr) {
       return candidate;
+    }
+  }
+  return undefined;
+}
+
+async function findEarlierAnswer(visibleLines: string[]): Promise<string | undefined> {
+  for (let i = visibleLines.length - 2; i >= 0; i--) {
+    const negatedAnswer = extractPreservedNegation(visibleLines[i]);
+    if (negatedAnswer) {
+      return negatedAnswer;
+    }
+    const earlierAnswer = extractFromLastLine([cleanMathText(visibleLines[i])]);
+    if (!earlierAnswer) {
+      continue;
+    }
+    const expr =
+      (await parseMathExpression(earlierAnswer)) ?? (await tryParseEachSegment(earlierAnswer));
+    if (expr) {
+      return earlierAnswer;
     }
   }
   return undefined;
@@ -777,10 +853,15 @@ export async function extractMathAnswer(text: string): Promise<string> {
       }
     }
     // No usable suffix → the boxed itself IS the answer.
-    const cleanedBoxed = findAllBoxed(cleaned);
-    if (cleanedBoxed.length > 0) {
-      return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
+    const visibleBoxed = findAllBoxed(lastVisible);
+    if (visibleBoxed.length > 0) {
+      return cleanBoxedAnswer(visibleBoxed[visibleBoxed.length - 1]);
     }
+  }
+
+  const negatedLastAnswer = extractPreservedNegation(lastVisible);
+  if (negatedLastAnswer) {
+    return negatedLastAnswer;
   }
 
   // Always try the cleaned final line first, even when the last visible
@@ -817,24 +898,17 @@ export async function extractMathAnswer(text: string): Promise<string> {
   // last visible line was prose with no math and the display-block scan
   // also failed). This preserves the legacy "last \\boxed wins" behavior
   // for shown work.
-  const cleanedBoxed = findAllBoxed(cleaned);
-  if (cleanedBoxed.length > 0) {
-    return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
+  const visibleBoxed = findAllBoxed(visible);
+  if (visibleBoxed.length > 0) {
+    return cleanBoxedAnswer(visibleBoxed[visibleBoxed.length - 1]);
   }
 
   // If the final line was only a prose trailer ("Done.", "This is the
   // final result."), fall back to the nearest earlier parseable line instead
   // of returning the whole cleaned transcript.
-  for (let i = cleanedLines.length - 2; i >= 0; i--) {
-    const earlierAnswer = extractFromLastLine([cleanedLines[i]]);
-    if (!earlierAnswer) {
-      continue;
-    }
-    const expr =
-      (await parseMathExpression(earlierAnswer)) ?? (await tryParseEachSegment(earlierAnswer));
-    if (expr) {
-      return earlierAnswer;
-    }
+  const earlierAnswer = await findEarlierAnswer(visibleLines);
+  if (earlierAnswer) {
+    return earlierAnswer;
   }
 
   return cleaned;

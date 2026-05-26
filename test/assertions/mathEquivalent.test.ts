@@ -534,8 +534,8 @@ describe('parseMathExpression', async () => {
 });
 
 describe('tryParseEachSegment', async () => {
-  it('returns the rightmost parseable segment of an equality chain', async () => {
-    const result = await tryParseEachSegment('a × b = 4 × 1 = 4');
+  it('returns the rightmost segment of a verified equality chain', async () => {
+    const result = await tryParseEachSegment('2 × 2 = 4 × 1 = 4');
     expect(result).toBeDefined();
   });
 
@@ -546,7 +546,10 @@ describe('tryParseEachSegment', async () => {
   it.each([
     'sin(x) = 1',
     'f(x) = 2',
-  ])('does not reduce function equation "%s" to its right-hand scalar', async (input) => {
+    '\\sin{x} = 1',
+    '\\sin x = 1',
+    'x^2 = 4',
+  ])('does not reduce constraint equation "%s" to its right-hand scalar', async (input) => {
     expect(await tryParseEachSegment(input)).toBeUndefined();
   });
 });
@@ -633,6 +636,41 @@ describe('extractMathAnswer', async () => {
 
   it('preserves a comma inside a coordinate answer', async () => {
     expect(await extractMathAnswer('Answer: (x, y)')).toBe('(x, y)');
+  });
+
+  it.each([
+    ['Answer: x = 1, y = 2', 'x = 1, y = 2'],
+    ['Answer: x = 1; y = 2', 'x = 1; y = 2'],
+    ['Answer: x = 1 and y = 2', 'x = 1 and y = 2'],
+  ])('preserves a multi-assignment system in "%s"', async (input, expected) => {
+    expect(await extractMathAnswer(input)).toBe(expected);
+  });
+
+  it.each([
+    'The answer is not 42',
+    'The result is not x + 1',
+    'The answer is unequal to 42',
+    "The answer doesn't equal 42",
+    'The answer is 41 != 42',
+  ])('preserves explicit negation in "%s"', async (input) => {
+    expect(await extractMathAnswer(input)).toBe(input);
+  });
+
+  it('preserves explicit negation inside a boxed LaTeX answer', async () => {
+    expect(await extractMathAnswer('\\boxed{\\text{not }42}')).toBe('\\text{not }42');
+  });
+
+  it.each([
+    'The answer is $\\text{not }42$',
+    'The answer is $\\text{not }42$\nDone.',
+    '$$\\text{not }42$$',
+    '$$\\text{not }42$$\nDone.',
+  ])('does not erase visible LaTeX negation in "%s"', async (input) => {
+    expect(await extractMathAnswer(input)).toContain('\\text{not }42');
+  });
+
+  it('prefers a later labelled answer after an inequality explanation', async () => {
+    expect(await extractMathAnswer('41 != 42, Final answer: 42')).toBe('42');
   });
 
   it.each([
@@ -1167,12 +1205,16 @@ describe('isMathEquivalent', async () => {
       expect((await isMathEquivalent('−3/2', '$-\\frac32$')).pass).toBe(true);
     });
 
-    it('matches "a × b = 4 × 1 = 4" via segment parsing', async () => {
-      expect((await isMathEquivalent('a × b = 4 × 1 = 4', '4')).pass).toBe(true);
+    it('matches "2 × 2 = 4 × 1 = 4" via validated segment parsing', async () => {
+      expect((await isMathEquivalent('2 × 2 = 4 × 1 = 4', '4')).pass).toBe(true);
     });
 
     it('matches "230/530 = 23/53" via segment parsing', async () => {
       expect((await isMathEquivalent('230/530 = 23/53', '$\\frac{23}{53}$')).pass).toBe(true);
+    });
+
+    it('matches a later labelled result after an inequality explanation', async () => {
+      expect((await isMathEquivalent('41 != 42, Final answer: 42', '42')).pass).toBe(true);
     });
 
     it('strips P(Safe|F) prefix before comparing', async () => {
@@ -1225,6 +1267,28 @@ describe('isMathEquivalent', async () => {
       expect(
         (await isMathEquivalent('\\dfrac{3260416\\,\\pi}{405}', '$\\frac{3260416}{405}$')).pass,
       ).toBe(false);
+    });
+
+    it.each([
+      ['\\sin{x} = 1', '1'],
+      ['\\sin x = 1', '1'],
+      ['x^2 = 4', '4'],
+      ['Answer: x = 1, y = 2', '1'],
+      ['Answer: x = 1; y = 2', '1'],
+      ['Answer: x = 1 and y = 2', '2'],
+      ['The answer is not 42', '42'],
+      ['The result is not x + 1', 'x + 1'],
+      ['The answer is unequal to 42', '42'],
+      ["The answer doesn't equal 42", '42'],
+      ['The answer is 41 != 42', '42'],
+      ['\\boxed{\\text{not }42}', '42'],
+      ['The answer is $\\text{not }42$', '42'],
+      ['The answer is $\\text{not }42$\nDone.', '42'],
+      ['$$\\text{not }42$$', '42'],
+      ['$$\\text{not }42$$\nDone.', '42'],
+      ['a × b = 4 × 1 = 4', '4'],
+    ])('rejects constraint or negation "%s" against %s', async (actual, expected) => {
+      expect((await isMathEquivalent(actual, expected)).pass).toBe(false);
     });
 
     it('rejects 5π/3 vs -π/3 (mod-2π collapse FP regression)', async () => {

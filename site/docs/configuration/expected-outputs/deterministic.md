@@ -901,7 +901,8 @@ trip up `equals` and `contains`:
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
 - Approximation symbols (`≈`, `\approx`) treated as equality, including in
   chain form (`1/2 ≈ 0.5` is graded against `0.5`)
-- Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins
+- Equality chains (`230/530 = 23/53`) when each stated step is symbolically
+  equivalent — the final segment is used as the answer
 - "Total: 14", "Answer: 42", and "Final answer is 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer
 - Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42",
@@ -935,6 +936,12 @@ Cases that intentionally do **not** pass:
 - Same angle modulo 2π is not the same value (`5\pi/3` vs `-\pi/3`)
 - Extra factors like a stray `\pi`
 - Pure prose that contains no parseable expression
+- Constraint equations (`x^2 = 4`, `\sin{x} = 1`) and systems
+  (`x = 1, y = 2` or `x = 1 and y = 2`) are not silently reduced to one
+  right-hand value
+- Explicitly negated or unequal claims such as "The answer is not 42" or
+  "The answer is unequal to 42" are not extracted as the positive answer `42`,
+  even when the negation is inside a boxed `\text{...}` value
 
 To prevent pathological misuse like `value: 'apple'` matching any output that
 happens to contain the same letters, the assertion rejects "prose-shaped"
