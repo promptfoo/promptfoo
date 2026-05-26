@@ -586,6 +586,7 @@ describe('evalConfig store', () => {
               body: {
                 parts: [
                   { kind: 'field', name: 'api_key', value: 'multipart-leak-apikey' },
+                  { kind: 'field', name: 'api_key', value: '{{ multipart_api_key }}' },
                   { kind: 'field', name: 'authorization', value: 'multipart-leak-auth' },
                   { kind: 'field', name: 'prompt', value: '{{message}}' },
                   {
@@ -612,6 +613,7 @@ describe('evalConfig store', () => {
       expect(cfg.request).toContain('"prompt":"{{message}}"');
       expect(cfg.body.parts).toEqual([
         { kind: 'field', name: 'api_key' },
+        { kind: 'field', name: 'api_key', value: '{{ multipart_api_key }}' },
         { kind: 'field', name: 'authorization' },
         { kind: 'field', name: 'prompt', value: '{{message}}' },
         { kind: 'file', name: 'document', source: { type: 'path', path: '/tmp/doc.pdf' } },
@@ -641,10 +643,11 @@ describe('evalConfig store', () => {
           {
             id: 'http',
             config: {
-              url: 'https://api.example.com/{{ path }}?x-api-key=templated-url-secret&region=us',
+              url: 'https://api.example.com/{{ path }}?x-api-key=templated-url-secret&api_key={{ api_token }}&region=us',
             },
           },
           'https://templated-user:templated-password@api.example.com/{{ model }}',
+          'https://{{ username }}:{{ password }}@api.example.com/{{ model }}',
         ],
       } as any);
 
@@ -659,6 +662,8 @@ describe('evalConfig store', () => {
       expect(persisted.providers[0]).toContain('region=us');
       expect(persisted.providers[1].config.url).toContain('region=us');
       expect(persisted.providers[1].config.url).toContain('max_tokens=128');
+      expect(persisted.providers[2].config.url).toContain('api_key={{ api_token }}');
+      expect(persisted.providers[4]).toContain('{{ username }}:{{ password }}');
     });
 
     it('redacts credentials in HTTP body strings', () => {
@@ -693,6 +698,47 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('json-password');
       expect(persisted.providers[0].config.body).toContain('grant_type=client_credentials');
       expect(persisted.providers[1].config.body).toContain('"prompt":"hello"');
+    });
+
+    it('preserves templated credential references while stripping literal values', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              auth: {
+                type: 'bearer',
+                token: '{{ api_token }}',
+                clientSecret: 'literal-auth-secret',
+                password: '{{ api_token | default("embedded-default-secret") }}',
+              },
+              headers: {
+                Authorization: 'Bearer {{ api_token }}',
+                'X-API-Key': 'literal-header-secret',
+              },
+              request: [
+                'POST /v1?api_key={{ api_token }} HTTP/1.1',
+                'Authorization: Bearer {{ api_token }}',
+                '',
+                'client_secret={{ client_secret }}&api_key=literal-body-secret',
+              ].join('\r\n'),
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const config = persisted.providers[0].config;
+      expect(config.auth.token).toBe('{{ api_token }}');
+      expect(config.headers).toEqual({ Authorization: 'Bearer {{ api_token }}' });
+      expect(config.request).toContain('api_key={{ api_token }}');
+      expect(config.request).toContain('Authorization: Bearer {{ api_token }}');
+      expect(config.request).toContain('client_secret=%7B%7B+client_secret+%7D%7D');
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('literal-auth-secret');
+      expect(serialized).not.toContain('literal-header-secret');
+      expect(serialized).not.toContain('literal-body-secret');
+      expect(serialized).not.toContain('embedded-default-secret');
     });
 
     it('redacts inline TLS cert/ca/key material while preserving file paths', () => {
@@ -794,6 +840,17 @@ describe('evalConfig store', () => {
                     },
                   },
                 },
+                {
+                  type: 'mcp',
+                  server_label: 'private-mcp',
+                  server_url:
+                    'https://mcp-user:mcp-password@mcp.example.com/connect?token=mcp-url-secret&api_key={{ mcp_api_key }}',
+                  headers: {
+                    Authorization: 'Bearer mcp-header-secret',
+                    'X-API-Key': '{{ mcp_api_key }}',
+                    'X-Trace-Id': 'visible-tool-trace',
+                  },
+                },
               ],
               response_format: {
                 type: 'json_schema',
@@ -823,6 +880,15 @@ describe('evalConfig store', () => {
         cert: { type: 'string' },
       });
       expect(providerCfg.tools[0].function.parameters.required).toEqual(['api_key', 'password']);
+      expect(providerCfg.tools[1].server_url).toContain('mcp.example.com/connect');
+      expect(providerCfg.tools[1].server_url).toContain('api_key={{ mcp_api_key }}');
+      expect(providerCfg.tools[1].headers).toEqual({
+        'X-API-Key': '{{ mcp_api_key }}',
+        'X-Trace-Id': 'visible-tool-trace',
+      });
+      expect(JSON.stringify(providerCfg.tools[1])).not.toContain('mcp-password');
+      expect(JSON.stringify(providerCfg.tools[1])).not.toContain('mcp-url-secret');
+      expect(JSON.stringify(providerCfg.tools[1])).not.toContain('mcp-header-secret');
       expect(providerCfg.response_format.json_schema.schema.properties).toEqual({
         secret: { type: 'string' },
         authorization: { type: 'string' },
@@ -884,6 +950,46 @@ describe('evalConfig store', () => {
         },
       });
       expect(JSON.stringify(persistedConfig)).not.toContain('-secret');
+    });
+
+    it('redacts credentials inside test generator configuration objects', () => {
+      useStore.getState().setConfig({
+        tests: [
+          {
+            path: 'file://generate-tests.ts',
+            config: {
+              apiKey: 'generator-api-key-secret',
+              endpoint: 'https://generator.example.com?token=generator-url-secret',
+              dataset: 'truthfulqa',
+            },
+          },
+        ],
+      } as any);
+
+      let persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0]).toEqual({
+        path: 'file://generate-tests.ts',
+        config: {
+          endpoint: 'https://generator.example.com?token=[REDACTED]',
+          dataset: 'truthfulqa',
+        },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('generator-api-key-secret');
+      expect(JSON.stringify(persisted)).not.toContain('generator-url-secret');
+
+      useStore.getState().setConfig({
+        tests: {
+          path: 'file://generate-tests.py',
+          config: { clientSecret: 'standalone-generator-secret', split: 'validation' },
+        },
+      } as any);
+
+      persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests).toEqual({
+        path: 'file://generate-tests.py',
+        config: { split: 'validation' },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('standalone-generator-secret');
     });
   });
 

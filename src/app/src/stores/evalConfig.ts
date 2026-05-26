@@ -116,6 +116,23 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
 
 const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
 const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
+const NUNJUCKS_REFERENCE =
+  /\{\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*\s*\}\}/g;
+
+const isTemplatedCredentialReference = (value: unknown): boolean => {
+  if (typeof value !== 'string' || !value.includes('{{')) {
+    return false;
+  }
+  const literal = value.replace(NUNJUCKS_REFERENCE, '').trim();
+  return literal === '' || /^(?:bearer|basic|token|api[-_]?key)$/i.test(literal);
+};
+
+const isTemplatedUrlUserinfo = (value: string): boolean => {
+  if (!value.includes('{{')) {
+    return false;
+  }
+  return /^:?$/.test(value.replace(NUNJUCKS_REFERENCE, '').trim());
+};
 
 const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
   let name = rawName;
@@ -131,13 +148,18 @@ const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
 // settings retain their exact representation.
 const scrubProviderUrl = (value: string): string =>
   value
-    .replace(URL_USERINFO, '$1[REDACTED]@')
-    .replace(URL_QUERY_PARAMETER, (match, separator, name) =>
-      looksLikeUrlCredentialParameter(name) ? `${separator}${name}=[REDACTED]` : match,
+    .replace(URL_USERINFO, (match, prefix, userinfo) =>
+      isTemplatedUrlUserinfo(userinfo) ? match : `${prefix}[REDACTED]@`,
+    )
+    .replace(URL_QUERY_PARAMETER, (match, separator, name, parameterValue) =>
+      looksLikeUrlCredentialParameter(name) && !isTemplatedCredentialReference(parameterValue)
+        ? `${separator}${name}=[REDACTED]`
+        : match,
     );
 
 const looksLikeCredentialValue = (value: string): boolean =>
-  looksLikeSecret(value.trim()) || scrubProviderUrl(value) !== value;
+  !isTemplatedCredentialReference(value) &&
+  (looksLikeSecret(value.trim()) || scrubProviderUrl(value) !== value);
 
 const looksLikeHeaderCredential = (headerName: string, value: unknown): boolean =>
   looksLikeCredentialHeader(headerName) ||
@@ -153,22 +175,25 @@ const scrubHttpBodyString = (body: string): string => {
     // Handle non-JSON request bodies below.
   }
 
-  if (looksLikeCredentialValue(body)) {
-    return '[REDACTED]';
-  }
   if (!body.includes('=')) {
-    return body;
+    return looksLikeCredentialValue(body) ? '[REDACTED]' : body;
   }
 
   const params = new URLSearchParams(body);
   let changed = false;
   for (const [key, value] of params.entries()) {
-    if (looksLikeCredential(key) || looksLikeCredentialValue(value)) {
+    if (
+      (looksLikeCredential(key) || looksLikeCredentialValue(value)) &&
+      !isTemplatedCredentialReference(value)
+    ) {
       params.set(key, '[REDACTED]');
       changed = true;
     }
   }
-  return changed ? params.toString() : body;
+  if (changed) {
+    return params.toString();
+  }
+  return looksLikeCredentialValue(body) ? '[REDACTED]' : body;
 };
 
 // Only scan the header block, so body content that happens to resemble a
@@ -189,7 +214,7 @@ const scrubRawHttpRequest = (raw: string): string => {
         (_match, method, target, protocol) => `${method}${scrubProviderUrl(target)}${protocol}`,
       )
       .replace(headerLine, (match, indent, name, headerSeparator, value) =>
-        looksLikeHeaderCredential(name, value)
+        looksLikeHeaderCredential(name, value) && !isTemplatedCredentialReference(value)
           ? `${indent}${name}${headerSeparator}[REDACTED]`
           : match,
       ) +
@@ -205,6 +230,35 @@ const isMultipartFieldPart = (value: Record<string, unknown>): boolean =>
 // in-memory config must not throw and bypass redaction. Both limits are far
 // above any realistic provider config.
 const MAX_WALK_DEPTH = 64;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const hasOwn = (value: object, key: PropertyKey): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
+const omitOpaqueToolCredentials = (tool: unknown): unknown => {
+  if (!isRecord(tool) || tool.type !== 'mcp') {
+    return tool;
+  }
+
+  return {
+    ...tool,
+    ...(typeof tool.server_url === 'string'
+      ? { server_url: scrubProviderUrl(tool.server_url) }
+      : {}),
+    ...(isRecord(tool.headers)
+      ? {
+          headers: Object.fromEntries(
+            Object.entries(tool.headers).filter(
+              ([key, value]) =>
+                !looksLikeHeaderCredential(key, value) || isTemplatedCredentialReference(value),
+            ),
+          ),
+        }
+      : {}),
+  };
+};
 
 const walkValue = (
   value: unknown,
@@ -234,12 +288,15 @@ const walkValue = (
   seen.add(value as object);
 
   try {
-    if (Array.isArray(value)) {
-      return value.map((item) => walkValue(item, parentKey, seen, depth + 1));
-    }
-
     const normalizedParent =
       parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+
+    if (Array.isArray(value)) {
+      if (normalizedParent === 'tools') {
+        return value.map(omitOpaqueToolCredentials);
+      }
+      return value.map((item) => walkValue(item, parentKey, seen, depth + 1));
+    }
 
     if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
       return value;
@@ -252,9 +309,16 @@ const walkValue = (
     if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
       return Object.fromEntries(
         Object.entries(record).flatMap(([key, nested]) =>
-          key === 'value' || looksLikeCredential(key)
+          (key === 'value' || looksLikeCredential(key)) && !isTemplatedCredentialReference(nested)
             ? []
-            : [[key, walkValue(nested, key, seen, depth + 1)]],
+            : [
+                [
+                  key,
+                  isTemplatedCredentialReference(nested)
+                    ? nested
+                    : walkValue(nested, key, seen, depth + 1),
+                ],
+              ],
         ),
       );
     }
@@ -267,8 +331,14 @@ const walkValue = (
         const credential = isHeaders
           ? looksLikeHeaderCredential(key, nestedValue)
           : looksLikeCredential(key);
-        if (credential || (isApiKeyAuth && key === 'value')) {
+        if (
+          (credential || (isApiKeyAuth && key === 'value')) &&
+          !isTemplatedCredentialReference(nestedValue)
+        ) {
           return [];
+        }
+        if (isTemplatedCredentialReference(nestedValue)) {
+          return [[key, nestedValue]];
         }
         return [[key, walkValue(nestedValue, key, seen, depth + 1)]];
       }),
@@ -280,12 +350,6 @@ const walkValue = (
 
 const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
   walkValue(value, parentKey, new WeakSet<object>(), 0);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const hasOwn = (value: object, key: PropertyKey): boolean =>
-  Object.prototype.hasOwnProperty.call(value, key);
 
 const omitAssertionProviderCredentials = (assertions: unknown): unknown => {
   if (!Array.isArray(assertions)) {
@@ -336,6 +400,26 @@ const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
       ? { assert: omitAssertionProviderCredentials(testCase.assert) }
       : {}),
   };
+};
+
+const omitTestGeneratorCredentials = (testGenerator: unknown): unknown => {
+  if (!isRecord(testGenerator) || typeof testGenerator.path !== 'string') {
+    return omitTestCaseProviderCredentials(testGenerator);
+  }
+
+  return {
+    ...testGenerator,
+    ...(hasOwn(testGenerator, 'config')
+      ? { config: omitProviderCredentials(testGenerator.config) }
+      : {}),
+  };
+};
+
+const omitTestsCredentials = (tests: unknown): unknown => {
+  if (Array.isArray(tests)) {
+    return tests.map(omitTestGeneratorCredentials);
+  }
+  return omitTestGeneratorCredentials(tests);
 };
 
 const omitScenarioProviderCredentials = (scenario: unknown): unknown => {
@@ -437,9 +521,7 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
   defaultTest: omitTestCaseProviderCredentials(
     config.defaultTest,
   ) as Partial<UnifiedConfig>['defaultTest'],
-  tests: Array.isArray(config.tests)
-    ? (config.tests.map(omitTestCaseProviderCredentials) as Partial<UnifiedConfig>['tests'])
-    : config.tests,
+  tests: omitTestsCredentials(config.tests) as Partial<UnifiedConfig>['tests'],
   scenarios: Array.isArray(config.scenarios)
     ? (config.scenarios.map(omitScenarioProviderCredentials) as Partial<UnifiedConfig>['scenarios'])
     : config.scenarios,
