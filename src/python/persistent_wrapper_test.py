@@ -640,6 +640,7 @@ class TestTracedCall(unittest.TestCase):
         """Set up mock tracer, fake OTEL modules, and enable tracing."""
         self.original_tracing = persistent_wrapper._tracing_enabled
         self.original_tracer = persistent_wrapper._tracer
+        self.original_semconv_opt_in = os.environ.get("OTEL_SEMCONV_STABILITY_OPT_IN")
 
         # Build a mock span that supports context manager
         self.mock_span = MagicMock()
@@ -676,7 +677,10 @@ class TestTracedCall(unittest.TestCase):
     def tearDown(self):
         persistent_wrapper._tracing_enabled = self.original_tracing
         persistent_wrapper._tracer = self.original_tracer
-        os.environ.pop("OTEL_SEMCONV_STABILITY_OPT_IN", None)
+        if self.original_semconv_opt_in is None:
+            os.environ.pop("OTEL_SEMCONV_STABILITY_OPT_IN", None)
+        else:
+            os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] = self.original_semconv_opt_in
         # Restore original sys.modules state
         for mod_name, original in self._saved_modules.items():
             if original is None:
@@ -687,6 +691,13 @@ class TestTracedCall(unittest.TestCase):
     def _make_context(self, traceparent="00-abcd1234-5678-01"):
         """Helper to build a context dict with traceparent."""
         return {"traceparent": traceparent}
+
+    def test_latest_opt_in_accepts_comma_separated_environment_value(self):
+        with patch.dict(
+            os.environ,
+            {"OTEL_SEMCONV_STABILITY_OPT_IN": "http, gen_ai_latest_experimental"},
+        ):
+            self.assertTrue(persistent_wrapper._use_gen_ai_latest_experimental())
 
     def test_skips_tracing_when_disabled(self):
         """When tracing is disabled, should call method directly."""

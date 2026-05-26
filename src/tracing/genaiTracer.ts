@@ -48,11 +48,16 @@ export const GenAIAttributes = {
   // Usage attributes (custom/extended)
   USAGE_TOTAL_TOKENS: 'gen_ai.usage.total_tokens',
   USAGE_CACHED_TOKENS: 'gen_ai.usage.cached_tokens',
+  // Legacy Promptfoo spellings retained in default mode for existing dashboards.
   USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'gen_ai.usage.accepted_prediction_tokens',
   USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
   USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read_input_tokens',
   USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation_input_tokens',
+  // Latest OpenTelemetry Gen AI semantic convention spellings.
+  USAGE_REASONING_OUTPUT_TOKENS: 'gen_ai.usage.reasoning.output_tokens',
+  USAGE_CACHE_READ_INPUT_TOKENS_LATEST: 'gen_ai.usage.cache_read.input_tokens',
+  USAGE_CACHE_CREATION_INPUT_TOKENS_LATEST: 'gen_ai.usage.cache_creation.input_tokens',
 } as const;
 
 /** OTEL Gen AI operation names (spec well-known values) */
@@ -360,7 +365,7 @@ export async function withGenAISpan<T>(
       // Set response attributes if extractor provided
       if (resultExtractor) {
         const result = resultExtractor(value);
-        setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
+        setGenAIResponseAttributes(span, result, ctx.sanitizeBodies, useLatest);
       }
 
       // Check if response contains an error (ProviderResponse pattern)
@@ -514,68 +519,78 @@ function truncateBody(body: string, sanitize: boolean = true): string {
   return processed.slice(0, MAX_BODY_LENGTH - 15) + '... [truncated]';
 }
 
+function setGenAICompletionDetailAttributes(
+  span: Span,
+  details: NonNullable<TokenUsage['completionDetails']>,
+  useLatest: boolean,
+): void {
+  if (details.reasoning !== undefined) {
+    span.setAttribute(
+      useLatest
+        ? GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS
+        : GenAIAttributes.USAGE_REASONING_TOKENS,
+      details.reasoning,
+    );
+  }
+  if (details.acceptedPrediction !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS, details.acceptedPrediction);
+  }
+  if (details.rejectedPrediction !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS, details.rejectedPrediction);
+  }
+  if (details.cacheReadInputTokens !== undefined) {
+    span.setAttribute(
+      useLatest
+        ? GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS_LATEST
+        : GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+      details.cacheReadInputTokens,
+    );
+  }
+  if (details.cacheCreationInputTokens !== undefined) {
+    span.setAttribute(
+      useLatest
+        ? GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS_LATEST
+        : GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+      details.cacheCreationInputTokens,
+    );
+  }
+}
+
+function setGenAITokenUsageAttributes(span: Span, usage: TokenUsage, useLatest: boolean): void {
+  if (usage.prompt !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_INPUT_TOKENS, usage.prompt);
+  }
+  if (usage.completion !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
+  }
+  if (usage.total !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_TOTAL_TOKENS, usage.total);
+  }
+  if (usage.cached !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_CACHED_TOKENS, usage.cached);
+  }
+  if (usage.completionDetails) {
+    setGenAICompletionDetailAttributes(span, usage.completionDetails, useLatest);
+  }
+}
+
 /**
  * Set response attributes on a span after the API call completes.
  *
  * @param span - The span to update
  * @param result - The result data containing token usage and response metadata
  * @param sanitize - Whether to sanitize sensitive data from response body (defaults to true)
+ * @param useLatest - Whether to emit latest experimental OTEL usage attributes
  */
 export function setGenAIResponseAttributes(
   span: Span,
   result: GenAISpanResult,
   sanitize: boolean = true,
+  useLatest: boolean = useGenAILatestExperimental(),
 ): void {
   // Token usage
   if (result.tokenUsage) {
-    const usage = result.tokenUsage;
-
-    if (usage.prompt !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_INPUT_TOKENS, usage.prompt);
-    }
-    if (usage.completion !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
-    }
-    if (usage.total !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_TOTAL_TOKENS, usage.total);
-    }
-    if (usage.cached !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_CACHED_TOKENS, usage.cached);
-    }
-
-    // Completion details (reasoning tokens, etc.)
-    if (usage.completionDetails) {
-      if (usage.completionDetails.reasoning !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_REASONING_TOKENS,
-          usage.completionDetails.reasoning,
-        );
-      }
-      if (usage.completionDetails.acceptedPrediction !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
-          usage.completionDetails.acceptedPrediction,
-        );
-      }
-      if (usage.completionDetails.rejectedPrediction !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
-          usage.completionDetails.rejectedPrediction,
-        );
-      }
-      if (usage.completionDetails.cacheReadInputTokens !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
-          usage.completionDetails.cacheReadInputTokens,
-        );
-      }
-      if (usage.completionDetails.cacheCreationInputTokens !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
-          usage.completionDetails.cacheCreationInputTokens,
-        );
-      }
-    }
+    setGenAITokenUsageAttributes(span, result.tokenUsage, useLatest);
   }
 
   // Response metadata

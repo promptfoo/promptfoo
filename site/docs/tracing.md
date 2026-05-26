@@ -77,7 +77,10 @@ Each provider call creates a span with these attributes:
 - `gen_ai.usage.output_tokens` - Output/completion token count
 - `gen_ai.usage.total_tokens` - Total token count
 - `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
-- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.usage.reasoning_tokens` - Legacy reasoning token count (default mode)
+- `gen_ai.usage.cache_read_input_tokens` / `gen_ai.usage.cache_creation_input_tokens` - Legacy cache detail counts (default mode)
+- `gen_ai.usage.reasoning.output_tokens` - Reasoning token count in latest opt-in mode
+- `gen_ai.usage.cache_read.input_tokens` / `gen_ai.usage.cache_creation.input_tokens` - Cache detail counts in latest opt-in mode
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
 
 **Promptfoo-specific Attributes:**
@@ -94,7 +97,7 @@ Each provider call creates a span with these attributes:
 Built-in instrumentation follows the [OpenTelemetry Gen AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Operation names and some attributes can be emitted in two modes:
 
 - **Default (legacy):** Existing instrumentation is unchanged: `gen_ai.system` is set and `gen_ai.operation.name` uses legacy operation names. This keeps existing dashboards and queries working.
-- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to replace deprecated `gen_ai.system` with `gen_ai.provider.name` and emit spec-aligned operation and span names such as "text_completion" and "embeddings".
+- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to replace deprecated `gen_ai.system` with `gen_ai.provider.name`, emit spec-aligned operation and span names such as "text_completion" and "embeddings", and use current dotted reasoning/cache usage attribute names.
 
 The built-in OTLP receiver accepts both naming styles and normalizes them for the UI.
 

@@ -71,6 +71,9 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.rejected_prediction_tokens',
   'gen_ai.usage.cache_read_input_tokens',
   'gen_ai.usage.cache_creation_input_tokens',
+  'gen_ai.usage.reasoning.output_tokens',
+  'gen_ai.usage.cache_read.input_tokens',
+  'gen_ai.usage.cache_creation.input_tokens',
 ]);
 
 function isSensitiveAttributeKey(key: string): boolean {

@@ -70,6 +70,9 @@ describe('genaiTracer', () => {
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
       expect(GenAIAttributes.USAGE_OUTPUT_TOKENS).toBe('gen_ai.usage.output_tokens');
+      expect(GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS).toBe(
+        'gen_ai.usage.reasoning.output_tokens',
+      );
     });
   });
 
@@ -242,7 +245,7 @@ describe('genaiTracer', () => {
         },
       };
 
-      setGenAIResponseAttributes(mockSpan as any, result);
+      setGenAIResponseAttributes(mockSpan as any, result, true, false);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_INPUT_TOKENS, 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
@@ -261,7 +264,7 @@ describe('genaiTracer', () => {
         },
       };
 
-      setGenAIResponseAttributes(mockSpan as any, result);
+      setGenAIResponseAttributes(mockSpan as any, result, true, false);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         GenAIAttributes.USAGE_REASONING_TOKENS,
@@ -287,7 +290,7 @@ describe('genaiTracer', () => {
         },
       };
 
-      setGenAIResponseAttributes(mockSpan as any, result);
+      setGenAIResponseAttributes(mockSpan as any, result, true, false);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
@@ -296,6 +299,37 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
         40,
+      );
+    });
+
+    it('should emit latest OTEL reasoning and cache usage attributes when opted in', () => {
+      const result: GenAISpanResult = {
+        tokenUsage: {
+          completionDetails: {
+            reasoning: 25,
+            cacheReadInputTokens: 150,
+            cacheCreationInputTokens: 40,
+          },
+        },
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result, true, true);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
+        25,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS_LATEST,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS_LATEST,
+        40,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_REASONING_TOKENS,
+        expect.anything(),
       );
     });
 

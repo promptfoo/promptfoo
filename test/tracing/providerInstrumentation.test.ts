@@ -383,7 +383,8 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.USAGE_REASONING_TOKENS]).toBe(450);
+      expect(span.attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS]).toBe(450);
+      expect(span.attributes[GenAIAttributes.USAGE_REASONING_TOKENS]).toBeUndefined();
     });
 
     it('should capture speculative decoding tokens', async () => {
