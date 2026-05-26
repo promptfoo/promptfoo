@@ -606,7 +606,8 @@ paths such as `evals/files/input.csv` resolve from `<skill>`; files imported
 from a non-standard location resolve alongside that JSON file. Promptfoo lists
 the paths rather than uploading file bytes. Multiple declared files remain
 inputs to one eval rather than expanding into separate runs. Imported prompt
-text is treated as literal input rather than as Nunjucks template syntax.
+text is treated as literal input rather than as Nunjucks template syntax, while
+preserving any other `defaultTest.options.skipRenderVars` entries you define.
 Rubrics retain Promptfoo's normal variable interpolation behavior.
 
 ## Loading Media Files

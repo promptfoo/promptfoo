@@ -340,13 +340,13 @@ function parseCsvRows(fileContent: string): CsvRow[] {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonTestCases(fileContent, path.dirname(resolvedVarsPath));
+  return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
-function parseJsonTestCases(fileContent: string, sourceDirectory?: string): TestCase[] {
+function parseJsonTestCases(fileContent: string, sourcePath?: string): TestCase[] {
   const jsonData = yaml.load(fileContent) as unknown;
 
-  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData, sourceDirectory);
+  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData, sourcePath);
   if (agentSkillsCases) {
     return agentSkillsCases;
   }
@@ -360,11 +360,8 @@ function parseJsonTestCases(fileContent: string, sourceDirectory?: string): Test
   }));
 }
 
-function maybeConvertAgentSkillsEvalsJson(
-  input: unknown,
-  sourceDirectory?: string,
-): TestCase[] | null {
-  const testCases = parseAgentSkillsEvalsJson(input, sourceDirectory);
+function maybeConvertAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCase[] | null {
+  const testCases = parseAgentSkillsEvalsJson(input, sourcePath);
   if (testCases) {
     telemetry.record('feature_used', {
       feature: 'agent-skills evals.json tests file',
@@ -396,11 +393,11 @@ type AgentSkillsEvalsFile = {
  *   - `prompt`           -> literal `vars.prompt`
  *   - `expected_output`  -> `llm-rubric` assertion (first)
  *   - `assertions[i]`    -> additional `llm-rubric` assertions
- *   - `files`            -> absolute paths resolved from the AgentSkills skill root
+ *   - `files`            -> absolute paths resolved from the JSON source layout
  *   - `id`               -> `metadata.id` and `description`
  *   - top-level `skill_name` -> `metadata.skill_name`
  */
-function parseAgentSkillsEvalsJson(input: unknown, sourceDirectory?: string): TestCase[] | null {
+function parseAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCase[] | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return null;
   }
@@ -422,7 +419,7 @@ function parseAgentSkillsEvalsJson(input: unknown, sourceDirectory?: string): Te
       Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
   );
   return validCases.flatMap((entry, idx) => {
-    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName, sourceDirectory);
+    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName, sourcePath);
     return testCase ? [testCase] : [];
   });
 }
@@ -431,7 +428,7 @@ function agentSkillsEvalToTestCase(
   entry: AgentSkillsEvalCase,
   idx: number,
   skillName: string,
-  sourceDirectory?: string,
+  sourcePath?: string,
 ): TestCase | null {
   const assertions = buildAgentSkillsAssertions(entry);
   if (assertions.length === 0) {
@@ -441,10 +438,13 @@ function agentSkillsEvalToTestCase(
   const idValue =
     typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
 
-  const sourceRoot =
-    sourceDirectory && path.basename(sourceDirectory) === 'evals'
-      ? path.dirname(sourceDirectory)
-      : sourceDirectory;
+  const sourceDirectory = sourcePath ? path.dirname(sourcePath) : undefined;
+  const isStandardAgentSkillsLayout =
+    sourcePath &&
+    sourceDirectory &&
+    path.basename(sourcePath) === 'evals.json' &&
+    path.basename(sourceDirectory) === 'evals';
+  const sourceRoot = isStandardAgentSkillsLayout ? path.dirname(sourceDirectory) : sourceDirectory;
   const files = (
     Array.isArray(entry.files)
       ? entry.files.filter(
@@ -689,7 +689,7 @@ export async function loadTestsFromGlob(
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases =
-        maybeConvertAgentSkillsEvalsJson(rawContent, path.dirname(testFile)) ??
+        maybeConvertAgentSkillsEvalsJson(rawContent, testFile) ??
         (maybeLoadConfigFromExternalFile(rawContent) as TestCase[]);
       testCases = await _deref(testCases, testFile);
     } else {

@@ -369,6 +369,29 @@ describe('readStandaloneTestsFile', () => {
       });
     });
 
+    it('resolves file entries beside AgentSkills JSON outside the standard layout', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'csv-analyzer',
+          evals: [
+            {
+              prompt: 'Analyze the CSV.',
+              files: ['files/sales_2025.csv'],
+              assertions: ['Reports the total revenue'],
+            },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('/repo/evals/smoke.json');
+      const salesFile = path.resolve('/repo/evals/files/sales_2025.csv');
+
+      expect(result[0].vars).toEqual({
+        prompt: `Analyze the CSV.\n\nFiles available for this eval:\n- ${salesFile}`,
+        files: [salesFile],
+      });
+    });
+
     it('does not hijack prompt-bearing JSON files without an AgentSkills skill name', async () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({

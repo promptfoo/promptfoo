@@ -2188,9 +2188,14 @@ async function prepareTestCaseForEval(
     ...(testCase.assert || []),
   ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
+  const skipRenderVars = [
+    ...(defaultTest?.options?.skipRenderVars || []),
+    ...(testCase.options?.skipRenderVars || []),
+  ];
   testCase.options = {
     ...(defaultTest?.options || {}),
     ...testCase.options,
+    ...(skipRenderVars.length > 0 ? { skipRenderVars: [...new Set(skipRenderVars)] } : {}),
   };
   testCase.metadata = {
     ...(defaultTest?.metadata || {}),
