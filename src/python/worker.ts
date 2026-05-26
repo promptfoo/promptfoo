@@ -354,11 +354,11 @@ export class PythonWorker {
       this.pendingRequest = null;
       return;
     }
-    // Breadcrumb so operators can tell provider stdout collisions from
-    // genuine wrapper completions.
+    // Either no request is in flight, or the path does not match the one we
+    // dispatched. Do not record either path: the received marker is
+    // provider-controlled and the pending path belongs to a private temp dir.
     logger.debug('Python worker ignored DONE marker that did not match the in-flight request', {
-      received: responseFile,
-      pending: this.pendingRequest?.responseFile ?? null,
+      hasPendingRequest: this.pendingRequest !== null,
     });
   }
 

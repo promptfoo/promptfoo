@@ -294,7 +294,7 @@ describeOrSkip('PythonWorker', () => {
   let embeddingsOnlyWorker: PythonWorker;
   let loggingWorker: PythonWorker;
   let protocolCollisionWorker: PythonWorker;
-  let wrongPathCollisionWorker: PythonWorker;
+  let forgedMarkerWorker: PythonWorker;
   const fixturesDir = path.join(__dirname, 'fixtures');
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
   const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
@@ -304,11 +304,7 @@ describeOrSkip('PythonWorker', () => {
   const embeddingsOnlyPath = path.join(__dirname, 'fixtures', 'test_embeddings_only.py');
   const loggingPath = path.join(__dirname, 'fixtures', 'logging_provider.py');
   const protocolCollisionPath = path.join(__dirname, 'fixtures', 'protocol_collision_provider.py');
-  const wrongPathCollisionPath = path.join(
-    __dirname,
-    'fixtures',
-    'wrong_path_collision_provider.py',
-  );
+  const forgedMarkerPath = path.join(__dirname, 'fixtures', 'forged_marker_provider.py');
 
   beforeAll(async () => {
     // Create test fixture
@@ -374,16 +370,16 @@ def call_api(prompt, options, context):
 `,
     );
 
-    // Emits a DONE| line with an attacker-supplied path. The wrapper's real
+    // Emits a DONE| line with attacker-controlled content. The wrapper's real
     // DONE|<response_file> message must still resolve the request, and the
-    // unrelated path must be ignored.
+    // unrelated marker must be ignored without being repeated in logs.
     await fs.promises.writeFile(
-      wrongPathCollisionPath,
+      forgedMarkerPath,
       `
 import time
 
 def call_api(prompt, options, context):
-    print("DONE|/tmp/promptfoo-not-a-real-response.json", flush=True)
+    print("DONE|sensitive-provider-marker", flush=True)
     time.sleep(0.02)
     return {"output": f"Completed: {prompt}"}
 `,
@@ -403,7 +399,7 @@ def call_api(prompt, options, context):
     embeddingsOnlyWorker = new PythonWorker(embeddingsOnlyPath, 'call_api');
     loggingWorker = new PythonWorker(loggingPath, 'call_api');
     protocolCollisionWorker = new PythonWorker(protocolCollisionPath, 'call_api');
-    wrongPathCollisionWorker = new PythonWorker(wrongPathCollisionPath, 'call_api');
+    forgedMarkerWorker = new PythonWorker(forgedMarkerPath, 'call_api');
 
     await Promise.all([
       sharedWorker.initialize(),
@@ -414,7 +410,7 @@ def call_api(prompt, options, context):
       embeddingsOnlyWorker.initialize(),
       loggingWorker.initialize(),
       protocolCollisionWorker.initialize(),
-      wrongPathCollisionWorker.initialize(),
+      forgedMarkerWorker.initialize(),
     ]);
   });
 
@@ -429,7 +425,7 @@ def call_api(prompt, options, context):
         embeddingsOnlyWorker,
         loggingWorker,
         protocolCollisionWorker,
-        wrongPathCollisionWorker,
+        forgedMarkerWorker,
       ]
         .filter((worker): worker is PythonWorker => Boolean(worker))
         .map((worker) => worker.shutdown()),
@@ -441,7 +437,7 @@ def call_api(prompt, options, context):
       errorPath,
       loggingPath,
       protocolCollisionPath,
-      wrongPathCollisionPath,
+      forgedMarkerPath,
     ]) {
       if (fs.existsSync(fixturePath)) {
         fs.unlinkSync(fixturePath);
@@ -543,20 +539,27 @@ def call_api(prompt, options, context):
   );
 
   it(
-    'should ignore DONE| markers whose path does not match the in-flight request',
+    'should ignore forged DONE| markers without logging provider-controlled content',
     async () => {
-      const result = (await wrongPathCollisionWorker.call('call_api', ['hello', {}, {}])) as {
+      const result = (await forgedMarkerWorker.call('call_api', ['hello', {}, {}])) as {
         output: string;
       };
-      const secondResult = (await wrongPathCollisionWorker.call('call_api', ['again', {}, {}])) as {
+      const secondResult = (await forgedMarkerWorker.call('call_api', ['again', {}, {}])) as {
         output: string;
       };
 
-      // If the worker accepted the script's DONE|/tmp/promptfoo-not-a-real-response.json
-      // marker, executeCall would resolve early, read the empty reserved response
+      // If the worker accepted the script's forged DONE marker,
+      // executeCall would resolve early, read the empty reserved response
       // file, and either throw or return undefined.
       expect(result.output).toBe('Completed: hello');
       expect(secondResult.output).toBe('Completed: again');
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Python worker ignored DONE marker that did not match the in-flight request',
+        { hasPendingRequest: true },
+      );
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
+        'sensitive-provider-marker',
+      );
     },
     TEST_TIMEOUT,
   );
