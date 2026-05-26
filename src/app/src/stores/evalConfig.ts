@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { looksLikeSecret, sanitizeUrl } from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -50,6 +51,7 @@ const INLINE_CREDENTIAL_MATERIAL_NAMES = new Set([
 const HEADER_CREDENTIAL_NAMES = new Set([
   'auth',
   'x_auth',
+  'x_honeycomb_team',
   'proxy_authorization',
   'x_amz_security_token',
 ]);
@@ -59,6 +61,7 @@ const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)api_key_envar$/,
   /(?:^|_)api_key_required$/,
   /(?:^|_)azure_token_scope$/,
+  /(?:^|_)langfuse_public_key$/,
   /(?:^|_)key_alias$/,
   /(?:^|_)key_filename$/,
   /(?:^|_)key_name$/,
@@ -111,13 +114,30 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
   return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
 };
 
-// Scrub `Authorization: Bearer …` and similar lines from raw HTTP request
-// strings persisted under HTTP provider `config.request`. The local regex
-// avoids any cross-call state from the `g`/`m` flags.
+const looksLikeHeaderCredential = (headerName: string, value: unknown): boolean =>
+  looksLikeCredentialHeader(headerName) ||
+  (typeof value === 'string' && looksLikeSecret(value.trim()));
+
+const URL_CREDENTIAL_MARKER =
+  /(?:^[a-z][a-z0-9+.-]*:\/\/[^/?#\s@]*:[^/?#\s@]*@)|(?:[?&](?:api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)=)/i;
+
+const scrubProviderUrl = (value: string): string =>
+  URL_CREDENTIAL_MARKER.test(value) ? sanitizeUrl(value) : value;
+
+// Only scan the header block, so body content that happens to resemble a
+// credential header is not rewritten during persistence.
 const scrubRawHttpRequest = (raw: string): string => {
-  const headerLine =
-    /^([ \t]*)(authorization|proxy[-_]authorization|cookie|set[-_]cookie|x[-_]api[-_]key|x[-_]auth[-_]token|x[-_]auth|x[-_]amz[-_]security[-_]token|api[-_]key|bearer)([ \t]*:[ \t]*)(.+)$/gim;
-  return raw.replace(headerLine, (_match, indent, name, sep) => `${indent}${name}${sep}[REDACTED]`);
+  const headerBoundary = raw.search(/\r?\n\r?\n/);
+  const headerEnd = headerBoundary === -1 ? raw.length : headerBoundary;
+  const headerBlock = raw.slice(0, headerEnd);
+  const rest = raw.slice(headerEnd);
+  const headerLine = /^([ \t]*)([^:\r\n]+)([ \t]*:[ \t]*)(.*)$/gm;
+
+  return (
+    headerBlock.replace(headerLine, (match, indent, name, separator, value) =>
+      looksLikeHeaderCredential(name, value) ? `${indent}${name}${separator}[REDACTED]` : match,
+    ) + rest
+  );
 };
 
 const isMultipartFieldPart = (value: Record<string, unknown>): boolean =>
@@ -128,12 +148,17 @@ const isMultipartFieldPart = (value: Record<string, unknown>): boolean =>
 // above any realistic provider config.
 const MAX_WALK_DEPTH = 64;
 
-const walkValue = (value: unknown, parentKey: string | undefined, seen: WeakSet<object>, depth: number): unknown => {
+const walkValue = (
+  value: unknown,
+  parentKey: string | undefined,
+  seen: WeakSet<object>,
+  depth: number,
+): unknown => {
   if (typeof value === 'string') {
     if (parentKey === 'request') {
       return scrubRawHttpRequest(value);
     }
-    return value;
+    return scrubProviderUrl(value);
   }
 
   if (!value || typeof value !== 'object') {
@@ -146,42 +171,49 @@ const walkValue = (value: unknown, parentKey: string | undefined, seen: WeakSet<
   }
   seen.add(value as object);
 
-  if (Array.isArray(value)) {
-    return value.map((item) => walkValue(item, parentKey, seen, depth + 1));
-  }
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => walkValue(item, parentKey, seen, depth + 1));
+    }
 
-  const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+    const normalizedParent =
+      parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
 
-  if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
-    return value;
-  }
+    if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+      return value;
+    }
 
-  const record = value as Record<string, unknown>;
+    const record = value as Record<string, unknown>;
 
-  // HTTP multipart parts: `{ kind: 'field', name: 'api_key', value: '…' }`.
-  // The credential indicator lives in `name`, not the object's own key.
-  if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
+    // HTTP multipart parts: `{ kind: 'field', name: 'api_key', value: '…' }`.
+    // The credential indicator lives in `name`, not the object's own key.
+    if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
+      return Object.fromEntries(
+        Object.entries(record).flatMap(([key, nested]) =>
+          key === 'value' || looksLikeCredential(key)
+            ? []
+            : [[key, walkValue(nested, key, seen, depth + 1)]],
+        ),
+      );
+    }
+
+    const isApiKeyAuth = normalizedParent === 'auth' && record.type === 'api_key';
+    const isHeaders = normalizedParent === 'headers';
+
     return Object.fromEntries(
-      Object.entries(record).flatMap(([key, nested]) =>
-        key === 'value' || looksLikeCredential(key)
-          ? []
-          : [[key, walkValue(nested, key, seen, depth + 1)]],
-      ),
+      Object.entries(record).flatMap(([key, nestedValue]) => {
+        const credential = isHeaders
+          ? looksLikeHeaderCredential(key, nestedValue)
+          : looksLikeCredential(key);
+        if (credential || (isApiKeyAuth && key === 'value')) {
+          return [];
+        }
+        return [[key, walkValue(nestedValue, key, seen, depth + 1)]];
+      }),
     );
+  } finally {
+    seen.delete(value as object);
   }
-
-  const isApiKeyAuth = normalizedParent === 'auth' && record.type === 'api_key';
-  const isHeaders = normalizedParent === 'headers';
-
-  return Object.fromEntries(
-    Object.entries(record).flatMap(([key, nestedValue]) => {
-      const credential = isHeaders ? looksLikeCredentialHeader(key) : looksLikeCredential(key);
-      if (credential || (isApiKeyAuth && key === 'value')) {
-        return [];
-      }
-      return [[key, walkValue(nestedValue, key, seen, depth + 1)]];
-    }),
-  );
 };
 
 const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
@@ -235,7 +267,9 @@ const omitTestCaseProviderCredentials = (testCase: unknown): unknown => {
     ...(hasOwn(testCase, 'provider')
       ? { provider: omitProviderCredentials(testCase.provider) }
       : {}),
-    ...(hasOwn(testCase, 'options') ? { options: omitTestOptionsCredentials(testCase.options) } : {}),
+    ...(hasOwn(testCase, 'options')
+      ? { options: omitTestOptionsCredentials(testCase.options) }
+      : {}),
     ...(hasOwn(testCase, 'assert')
       ? { assert: omitAssertionProviderCredentials(testCase.assert) }
       : {}),
@@ -302,7 +336,9 @@ const omitTracingCredentials = (tracing: unknown): unknown => {
     return tracing;
   }
   const headers = Object.fromEntries(
-    Object.entries(forwarding.headers).filter(([key]) => !looksLikeCredentialHeader(key)),
+    Object.entries(forwarding.headers).filter(
+      ([key, value]) => !looksLikeHeaderCredential(key, value),
+    ),
   );
   return {
     ...tracing,
@@ -318,7 +354,10 @@ const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedCo
     return env;
   }
   const filtered = Object.fromEntries(
-    Object.entries(env).filter(([key]) => !looksLikeCredential(key)),
+    Object.entries(env).filter(
+      ([key, value]) =>
+        !looksLikeCredential(key) && !(typeof value === 'string' && looksLikeSecret(value)),
+    ),
   );
   return filtered as Partial<UnifiedConfig>['env'];
 };

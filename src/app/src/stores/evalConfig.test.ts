@@ -84,6 +84,21 @@ describe('evalConfig store', () => {
       });
     });
 
+    it('does not persist recognizable secret environment values under neutral names', () => {
+      useStore.getState().updateConfig({
+        env: {
+          SERVICE_AUTH: 'Bearer neutral-service-token-1234567890',
+          CONFIG_VALUE: 'sk-abcdefghijklmnopqrstuvwxyz1234567890',
+          SERVICE_REGION: 'us-east-1',
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.env).toEqual({ SERVICE_REGION: 'us-east-1' });
+      expect(JSON.stringify(persisted)).not.toContain('neutral-service-token');
+      expect(JSON.stringify(persisted)).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
+    });
+
     it('does not persist inline provider API keys used for the current evaluation', () => {
       useStore.getState().updateConfig({
         providers: [
@@ -440,9 +455,7 @@ describe('evalConfig store', () => {
         endpoint: 'https://example.com',
       });
       expect(persisted.env.LANGFUSE_SECRET_KEY).toBeUndefined();
-      // LANGFUSE_PUBLIC_KEY ends in `_KEY`; we treat it as a secret-by-default
-      // because the regex cannot tell a "public" key from a "secret" key.
-      expect(persisted.env.LANGFUSE_PUBLIC_KEY).toBeUndefined();
+      expect(persisted.env.LANGFUSE_PUBLIC_KEY).toBe('pk-langfuse-public-id');
     });
 
     it('redacts credentials living in test options and prompts[].config', () => {
@@ -454,7 +467,12 @@ describe('evalConfig store', () => {
             label: 'Inline prompt',
             config: {
               apiKey: 'prompt-leak-apikey',
-              headers: { Authorization: 'Bearer prompt-leak-token', 'x-trace-id': 'visible' },
+              headers: {
+                Authorization: 'Bearer prompt-leak-token',
+                'X-Honeycomb-Team': 'provider-honeycomb-key',
+                'X-Observability-Team': 'Bearer neutral-header-token-1234567890',
+                'x-trace-id': 'visible',
+              },
               temperature: 0.1,
             },
           } as any,
@@ -496,6 +514,8 @@ describe('evalConfig store', () => {
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('prompt-leak-apikey');
       expect(serialized).not.toContain('prompt-leak-token');
+      expect(serialized).not.toContain('provider-honeycomb-key');
+      expect(serialized).not.toContain('neutral-header-token');
       expect(serialized).not.toContain('default-options-token');
       expect(serialized).not.toContain('test-options-key');
     });
@@ -510,6 +530,8 @@ describe('evalConfig store', () => {
             headers: {
               Authorization: 'Bearer tracing-leak-token',
               'X-Auth': 'tracing-leak-x-auth',
+              'X-Honeycomb-Team': 'honeycomb-ingest-key',
+              'X-Collector': 'Bearer neutral-tracing-token-1234567890',
               'X-Service': 'visible-service',
               'X-Request-Id': 'visible-request-id',
             },
@@ -527,6 +549,8 @@ describe('evalConfig store', () => {
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('tracing-leak-token');
       expect(serialized).not.toContain('tracing-leak-x-auth');
+      expect(serialized).not.toContain('honeycomb-ingest-key');
+      expect(serialized).not.toContain('neutral-tracing-token');
     });
 
     it('redacts raw HTTP request strings and multipart form-field values', () => {
@@ -541,6 +565,8 @@ describe('evalConfig store', () => {
                 'Host: api.example.com',
                 'Authorization: Bearer raw-request-secret',
                 'X-Api-Key: raw-request-apikey',
+                'X-Client-Secret: raw-request-client-secret',
+                'X-Session-Token: raw-request-session-token',
                 'Cookie: session=raw-request-cookie',
                 'Content-Type: application/json',
                 '',
@@ -568,6 +594,8 @@ describe('evalConfig store', () => {
       expect(cfg.url).toBe('https://api.example.com/v1/predict');
       expect(cfg.request).toContain('Authorization: [REDACTED]');
       expect(cfg.request).toContain('X-Api-Key: [REDACTED]');
+      expect(cfg.request).toContain('X-Client-Secret: [REDACTED]');
+      expect(cfg.request).toContain('X-Session-Token: [REDACTED]');
       expect(cfg.request).toContain('Cookie: [REDACTED]');
       expect(cfg.request).toContain('Host: api.example.com');
       expect(cfg.request).toContain('{"prompt":"{{message}}"}');
@@ -580,9 +608,34 @@ describe('evalConfig store', () => {
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('raw-request-secret');
       expect(serialized).not.toContain('raw-request-apikey');
+      expect(serialized).not.toContain('raw-request-client-secret');
+      expect(serialized).not.toContain('raw-request-session-token');
       expect(serialized).not.toContain('raw-request-cookie');
       expect(serialized).not.toContain('multipart-leak-apikey');
       expect(serialized).not.toContain('multipart-leak-auth');
+    });
+
+    it('redacts credentials embedded in provider URL strings and URL configuration', () => {
+      useStore.getState().setConfig({
+        providers: [
+          'https://browser-user:browser-password@api.example.com/v1?api_key=provider-url-secret&region=us',
+          {
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/v1?token=config-url-secret&region=us',
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('browser-user');
+      expect(serialized).not.toContain('browser-password');
+      expect(serialized).not.toContain('provider-url-secret');
+      expect(serialized).not.toContain('config-url-secret');
+      expect(persisted.providers[0]).toContain('region=us');
+      expect(persisted.providers[1].config.url).toContain('region=us');
     });
 
     it('redacts inline TLS cert/ca/key material while preserving file paths', () => {
@@ -636,6 +689,27 @@ describe('evalConfig store', () => {
       if (cfg) {
         expect(cfg.apiKey).toBeUndefined();
       }
+    });
+
+    it('preserves shared provider references while sanitizing every occurrence', () => {
+      const sharedProvider = {
+        id: 'http',
+        config: {
+          apiKey: 'shared-provider-secret',
+          endpoint: 'https://api.example.com',
+        },
+      };
+
+      useStore.getState().setConfig({
+        providers: [sharedProvider as any, sharedProvider as any],
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers).toEqual([
+        { id: 'http', config: { endpoint: 'https://api.example.com' } },
+        { id: 'http', config: { endpoint: 'https://api.example.com' } },
+      ]);
+      expect(JSON.stringify(persisted)).not.toContain('shared-provider-secret');
     });
 
     it('does not corrupt JSON schemas inside provider tools/functions', () => {
