@@ -561,7 +561,7 @@ describe('prompt optimizer', () => {
     });
   });
 
-  it('extends prompt filters for explicit and default tests when candidates are added', async () => {
+  it('extends prompt filters for explicit, default, and scenario tests when candidates are added', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
       response: optimizerResponse('Optimized Seed'),
@@ -599,6 +599,12 @@ describe('prompt optimizer', () => {
       prompts: [{ raw: 'Seed', label: 'Seed' }],
       defaultTest: { prompts: ['Seed'] },
       tests: [{ prompts: ['Seed'] }],
+      scenarios: [
+        {
+          config: [{ prompts: ['Seed'] }],
+          tests: [{ prompts: ['Seed'] }],
+        },
+      ],
     };
 
     await optimizePromptTestSuite({}, testSuite);
@@ -610,6 +616,8 @@ describe('prompt optimizer', () => {
         ? candidateSuite.defaultTest.prompts
         : undefined,
     ).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(candidateSuite.scenarios?.[0].config[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(candidateSuite.scenarios?.[0].tests[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
   });
 
   it('rejects validation splits for scenario-based optimization instead of pretending they are held out', async () => {
@@ -700,6 +708,86 @@ describe('prompt optimizer', () => {
     await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
       'Prompt optimization requires at least one configured test or scenario.',
     );
+  });
+
+  it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    // The configured test exists (so the preflight test count is non-zero) but
+    // its prompt filter scopes it away from the selected prompt, so the baseline
+    // evaluation schedules zero result rows.
+    vi.mocked(evaluate).mockResolvedValueOnce(emptyEval([completedPrompt('Seed', 'Seed', 0)]));
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{ prompts: ['some-other-prompt'] }],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'No eval test cases ran for the selected prompt/provider — check filters and other test scoping options.',
+    );
+    // The optimizer must fail fast instead of running candidate rounds against
+    // empty evidence.
+    expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(1);
+  });
+
+  it('errors when the validation split produces no runnable tests', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized'),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    // The baseline search eval has rows, but the held-out validation split is
+    // scoped away by filters and schedules zero result rows.
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(evalWith([completedPrompt('Base', 'Base', 0.6)], []))
+      .mockResolvedValueOnce(emptyEval([completedPrompt('Base', 'Base', 0)]));
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Base', label: 'Base' }],
+      tests: [{}, {}, {}, {}, {}],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite, { validationSplit: 0.4 })).rejects.toThrow(
+      'No eval test cases ran for the validation split',
+    );
+    // Fails fast after the baseline search + validation evals, before rounds.
+    expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects function-backed prompts before evaluating unchanged function output', async () => {
+    vi.mocked(evaluate).mockRejectedValue(new Error('baseline evaluation should not run'));
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed', function: async () => 'Seed' }],
+      tests: [{}],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization currently supports literal string prompts only.',
+    );
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {
@@ -944,7 +1032,25 @@ function evalResult(promptIdx: number, success: boolean, reason: string): Evalua
 function evalWith(prompts: CompletedPrompt[], results: EvaluateResult[]): Eval {
   const evalRecord = new Eval({}, { persisted: false, prompts });
   evalRecord.prompts = prompts;
-  evalRecord.results = results as any;
+  // These optimizer tests often omit result rows when they only care about
+  // prompt scores. Backfill placeholders so the zero-runnable-tests guard only
+  // fires for cases that intentionally use `emptyEval`.
+  const backfilledResults =
+    results.length === 0
+      ? prompts.map((_prompt, promptIdx) => evalResult(promptIdx, true, 'placeholder result'))
+      : results;
+  evalRecord.results = backfilledResults as any;
+  return evalRecord;
+}
+
+/**
+ * Builds an Eval whose results are genuinely empty, mirroring an evaluator run
+ * where active test scoping left no runnable result rows.
+ */
+function emptyEval(prompts: CompletedPrompt[]): Eval {
+  const evalRecord = new Eval({}, { persisted: false, prompts });
+  evalRecord.prompts = prompts;
+  evalRecord.results = [];
   return evalRecord;
 }
 

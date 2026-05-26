@@ -493,6 +493,25 @@ function buildCandidateDefaultTest(
   };
 }
 
+function buildCandidateScenarios(
+  scenarios: TestSuite['scenarios'],
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): TestSuite['scenarios'] {
+  return scenarios?.map((scenario) => ({
+    ...scenario,
+    config: scenario.config.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+    tests: scenario.tests.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+  }));
+}
+
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -530,7 +549,12 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
+    scenarios: buildCandidateScenarios(
+      testSuite.scenarios,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
   };
 }
 
@@ -673,6 +697,14 @@ function assertFilterRangeSelectedOptimizationTests(
   throw new Error('Prompt optimization filterRange did not select any tests.');
 }
 
+function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
+  if (evalRecord?.results.length === 0) {
+    throw new Error(
+      `No eval test cases ran for ${scope} — check filters and other test scoping options.`,
+    );
+  }
+}
+
 export async function optimizePromptTestSuite(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
@@ -689,6 +721,9 @@ export async function optimizePromptTestSuite(
   }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(runtimeTestSuite, options);
+  if (selectedTestSuite.prompts[0].function) {
+    throw new Error('Prompt optimization currently supports literal string prompts only.');
+  }
   // Partition an already filtered explicit test set; forwarding the original
   // range into each partition would apply absolute indices a second time.
   const { testSuite: partitionableTestSuite, filterRangeApplied } =
@@ -708,6 +743,7 @@ export async function optimizePromptTestSuite(
     new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config, runtimeTestSuite, filterRangeApplied),
   );
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
@@ -715,6 +751,7 @@ export async function optimizePromptTestSuite(
         createEvaluationOptions(config, runtimeTestSuite, filterRangeApplied),
       )
     : undefined;
+  assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,
