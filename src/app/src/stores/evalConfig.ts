@@ -117,7 +117,7 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
 const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
 const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
 const NUNJUCKS_REFERENCE =
-  /\{\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*\s*\}\}/g;
+  /\{\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*(?:\s*\|\s*(?:trim|urlencode)\s*)*\s*\}\}/g;
 
 const isTemplatedCredentialReference = (value: unknown): boolean => {
   if (typeof value !== 'string' || !value.includes('{{')) {
@@ -204,7 +204,7 @@ const scrubRawHttpRequest = (raw: string): string => {
   const headerBlock = raw.slice(0, headerEnd);
   const separator = boundary?.[0] ?? '';
   const body = boundary ? raw.slice(headerEnd + separator.length) : '';
-  const requestLine = /^(\S+[ \t]+)(\S+)([ \t]+HTTP\/\d(?:\.\d)?[^\r\n]*)$/im;
+  const requestLine = /^(\S+[ \t]+)([^\r\n]*?)([ \t]+HTTP\/\d(?:\.\d)?[^\r\n]*)$/im;
   const headerLine = /^([ \t]*)([^:\r\n]+)([ \t]*:[ \t]*)(.*)$/gm;
 
   return (
@@ -242,8 +242,12 @@ const omitOpaqueToolCredentials = (tool: unknown): unknown => {
     return tool;
   }
 
+  const { authorization: _authorization, ...toolWithoutAuthorization } = tool;
   return {
-    ...tool,
+    ...toolWithoutAuthorization,
+    ...(isTemplatedCredentialReference(tool.authorization)
+      ? { authorization: tool.authorization }
+      : {}),
     ...(typeof tool.server_url === 'string'
       ? { server_url: scrubProviderUrl(tool.server_url) }
       : {}),
@@ -439,13 +443,33 @@ const omitScenarioProviderCredentials = (scenario: unknown): unknown => {
 };
 
 const omitRedteamProviderCredentials = (redteam: unknown): unknown => {
-  if (!isRecord(redteam) || !hasOwn(redteam, 'provider')) {
+  if (!isRecord(redteam)) {
     return redteam;
   }
 
   return {
     ...redteam,
-    provider: omitProviderCredentials(redteam.provider),
+    ...(hasOwn(redteam, 'provider') ? { provider: omitProviderCredentials(redteam.provider) } : {}),
+    ...(Array.isArray(redteam.strategies)
+      ? {
+          strategies: redteam.strategies.map((strategy) => {
+            if (!isRecord(strategy) || !isRecord(strategy.config)) {
+              return strategy;
+            }
+            return {
+              ...strategy,
+              config: {
+                ...strategy.config,
+                ...(hasOwn(strategy.config, 'redteamProvider')
+                  ? {
+                      redteamProvider: omitProviderCredentials(strategy.config.redteamProvider),
+                    }
+                  : {}),
+              },
+            };
+          }),
+        }
+      : {}),
   };
 };
 
@@ -489,7 +513,8 @@ const omitTracingCredentials = (tracing: unknown): unknown => {
         ? {
             headers: Object.fromEntries(
               Object.entries(forwarding.headers).filter(
-                ([key, value]) => !looksLikeHeaderCredential(key, value),
+                ([key, value]) =>
+                  !looksLikeHeaderCredential(key, value) || isTemplatedCredentialReference(value),
               ),
             ),
           }

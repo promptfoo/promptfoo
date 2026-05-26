@@ -164,7 +164,18 @@ describe('evalConfig store', () => {
             tests: [{ provider: provider('scenario-test-secret') }],
           },
         ],
-        redteam: { provider: provider('redteam-secret') },
+        redteam: {
+          provider: provider('redteam-secret'),
+          strategies: [
+            {
+              id: 'crescendo',
+              config: {
+                redteamProvider: provider('redteam-strategy-provider-secret'),
+                stateful: true,
+              },
+            },
+          ],
+        },
       } as any);
 
       const persistedConfig = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
@@ -198,6 +209,13 @@ describe('evalConfig store', () => {
       });
       expect(persistedConfig.redteam.provider.config).toEqual({
         endpoint: 'https://example.com',
+      });
+      expect(persistedConfig.redteam.strategies[0].config).toEqual({
+        redteamProvider: {
+          id: 'http',
+          config: { endpoint: 'https://example.com' },
+        },
+        stateful: true,
       });
       expect(JSON.stringify(persistedConfig)).not.toContain('-secret');
     });
@@ -541,6 +559,7 @@ describe('evalConfig store', () => {
               'X-Auth': 'tracing-leak-x-auth',
               'X-Honeycomb-Team': 'honeycomb-ingest-key',
               'X-Collector': 'Bearer neutral-tracing-token-1234567890',
+              'X-Forwarded-Authorization': 'Bearer {{ otlp_token | trim }}',
               'X-Service': 'visible-service',
               'X-Request-Id': 'visible-request-id',
             },
@@ -552,6 +571,7 @@ describe('evalConfig store', () => {
       expect(persisted.tracing.enabled).toBe(true);
       expect(persisted.tracing.forwarding.endpoint).toContain('otel.example.com/v1/traces');
       expect(persisted.tracing.forwarding.headers).toEqual({
+        'X-Forwarded-Authorization': 'Bearer {{ otlp_token | trim }}',
         'X-Service': 'visible-service',
         'X-Request-Id': 'visible-request-id',
       });
@@ -572,7 +592,7 @@ describe('evalConfig store', () => {
             config: {
               url: 'https://api.example.com/v1/predict',
               request: [
-                'POST /v1/predict?api_key=raw-target-secret HTTP/1.1',
+                'POST /{{ path }}?api_key=raw-target-secret HTTP/1.1',
                 'Host: api.example.com',
                 'Authorization: Bearer raw-request-secret',
                 'X-Api-Key: raw-request-apikey',
@@ -610,6 +630,7 @@ describe('evalConfig store', () => {
       expect(cfg.request).toContain('X-Session-Token: [REDACTED]');
       expect(cfg.request).toContain('Cookie: [REDACTED]');
       expect(cfg.request).toContain('Host: api.example.com');
+      expect(cfg.request).toContain('POST /{{ path }}?api_key=[REDACTED] HTTP/1.1');
       expect(cfg.request).toContain('"prompt":"{{message}}"');
       expect(cfg.body.parts).toEqual([
         { kind: 'field', name: 'api_key' },
@@ -708,17 +729,17 @@ describe('evalConfig store', () => {
             config: {
               auth: {
                 type: 'bearer',
-                token: '{{ api_token }}',
+                token: '{{ api_token | trim }}',
                 clientSecret: 'literal-auth-secret',
                 password: '{{ api_token | default("embedded-default-secret") }}',
               },
               headers: {
-                Authorization: 'Bearer {{ api_token }}',
+                Authorization: 'Bearer {{ env.API_TOKEN | trim }}',
                 'X-API-Key': 'literal-header-secret',
               },
               request: [
-                'POST /v1?api_key={{ api_token }} HTTP/1.1',
-                'Authorization: Bearer {{ api_token }}',
+                'POST /v1?api_key={{ api_token | urlencode }} HTTP/1.1',
+                'Authorization: Bearer {{ env.API_TOKEN | trim }}',
                 '',
                 'client_secret={{ client_secret }}&api_key=literal-body-secret',
               ].join('\r\n'),
@@ -729,10 +750,10 @@ describe('evalConfig store', () => {
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
       const config = persisted.providers[0].config;
-      expect(config.auth.token).toBe('{{ api_token }}');
-      expect(config.headers).toEqual({ Authorization: 'Bearer {{ api_token }}' });
-      expect(config.request).toContain('api_key={{ api_token }}');
-      expect(config.request).toContain('Authorization: Bearer {{ api_token }}');
+      expect(config.auth.token).toBe('{{ api_token | trim }}');
+      expect(config.headers).toEqual({ Authorization: 'Bearer {{ env.API_TOKEN | trim }}' });
+      expect(config.request).toContain('api_key={{ api_token | urlencode }}');
+      expect(config.request).toContain('Authorization: Bearer {{ env.API_TOKEN | trim }}');
       expect(config.request).toContain('client_secret=%7B%7B+client_secret+%7D%7D');
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('literal-auth-secret');
@@ -850,6 +871,7 @@ describe('evalConfig store', () => {
                     'X-API-Key': '{{ mcp_api_key }}',
                     'X-Trace-Id': 'visible-tool-trace',
                   },
+                  authorization: 'Bearer xai-mcp-authorization-secret',
                 },
               ],
               response_format: {
@@ -889,6 +911,7 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(providerCfg.tools[1])).not.toContain('mcp-password');
       expect(JSON.stringify(providerCfg.tools[1])).not.toContain('mcp-url-secret');
       expect(JSON.stringify(providerCfg.tools[1])).not.toContain('mcp-header-secret');
+      expect(JSON.stringify(providerCfg.tools[1])).not.toContain('xai-mcp-authorization-secret');
       expect(providerCfg.response_format.json_schema.schema.properties).toEqual({
         secret: { type: 'string' },
         authorization: { type: 'string' },
