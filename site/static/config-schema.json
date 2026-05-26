@@ -43,29 +43,32 @@
         "derivedMetrics": {
           "$ref": "#/definitions/__schema35"
         },
-        "extensions": {
+        "resultsTable": {
           "$ref": "#/definitions/__schema36"
         },
-        "metadata": {
+        "extensions": {
           "$ref": "#/definitions/__schema37"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema38"
         },
-        "writeLatestResults": {
+        "redteam": {
           "$ref": "#/definitions/__schema39"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema40"
         },
-        "evaluateOptions": {
+        "tracing": {
           "$ref": "#/definitions/__schema41"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema42"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema44"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema45"
         }
       },
       "required": ["prompts"],
@@ -1467,6 +1470,24 @@
       }
     },
     "__schema36": {
+      "type": "object",
+      "properties": {
+        "defaultVisibleVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "defaultHiddenVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema37": {
       "anyOf": [
         {
           "type": "array",
@@ -1479,14 +1500,14 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema38": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema38": {
+    "__schema39": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -3003,10 +3024,10 @@
         }
       }
     },
-    "__schema39": {
+    "__schema40": {
       "type": "boolean"
     },
-    "__schema40": {
+    "__schema41": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3094,7 +3115,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema41": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3137,15 +3158,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema43"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema43": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema44": {
       "type": "object",
       "properties": {
         "description": {
@@ -3273,7 +3294,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema43"
             }
           ]
         },
@@ -3342,7 +3363,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema45": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

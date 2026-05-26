@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+import type { EvaluateTableOutput, PromptMetrics, UnifiedConfig } from '@promptfoo/types';
 
 const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
 
@@ -150,6 +150,33 @@ export function hashVarSchema(varNames: string[]): string {
   const sorted = [...varNames].sort();
   // Use JSON.stringify for robust serialization that handles any characters
   return JSON.stringify(sorted);
+}
+
+/**
+ * Computes default hidden variable names from results table visibility config.
+ *
+ * Precedence:
+ * 1) defaultVisibleVars (allowlist): any var not listed will be hidden by default.
+ * 2) defaultHiddenVars (denylist): listed vars will be hidden by default.
+ * 3) no config: no vars hidden by default.
+ */
+export function getDefaultHiddenVarNames(
+  varNames: string[],
+  resultsTableConfig: Partial<UnifiedConfig>['resultsTable'] | undefined,
+): string[] {
+  const defaultVisibleVars = resultsTableConfig?.defaultVisibleVars;
+  if (defaultVisibleVars) {
+    const visibleSet = new Set(defaultVisibleVars);
+    return varNames.filter((name) => !visibleSet.has(name));
+  }
+
+  const defaultHiddenVars = resultsTableConfig?.defaultHiddenVars;
+  if (defaultHiddenVars && defaultHiddenVars.length > 0) {
+    const hiddenSet = new Set(defaultHiddenVars);
+    return varNames.filter((name) => hiddenSet.has(name));
+  }
+
+  return [];
 }
 
 /**

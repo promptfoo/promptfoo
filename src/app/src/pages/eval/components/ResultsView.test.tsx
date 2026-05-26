@@ -61,7 +61,11 @@ vi.mock('./ShareModal', () => ({
 }));
 
 vi.mock('./ResultsTable', () => ({
-  default: () => <div data-testid="results-table">Results Table</div>,
+  default: ({ columnVisibility }: { columnVisibility: Record<string, boolean> }) => (
+    <div data-testid="results-table" data-column-visibility={JSON.stringify(columnVisibility)}>
+      Results Table
+    </div>
+  ),
 }));
 
 vi.mock('./ResultsCharts', () => ({
@@ -452,6 +456,104 @@ describe('ResultsView Share Button', () => {
     );
 
     expect(screen.queryByText('Eval actions')).not.toBeInTheDocument();
+  });
+});
+
+describe('ResultsView configured variable visibility', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
+    });
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          prompts: [{ label: 'Prompt', provider: 'echo', raw: 'Prompt' }],
+          vars: ['question', 'context'],
+        },
+        body: [],
+      },
+      config: {
+        resultsTable: {
+          defaultVisibleVars: ['question'],
+        },
+      },
+      setConfig: vi.fn(),
+      evalId: 'visibility-eval-id',
+      setAuthor: vi.fn(),
+      totalResultsCount: 0,
+      highlightedResultsCount: 0,
+      userRatedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+    });
+  });
+
+  function getResultsTableVisibility() {
+    return JSON.parse(screen.getByTestId('results-table').dataset.columnVisibility ?? '{}');
+  }
+
+  it('applies configured default visible variables when no preference has been saved', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="visibility-eval-id"
+      />,
+    );
+
+    expect(getResultsTableVisibility()).toEqual(
+      expect.objectContaining({
+        'Variable 1': true,
+        'Variable 2': false,
+        'Prompt 1': true,
+      }),
+    );
+  });
+
+  it('preserves a saved show-all preference over configured defaults', () => {
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: { '["context","question"]': [] },
+      setHiddenVarNamesForSchema: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="visibility-eval-id"
+      />,
+    );
+
+    expect(getResultsTableVisibility()).toEqual(
+      expect.objectContaining({
+        'Variable 1': true,
+        'Variable 2': true,
+      }),
+    );
   });
 });
 describe('ResultsView Copy Eval', () => {

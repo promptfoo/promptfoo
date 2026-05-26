@@ -49,7 +49,27 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.cache           | boolean                                                                                                                                               | No                             | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
 | evaluateOptions.timeoutMs       | number                                                                                                                                                | No                             | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                                     |
 | evaluateOptions.maxEvalTimeMs   | number                                                                                                                                                | No                             | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
+| resultsTable                    | object                                                                                                                                                | No                             | Default variable-column visibility for the web viewer. Use `defaultVisibleVars` as an allowlist or `defaultHiddenVars` as a denylist.                                                                                           |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                                             | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
+
+### Results Table Defaults
+
+Use `resultsTable` to select the variable columns shown when a results table is first opened. `defaultVisibleVars` is an allowlist and takes precedence over `defaultHiddenVars` if both are specified. Once a user changes visibility for the same set of variables in the web viewer, that saved preference overrides these defaults.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Answer {{question}} using {{context}}'
+providers:
+  - echo
+resultsTable:
+  defaultVisibleVars:
+    - question
+tests:
+  - vars:
+      question: What is the capital of France?
+      context: Paris is the capital of France.
+      metadata: internal-source
+```
 
 ### Test Case
 
@@ -951,6 +971,12 @@ interface TestSuiteConfig {
   // Whether to write latest results to promptfoo storage. This enables you to use the web viewer.
   writeLatestResults?: boolean;
 
+  // Default variable-column visibility in the web viewer.
+  // If both fields are set, defaultVisibleVars takes precedence.
+  resultsTable?: {
+    defaultVisibleVars?: string[];
+    defaultHiddenVars?: string[];
+  };
   // OpenTelemetry tracing configuration
   tracing?: TracingConfig;
 }

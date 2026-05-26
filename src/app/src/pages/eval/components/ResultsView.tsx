@@ -43,7 +43,12 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
+import {
+  buildEvalUrlWithSearchParams,
+  getDefaultHiddenVarNames,
+  hashVarSchema,
+  setEvalDetailsHash,
+} from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -496,9 +501,14 @@ export default function ResultsView({
 
   const schemaHash = React.useMemo(() => hashVarSchema(head.vars), [head.vars]);
 
+  const defaultHiddenVarNames = React.useMemo(
+    () => getDefaultHiddenVarNames(head.vars, config?.resultsTable),
+    [head.vars, config?.resultsTable],
+  );
+
   const hiddenVarNames = React.useMemo(
-    () => hiddenVarNamesBySchema[schemaHash] ?? [],
-    [hiddenVarNamesBySchema, schemaHash],
+    () => hiddenVarNamesBySchema[schemaHash] ?? defaultHiddenVarNames,
+    [hiddenVarNamesBySchema, schemaHash, defaultHiddenVarNames],
   );
 
   const currentColumnState = React.useMemo(() => {
