@@ -43,17 +43,16 @@ const TRIG_FNS = [
   'sqrt',
 ];
 
-const ADDITIONAL_ASSIGNMENT_PATTERN =
-  /(?:,|;|\band\b)\s*(?:[A-Za-z_]\w*|P\([^)]*\))\s*(?:=|\u2248|\\approx\b)/i;
-const EXPLICIT_NEGATION_PATTERN =
-  /\b(?:is|are)\s+(?:not\b|unequal\s+to\b)|\b(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b|\bnot\s+(?=[-+\\($\dA-Za-z])|\\text\s*\{\s*(?:not\b|unequal\s+to\b|(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b)|(?:!=|!==|\u2260|\\ne(?:q)?\b)/i;
+const ASSIGNMENT_PATTERN = /(?:[A-Za-z_]\w*|P\([^)]*\))\s*(?:=|\u2248|\\approx\b)/gi;
+const DISQUALIFYING_CLAIM_PATTERN =
+  /\b(?:is|are)\s+(?:not\b|unequal\s+to\b|less\s+than\b|greater\s+than\b)|\b(?:does\s+not|doesn't)\s+equal(?:s)?(?:\s+to)?\b|\bisn't(?:\s+equal(?:s)?(?:\s+to)?)?\s+(?=[-+\\($\dA-Za-z])|\b(?:cannot|can't)\s+be\b|\b(?:incorrect|wrong)\s+answer\b|\b(?:less|greater)\s+than(?:\s+or\s+equal\s+to)?\b|\bnot\s+(?=[-+\\($\dA-Za-z])|\\text\s*\{\s*(?:not\b|unequal\s+to\b|(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b)|(?:!=|!==|<=|>=|<|>|\u2260|\u2264|\u2265|\\ne(?:q)?\b|\\le(?:q)?\b|\\ge(?:q)?\b)/i;
 
 function hasAdditionalAssignment(text: string): boolean {
-  return ADDITIONAL_ASSIGNMENT_PATTERN.test(text);
+  return [...text.matchAll(ASSIGNMENT_PATTERN)].length > 1;
 }
 
-function hasExplicitNegation(text: string): boolean {
-  return EXPLICIT_NEGATION_PATTERN.test(text);
+function hasDisqualifyingClaim(text: string): boolean {
+  return DISQUALIFYING_CLAIM_PATTERN.test(text);
 }
 
 let _enginePromise: Promise<ComputeEngine> | undefined;
@@ -115,6 +114,8 @@ export function normalizeLatex(text: string): string {
   s = s.replace(/√\{/g, '\\sqrt{');
   s = s.replace(/√(\\[A-Za-z]+|[A-Za-z])/g, '\\sqrt{$1}');
   s = s.replace(/√/g, '\\sqrt');
+  s = s.replace(/(?<!\\)(?<![A-Za-z])sqrt(\d+)(?!\w)/g, '\\sqrt{$1}');
+  s = s.replace(/(?<!\\)(?<![A-Za-z])sqrt\s+(\d+|\\[A-Za-z]+|[A-Za-z])(?!\w)/g, '\\sqrt{$1}');
 
   // Approximation symbols collapse to equality so segment parsing can split on '='.
   s = s.replace(/≈/g, '=').replace(/\\approx/g, '=');
@@ -254,13 +255,16 @@ function stripTrailingUnit(text: string): string {
     return trimmed;
   }
   const value = match[1].trimEnd();
+  const normalizedValue = normalizeLatex(value);
   if (
     NUMERIC_VALUE_PATTERN.test(value) ||
     isParenthesizedNumericValue(value) ||
     isSelfContainedLatexValue(value) ||
     isCoefficientedLatexValue(value) ||
-    isSelfContainedLatexValue(normalizeLatex(value)) ||
-    isCoefficientedLatexValue(normalizeLatex(value))
+    NUMERIC_VALUE_PATTERN.test(normalizedValue) ||
+    isParenthesizedNumericValue(normalizedValue) ||
+    isSelfContainedLatexValue(normalizedValue) ||
+    isCoefficientedLatexValue(normalizedValue)
   ) {
     return value;
   }
@@ -272,6 +276,12 @@ function stripTrailingUnit(text: string): string {
  */
 export function cleanMathText(text: string): string {
   let s = stripThinkingBlocks(text);
+
+  // Normalize common LaTeX unit styling before the plain-unit suffix pass.
+  s = s.replace(
+    /(?:\\,|\\\s|\s)*\\mathrm\{\s*(rad|deg|km|cm|mm|kg|ms|m|s|g)\s*\}(?=\s*(?:(?:\$\$|\\\]|\\\)|\$)\s*)?$)/i,
+    ' $1',
+  );
 
   // \text{...} units/labels and any preceding space/backslash.
   s = s.replace(/\s*\\?\s*\\text\{[^}]*\}/g, '');
@@ -292,6 +302,10 @@ export function cleanMathText(text: string): string {
   s = s.replace(/\\\(([\s\S]*?)\\\)/g, '$1');
   s = s.replace(/\$([^$]+)\$/g, '$1');
 
+  // A tolerated unit can sit inside a math fence (`$$10 kg$$`), so retry
+  // after unwrapping the fence rather than treating the unit as a variable.
+  s = stripTrailingUnit(s);
+
   // Markdown bold/italic. Guard against asterisks used as math operators
   // (e.g. "2*3*4", "2 * 3 * 4", or "x**y**z"). Markdown emphasis cannot
   // start or end with whitespace, which keeps spaced multiplication intact.
@@ -305,7 +319,7 @@ export function cleanMathText(text: string): string {
 
 function cleanBoxedAnswer(content: string): string {
   const trimmed = content.trim();
-  return hasExplicitNegation(trimmed) ? trimmed : cleanMathText(trimmed);
+  return hasDisqualifyingClaim(trimmed) ? trimmed : cleanMathText(trimmed);
 }
 
 function isEqualityExpr(expr: BoxedExpression): boolean {
@@ -345,7 +359,7 @@ function looksLikeProse(normalized: string): boolean {
  * dynamic `import()` (see `getEngine`).
  */
 export async function parseMathExpression(text: string): Promise<BoxedExpression | undefined> {
-  if (hasExplicitNegation(text) || hasAdditionalAssignment(text)) {
+  if (hasDisqualifyingClaim(text) || hasAdditionalAssignment(text)) {
     return undefined;
   }
   const normalized = normalizeLatex(text.trim());
@@ -376,7 +390,7 @@ export async function parseMathExpression(text: string): Promise<BoxedExpression
  * expression only when every stated step is symbolically equivalent.
  */
 export async function tryParseEachSegment(text: string): Promise<BoxedExpression | undefined> {
-  if (hasExplicitNegation(text) || hasAdditionalAssignment(text)) {
+  if (hasDisqualifyingClaim(text) || hasAdditionalAssignment(text)) {
     return undefined;
   }
   const segments = text
@@ -421,28 +435,47 @@ type BoxedMatch = {
 };
 
 function scanBoxed(text: string): BoxedMatch[] {
-  const matches: BoxedMatch[] = [];
+  type IndexedBoxedMatch = BoxedMatch & { start: number };
+  type BraceFrame = { boxedStart?: number; contentStart?: number };
+
+  const braceStack: BraceFrame[] = [];
+  const completed: IndexedBoxedMatch[] = [];
+
   for (let i = 0; i < text.length; i++) {
-    if (!text.startsWith(BOXED_PREFIX, i)) {
+    if (text.startsWith(BOXED_PREFIX, i)) {
+      braceStack.push({ boxedStart: i, contentStart: i + BOXED_PREFIX.length });
+      i += BOXED_PREFIX.length - 1;
       continue;
     }
-
-    let depth = 1;
-    const contentStart = i + BOXED_PREFIX.length;
-    let j = contentStart;
-    while (j < text.length && depth > 0) {
-      if (text[j] === '{') {
-        depth++;
-      } else if (text[j] === '}') {
-        depth--;
+    if (text[i] === '{') {
+      braceStack.push({});
+      continue;
+    }
+    if (text[i] === '}') {
+      const frame = braceStack.pop();
+      if (frame?.boxedStart !== undefined && frame.contentStart !== undefined) {
+        completed.push({
+          start: frame.boxedStart,
+          content: text.slice(frame.contentStart, i),
+          end: i + 1,
+        });
       }
-      j++;
     }
+  }
 
-    if (depth === 0) {
-      matches.push({ content: text.slice(contentStart, j - 1), end: j });
-      i = j - 1;
+  // Preserve the old outermost-box semantics while avoiding repeated
+  // rescanning for unterminated prefixes. A later valid box inside an
+  // unterminated earlier box remains usable because the earlier box never
+  // enters `completed`.
+  completed.sort((a, b) => a.start - b.start);
+  const matches: BoxedMatch[] = [];
+  let outerEnd = -1;
+  for (const match of completed) {
+    if (match.start < outerEnd) {
+      continue;
     }
+    matches.push({ content: match.content, end: match.end });
+    outerEnd = match.end;
   }
   return matches;
 }
@@ -619,23 +652,23 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
     return undefined;
   }
   let candidate = cleanedLines[cleanedLines.length - 1];
-  candidate = candidate.replace(/^[A-Za-z][A-Za-z\s]*:\s*/, '');
-  // Mid-line label after a stripped display fence ("$$2$$ Answer: 3" cleans
-  // to "2 Answer: 3" — the labelled answer is the real one). Take the
-  // rightmost "<Word(s)>: <rest>" suffix when one exists. The leading `\s`
-  // anchor keeps this from re-firing on a label that's already at the
-  // start (handled above) and avoids matching `f(x):...` style colons.
-  const labelMatch = candidate.match(/\s([A-Za-z][A-Za-z\s]*):\s*(\S.*)$/);
-  if (labelMatch) {
-    candidate = labelMatch[2].trim();
-  }
   const finalPrefixMatch = candidate.match(
-    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)(?:\s+(?:is|equals?))?\s+(.+)$/i,
+    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)(?:(?:\s*:\s*)|(?:\s+(?:is|equals?)\s+)|\s+)(.+)$/i,
   );
   if (finalPrefixMatch) {
     candidate = finalPrefixMatch[1].trim();
   }
-  if (hasExplicitNegation(candidate)) {
+  // Mid-line affirmative final after stripped display work or an inequality
+  // explanation ("$$2$$ Answer: 3", "41 != 42, final answer is 42").
+  const finalSuffixMatch =
+    candidate.match(/[0-9)\]}]\s+(?:final\s+answer|answer|result|total)\s*:\s*(\S.*)$/i) ??
+    candidate.match(
+      /[,;]\s*(?:final\s+answer|answer|result|total)(?:(?:\s*:\s*)|(?:\s+(?:is|equals?)\s+)|\s+)(\S.*)$/i,
+    );
+  if (finalSuffixMatch) {
+    candidate = finalSuffixMatch[1].trim();
+  }
+  if (hasDisqualifyingClaim(candidate)) {
     return candidate;
   }
   if (hasAdditionalAssignment(candidate)) {
@@ -674,12 +707,12 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   return cleanMathText(candidate);
 }
 
-function extractPreservedNegation(line: string): string | undefined {
-  if (!hasExplicitNegation(line)) {
+function extractPreservedDisqualifyingClaim(line: string): string | undefined {
+  if (!hasDisqualifyingClaim(line)) {
     return undefined;
   }
   const candidate = extractFromLastLine([line]);
-  return !candidate || hasExplicitNegation(candidate) ? (candidate ?? line) : undefined;
+  return !candidate || hasDisqualifyingClaim(candidate) ? line : undefined;
 }
 
 async function extractFromDisplayBlocks(text: string): Promise<string | undefined> {
@@ -689,18 +722,18 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     const boxed = findAllBoxed(block);
+    if (hasDisqualifyingClaim(block)) {
+      return block.trim();
+    }
     if (boxed.length > 0) {
       return cleanBoxedAnswer(boxed[boxed.length - 1]);
-    }
-    if (hasExplicitNegation(block)) {
-      return block.trim();
     }
     const candidate = cleanMathText(block.trim());
     if (!candidate) {
       continue;
     }
-    // Accept the block if it parses on its own OR if any segment of an
-    // equality / approximation chain inside it parses (e.g. "230/530 =
+    // Accept the block if it parses on its own OR if an equality /
+    // approximation chain inside it is fully validated (e.g. "230/530 =
     // 23/53"). Without the segment fallback, equality chains in display
     // blocks were silently discarded and tryParseEachSegment later saw
     // the chain polluted by trailing prose ("23/53\nDone."), letting it
@@ -715,9 +748,9 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
 
 async function findEarlierAnswer(visibleLines: string[]): Promise<string | undefined> {
   for (let i = visibleLines.length - 2; i >= 0; i--) {
-    const negatedAnswer = extractPreservedNegation(visibleLines[i]);
-    if (negatedAnswer) {
-      return negatedAnswer;
+    const disqualifiedAnswer = extractPreservedDisqualifyingClaim(visibleLines[i]);
+    if (disqualifiedAnswer) {
+      return disqualifiedAnswer;
     }
     const earlierAnswer = extractFromLastLine([cleanMathText(visibleLines[i])]);
     if (!earlierAnswer) {
@@ -790,30 +823,28 @@ function hasTrailingDisplaySuffix(line: string): boolean {
   if (lastBlockEnd < 0) {
     return false;
   }
-  return (
-    line
-      .slice(lastBlockEnd)
-      .replace(/^[,.;:!?\s]+/, '')
-      .trim().length > 0
-  );
+  const suffix = line
+    .slice(lastBlockEnd)
+    .replace(/^[,.;:!?\s]+/, '')
+    .trim();
+  return suffix.length > 0 && !/^(?:rad|deg|km|cm|mm|kg|ms|m|s|g|°)$/i.test(suffix);
 }
 
 /**
  * Extract the mathematical answer from arbitrary model prose.
  *
  * Priority (highest first):
- *  1. `\boxed{}` on the last visible line — that's the actual final answer.
- *  2. Last non-trivial cleaned line, if its raw counterpart has no `$$` /
- *     `\[ \]` / `\boxed` fence — pulls the rightmost numeric/LaTeX token
- *     from prose like "The answer is 0.5" or "$$intermediate$$\nAnswer:
- *     final". Intermediate `\boxed` work is demoted by this step so the
- *     real final-line answer wins.
- *  3. Latest display block (`$$...$$` or `\[...\]`, boxed inside first,
+ *  1. An explicit later final answer on the last visible line, including one
+ *     that follows boxed or displayed intermediate work.
+ *  2. A non-disqualified `\boxed{}` on the last visible line.
+ *  3. Last non-trivial cleaned line — pulls a numeric/LaTeX candidate from
+ *     prose such as "The answer is 0.5", while retaining denied claims.
+ *  4. Latest display block (`$$...$$` or `\[...\]`, boxed inside first,
  *     then parseable content), scanned over the visible text only
  *     (thinking blocks excluded).
- *  4. Last `\boxed{}` anywhere in the cleaned text — fallback for shown
+ *  5. Last non-disqualified `\boxed{}` anywhere in the cleaned text — fallback for shown
  *     work when (2) and (3) didn't yield anything.
- *  5. Last cleaned line as-is.
+ *  6. Last cleaned line as-is.
  */
 export async function extractMathAnswer(text: string): Promise<string> {
   if (!text) {
@@ -838,6 +869,10 @@ export async function extractMathAnswer(text: string): Promise<string> {
   // prose final from that suffix. Brace-balanced because boxed contents
   // may carry arbitrary nesting ("\boxed{\frac{1}{\sqrt{2}}}").
   if (/\\boxed\{/.test(lastVisible)) {
+    const boxedPrefix = lastVisible.slice(0, lastVisible.indexOf(BOXED_PREFIX));
+    if (hasDisqualifyingClaim(boxedPrefix)) {
+      return lastVisible;
+    }
     const remainder = remainderAfterLastBoxed(lastVisible);
     // Strip any closing display fence ("$$" / "\]") and trailing punctuation
     // so we don't treat an empty or fence-only suffix as a final answer.
@@ -859,9 +894,9 @@ export async function extractMathAnswer(text: string): Promise<string> {
     }
   }
 
-  const negatedLastAnswer = extractPreservedNegation(lastVisible);
-  if (negatedLastAnswer) {
-    return negatedLastAnswer;
+  const disqualifiedLastAnswer = extractPreservedDisqualifyingClaim(lastVisible);
+  if (disqualifiedLastAnswer) {
+    return disqualifiedLastAnswer;
   }
 
   // Always try the cleaned final line first, even when the last visible
@@ -885,6 +920,12 @@ export async function extractMathAnswer(text: string): Promise<string> {
   if (!skipLastLine) {
     const lineAnswer = extractFromLastLine(cleanedLines);
     if (lineAnswer) {
+      if (
+        hasAdditionalAssignment(visible) &&
+        !/^(?:final\s+answer|answer|result|total)\b/i.test(lastVisible)
+      ) {
+        return visible.trim();
+      }
       return lineAnswer;
     }
   }
@@ -900,6 +941,12 @@ export async function extractMathAnswer(text: string): Promise<string> {
   // for shown work.
   const visibleBoxed = findAllBoxed(visible);
   if (visibleBoxed.length > 0) {
+    const disqualifiedBoxedLine = [...visibleLines]
+      .reverse()
+      .find((line) => /\\boxed\{/.test(line) && hasDisqualifyingClaim(line));
+    if (disqualifiedBoxedLine) {
+      return disqualifiedBoxedLine;
+    }
     return cleanBoxedAnswer(visibleBoxed[visibleBoxed.length - 1]);
   }
 
@@ -972,7 +1019,7 @@ export async function isMathEquivalent(
       parseFailed: true,
       reason: expr1
         ? `Could not parse expected answer "${expectedAnswer}" as a math expression`
-        : `Could not parse actual answer "${actualAnswer}" as a math expression`,
+        : 'Could not parse model output as a math expression',
       metadata: { actualAnswer, expectedAnswer },
     };
   }

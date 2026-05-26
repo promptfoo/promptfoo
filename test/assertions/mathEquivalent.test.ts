@@ -17,6 +17,10 @@ import {
 
 import type { AssertionParams } from '../../src/types/index';
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 // =============================================================================
 // normalizeLatex
 // =============================================================================
@@ -153,11 +157,11 @@ describe('normalizeLatex', async () => {
     });
 
     it.each([
-      ['sqrt2', '\\sqrt(2)'],
+      ['sqrt2', '\\sqrt{2}'],
       ['cos4', '\\cos(4)'],
       ['cos 4', '\\cos(4)'],
       ['sin x', '\\sin(x)'],
-      ['sqrt 23', '\\sqrt(23)'],
+      ['sqrt 23', '\\sqrt{23}'],
     ])('still rewrites legitimate function shorthand (%s → %s)', async (input, expected) => {
       expect(normalizeLatex(input)).toBe(expected);
     });
@@ -319,6 +323,12 @@ describe('cleanMathText', async () => {
     expect(cleanMathText('10\\ \\text{km}')).toBe('10');
   });
 
+  it('strips tolerated units styled with \\mathrm{...}', async () => {
+    expect(cleanMathText('10\\,\\mathrm{m}')).toBe('10');
+    expect(cleanMathText('$$10\\,\\mathrm{m}$$')).toBe('10');
+    expect(cleanMathText('$$10 kg$$')).toBe('10');
+  });
+
   it.each([
     ['10 m', '10'],
     ['5.2 kg', '5.2'],
@@ -373,6 +383,7 @@ describe('cleanMathText', async () => {
     ['\\frac{8\\pi}{3} m', '\\frac{8\\pi}{3}'],
     ['\\dfrac{1}{2} m', '\\dfrac{1}{2}'],
     ['\\sqrt{2} m', '\\sqrt{2}'],
+    ['\\sqrt{2}\\,\\mathrm{m}', '\\sqrt{2}'],
     ['√2 m', '√2'],
     ['√\\pi m', '√\\pi'],
     ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
@@ -592,6 +603,17 @@ describe('extractMathAnswer', async () => {
     expect(result).toContain('\\sqrt');
   });
 
+  it('recovers a later valid box after an unterminated boxed prefix', async () => {
+    expect(await extractMathAnswer('\\boxed{ unfinished \\boxed{42}')).toBe('42');
+  });
+
+  it('handles many malformed boxed prefixes without quadratic extraction work', async () => {
+    const malformed = '\\boxed{'.repeat(8000);
+    const startedAt = performance.now();
+    await extractMathAnswer(malformed);
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+
   it('strips <think> blocks before extracting', async () => {
     expect(await extractMathAnswer('<think>\nsteps\n</think>\n\n0.5')).toBe('0.5');
   });
@@ -651,6 +673,12 @@ describe('extractMathAnswer', async () => {
     'The result is not x + 1',
     'The answer is unequal to 42',
     "The answer doesn't equal 42",
+    "The answer isn't 42",
+    'The answer is less than 42',
+    'The answer is greater than or equal to 42',
+    'The value cannot be 42',
+    'Incorrect answer: 42',
+    'Previous wrong answer: 42',
     'The answer is 41 != 42',
   ])('preserves explicit negation in "%s"', async (input) => {
     expect(await extractMathAnswer(input)).toBe(input);
@@ -658,6 +686,13 @@ describe('extractMathAnswer', async () => {
 
   it('preserves explicit negation inside a boxed LaTeX answer', async () => {
     expect(await extractMathAnswer('\\boxed{\\text{not }42}')).toBe('\\text{not }42');
+  });
+
+  it.each([
+    'The answer is not \\boxed{42}',
+    'The answer is \\boxed{\\text{not }42}',
+  ])('does not erase negation around a boxed answer in "%s"', async (input) => {
+    expect(await extractMathAnswer(input)).toContain('not');
   });
 
   it.each([
@@ -671,6 +706,7 @@ describe('extractMathAnswer', async () => {
 
   it('prefers a later labelled answer after an inequality explanation', async () => {
     expect(await extractMathAnswer('41 != 42, Final answer: 42')).toBe('42');
+    expect(await extractMathAnswer('41 != 42, final answer is 42')).toBe('42');
   });
 
   it.each([
@@ -694,6 +730,7 @@ describe('extractMathAnswer', async () => {
 
   it('strips units from inside \\boxed{}', async () => {
     expect(await extractMathAnswer('\\boxed{10\\ \\text{m}}')).toBe('10');
+    expect(await extractMathAnswer('\\boxed{10\\,\\mathrm{m}}')).toBe('10');
   });
 
   it('returns 5.09 from "**V ≈ 5.09**"', async () => {
@@ -894,6 +931,10 @@ describe('extractMathAnswer', async () => {
 
     it('prefers prose after multiple display blocks over the earlier fenced work', async () => {
       expect(await extractMathAnswer('$$2$$ $$3$$ final answer is 4')).toBe('4');
+    });
+
+    it('uses the last display value when its only suffix is a unit', async () => {
+      expect(await extractMathAnswer('work $$2$$ $$3$$ kg')).toBe('3');
     });
   });
 
@@ -1276,12 +1317,24 @@ describe('isMathEquivalent', async () => {
       ['Answer: x = 1, y = 2', '1'],
       ['Answer: x = 1; y = 2', '1'],
       ['Answer: x = 1 and y = 2', '2'],
+      ['Answer:\nx = 1\ny = 2', '2'],
       ['The answer is not 42', '42'],
       ['The result is not x + 1', 'x + 1'],
       ['The answer is unequal to 42', '42'],
       ["The answer doesn't equal 42", '42'],
+      ["The answer isn't 42", '42'],
+      ['The answer is less than 42', '42'],
+      ['The answer is greater than or equal to 42', '42'],
+      ['The answer is < 42', '42'],
+      ['The answer is \\le 42', '42'],
+      ['The answer is ≥ 42', '42'],
+      ['The value cannot be 42', '42'],
+      ['Incorrect answer: 42', '42'],
+      ['Previous wrong answer: 42', '42'],
       ['The answer is 41 != 42', '42'],
       ['\\boxed{\\text{not }42}', '42'],
+      ['The answer is not \\boxed{42}', '42'],
+      ['The answer is \\boxed{\\text{not }42}', '42'],
       ['The answer is $\\text{not }42$', '42'],
       ['The answer is $\\text{not }42$\nDone.', '42'],
       ['$$\\text{not }42$$', '42'],
@@ -1338,6 +1391,13 @@ describe('isMathEquivalent', async () => {
       expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
     });
 
+    it.each([
+      ['Answer: 1,234 kg', '1234'],
+      ['Answer: 2,00625 m', '2.00625'],
+    ])('grades comma-formatted values with trailing units "%s" against %s', async (actual, expected) => {
+      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+    });
+
     it('does NOT silently equate 1,000 with 1', async () => {
       // The decimal-comma rewrite previously turned "1,000" into "1.000"=1,
       // making "1,000" spuriously equivalent to 1.
@@ -1381,7 +1441,10 @@ describe('isMathEquivalent', async () => {
       ['\\frac{1}{2} kg', 0.5],
       ['\\frac{1}{2}m', '0.5'],
       ['\\sqrt{2} m', '\\sqrt{2}'],
+      ['\\sqrt{2}\\,\\mathrm{m}', '\\sqrt{2}'],
       ['√2 m', '\\sqrt{2}'],
+      ['sqrt2 m', '\\sqrt{2}'],
+      ['sqrt 2 m', '\\sqrt{2}'],
       ['√\\pi m', '\\sqrt{\\pi}'],
       ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
       ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
@@ -1463,6 +1526,14 @@ describe('isMathEquivalent', async () => {
       expect((await isMathEquivalent('$$2$$\nAnswer: 3', '2')).pass).toBe(false);
     });
 
+    it('grades an uncolonized labelled answer after an inequality explanation', async () => {
+      expect((await isMathEquivalent('41 != 42, final answer is 42', '42')).pass).toBe(true);
+    });
+
+    it('grades the latest display value when followed only by a tolerated unit', async () => {
+      expect((await isMathEquivalent('work $$2$$ $$3$$ kg', '3')).pass).toBe(true);
+    });
+
     it('rejects identical English-word inputs as a defensive misuse guard', async () => {
       // Without the prose heuristic, both sides would parse to the same
       // Multiply of letter symbols and report pass=true — silently accepting
@@ -1491,10 +1562,6 @@ describe('isMathEquivalent', async () => {
   });
 
   describe('CortexJS fault tolerance (catch fences)', async () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
     it('returns undefined when ce.parse throws (parseMathExpression catch)', async () => {
       // Force the engine's parse to throw. The fence inside parseMathExpression
       // must swallow the error and return undefined rather than propagating.
@@ -1617,7 +1684,15 @@ describe('handleMathEquivalent', async () => {
       makeParams({ renderedValue: '42', outputString: 'no answer here' }),
     );
     expect(result.pass).toBe(false);
-    expect(result.reason).toContain('Could not parse actual answer');
+    expect(result.reason).toBe('Could not parse model output as a math expression');
+  });
+
+  it('does not copy unparseable model output into assertion reasons', async () => {
+    const result = await handleMathEquivalent(
+      makeParams({ renderedValue: '42', outputString: 'API key sk-sensitive and not math' }),
+    );
+    expect(result.reason).not.toContain('sk-sensitive');
+    expect(result.reason).toBe('Could not parse model output as a math expression');
   });
 
   it('respects the inverse flag (not-math-equivalent)', async () => {

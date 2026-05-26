@@ -41,17 +41,6 @@ import type {
 } from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
-export function formatThinkingOutput(reasoning: string, output: unknown): string {
-  const renderedReasoning = /\r?\n[ \t]*\r?\n/.test(reasoning)
-    ? reasoning
-        .split(/\r?\n/)
-        .map((line) => `Thinking: ${line}`)
-        .join('\n')
-    : `Thinking: ${reasoning}`;
-
-  return `${renderedReasoning}\n\n${String(output ?? '')}`;
-}
-
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
@@ -674,7 +663,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       // Handle reasoning as thinking content if present and showThinking is enabled
       if (reasoning && (this.config.showThinking ?? true)) {
-        output = formatThinkingOutput(reasoning, output);
+        output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
       // Handle function tool callbacks
@@ -800,7 +789,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         typeof output === 'string' &&
         (this.config.showThinking ?? true)
       ) {
-        output = formatThinkingOutput(message.reasoning_content, output);
+        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
       }
       if (message.audio) {
         return {

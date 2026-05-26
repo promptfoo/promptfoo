@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
-import { formatThinkingOutput, OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
@@ -195,11 +195,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
       if (message.reasoning && (this.config.showThinking ?? true)) {
-        output = formatThinkingOutput(message.reasoning, output);
+        output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
     } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Preserve reasoning-only output for display while marking it as non-answer content.
-      output = formatThinkingOutput(message.reasoning, '');
+      // Fallback to reasoning if no content and showThinking is enabled
+      output = message.reasoning;
     }
     // Handle structured output
     if (config.response_format?.type === 'json_schema') {

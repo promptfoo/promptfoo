@@ -345,8 +345,8 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // Reasoning-only output remains visible but is marked as non-answer content.
-        expect(result.output).toBe('Thinking: This is the thinking process for the response.\n\n');
+        // Should show reasoning when content is null
+        expect(result.output).toBe('This is the thinking process for the response.');
         expect(result.tokenUsage).toEqual({
           total: 50,
           prompt: 20,
@@ -389,33 +389,6 @@ describe('OpenRouter', () => {
           completion: 20,
           numRequests: 1,
         });
-      });
-
-      it('should preserve boundaries in reasoning with blank paragraphs', async () => {
-        const mockResponse = {
-          choices: [
-            {
-              message: {
-                content: 'Final answer: 3',
-                reasoning: 'scratch\n\n$$2$$',
-              },
-            },
-          ],
-          usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
-        };
-
-        const response = new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
-
-        const result = await provider.callApi('Test prompt');
-
-        expect(result.output).toBe(
-          'Thinking: scratch\nThinking: \nThinking: $$2$$\n\nFinal answer: 3',
-        );
       });
 
       it('should handle models without reasoning field', async () => {
