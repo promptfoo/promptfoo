@@ -32,6 +32,7 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
+import { restoreAzureBlobSasTokens } from './sanitizer';
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -199,7 +200,7 @@ export async function updateResult(
     }
 
     if (newConfig) {
-      existingEval.config = newConfig;
+      existingEval.config = restoreAzureBlobSasTokens(newConfig, existingEval.config);
     }
     if (newTable) {
       existingEval.setTable(newTable);
