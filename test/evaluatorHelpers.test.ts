@@ -498,6 +498,29 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ message: 'Hello ALICE' }, null, 2));
     });
 
+    it('should not evaluate filtered skipped payloads loaded through nested files (issue #1613)', async () => {
+      mockProcessEnv({ PROMPTFOO_SKIP_SENTINEL: 'must-not-render' });
+      const vars: Record<string, any> = {
+        payload: '{{ env.PROMPTFOO_SKIP_SENTINEL }}',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Payload: {{ payload | safe }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.message }}'),
+        vars,
+        {},
+        undefined,
+        ['payload'],
+      );
+
+      expect(vars.context.message).toBe('Payload: {{ env.PROMPTFOO_SKIP_SENTINEL }}');
+      expect(renderedPrompt).toBe('Payload: {{ env.PROMPTFOO_SKIP_SENTINEL }}');
+      expect(renderedPrompt).not.toContain('must-not-render');
+      mockProcessEnv({ PROMPTFOO_SKIP_SENTINEL: undefined });
+    });
+
     it('should stabilize dependent nested file templates regardless of traversal order (issue #1613)', async () => {
       const vars: Record<string, any> = {
         name: 'Alice',

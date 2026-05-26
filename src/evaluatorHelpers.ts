@@ -349,6 +349,8 @@ function renderNestedFileRefTemplates(
       : [];
   });
 
+  // Render each pass from the loaded template, never from prior rendered output.
+  // This lets dependency chains settle without evaluating inserted skipRenderVars payload text.
   for (let iteration = 0; iteration <= templates.length; iteration++) {
     let changed = false;
     for (const { target, template } of templates) {
