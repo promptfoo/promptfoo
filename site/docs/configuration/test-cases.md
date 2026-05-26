@@ -601,10 +601,11 @@ Each `llm-rubric` assertion is graded independently, so all of
 to succeed. Pair this format with a `defaultTest.options.provider` to choose
 the grader model. Declared file paths are listed in the rendered task so an
 agent provider with file access can retrieve them; plain chat providers receive
-the paths, not uploaded file bytes. Multiple declared files remain inputs to
-one eval rather than expanding into separate runs. Imported prompt text is
-treated as literal input rather than as Nunjucks template syntax. Rubrics
-retain Promptfoo's normal variable interpolation behavior.
+absolute paths resolved relative to the imported `evals.json`, not uploaded
+file bytes. Multiple declared files remain inputs to one eval rather than
+expanding into separate runs. Imported prompt text is treated as literal input
+rather than as Nunjucks template syntax. Rubrics retain Promptfoo's normal
+variable interpolation behavior.
 
 ## Loading Media Files
 
