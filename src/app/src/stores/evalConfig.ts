@@ -122,23 +122,58 @@ const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
 const URL_PATH_SEGMENT = /\/([^/?#\s]+)/g;
 const URL_PROTOCOL = /^[a-z][a-z0-9+.-]*:\/\//i;
 const NUNJUCKS_REFERENCE = /\{\{[^{}]*\}\}/g;
-const NUNJUCKS_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const NUNJUCKS_NAME_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*/;
+const NUNJUCKS_BRACKET_SEGMENT = /\[(?:"([^"\\\r\n]+)"|'([^'\\\r\n]+)')\]/y;
 const SAFE_CREDENTIAL_TEMPLATE_FILTERS = new Set(['trim', 'urlencode']);
 
-const getSafeNunjucksPath = (reference: string): string | undefined => {
+const serializeCredentialTemplatePath = (path: string[]): string => JSON.stringify(path);
+
+const deserializeCredentialTemplatePath = (path: string): string[] => JSON.parse(path) as string[];
+
+const parseSafeNunjucksPath = (path: string): string[] | undefined => {
+  const initial = path.match(NUNJUCKS_NAME_PREFIX);
+  if (!initial) {
+    return undefined;
+  }
+  const segments = [initial[0]];
+  let index = initial[0].length;
+  while (index < path.length) {
+    while (path[index] !== undefined && /\s/.test(path[index])) {
+      index += 1;
+    }
+    if (path[index] === '.') {
+      index += 1;
+      while (path[index] !== undefined && /\s/.test(path[index])) {
+        index += 1;
+      }
+      const name = path.slice(index).match(NUNJUCKS_NAME_PREFIX)?.[0];
+      if (!name) {
+        return undefined;
+      }
+      segments.push(name);
+      index += name.length;
+      continue;
+    }
+    NUNJUCKS_BRACKET_SEGMENT.lastIndex = index;
+    const bracketMatch = NUNJUCKS_BRACKET_SEGMENT.exec(path);
+    const bracketKey = bracketMatch?.[1] ?? bracketMatch?.[2];
+    if (!bracketMatch || !bracketKey) {
+      return undefined;
+    }
+    segments.push(bracketKey);
+    index = NUNJUCKS_BRACKET_SEGMENT.lastIndex;
+  }
+  return segments;
+};
+
+const getSafeNunjucksPath = (reference: string): string[] | undefined => {
   const [path, ...filters] = reference
     .slice(2, -2)
     .split('|')
     .map((part) => part.trim());
-  const safePath =
-    path.length > 0 && path.split('.').every((part) => NUNJUCKS_NAME.test(part.trim()));
+  const safePath = parseSafeNunjucksPath(path);
   const safeFilters = filters.every((filter) => SAFE_CREDENTIAL_TEMPLATE_FILTERS.has(filter));
-  return safePath && safeFilters
-    ? path
-        .split('.')
-        .map((part) => part.trim())
-        .join('.')
-    : undefined;
+  return safePath && safeFilters ? safePath : undefined;
 };
 
 const stripSafeNunjucksReferences = (value: string): string =>
@@ -153,7 +188,7 @@ const recordCredentialTemplatePaths = (value: string, paths?: Set<string>): void
   for (const match of value.matchAll(NUNJUCKS_REFERENCE)) {
     const path = getSafeNunjucksPath(match[0]);
     if (path) {
-      paths.add(path);
+      paths.add(serializeCredentialTemplatePath(path));
     }
   }
 };
@@ -288,16 +323,23 @@ const scrubRawMultipartBody = (
       const nameMatch = part.match(MULTIPART_FIELD_NAME);
       const name = nameMatch?.[1] ?? nameMatch?.[2];
       const separator = part.match(/\r?\n\r?\n/);
-      if (!name || !separator || !looksLikeRequestCredentialParameter(name)) {
+      if (!name || !separator) {
         return part;
       }
       const valueStart = (separator.index ?? 0) + separator[0].length;
       const ending = part.endsWith('\r\n') ? '\r\n' : part.endsWith('\n') ? '\n' : '';
       const value = part.slice(valueStart, part.length - ending.length);
-      if (preserveCredentialTemplate(value.trim(), templatePaths)) {
-        return part;
+      const credentialField = looksLikeRequestCredentialParameter(name);
+      if (credentialField) {
+        if (preserveCredentialTemplate(value.trim(), templatePaths)) {
+          return part;
+        }
+        return `${part.slice(0, valueStart)}[REDACTED]${ending}`;
       }
-      return `${part.slice(0, valueStart)}[REDACTED]${ending}`;
+      const scrubbedValue = scrubHttpBodyString(value, templatePaths);
+      return scrubbedValue === value
+        ? part
+        : `${part.slice(0, valueStart)}${scrubbedValue}${ending}`;
     })
     .join(`--${boundary}`);
 
@@ -353,6 +395,48 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const hasOwn = (value: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
 
+const CREDENTIAL_ENV_SELECTOR_NAMES = new Set([
+  'api_key_envar',
+  'api_bearer_token_envar',
+  'cf_aig_token_envar',
+]);
+
+const collectCredentialEnvSelectors = (
+  value: unknown,
+  selectors: Set<string>,
+  seen: WeakSet<object>,
+  depth: number,
+  parentKey?: string,
+): void => {
+  if (!value || typeof value !== 'object' || depth > MAX_WALK_DEPTH || seen.has(value as object)) {
+    return;
+  }
+  const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+  if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+    return;
+  }
+  seen.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      value.forEach((item) =>
+        collectCredentialEnvSelectors(item, selectors, seen, depth + 1, parentKey),
+      );
+      return;
+    }
+    Object.entries(value as Record<string, unknown>).forEach(([key, nestedValue]) => {
+      if (
+        CREDENTIAL_ENV_SELECTOR_NAMES.has(normalizeCredentialName(key)) &&
+        typeof nestedValue === 'string'
+      ) {
+        selectors.add(nestedValue);
+      }
+      collectCredentialEnvSelectors(nestedValue, selectors, seen, depth + 1, key);
+    });
+  } finally {
+    seen.delete(value as object);
+  }
+};
+
 const omitOpaqueToolCredentials = (tool: unknown, templatePaths?: Set<string>): unknown => {
   if (!isRecord(tool) || tool.type !== 'mcp') {
     return tool;
@@ -388,6 +472,7 @@ const walkValue = (
   depth: number,
   templatePaths?: Set<string>,
   inHttpBody = false,
+  credentialEnvSelectors?: ReadonlySet<string>,
 ): unknown => {
   if (typeof value === 'string') {
     if (parentKey === 'request') {
@@ -426,24 +511,41 @@ const walkValue = (
 
     if (Array.isArray(value)) {
       return value.map((item) =>
-        walkValue(item, parentKey, seen, depth + 1, templatePaths, isHttpBody),
+        walkValue(
+          item,
+          parentKey,
+          seen,
+          depth + 1,
+          templatePaths,
+          isHttpBody,
+          credentialEnvSelectors,
+        ),
       );
     }
 
     const record = value as Record<string, unknown>;
 
-    // HTTP multipart parts: `{ kind: 'field', name: 'api_key', value: '…' }`.
-    // The credential indicator lives in `name`, not the object's own key.
-    if (
-      isMultipartFieldPart(record) &&
-      looksLikeRequestCredentialParameter(record.name as string)
-    ) {
+    // HTTP multipart values are request-body content; credential field names
+    // remove their value, while neutral fields still get body-string scrubbing.
+    if (isMultipartFieldPart(record)) {
+      const credentialField = looksLikeRequestCredentialParameter(record.name as string);
       return Object.fromEntries(
         Object.entries(record).flatMap(([key, nested]) => {
-          if (key === 'value' || looksLikeCredential(key)) {
+          if (key === 'value' && credentialField) {
             return preserveCredentialTemplate(nested, templatePaths) ? [[key, nested]] : [];
           }
-          return [[key, walkValue(nested, key, seen, depth + 1, templatePaths, isHttpBody)]];
+          if (key === 'value' && typeof nested === 'string') {
+            return [[key, scrubHttpBodyString(nested, templatePaths)]];
+          }
+          if (credentialField && looksLikeCredential(key)) {
+            return preserveCredentialTemplate(nested, templatePaths) ? [[key, nested]] : [];
+          }
+          return [
+            [
+              key,
+              walkValue(nested, key, seen, depth + 1, templatePaths, true, credentialEnvSelectors),
+            ],
+          ];
         }),
       );
     }
@@ -451,6 +553,7 @@ const walkValue = (
     const isApiKeyAuth = normalizedParent === 'auth' && record.type === 'api_key';
     const isHeaders = normalizedParent === 'headers';
     const isQueryParams = normalizedParent === 'query_params';
+    const isEnv = normalizedParent === 'env';
 
     return Object.fromEntries(
       Object.entries(record).flatMap(([key, nestedValue]) => {
@@ -461,10 +564,27 @@ const walkValue = (
             : isHttpBody
               ? looksLikeRequestCredentialParameter(key)
               : looksLikeCredential(key);
-        if (credential || (isApiKeyAuth && key === 'value')) {
+        if (
+          credential ||
+          (isApiKeyAuth && key === 'value') ||
+          (isEnv && credentialEnvSelectors?.has(key))
+        ) {
           return preserveCredentialTemplate(nestedValue, templatePaths) ? [[key, nestedValue]] : [];
         }
-        return [[key, walkValue(nestedValue, key, seen, depth + 1, templatePaths, isHttpBody)]];
+        return [
+          [
+            key,
+            walkValue(
+              nestedValue,
+              key,
+              seen,
+              depth + 1,
+              templatePaths,
+              isHttpBody,
+              credentialEnvSelectors,
+            ),
+          ],
+        ];
       }),
     );
   } finally {
@@ -476,7 +596,22 @@ const omitProviderCredentials = (
   value: unknown,
   parentKey?: string,
   templatePaths?: Set<string>,
-): unknown => walkValue(value, parentKey, new WeakSet<object>(), 0, templatePaths);
+): unknown => {
+  const credentialEnvSelectors = new Set<string>();
+  collectCredentialEnvSelectors(value, credentialEnvSelectors, new WeakSet<object>(), 0);
+  credentialEnvSelectors.forEach((name) =>
+    templatePaths?.add(serializeCredentialTemplatePath(['env', name])),
+  );
+  return walkValue(
+    value,
+    parentKey,
+    new WeakSet<object>(),
+    0,
+    templatePaths,
+    false,
+    credentialEnvSelectors,
+  );
+};
 
 const PROVIDER_OPTION_KEYS = new Set([
   'id',
@@ -680,7 +815,9 @@ const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): u
     return prompts;
   }
   if (!hasOwn(prompts, 'config')) {
-    return prompts;
+    return Object.fromEntries(
+      Object.entries(prompts).map(([key, value]) => [redactAzureBlobSasTokens(key), value]),
+    );
   }
   return {
     ...prompts,
@@ -753,9 +890,9 @@ const omitReferencedCredentialVars = (vars: unknown, templatePaths: Set<string>)
   if (!isRecord(vars) || templatePaths.size === 0) {
     return vars;
   }
-  return Array.from(templatePaths)
-    .filter((path) => !path.startsWith('env.'))
-    .reduce((sanitized, path) => omitNestedPath(sanitized, path.split('.')), vars);
+  return Array.from(templatePaths, deserializeCredentialTemplatePath)
+    .filter((path) => path[0] !== 'env')
+    .reduce((sanitized, path) => omitNestedPath(sanitized, path), vars);
 };
 
 const omitReferencedCredentialEnv = (
@@ -765,10 +902,10 @@ const omitReferencedCredentialEnv = (
   if (!isRecord(env) || templatePaths.size === 0) {
     return env;
   }
-  return Array.from(templatePaths)
-    .filter((path) => path.startsWith('env.'))
+  return Array.from(templatePaths, deserializeCredentialTemplatePath)
+    .filter((path) => path[0] === 'env')
     .reduce(
-      (sanitized, path) => omitNestedPath(sanitized, path.slice('env.'.length).split('.')),
+      (sanitized, path) => omitNestedPath(sanitized, path.slice(1)),
       env,
     ) as Partial<UnifiedConfig>['env'];
 };

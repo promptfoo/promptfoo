@@ -283,7 +283,11 @@ describe('evalConfig store', () => {
 
     it('redacts test vars used by credential templates without walking ordinary payloads', () => {
       useStore.getState().setConfig({
-        env: { SERVICE_AUTH: 'short-secret', NORMAL_ENV: 'visible-env' },
+        env: {
+          SERVICE_AUTH: 'short-secret',
+          'SERVICE-AUTH': 'bracket-short-secret',
+          NORMAL_ENV: 'visible-env',
+        },
         providers: [
           {
             id: 'http',
@@ -291,6 +295,8 @@ describe('evalConfig store', () => {
               headers: {
                 Authorization: 'Bearer {{ api_token }}',
                 'X-Remote-Authorization': 'Bearer {{ env.SERVICE_AUTH }}',
+                'X-Bracket-Authorization': 'Bearer {{ env["SERVICE-AUTH"] }}',
+                'X-Bracket-Var-Authorization': 'Bearer {{ auth["key-with-dash"] }}',
                 'X-Context-Authorization': 'Bearer {{ user_token }}',
               },
               url: 'https://api.example.com?api_key={{ auth.key | urlencode }}',
@@ -305,7 +311,11 @@ describe('evalConfig store', () => {
           {
             vars: {
               api_token: 'test-token-secret',
-              auth: { key: 'nested-test-token-secret', visible: 'nested-visible' },
+              auth: {
+                key: 'nested-test-token-secret',
+                'key-with-dash': 'bracket-var-secret',
+                visible: 'nested-visible',
+              },
               prompt: 'ordinary-prompt-input',
               payload: { provider: { apiKey: 'ordinary-input-value' } },
             },
@@ -333,6 +343,8 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('default-test-token-secret');
       expect(JSON.stringify(persisted)).not.toContain('nested-test-token-secret');
       expect(JSON.stringify(persisted)).not.toContain('short-secret');
+      expect(JSON.stringify(persisted)).not.toContain('bracket-short-secret');
+      expect(JSON.stringify(persisted)).not.toContain('bracket-var-secret');
       expect(JSON.stringify(persisted)).not.toContain('context-token-secret');
     });
 
@@ -374,6 +386,23 @@ describe('evalConfig store', () => {
       expect(persisted.tests[0]).not.toContain('file-reference-secret');
       expect(persisted.tests[1]).toEqual({ vars: { prompt: 'visible' } });
       expect(persisted.scenarios[0]).not.toContain('scenario-reference-secret');
+    });
+
+    it('redacts Azure SAS credentials from legacy prompt-map keys', () => {
+      useStore.getState().setConfig({
+        prompts: {
+          'az://account/container/prompts.txt?sig=legacy-prompt-secret&sp=r': 'secret-file',
+          'plain.txt': 'plain-file',
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const legacyPromptPath = Object.keys(persisted.prompts).find((key) =>
+        key.includes('prompts.txt'),
+      );
+      expect(legacyPromptPath).toContain('sig=');
+      expect(legacyPromptPath).not.toContain('legacy-prompt-secret');
+      expect(persisted.prompts['plain.txt']).toBe('plain-file');
     });
 
     it('preserves provider-map IDs while redacting HTTP body and query parameter credentials', () => {
@@ -632,6 +661,52 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persistedState)).not.toContain('inline-client-key');
     });
 
+    it('redacts provider env values selected by credential envar settings', () => {
+      useStore.getState().setConfig({
+        env: {
+          SERVICE_AUTH: 'root-selected-secret',
+          BEARER_AUTH: 'root-bearer-secret',
+          CF_AUTH: 'root-cloudflare-secret',
+          NORMAL_ENV: 'visible-root',
+        },
+        providers: [
+          {
+            id: 'watsonx',
+            config: {
+              apiKeyEnvar: 'SERVICE_AUTH',
+              apiBearerTokenEnvar: 'BEARER_AUTH',
+              cfAigTokenEnvar: 'CF_AUTH',
+              endpoint: 'https://example.com',
+            },
+            env: {
+              SERVICE_AUTH: 'provider-selected-secret',
+              BEARER_AUTH: 'provider-bearer-secret',
+              CF_AUTH: 'provider-cloudflare-secret',
+              NORMAL_ENV: 'visible-provider',
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.env).toEqual({ NORMAL_ENV: 'visible-root' });
+      expect(persisted.providers[0]).toEqual({
+        id: 'watsonx',
+        config: {
+          apiKeyEnvar: 'SERVICE_AUTH',
+          apiBearerTokenEnvar: 'BEARER_AUTH',
+          endpoint: 'https://example.com',
+        },
+        env: { NORMAL_ENV: 'visible-provider' },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('root-selected-secret');
+      expect(JSON.stringify(persisted)).not.toContain('root-bearer-secret');
+      expect(JSON.stringify(persisted)).not.toContain('root-cloudflare-secret');
+      expect(JSON.stringify(persisted)).not.toContain('provider-selected-secret');
+      expect(JSON.stringify(persisted)).not.toContain('provider-bearer-secret');
+      expect(JSON.stringify(persisted)).not.toContain('provider-cloudflare-secret');
+    });
+
     it('preserves additional non-secret provider selectors and behavior flags', () => {
       useStore.getState().setConfig({
         providers: [
@@ -801,6 +876,16 @@ describe('evalConfig store', () => {
                   { kind: 'field', name: 'api_key', value: '{{ multipart_api_key }}' },
                   { kind: 'field', name: 'authorization', value: 'multipart-leak-auth' },
                   { kind: 'field', name: 'auth', value: 'multipart-leak-bare-auth' },
+                  {
+                    kind: 'field',
+                    name: 'metadata',
+                    value: '{"api_key":"multipart-json-secret","prompt":"visible metadata"}',
+                  },
+                  {
+                    kind: 'field',
+                    name: 'payload',
+                    value: 'sk-structuredmultipartabcdefghijklmnopqrstuvwxyz123456',
+                  },
                   { kind: 'field', name: 'prompt', value: '{{message}}' },
                   {
                     kind: 'file',
@@ -828,6 +913,18 @@ describe('evalConfig store', () => {
                 '',
                 'raw-multipart-password',
                 '--boundary-value',
+                'Content-Disposition: form-data; name="payload"',
+                '',
+                'sk-neutralmultipartabcdefghijklmnopqrstuvwxyz123456',
+                '--boundary-value',
+                'Content-Disposition: form-data; name="endpoint"',
+                '',
+                'https://raw-user:raw-password@api.example.test/submit',
+                '--boundary-value',
+                'Content-Disposition: form-data; name="metadata"',
+                '',
+                '{"api_key":"raw-json-part-secret","prompt":"visible embedded prompt"}',
+                '--boundary-value',
                 'Content-Disposition: form-data; name="prompt"',
                 '',
                 'visible multipart prompt',
@@ -854,6 +951,8 @@ describe('evalConfig store', () => {
         { kind: 'field', name: 'api_key', value: '{{ multipart_api_key }}' },
         { kind: 'field', name: 'authorization' },
         { kind: 'field', name: 'auth' },
+        { kind: 'field', name: 'metadata', value: '{"prompt":"visible metadata"}' },
+        { kind: 'field', name: 'payload', value: '[REDACTED]' },
         { kind: 'field', name: 'prompt', value: '{{message}}' },
         { kind: 'file', name: 'document', source: { type: 'path', path: '/tmp/doc.pdf' } },
       ]);
@@ -861,6 +960,7 @@ describe('evalConfig store', () => {
       expect(rawMultipartRequest).toContain('POST /services/T/B/[REDACTED] HTTP/1.1');
       expect(rawMultipartRequest).toContain('[REDACTED]');
       expect(rawMultipartRequest).toContain('visible multipart prompt');
+      expect(rawMultipartRequest).toContain('visible embedded prompt');
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('raw-request-secret');
       expect(serialized).not.toContain('raw-request-apikey');
@@ -874,6 +974,11 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('multipart-leak-bare-auth');
       expect(serialized).not.toContain('raw-multipart-secret');
       expect(serialized).not.toContain('raw-multipart-password');
+      expect(serialized).not.toContain('sk-neutralmultipartabcdefghijklmnopqrstuvwxyz123456');
+      expect(serialized).not.toContain('raw-password');
+      expect(serialized).not.toContain('multipart-json-secret');
+      expect(serialized).not.toContain('sk-structuredmultipartabcdefghijklmnopqrstuvwxyz123456');
+      expect(serialized).not.toContain('raw-json-part-secret');
       expect(serialized).not.toContain('sk-abcdefghijklmnopqrstuvwxyz1234567890');
     });
 
