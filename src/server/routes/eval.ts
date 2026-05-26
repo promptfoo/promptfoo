@@ -258,9 +258,9 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     .then(async (evalResult) => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
-      job.status = 'complete';
       job.result = await evalResult.toEvaluateSummary();
       job.evalId = evalResult.id;
+      job.status = 'complete';
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
