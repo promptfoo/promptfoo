@@ -291,6 +291,7 @@ describe('evalConfig store', () => {
               headers: {
                 Authorization: 'Bearer {{ api_token }}',
                 'X-Remote-Authorization': 'Bearer {{ env.SERVICE_AUTH }}',
+                'X-Context-Authorization': 'Bearer {{ user_token }}',
               },
               url: 'https://api.example.com?api_key={{ auth.key | urlencode }}',
               body: 'prompt={{ prompt }}&client_secret={{ api_token }}',
@@ -310,6 +311,14 @@ describe('evalConfig store', () => {
             },
           },
         ],
+        redteam: {
+          contexts: [
+            {
+              id: 'tenant-a',
+              vars: { user_token: 'context-token-secret', visible: 'context-visible' },
+            },
+          ],
+        },
       } as any);
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
@@ -320,9 +329,11 @@ describe('evalConfig store', () => {
         prompt: 'ordinary-prompt-input',
         payload: { provider: { apiKey: 'ordinary-input-value' } },
       });
+      expect(persisted.redteam.contexts[0].vars).toEqual({ visible: 'context-visible' });
       expect(JSON.stringify(persisted)).not.toContain('default-test-token-secret');
       expect(JSON.stringify(persisted)).not.toContain('nested-test-token-secret');
       expect(JSON.stringify(persisted)).not.toContain('short-secret');
+      expect(JSON.stringify(persisted)).not.toContain('context-token-secret');
     });
 
     it('redacts token-shaped path segments in provider URLs', () => {
@@ -363,6 +374,42 @@ describe('evalConfig store', () => {
       expect(persisted.tests[0]).not.toContain('file-reference-secret');
       expect(persisted.tests[1]).toEqual({ vars: { prompt: 'visible' } });
       expect(persisted.scenarios[0]).not.toContain('scenario-reference-secret');
+    });
+
+    it('preserves provider-map IDs while redacting HTTP body and query parameter credentials', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            'token-counter': {
+              id: 'http',
+              config: {
+                queryParams: {
+                  sig: 'query-signature-secret',
+                  pwd: 'query-password-secret',
+                  region: 'us',
+                },
+                body: {
+                  auth: 'body-auth-secret',
+                  pwd: 'body-password-secret',
+                  nested: { auth: 'nested-body-auth-secret' },
+                  prompt: 'visible-prompt',
+                },
+              },
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0]['token-counter'].config).toEqual({
+        queryParams: { region: 'us' },
+        body: { nested: {}, prompt: 'visible-prompt' },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('query-signature-secret');
+      expect(JSON.stringify(persisted)).not.toContain('query-password-secret');
+      expect(JSON.stringify(persisted)).not.toContain('body-auth-secret');
+      expect(JSON.stringify(persisted)).not.toContain('body-password-secret');
+      expect(JSON.stringify(persisted)).not.toContain('nested-body-auth-secret');
     });
 
     it('removes sensitive environment values from previously persisted browser state on rehydrate', async () => {
@@ -753,6 +800,7 @@ describe('evalConfig store', () => {
                   { kind: 'field', name: 'api_key', value: 'multipart-leak-apikey' },
                   { kind: 'field', name: 'api_key', value: '{{ multipart_api_key }}' },
                   { kind: 'field', name: 'authorization', value: 'multipart-leak-auth' },
+                  { kind: 'field', name: 'auth', value: 'multipart-leak-bare-auth' },
                   { kind: 'field', name: 'prompt', value: '{{message}}' },
                   {
                     kind: 'file',
@@ -762,6 +810,30 @@ describe('evalConfig store', () => {
                 ],
               },
             } as any,
+          },
+          {
+            id: 'http',
+            config: {
+              request: [
+                'POST /services/T/B/sk-abcdefghijklmnopqrstuvwxyz1234567890 HTTP/1.1',
+                'Host: hooks.example.test',
+                'Content-Type: multipart/form-data; boundary=boundary-value',
+                '',
+                '--boundary-value',
+                'Content-Disposition: form-data; name="api_key"',
+                '',
+                'raw-multipart-secret',
+                '--boundary-value',
+                'Content-Disposition: form-data; name=pwd',
+                '',
+                'raw-multipart-password',
+                '--boundary-value',
+                'Content-Disposition: form-data; name="prompt"',
+                '',
+                'visible multipart prompt',
+                '--boundary-value--',
+              ].join('\r\n'),
+            },
           },
         ],
       } as any);
@@ -781,9 +853,14 @@ describe('evalConfig store', () => {
         { kind: 'field', name: 'api_key' },
         { kind: 'field', name: 'api_key', value: '{{ multipart_api_key }}' },
         { kind: 'field', name: 'authorization' },
+        { kind: 'field', name: 'auth' },
         { kind: 'field', name: 'prompt', value: '{{message}}' },
         { kind: 'file', name: 'document', source: { type: 'path', path: '/tmp/doc.pdf' } },
       ]);
+      const rawMultipartRequest = persisted.providers[1].config.request;
+      expect(rawMultipartRequest).toContain('POST /services/T/B/[REDACTED] HTTP/1.1');
+      expect(rawMultipartRequest).toContain('[REDACTED]');
+      expect(rawMultipartRequest).toContain('visible multipart prompt');
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('raw-request-secret');
       expect(serialized).not.toContain('raw-request-apikey');
@@ -794,6 +871,10 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('raw-body-secret');
       expect(serialized).not.toContain('multipart-leak-apikey');
       expect(serialized).not.toContain('multipart-leak-auth');
+      expect(serialized).not.toContain('multipart-leak-bare-auth');
+      expect(serialized).not.toContain('raw-multipart-secret');
+      expect(serialized).not.toContain('raw-multipart-password');
+      expect(serialized).not.toContain('sk-abcdefghijklmnopqrstuvwxyz1234567890');
     });
 
     it('redacts credentials embedded in provider URL strings and URL configuration', () => {
@@ -838,7 +919,7 @@ describe('evalConfig store', () => {
           {
             id: 'http',
             config: {
-              body: 'client_secret=form-body-secret&grant_type=client_credentials',
+              body: 'client_secret=form-body-secret&pwd=form-password-secret&grant_type=client_credentials',
             },
           },
           {
@@ -859,6 +940,7 @@ describe('evalConfig store', () => {
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
       const serialized = JSON.stringify(persisted);
       expect(serialized).not.toContain('form-body-secret');
+      expect(serialized).not.toContain('form-password-secret');
       expect(serialized).not.toContain('json-body-secret');
       expect(serialized).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
       expect(serialized).not.toContain('json-password');

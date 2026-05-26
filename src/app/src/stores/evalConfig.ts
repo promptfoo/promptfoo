@@ -52,6 +52,9 @@ const HEADER_CREDENTIAL_NAMES = new Set([
   'proxy_authorization',
   'x_amz_security_token',
 ]);
+// Bare parameter aliases are credential carriers only in HTTP request data
+// (query params, form bodies, and multipart fields).
+const BARE_CREDENTIAL_PARAMETER_NAMES = new Set(['auth', 'passwd', 'pwd']);
 
 const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)api_bearer_token_envar$/,
@@ -110,6 +113,9 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
   const normalized = normalizeCredentialName(headerName);
   return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
 };
+
+const looksLikeRequestCredentialParameter = (name: string): boolean =>
+  BARE_CREDENTIAL_PARAMETER_NAMES.has(normalizeCredentialName(name)) || looksLikeCredential(name);
 
 const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
 const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
@@ -191,7 +197,11 @@ const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
   } catch {
     // Keep malformed parameter names unchanged for conservative matching.
   }
-  return normalizeCredentialName(name) === 'sig' || looksLikeCredentialHeader(name);
+  return (
+    normalizeCredentialName(name) === 'sig' ||
+    looksLikeRequestCredentialParameter(name) ||
+    looksLikeCredentialHeader(name)
+  );
 };
 
 const looksLikeCredentialPathSegment = (rawValue: string): boolean => {
@@ -203,6 +213,11 @@ const looksLikeCredentialPathSegment = (rawValue: string): boolean => {
   }
   return looksLikeSecret(value);
 };
+
+const scrubCredentialPathSegments = (value: string): string =>
+  value.replace(URL_PATH_SEGMENT, (match, segment) =>
+    looksLikeCredentialPathSegment(segment) ? '/[REDACTED]' : match,
+  );
 
 // Operate on URL text so Nunjucks placeholders remain intact and safe query
 // settings retain their exact representation.
@@ -217,11 +232,7 @@ const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
         ? `${separator}${name}=[REDACTED]`
         : match,
     );
-  return URL_PROTOCOL.test(scrubbed)
-    ? scrubbed.replace(URL_PATH_SEGMENT, (match, segment) =>
-        looksLikeCredentialPathSegment(segment) ? '/[REDACTED]' : match,
-      )
-    : scrubbed;
+  return URL_PROTOCOL.test(scrubbed) ? scrubCredentialPathSegments(scrubbed) : scrubbed;
 };
 
 const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
@@ -237,6 +248,9 @@ const looksLikeHeaderCredential = (
   (typeof value === 'string' && looksLikeCredentialValue(value, templatePaths));
 
 const FORM_PARAMETER = /(^|&)([^=&#]+)=([^&]*)/g;
+const MULTIPART_BOUNDARY_PARAMETER =
+  /^Content-Type\s*:\s*multipart\/form-data[^\r\n]*?\bboundary=(?:"([^"]+)"|([^;\s]+))/im;
+const MULTIPART_FIELD_NAME = /Content-Disposition\s*:[^\r\n]*\bname=(?:"([^"]+)"|([^;\s]+))/i;
 
 const scrubHttpBodyString = (body: string, templatePaths?: Set<string>): string => {
   try {
@@ -263,6 +277,30 @@ const scrubHttpBodyString = (body: string, templatePaths?: Set<string>): string 
     : '[REDACTED]';
 };
 
+const scrubRawMultipartBody = (
+  body: string,
+  boundary: string,
+  templatePaths?: Set<string>,
+): string =>
+  body
+    .split(`--${boundary}`)
+    .map((part) => {
+      const nameMatch = part.match(MULTIPART_FIELD_NAME);
+      const name = nameMatch?.[1] ?? nameMatch?.[2];
+      const separator = part.match(/\r?\n\r?\n/);
+      if (!name || !separator || !looksLikeRequestCredentialParameter(name)) {
+        return part;
+      }
+      const valueStart = (separator.index ?? 0) + separator[0].length;
+      const ending = part.endsWith('\r\n') ? '\r\n' : part.endsWith('\n') ? '\n' : '';
+      const value = part.slice(valueStart, part.length - ending.length);
+      if (preserveCredentialTemplate(value.trim(), templatePaths)) {
+        return part;
+      }
+      return `${part.slice(0, valueStart)}[REDACTED]${ending}`;
+    })
+    .join(`--${boundary}`);
+
 // Only scan the header block, so body content that happens to resemble a
 // credential header is not rewritten during persistence.
 const scrubRawHttpRequest = (raw: string, templatePaths?: Set<string>): string => {
@@ -271,6 +309,7 @@ const scrubRawHttpRequest = (raw: string, templatePaths?: Set<string>): string =
   const headerBlock = raw.slice(0, headerEnd);
   const separator = boundary?.[0] ?? '';
   const body = boundary ? raw.slice(headerEnd + separator.length) : '';
+  const multipartBoundary = headerBlock.match(MULTIPART_BOUNDARY_PARAMETER);
   const requestLine = /^(\S+[ \t]+)([^\r\n]*?)([ \t]+HTTP\/\d(?:\.\d)?[^\r\n]*)$/im;
   const headerLine = /^([ \t]*)([^:\r\n]+)([ \t]*:[ \t]*)(.*)$/gm;
 
@@ -279,7 +318,7 @@ const scrubRawHttpRequest = (raw: string, templatePaths?: Set<string>): string =
       .replace(
         requestLine,
         (_match, method, target, protocol) =>
-          `${method}${scrubProviderUrl(target, templatePaths)}${protocol}`,
+          `${method}${scrubCredentialPathSegments(scrubProviderUrl(target, templatePaths))}${protocol}`,
       )
       .replace(headerLine, (match, indent, name, headerSeparator, value) =>
         looksLikeHeaderCredential(name, value, templatePaths) &&
@@ -288,7 +327,15 @@ const scrubRawHttpRequest = (raw: string, templatePaths?: Set<string>): string =
           : match,
       ) +
     separator +
-    (boundary ? scrubHttpBodyString(body, templatePaths) : body)
+    (boundary
+      ? multipartBoundary
+        ? scrubRawMultipartBody(
+            body,
+            multipartBoundary[1] ?? multipartBoundary[2] ?? '',
+            templatePaths,
+          )
+        : scrubHttpBodyString(body, templatePaths)
+      : body)
   );
 };
 
@@ -340,6 +387,7 @@ const walkValue = (
   seen: WeakSet<object>,
   depth: number,
   templatePaths?: Set<string>,
+  inHttpBody = false,
 ): unknown => {
   if (typeof value === 'string') {
     if (parentKey === 'request') {
@@ -365,6 +413,7 @@ const walkValue = (
   try {
     const normalizedParent =
       parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+    const isHttpBody = inHttpBody || normalizedParent === 'body';
 
     if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
       if (normalizedParent === 'tools') {
@@ -376,36 +425,46 @@ const walkValue = (
     }
 
     if (Array.isArray(value)) {
-      return value.map((item) => walkValue(item, parentKey, seen, depth + 1, templatePaths));
+      return value.map((item) =>
+        walkValue(item, parentKey, seen, depth + 1, templatePaths, isHttpBody),
+      );
     }
 
     const record = value as Record<string, unknown>;
 
     // HTTP multipart parts: `{ kind: 'field', name: 'api_key', value: '…' }`.
     // The credential indicator lives in `name`, not the object's own key.
-    if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
+    if (
+      isMultipartFieldPart(record) &&
+      looksLikeRequestCredentialParameter(record.name as string)
+    ) {
       return Object.fromEntries(
         Object.entries(record).flatMap(([key, nested]) => {
           if (key === 'value' || looksLikeCredential(key)) {
             return preserveCredentialTemplate(nested, templatePaths) ? [[key, nested]] : [];
           }
-          return [[key, walkValue(nested, key, seen, depth + 1, templatePaths)]];
+          return [[key, walkValue(nested, key, seen, depth + 1, templatePaths, isHttpBody)]];
         }),
       );
     }
 
     const isApiKeyAuth = normalizedParent === 'auth' && record.type === 'api_key';
     const isHeaders = normalizedParent === 'headers';
+    const isQueryParams = normalizedParent === 'query_params';
 
     return Object.fromEntries(
       Object.entries(record).flatMap(([key, nestedValue]) => {
         const credential = isHeaders
           ? looksLikeHeaderCredential(key, nestedValue)
-          : looksLikeCredential(key);
+          : isQueryParams
+            ? looksLikeUrlCredentialParameter(key)
+            : isHttpBody
+              ? looksLikeRequestCredentialParameter(key)
+              : looksLikeCredential(key);
         if (credential || (isApiKeyAuth && key === 'value')) {
           return preserveCredentialTemplate(nestedValue, templatePaths) ? [[key, nestedValue]] : [];
         }
-        return [[key, walkValue(nestedValue, key, seen, depth + 1, templatePaths)]];
+        return [[key, walkValue(nestedValue, key, seen, depth + 1, templatePaths, isHttpBody)]];
       }),
     );
   } finally {
@@ -418,6 +477,41 @@ const omitProviderCredentials = (
   parentKey?: string,
   templatePaths?: Set<string>,
 ): unknown => walkValue(value, parentKey, new WeakSet<object>(), 0, templatePaths);
+
+const PROVIDER_OPTION_KEYS = new Set([
+  'id',
+  'label',
+  'config',
+  'prompts',
+  'transform',
+  'delay',
+  'env',
+  'inputs',
+]);
+
+const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
+  isRecord(value) &&
+  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
+  Object.values(value).every(isRecord);
+
+const omitConfiguredProvidersCredentials = (
+  providers: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!Array.isArray(providers)) {
+    return omitProviderCredentials(providers, undefined, templatePaths);
+  }
+  return providers.map((provider) =>
+    isProviderOptionsMap(provider)
+      ? Object.fromEntries(
+          Object.entries(provider).map(([id, options]) => [
+            id,
+            omitProviderCredentials(options, undefined, templatePaths),
+          ]),
+        )
+      : omitProviderCredentials(provider, undefined, templatePaths),
+  );
+};
 
 const omitAssertionProviderCredentials = (
   assertions: unknown,
@@ -706,20 +800,35 @@ const omitScenarioCredentialVars = (scenario: unknown, templatePaths: Set<string
   };
 };
 
+const omitRedteamContextCredentialVars = (
+  redteam: unknown,
+  templatePaths: Set<string>,
+): unknown => {
+  if (!isRecord(redteam) || !Array.isArray(redteam.contexts)) {
+    return redteam;
+  }
+  return {
+    ...redteam,
+    contexts: redteam.contexts.map((context) =>
+      isRecord(context) && hasOwn(context, 'vars')
+        ? { ...context, vars: omitReferencedCredentialVars(context.vars, templatePaths) }
+        : context,
+    ),
+  };
+};
+
 const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
   const templatePaths = new Set<string>();
   const configWithoutAzureSas = redactAzureBlobSasTokens(config);
   const sanitized = {
     ...configWithoutAzureSas,
     env: omitSensitiveEnv(configWithoutAzureSas.env),
-    providers: omitProviderCredentials(
+    providers: omitConfiguredProvidersCredentials(
       configWithoutAzureSas.providers,
-      undefined,
       templatePaths,
     ) as Partial<UnifiedConfig>['providers'],
-    targets: omitProviderCredentials(
+    targets: omitConfiguredProvidersCredentials(
       configWithoutAzureSas.targets,
-      undefined,
       templatePaths,
     ) as Partial<UnifiedConfig>['targets'],
     prompts: omitPromptCredentials(
@@ -768,6 +877,10 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
           omitScenarioCredentialVars(scenario, templatePaths),
         ) as Partial<UnifiedConfig>['scenarios'])
       : sanitized.scenarios,
+    redteam: omitRedteamContextCredentialVars(
+      sanitized.redteam,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['redteam'],
   };
 };
 
