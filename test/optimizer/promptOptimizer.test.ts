@@ -700,7 +700,7 @@ describe('prompt optimizer', () => {
     );
   });
 
-  it('accepts a defaultTest-only config (no tests or scenarios) like eval does', async () => {
+  it('accepts a defaultTest-only config with assertions and a scoring function', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
       response: optimizerResponse('Optimized Seed'),
@@ -740,6 +740,7 @@ describe('prompt optimizer', () => {
       // `defaultTest`, so the optimizer preflight must accept this config too.
       defaultTest: {
         assert: [{ type: 'contains', value: 'default' }],
+        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
       },
     };
 
@@ -750,51 +751,23 @@ describe('prompt optimizer', () => {
     expect(evaluate).toHaveBeenCalled();
   });
 
-  it('accepts a defaultTest-only config with an assertion scoring function', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
-
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
-    );
-
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
+  it.each([
+    ['alone', {}],
+    ['with variables', { vars: { name: 'Alice' } }],
+  ])('rejects a defaultTest-only scoring function %s when it has no assertions', async (_, rest) => {
     const testSuite: TestSuite = {
       providers: [createMockProvider({ id: 'target-provider' })],
       prompts: [{ raw: 'Seed', label: 'Seed' }],
       defaultTest: {
+        ...rest,
         assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
       },
     };
 
-    const result = await optimizePromptTestSuite({}, testSuite);
-
-    expect(result.improved).toBe(true);
-    expect(evaluate).toHaveBeenCalled();
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
