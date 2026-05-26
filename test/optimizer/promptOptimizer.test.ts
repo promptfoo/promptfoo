@@ -671,6 +671,105 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it('still rejects prompt optimization when defaultTest is empty', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      defaultTest: {},
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
+  });
+
+  it('rejects a defaultTest-only config when an empty scenarios array is present', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      // An empty `scenarios` array still suppresses `eval`'s implicit-test
+      // synthesis, so this config runs zero tests and must be rejected.
+      scenarios: [],
+      defaultTest: {
+        assert: [{ type: 'contains', value: 'default' }],
+      },
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
+  });
+
+  it('accepts a defaultTest-only config with assertions and a scoring function', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      // No `tests` or `scenarios`: `eval` synthesizes one implicit test and applies
+      // `defaultTest`, so the optimizer preflight must accept this config too.
+      defaultTest: {
+        assert: [{ type: 'contains', value: 'default' }],
+        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
+      },
+    };
+
+    const result = await optimizePromptTestSuite({}, testSuite);
+
+    expect(result.improved).toBe(true);
+    expect(result.bestPrompt.label).toBe('Seed [optimized 1]');
+    expect(evaluate).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['alone', {}],
+    ['with variables', { vars: { name: 'Alice' } }],
+  ])('rejects a defaultTest-only scoring function %s when it has no assertions', async (_, rest) => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      defaultTest: {
+        ...rest,
+        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
+      },
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
