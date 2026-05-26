@@ -47,7 +47,7 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { findTestsWithoutAssertions, findUnknownTopLevelKeys } from './strictValidation';
+import { findTestSuiteRowsWithoutAssertions, findUnknownTopLevelKeys } from './strictValidation';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -84,9 +84,7 @@ function enforceStrictConfigAssertions(testSuite: TestSuite): void {
   if (!getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
     return;
   }
-  const defaultTestForCheck =
-    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
-  const offenders = findTestsWithoutAssertions(testSuite.tests || [], defaultTestForCheck);
+  const offenders = findTestSuiteRowsWithoutAssertions(testSuite);
   if (offenders.length === 0) {
     return;
   }
@@ -97,8 +95,8 @@ function enforceStrictConfigAssertions(testSuite: TestSuite): void {
       ? ` (and ${offenders.length - previewIndices.length} more)`
       : '';
   failConfigResolution(
-    `Strict config: ${offenders.length} test${offenders.length === 1 ? '' : 's'} ` +
-      `[indices ${indexList}${more}] have no assertions. ` +
+    `Strict config: ${offenders.length} evaluated test row${offenders.length === 1 ? '' : 's'} ` +
+      `[indices ${indexList}${more}] have no effective assertions. ` +
       'Add an `assert:` block to each test or `defaultTest.assert`, or unset PROMPTFOO_STRICT_CONFIG.',
   );
 }
