@@ -163,6 +163,23 @@ describe('extractMarkdownImageSources', () => {
     expect(sources).toEqual(['https://example.com/image with spaces.png']);
   });
 
+  it('extracts markdown image URLs containing balanced parentheses', () => {
+    const markdown = '![Alt](https://example.com/render_(preview).png)';
+    const sources = extractMarkdownImageSources(markdown);
+    expect(sources).toEqual(['https://example.com/render_(preview).png']);
+  });
+
+  it('extracts reference-style markdown images', () => {
+    const markdown = '![Alt][preview]\n\n[preview]: https://example.com/reference.png';
+    const sources = extractMarkdownImageSources(markdown);
+    expect(sources).toEqual(['https://example.com/reference.png']);
+  });
+
+  it('ignores image syntax rendered as an indented code block', () => {
+    const sources = extractMarkdownImageSources('    ![Alt](https://example.com/code.png)');
+    expect(sources).toEqual([]);
+  });
+
   it('ignores HTML img tag sources because ReactMarkdown does not render raw HTML', () => {
     const html = '<img src="https://example.com/image.png" alt="Test">';
     const sources = extractMarkdownImageSources(html);
@@ -274,22 +291,22 @@ describe('extractMarkdownImageSources', () => {
   });
 
   it('handles newlines in markdown', () => {
-    const markdown = `
-      ![Image 1](https://example.com/img1.png)
-      Some text here
-      ![Image 2](https://example.com/img2.jpg)
-    `;
+    const markdown = [
+      '![Image 1](https://example.com/img1.png)',
+      'Some text here',
+      '![Image 2](https://example.com/img2.jpg)',
+    ].join('\n');
     const sources = extractMarkdownImageSources(markdown);
     expect(sources).toEqual(['https://example.com/img1.png', 'https://example.com/img2.jpg']);
   });
 
   it('preserves order of first occurrence when deduplicating', () => {
-    const markdown = `
-      ![First](https://example.com/a.png)
-      ![Second](https://example.com/b.png)
-      ![Duplicate of first](https://example.com/a.png)
-      ![Third](https://example.com/c.png)
-    `;
+    const markdown = [
+      '![First](https://example.com/a.png)',
+      '![Second](https://example.com/b.png)',
+      '![Duplicate of first](https://example.com/a.png)',
+      '![Third](https://example.com/c.png)',
+    ].join('\n');
     const sources = extractMarkdownImageSources(markdown);
     // Set iteration order should preserve insertion order
     expect(sources).toEqual([
@@ -302,10 +319,10 @@ describe('extractMarkdownImageSources', () => {
   it('normalizes URLs before deduplication', () => {
     // If two URLs normalize to the same thing, they should be deduplicated
     const blobHash = 'abc123def456abc123def456abc123de';
-    const markdown = `
-      ![Blob1](promptfoo://blob/${blobHash})
-      ![Blob2](promptfoo://blob/${blobHash})
-    `;
+    const markdown = [
+      `![Blob1](promptfoo://blob/${blobHash})`,
+      `![Blob2](promptfoo://blob/${blobHash})`,
+    ].join('\n');
     const sources = extractMarkdownImageSources(markdown);
     expect(sources).toEqual([`/api/blobs/${blobHash}`]);
   });

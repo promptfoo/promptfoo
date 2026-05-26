@@ -1,5 +1,7 @@
 import { normalizeMediaText, resolveImageSource } from '@app/utils/media';
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { ImageOutput } from '@promptfoo/types';
+import type { Nodes } from 'mdast';
 
 function getImageDataUriComparisonKey(src: string): string | undefined {
   const trimmed = src.trim();
@@ -49,18 +51,40 @@ export function hasImageSrcComparisonKey(keys: Set<string>, src: string): boolea
   return getImageSrcComparisonKeys(src).some((key) => keys.has(key));
 }
 
-export function extractMarkdownImageSources(markdown: string): string[] {
-  const sources = new Set<string>();
-  const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
-
-  for (const match of markdown.matchAll(markdownImageRegex)) {
-    const candidate = match[1]?.trim();
-    if (!candidate) {
-      continue;
+function visitMarkdownNodes(node: Nodes, visitor: (node: Nodes) => void): void {
+  visitor(node);
+  if ('children' in node) {
+    for (const child of node.children) {
+      visitMarkdownNodes(child, visitor);
     }
-    const unwrapped =
-      candidate.startsWith('<') && candidate.endsWith('>') ? candidate.slice(1, -1) : candidate;
-    sources.add(normalizeImageSrcForComparison(unwrapped));
+  }
+}
+
+export function extractMarkdownImageSources(markdown: string): string[] {
+  if (!markdown.includes('![')) {
+    return [];
+  }
+
+  const sources = new Set<string>();
+  const definitions = new Map<string, string>();
+  const candidates: Array<string | { identifier: string }> = [];
+
+  visitMarkdownNodes(fromMarkdown(markdown), (node) => {
+    if (node.type === 'definition') {
+      definitions.set(node.identifier, node.url);
+    } else if (node.type === 'image') {
+      candidates.push(node.url);
+    } else if (node.type === 'imageReference') {
+      candidates.push({ identifier: node.identifier });
+    }
+  });
+
+  for (const candidate of candidates) {
+    const source =
+      typeof candidate === 'string' ? candidate : definitions.get(candidate.identifier);
+    if (source) {
+      sources.add(normalizeImageSrcForComparison(source));
+    }
   }
 
   return [...sources];

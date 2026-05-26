@@ -107,4 +107,26 @@ describe('EvalOutputCell markdown image previews', () => {
     await user.click(image);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
+
+  it.each([
+    [
+      'image URLs containing balanced parentheses',
+      'Assertion failed\n\n![Preview](https://example.com/render_(preview).png)',
+      'https://example.com/render_(preview).png',
+    ],
+    [
+      'reference-style images',
+      'Assertion failed\n\n![Preview][asset]\n\n[asset]: https://example.com/reference.png',
+      'https://example.com/reference.png',
+    ],
+  ])('renders and previews %s when renderMarkdown is disabled', async (_case, text, source) => {
+    renderWithProviders(<EvalOutputCell {...createProps({ text })} />);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    const image = screen.getByAltText('Preview');
+    expect(image).toHaveAttribute('src', source);
+
+    await user.click(image);
+    expect(screen.getByAltText('Lightbox')).toHaveAttribute('src', source);
+  });
 });
