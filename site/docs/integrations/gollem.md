@@ -140,7 +140,10 @@ npx promptfoo@latest view
 
 ## Testing tool use
 
-Use test cases that can only pass when the sample agent invokes `lookup_user` and returns its output:
+Use test cases that exercise the expected `lookup_user` path by asserting on values returned
+by the tool. These checks confirm the returned result shape; to prove that the tool was invoked
+rather than receiving an equivalent model-generated response, expose tool-call traces or a
+per-request value from your handler and assert on that value.
 
 ```yaml title="promptfooconfig.yaml"
 description: 'Test Gollem lookup tool usage'
