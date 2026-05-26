@@ -15,7 +15,7 @@ interface BlobContext {
   promptIdx?: number;
 }
 
-type BlobKind = 'audio' | 'image';
+type BlobKind = 'audio' | 'image' | 'other';
 
 function isDataUrl(value: string): boolean {
   return /^data:(audio|image)\/[^;]+;base64,/.test(value);
@@ -213,7 +213,7 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
   };
 }
 
-function getRawSvgOutputPreview(output: string): { dataUrl: string; uri: string } | null {
+function getRawSvgOutputPreview(output: string): { base64: string; uri: string } | null {
   const trimmed = output.trim();
   if (!trimmed.startsWith('<')) {
     return null;
@@ -234,7 +234,7 @@ function getRawSvgOutputPreview(output: string): { dataUrl: string; uri: string 
 
   const buffer = Buffer.from(trimmed, 'utf8');
   return {
-    dataUrl: `data:image/svg+xml;base64,${buffer.toString('base64')}`,
+    base64: buffer.toString('base64'),
     uri: `${BLOB_SCHEME}${sha256(buffer)}`,
   };
 }
@@ -275,7 +275,13 @@ async function storeRawSvgOutputPreview(
     return { metadata, mutated: false };
   }
 
-  const stored = await storeOnce(preview.dataUrl, 'image/svg+xml', 'response.output', 'image', 0);
+  const stored = await storeOnce(
+    preview.base64,
+    'application/octet-stream',
+    'response.output',
+    'other',
+    0,
+  );
   if (!stored) {
     return { metadata, mutated: false };
   }

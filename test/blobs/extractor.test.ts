@@ -645,7 +645,7 @@ describe('Cloud blob upload', () => {
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
   });
 
-  it('should store small raw SVG outputs for the media library without replacing text output', async () => {
+  it('should store raw SVG outputs as download-only preview blobs without replacing text output', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
 
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
@@ -658,10 +658,10 @@ describe('Cloud blob upload', () => {
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
     expect(mockStoreBlob).toHaveBeenCalledWith(
       Buffer.from(svg),
-      'image/svg+xml',
+      'application/octet-stream',
       expect.objectContaining({
         location: 'response.output',
-        kind: 'image',
+        kind: 'other',
       }),
     );
   });
