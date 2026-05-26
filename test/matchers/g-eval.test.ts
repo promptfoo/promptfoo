@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesGEval } from '../../src/matchers/llmGrading';
+import { resolveProvider } from '../../src/providers';
+import { createLiteLLMProvider } from '../../src/providers/litellm';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesGEval', () => {
@@ -123,6 +125,76 @@ describe('matchesGEval', () => {
     DefaultGradingProvider.callApi = originalCallApi;
   });
 
+  it('uses a configured LiteLLM grader for both G-Eval phases', async () => {
+    const criteria = 'Reward factual grounding and completeness';
+    const configuredLiteLLM = createLiteLLMProvider('litellm:gemini-pro', {
+      config: {
+        config: {
+          apiBaseUrl: 'http://litellm-regression.local:4000',
+          apiKey: 'test-litellm-key',
+          temperature: 0,
+        },
+      },
+    });
+
+    const resolvedProvider = await resolveProvider('litellm:gemini-pro', {
+      [configuredLiteLLM.id()]: configuredLiteLLM,
+    });
+    expect(resolvedProvider).toBe(configuredLiteLLM);
+    expect(configuredLiteLLM.config.apiBaseUrl).toBe('http://litellm-regression.local:4000');
+
+    const litellmCallApi = vi
+      .fn()
+      .mockImplementationOnce(async () => ({
+        output: '{"steps": ["Check factual alignment", "Check completeness"]}',
+        tokenUsage: { total: 11, prompt: 6, completion: 5 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output: '{"score": 8, "reason": "The answer is grounded and complete"}',
+        tokenUsage: { total: 13, prompt: 7, completion: 6 },
+      }));
+    resolvedProvider.callApi = litellmCallApi;
+
+    const result = await matchesGEval(
+      criteria,
+      'Question: what is the capital of France?',
+      'Paris is the capital of France.',
+      0.7,
+      { provider: resolvedProvider },
+    );
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'The answer is grounded and complete',
+      tokensUsed: expect.objectContaining({ total: 24, prompt: 13, completion: 11 }),
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(litellmCallApi).toHaveBeenCalledTimes(2);
+    expect(litellmCallApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('generate 3-4 concise evaluation steps'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({ label: 'g-eval-steps' }),
+        vars: { criteria },
+      }),
+    );
+    expect(litellmCallApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Check factual alignment'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({ label: 'g-eval' }),
+        vars: expect.objectContaining({
+          criteria,
+          input: 'Question: what is the capital of France?',
+          maxScore: '10',
+          output: 'Paris is the capital of France.',
+        }),
+      }),
+    );
+    expect(litellmCallApi.mock.calls[1][1].vars.steps).toContain('Check completeness');
+  });
+
   it('should fail when score is below threshold', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(async () => {
@@ -175,6 +247,28 @@ describe('matchesGEval', () => {
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('reports the LiteLLM grader and phase when step generation returns no output', async () => {
+    const provider = createLiteLLMProvider('litellm:gemini-pro', {});
+    provider.callApi = vi.fn().mockResolvedValueOnce({
+      output: '',
+      tokenUsage: { total: 3, prompt: 1, completion: 2 },
+    });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7, {
+      provider,
+    });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'G-Eval step-generation call to litellm:gemini-pro returned no output',
+      tokensUsed: expect.objectContaining({ total: 3, prompt: 1, completion: 2 }),
+      metadata: { graderError: true },
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('should fail clearly when the evaluation steps shape is invalid', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: '{"steps":"Check clarity"}',
@@ -221,6 +315,33 @@ describe('matchesGEval', () => {
       }),
       metadata: { graderError: true },
     });
+  });
+
+  it('reports the LiteLLM grader and phase when evaluation returns no output', async () => {
+    const provider = createLiteLLMProvider('litellm:gemini-pro', {});
+    provider.callApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        output: '{"steps": ["Check clarity"]}',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      })
+      .mockResolvedValueOnce({
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7, {
+      provider,
+    });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'G-Eval evaluation call to litellm:gemini-pro returned no output',
+      tokensUsed: expect.objectContaining({ total: 7, prompt: 3, completion: 4 }),
+      metadata: { graderError: true },
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
   });
 
   it('should fail clearly when the evaluation result is not a string', async () => {

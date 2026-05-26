@@ -87,6 +87,31 @@ assert:
 
 See the [llm-rubric grader override docs](/docs/configuration/expected-outputs/model-graded/llm-rubric#setting-grader-parameters-temperature-etc) for more detail.
 
+### Using LiteLLM as the G-Eval grader
+
+G-Eval makes two grader calls: one to generate evaluation steps (`g-eval-steps`) and one to score the output (`g-eval`). When using a LiteLLM proxy as the grader, define the LiteLLM provider once and reference the same provider ID from the assertion so the configured proxy URL, key, and model parameters are reused for both calls:
+
+```yaml
+providers:
+  - id: openai:gpt-5
+  - id: litellm:gemini-pro
+    config:
+      apiBaseUrl: http://localhost:4000
+      apiKey: ${LITELLM_API_KEY}
+      temperature: 0
+
+tests:
+  - vars:
+      topic: 'refund policy'
+    assert:
+      - type: g-eval
+        value: 'Check whether the answer is grounded in the policy and does not add unsupported details'
+        threshold: 0.7
+        provider: litellm:gemini-pro
+```
+
+If the LiteLLM grader returns an empty response, promptfoo reports which G-Eval phase and provider returned no output to make proxy or model routing issues easier to debug.
+
 ## Example
 
 Here's a complete example showing how to use G-Eval to assess multiple aspects of an LLM response:
