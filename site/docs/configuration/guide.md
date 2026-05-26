@@ -201,7 +201,9 @@ tests:
 ```
 
 Nested file references use the same loading behavior as top-level variables, including text,
-structured data, scripts, PDFs, and multimedia files.
+structured data, scripts, PDFs, and multimedia files. Arrays nested inside an object are loaded
+recursively. To use a top-level array as a single variable value rather than one test per array
+entry, set `options.disableVarExpansion: true` for that test.
 
 Javascript and Python variable files are supported. For example:
 

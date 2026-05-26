@@ -561,6 +561,31 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('file://should-not-load.txt');
     });
 
+    it('should not load array file:// references skipped with quoted bracket indices', async () => {
+      const prompt = toPrompt('{{ payload["0"] }}');
+      const vars = {
+        payload: ['file://should-not-load.txt'],
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload["0"]']);
+
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://should-not-load.txt');
+    });
+
+    it('should not load flattened file:// values addressed by skipped nested paths', async () => {
+      const prompt = toPrompt('{{ payload["0"] }}');
+      const vars = {
+        payload: 'file://should-not-load.txt',
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload["0"]']);
+
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+      // A flattened array row retains scalar string indexing while preserving the payload itself.
+      expect(renderedPrompt).toBe('f');
+    });
+
     it('should not load file:// references from runtime conversation history', async () => {
       const prompt = toPrompt('{{ _conversation[0].response.output }}');
       const vars = {

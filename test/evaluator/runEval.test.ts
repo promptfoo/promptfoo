@@ -893,6 +893,34 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it('should preserve flattened nested file payloads for generated redteam exports', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{ payload["0"] }}', label: 'test-label' },
+      test: {
+        vars: {
+          payload: 'file:///tmp/does-not-exist.txt',
+        },
+        metadata: {
+          pluginId: 'xstest',
+          goal: 'Keep generated payload uninterpreted',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    // A normal string-array var is already a scalar row here; it must index the URL, not file contents.
+    expect(results[0].prompt.raw).toBe('User said: f');
+  });
+
   it('should infer the inject variable from the undecorated prompt template', async () => {
     const results = await runEval({
       ...defaultOptions,

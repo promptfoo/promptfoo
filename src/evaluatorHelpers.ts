@@ -352,15 +352,48 @@ async function loadPromptFileVar(
 }
 
 function normalizePromptVarPath(value: string): string {
-  return value.replace(/\[\s*(['"])([^'"]+)\1\s*\]/g, '.$2');
+  return value.replace(/\[\s*(['"])([^'"]+)\1\s*\]/g, '.$2').replace(/\[\s*(\d+)\s*\]/g, '.$1');
 }
 
-function isSkippedPromptFileVar(varName: string, skipRenderVars?: string[]): boolean {
+function isSkippedPromptVarValue(
+  varName: string,
+  value: unknown,
+  skipRenderVars?: string[],
+): boolean {
   const normalizedVarName = normalizePromptVarPath(varName);
   return (
-    skipRenderVars?.some(
-      (skippedVar) => normalizePromptVarPath(skippedVar) === normalizedVarName,
-    ) ?? false
+    skipRenderVars?.some((skippedVar) => {
+      const normalizedSkippedVar = normalizePromptVarPath(skippedVar);
+      if (normalizedSkippedVar === normalizedVarName) {
+        return true;
+      }
+
+      // Top-level array vars fan out into scalar rows unless expansion is disabled.
+      // Preserve a scalar representing a protected nested payload after that flattening.
+      return (
+        !Array.isArray(value) &&
+        !isPlainObject(value) &&
+        normalizedSkippedVar.startsWith(`${normalizedVarName}.`)
+      );
+    }) ?? false
+  );
+}
+
+function includeCollapsedSkippedPromptVars(
+  vars: Record<string, VarValue>,
+  skipRenderVars?: string[],
+): string[] | undefined {
+  if (!skipRenderVars) {
+    return undefined;
+  }
+
+  return Array.from(
+    new Set([
+      ...skipRenderVars,
+      ...Object.entries(vars)
+        .filter(([varName, value]) => isSkippedPromptVarValue(varName, value, skipRenderVars))
+        .map(([varName]) => varName),
+    ]),
   );
 }
 
@@ -370,7 +403,10 @@ async function loadPromptFileVars(
   context: PromptFileLoadContext,
   loadedValues: WeakMap<object, VarValue>,
 ): Promise<VarValue> {
-  if (varName === '_conversation' || isSkippedPromptFileVar(varName, context.skipRenderVars)) {
+  if (
+    varName === '_conversation' ||
+    isSkippedPromptVarValue(varName, value, context.skipRenderVars)
+  ) {
     return value as VarValue;
   }
 
@@ -496,6 +532,7 @@ export async function renderPrompt(
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
   let basePrompt = prompt.raw;
+  const effectiveSkipRenderVars = includeCollapsedSkippedPromptVars(vars, skipRenderVars);
 
   const basePath = cliState.basePath || '';
   const fileLoadContext = {
@@ -503,14 +540,17 @@ export async function renderPrompt(
     basePrompt,
     vars,
     provider,
-    skipRenderVars,
+    skipRenderVars: effectiveSkipRenderVars,
     loadedFilePaths: new Set<string>(),
   };
   const loadedValues = new WeakMap<object, VarValue>();
 
   // Load file-backed values at any depth using the same renderer semantics.
   for (const [varName, value] of Object.entries(vars)) {
-    if (varName === '_conversation' || skipRenderVars?.includes(varName)) {
+    if (
+      varName === '_conversation' ||
+      isSkippedPromptVarValue(varName, value, effectiveSkipRenderVars)
+    ) {
       continue;
     }
 
@@ -570,13 +610,13 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+    if (typeof vars[key] === 'string' && !effectiveSkipRenderVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveVariables(vars, effectiveSkipRenderVars, varsResolvedFromSkipped);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -682,7 +722,7 @@ export async function renderPrompt(
           ];
         }
 
-        if (skipRenderVars?.includes(key) || varsResolvedFromSkipped.has(key)) {
+        if (effectiveSkipRenderVars?.includes(key) || varsResolvedFromSkipped.has(key)) {
           return [key, value];
         }
 

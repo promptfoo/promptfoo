@@ -121,6 +121,17 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(result).toBe('User input: payload-with-newline\n');
   });
 
+  it('should preserve flattened scalar payloads addressed by skipped nested paths', async () => {
+    const prompt = { raw: 'User input: {{payload}}', label: 'test' };
+    const vars = {
+      payload: '{{7*7}}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['payload["0"]']);
+
+    expect(result).toBe('User input: {{7*7}}');
+  });
+
   it('should handle redteam prompts with undefined purpose and trim filter', async () => {
     // This is the exact scenario from Discord issue:
     // Redteam generates prompts containing {{purpose | trim}} which used to cause:
