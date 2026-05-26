@@ -42,6 +42,8 @@ The Ejentum base URL is configurable so you can target staging or a self-hosted 
     apiUrl: https://your-endpoint.example.com/logicv1/
 ```
 
+The OpenAI completion endpoint follows the built-in provider's base URL options: set `config.apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` when using an OpenAI-compatible gateway or local endpoint.
+
 ## How the custom provider works
 
 `provider.js` is a one-class custom provider:
@@ -56,15 +58,18 @@ Provider config options (set in `promptfooconfig.yaml`):
 | ------------------ | ----------------------- | ------------------------------------------------------------------------------------------- |
 | `mode`             | `reasoning`             | One of `reasoning`, `code`, `anti-deception`, `memory`.                                     |
 | `model`            | `gpt-5.4-mini`          | Any OpenAI chat-completion model.                                                           |
-| `reasoning_effort` | `none`                  | OpenAI reasoning effort applied to the completion request.                                  |
-| `verbosity`        | `low`                   | OpenAI response verbosity applied to the completion request.                                |
+| `reasoning_effort` | `none`                  | Included for reasoning or GPT-5-compatible chat models only.                                |
+| `verbosity`        | `low`                   | Included for GPT-5 chat models only.                                                        |
 | `apiUrl`           | Ejentum public endpoint | Override the Ejentum base URL. Falls back to `EJENTUM_API_URL`, then the default published. |
+| `apiBaseUrl`       | OpenAI public endpoint  | Override the OpenAI base URL. Falls back to `OPENAI_API_BASE_URL`, then `OPENAI_BASE_URL`.  |
 
 To test a different harness (for example, the anti-deception mode), copy the `file://provider.js` provider block, change `mode: reasoning` to `mode: anti-deception`, and update the label.
 
 ## Bringing your own prompts
 
 The four `tests:` entries in `promptfooconfig.yaml` are seed prompts. Replace them with prompts from your own workload to see how the harness affects results on tasks you actually run. The `defaultTest` rubric is general enough to apply across most reasoning tasks; tighten it per-test if you need stricter scoring.
+
+When your prompts are JSON or YAML chat message arrays, the augmented provider preserves their roles and inserts the scaffold as an additional system message, so the baseline and augmented arms still run the same original conversation. JSON chat prompts require no additional package; before using YAML chat prompts in a copied example, run `npm install js-yaml`.
 
 ## Configuration is minimal
 

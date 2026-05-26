@@ -13,7 +13,49 @@
 // it lets readers point this provider at a staging endpoint, a self-hosted
 // prompt-augmentation service, or any other compatible API without editing code.
 const DEFAULT_EJENTUM_URL = 'https://ejentum-main-ab125c3.zuplo.app/logicv1/';
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+function isGpt5Model(model) {
+  return model.startsWith('gpt-5') || model.includes('/gpt-5');
+}
+
+function supportsReasoningEffort(model) {
+  return (
+    isGpt5Model(model) ||
+    model.startsWith('o1') ||
+    model.startsWith('o3') ||
+    model.startsWith('o4') ||
+    model.includes('/o1') ||
+    model.includes('/o3') ||
+    model.includes('/o4') ||
+    model.includes('gpt-oss')
+  );
+}
+
+function parseChatMessages(prompt) {
+  const trimmedPrompt = prompt.trim();
+  if (trimmedPrompt.startsWith('- role:')) {
+    // Optional dependency: only YAML chat prompts need a YAML parser.
+    // Install it in a copied example with: npm install js-yaml
+    const yaml = require('js-yaml');
+    return yaml.load(prompt);
+  }
+
+  try {
+    return JSON.parse(prompt);
+  } catch {
+    return [{ role: 'user', content: prompt }];
+  }
+}
+
+function getOpenAiUrl(config) {
+  const baseUrl =
+    config.apiBaseUrl ||
+    process.env.OPENAI_API_BASE_URL ||
+    process.env.OPENAI_BASE_URL ||
+    DEFAULT_OPENAI_BASE_URL;
+  return `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+}
 
 class EjentumAugmentedProvider {
   constructor(options = {}) {
@@ -42,6 +84,7 @@ class EjentumAugmentedProvider {
     const reasoningEffort = this.config.reasoning_effort || 'none';
     const verbosity = this.config.verbosity || 'low';
     const ejentumUrl = this.config.apiUrl || process.env.EJENTUM_API_URL || DEFAULT_EJENTUM_URL;
+    const messages = parseChatMessages(prompt);
 
     // Step 1: fetch the cognitive scaffold for this task.
     let scaffold = '';
@@ -71,7 +114,7 @@ class EjentumAugmentedProvider {
 
     // Step 2: call OpenAI with the scaffold as a prefix to the system message.
     try {
-      const r = await fetch(OPENAI_URL, {
+      const r = await fetch(getOpenAiUrl(this.config), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${openaiKey}`,
@@ -79,8 +122,6 @@ class EjentumAugmentedProvider {
         },
         body: JSON.stringify({
           model,
-          reasoning_effort: reasoningEffort,
-          verbosity,
           messages: [
             {
               role: 'system',
@@ -88,8 +129,10 @@ class EjentumAugmentedProvider {
                 `Apply the cognitive scaffold below, then answer the user's task.\n\n` +
                 `[COGNITIVE SCAFFOLD]\n${scaffold}\n[END SCAFFOLD]`,
             },
-            { role: 'user', content: prompt },
+            ...messages,
           ],
+          ...(supportsReasoningEffort(model) ? { reasoning_effort: reasoningEffort } : {}),
+          ...(isGpt5Model(model) ? { verbosity } : {}),
         }),
       });
       const body = await r.json();
