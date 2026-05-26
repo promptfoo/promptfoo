@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
@@ -517,6 +517,11 @@ const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
   max: 2000,
 });
 
+/** Clears the standalone eval LRU cache. Intended for tests that mutate evals. */
+export function clearStandaloneEvalCache(): void {
+  standaloneEvalCache.clear();
+}
+
 export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
@@ -544,7 +549,7 @@ export async function getStandaloneEvals({
       datasetId: evalsToDatasetsTable.datasetId,
       tagName: tagsTable.name,
       tagValue: tagsTable.value,
-      isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
+      isRedteam: evalsTable.isRedteam,
     })
     .from(evalsTable)
     .leftJoin(evalsToPromptsTable, eq(evalsTable.id, evalsToPromptsTable.evalId))
@@ -576,15 +581,7 @@ export async function getStandaloneEvals({
   const evalMap = new Map(evalData.map(({ evalId, eval_, table }) => [evalId, { eval_, table }]));
 
   const standaloneEvals = results.flatMap((result) => {
-    const {
-      description,
-      createdAt,
-      evalId,
-      promptId,
-      datasetId,
-      // @ts-ignore
-      isRedteam,
-    } = result;
+    const { description, createdAt, evalId, promptId, datasetId, isRedteam } = result;
 
     const evalInfo = evalMap.get(evalId);
     invariant(evalInfo, `Eval with ID ${evalId} not found in map`);
@@ -616,7 +613,7 @@ export async function getStandaloneEvals({
         promptId,
         datasetId,
         createdAt,
-        isRedteam: isRedteam as boolean,
+        isRedteam,
         ...pluginCounts,
         ...col,
       };
