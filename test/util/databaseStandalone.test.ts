@@ -33,10 +33,30 @@ const completedPrompt: CompletedPrompt = {
 
 const renderedPrompts: Prompt[] = [{ raw: 'hello', label: 'hello' }];
 
+// Mirrors the CASE expression in drizzle/0024_repair_eval_redteam_flags.sql.
+const isRedteamCase = sql`CASE
+  WHEN json_valid(${evalsTable.config}) AND json_type(${evalsTable.config}, '$.redteam') IS NOT NULL THEN 1
+  ELSE 0
+END`;
+
 async function createEvalWithPrompts(config: Partial<Parameters<typeof Eval.create>[0]>) {
   return Eval.create(config as Parameters<typeof Eval.create>[0], renderedPrompts, {
     completedPrompts: [completedPrompt],
   });
+}
+
+async function resetEvalTables() {
+  const db = getDb();
+  await db.run('DELETE FROM eval_results');
+  await db.run('DELETE FROM evals_to_datasets');
+  await db.run('DELETE FROM evals_to_prompts');
+  await db.run('DELETE FROM evals_to_tags');
+  await db.run('DELETE FROM evals');
+  clearStandaloneEvalCache();
+}
+
+function setIsRedteam(evalId: string, value: boolean) {
+  getDb().update(evalsTable).set({ isRedteam: value }).where(eq(evalsTable.id, evalId)).run();
 }
 
 describe('getStandaloneEvals', () => {
@@ -44,32 +64,15 @@ describe('getStandaloneEvals', () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-    clearStandaloneEvalCache();
-  });
+  beforeEach(resetEvalTables);
 
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
     const redteamEval = await createEvalWithPrompts({ redteam: {} as any });
     const regularEval = await createEvalWithPrompts({});
 
-    // Simulate a legacy row whose materialized flag is stale relative to the JSON config.
-    // The old query would have read the JSON; the new query must trust the column.
-    getDb()
-      .update(evalsTable)
-      .set({ isRedteam: false })
-      .where(eq(evalsTable.id, redteamEval.id))
-      .run();
-    getDb()
-      .update(evalsTable)
-      .set({ isRedteam: true })
-      .where(eq(evalsTable.id, regularEval.id))
-      .run();
+    // Flip the column away from what the JSON config would imply; the query must trust the column.
+    setIsRedteam(redteamEval.id, false);
+    setIsRedteam(regularEval.id, true);
 
     const rows = await getStandaloneEvals();
     const byId = new Map(rows.map((row) => [row.evalId, row.isRedteam] as const));
@@ -86,8 +89,7 @@ describe('getStandaloneEvals', () => {
 
     await updateResult(eval_.id, { redteam: {} as any });
 
-    // The /api/history LRU cache is not invalidated on writes; tests must clear it
-    // explicitly to observe the new value.
+    // updateResult does not invalidate the LRU cache; tests clear it to observe the new value.
     clearStandaloneEvalCache();
     expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
       true,
@@ -95,8 +97,6 @@ describe('getStandaloneEvals', () => {
   });
 
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
-    // `config.redteam !== undefined` is true for null, so the write paths store
-    // isRedteam = true. Confirm getStandaloneEvals surfaces that consistently.
     const eval_ = await createEvalWithPrompts({ redteam: null as any });
 
     const stored = getDb()
@@ -116,19 +116,9 @@ describe('migration 0024 repair semantics', () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-    clearStandaloneEvalCache();
-  });
+  beforeEach(resetEvalTables);
 
   it('classifies {redteam: null} as redteam via json_type (not json_extract)', async () => {
-    // This is the exact CASE expression from 0024. Verify it matches the runtime
-    // predicate (config.redteam !== undefined) for both `null` and missing keys.
     const db = getDb();
     const evalNullRedteam = await Eval.create({ redteam: null as any }, []);
     const evalNoRedteam = await Eval.create({}, []);
@@ -137,10 +127,7 @@ describe('migration 0024 repair semantics', () => {
     const classify = (id: string) =>
       db
         .select({
-          fromMigration: sql<number>`CASE
-            WHEN json_valid(${evalsTable.config}) AND json_type(${evalsTable.config}, '$.redteam') IS NOT NULL THEN 1
-            ELSE 0
-          END`,
+          fromMigration: sql<number>`${isRedteamCase}`,
           fromLegacyExtract: sql<number>`CASE
             WHEN json_valid(${evalsTable.config}) AND json_extract(${evalsTable.config}, '$.redteam') IS NOT NULL THEN 1
             ELSE 0
@@ -154,13 +141,11 @@ describe('migration 0024 repair semantics', () => {
     const missingRow = classify(evalNoRedteam.id);
     const presentRow = classify(evalWithRedteam.id);
 
-    // json_type-based predicate (used by 0024) matches !== undefined semantics.
     expect(nullRow?.fromMigration).toBe(1);
     expect(missingRow?.fromMigration).toBe(0);
     expect(presentRow?.fromMigration).toBe(1);
 
-    // Legacy json_extract predicate would classify {redteam: null} as non-redteam,
-    // which is exactly the divergence the new migration repairs.
+    // Legacy json_extract collapses {redteam: null} to non-redteam — the divergence this migration repairs.
     expect(nullRow?.fromLegacyExtract).toBe(0);
     expect(missingRow?.fromLegacyExtract).toBe(0);
     expect(presentRow?.fromLegacyExtract).toBe(1);
@@ -171,29 +156,13 @@ describe('migration 0024 repair semantics', () => {
     const evalWithRedteam = await Eval.create({ redteam: {} as any }, []);
     const evalRegular = await Eval.create({}, []);
 
-    // Manually flip both flags to stale values, simulating drift from older code paths.
-    db.update(evalsTable)
-      .set({ isRedteam: false })
-      .where(eq(evalsTable.id, evalWithRedteam.id))
-      .run();
-    db.update(evalsTable).set({ isRedteam: true }).where(eq(evalsTable.id, evalRegular.id)).run();
+    setIsRedteam(evalWithRedteam.id, false);
+    setIsRedteam(evalRegular.id, true);
 
-    const repairSql = sql`UPDATE evals SET is_redteam = CASE
-      WHEN json_valid(config) AND json_type(config, '$.redteam') IS NOT NULL THEN 1
-      ELSE 0
-    END
-    WHERE is_redteam != CASE
-      WHEN json_valid(config) AND json_type(config, '$.redteam') IS NOT NULL THEN 1
-      ELSE 0
-    END`;
+    const repairSql = sql`UPDATE evals SET is_redteam = ${isRedteamCase} WHERE is_redteam != ${isRedteamCase}`;
 
-    // First run: should repair both stale rows.
-    const firstRun = db.run(repairSql);
-    expect(firstRun.changes).toBe(2);
-
-    // Second run: idempotent, nothing changes.
-    const secondRun = db.run(repairSql);
-    expect(secondRun.changes).toBe(0);
+    expect(db.run(repairSql).changes).toBe(2);
+    expect(db.run(repairSql).changes).toBe(0);
 
     const rows = db
       .select({ id: evalsTable.id, isRedteam: evalsTable.isRedteam })
