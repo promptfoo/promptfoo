@@ -340,13 +340,13 @@ function parseCsvRows(fileContent: string): CsvRow[] {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonTestCases(fileContent);
+  return parseJsonTestCases(fileContent, path.dirname(resolvedVarsPath));
 }
 
-function parseJsonTestCases(fileContent: string): TestCase[] {
+function parseJsonTestCases(fileContent: string, sourceDirectory?: string): TestCase[] {
   const jsonData = yaml.load(fileContent) as unknown;
 
-  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData);
+  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData, sourceDirectory);
   if (agentSkillsCases) {
     return agentSkillsCases;
   }
@@ -360,8 +360,11 @@ function parseJsonTestCases(fileContent: string): TestCase[] {
   }));
 }
 
-function maybeConvertAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
-  const testCases = parseAgentSkillsEvalsJson(input);
+function maybeConvertAgentSkillsEvalsJson(
+  input: unknown,
+  sourceDirectory?: string,
+): TestCase[] | null {
+  const testCases = parseAgentSkillsEvalsJson(input, sourceDirectory);
   if (testCases) {
     telemetry.record('feature_used', {
       feature: 'agent-skills evals.json tests file',
@@ -393,11 +396,11 @@ type AgentSkillsEvalsFile = {
  *   - `prompt`           -> literal `vars.prompt`
  *   - `expected_output`  -> `llm-rubric` assertion (first)
  *   - `assertions[i]`    -> additional `llm-rubric` assertions
- *   - `files`            -> `vars.files` and a file-context list in `vars.prompt`
+ *   - `files`            -> absolute paths resolved from the source JSON directory
  *   - `id`               -> `metadata.id` and `description`
  *   - top-level `skill_name` -> `metadata.skill_name`
  */
-function parseAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
+function parseAgentSkillsEvalsJson(input: unknown, sourceDirectory?: string): TestCase[] | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return null;
   }
@@ -419,7 +422,7 @@ function parseAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
       Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
   );
   return validCases.flatMap((entry, idx) => {
-    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName);
+    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName, sourceDirectory);
     return testCase ? [testCase] : [];
   });
 }
@@ -428,6 +431,7 @@ function agentSkillsEvalToTestCase(
   entry: AgentSkillsEvalCase,
   idx: number,
   skillName: string,
+  sourceDirectory?: string,
 ): TestCase | null {
   const assertions = buildAgentSkillsAssertions(entry);
   if (assertions.length === 0) {
@@ -437,9 +441,15 @@ function agentSkillsEvalToTestCase(
   const idValue =
     typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
 
-  const files = Array.isArray(entry.files)
-    ? entry.files.filter((file): file is string => typeof file === 'string' && Boolean(file.trim()))
-    : [];
+  const files = (
+    Array.isArray(entry.files)
+      ? entry.files.filter(
+          (file): file is string => typeof file === 'string' && Boolean(file.trim()),
+        )
+      : []
+  ).map((file) =>
+    sourceDirectory && !file.startsWith('file://') ? path.resolve(sourceDirectory, file) : file,
+  );
   const prompt =
     files.length > 0
       ? `${entry.prompt}\n\nFiles available for this eval:\n${files.map((file) => `- ${file}`).join('\n')}`
@@ -675,7 +685,7 @@ export async function loadTestsFromGlob(
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases =
-        maybeConvertAgentSkillsEvalsJson(rawContent) ??
+        maybeConvertAgentSkillsEvalsJson(rawContent, path.dirname(testFile)) ??
         (maybeLoadConfigFromExternalFile(rawContent) as TestCase[]);
       testCases = await _deref(testCases, testFile);
     } else {

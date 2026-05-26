@@ -315,14 +315,15 @@ describe('readStandaloneTestsFile', () => {
       );
 
       const result = await readStandaloneTestsFile('evals.json');
+      const salesFile = path.resolve('evals/files/sales_2025.csv');
+      const chartTemplate = path.resolve('evals/files/chart-template.svg');
 
       expect(result).toEqual([
         {
           description: 'eval 1',
           vars: {
-            prompt:
-              'Find the top 3 months by revenue from data/sales_2025.csv.\n\nFiles available for this eval:\n- evals/files/sales_2025.csv\n- evals/files/chart-template.svg',
-            files: ['evals/files/sales_2025.csv', 'evals/files/chart-template.svg'],
+            prompt: `Find the top 3 months by revenue from data/sales_2025.csv.\n\nFiles available for this eval:\n- ${salesFile}\n- ${chartTemplate}`,
+            files: [salesFile, chartTemplate],
           },
           assert: [
             {
@@ -1490,17 +1491,28 @@ describe('readTests', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         skill_name: 'summarizer',
-        evals: [{ id: 'case-1', prompt: 'Summarize this input.', assertions: ['Is concise'] }],
+        evals: [
+          {
+            id: 'case-1',
+            prompt: 'Summarize this input.',
+            files: ['evals/files/input.txt'],
+            assertions: ['Is concise'],
+          },
+        ],
       }),
     );
     vi.mocked(globSync).mockReturnValue(['/skills/summarizer/evals.json']);
 
     const result = await readTests(['file://skills/*/evals.json']);
+    const inputFile = path.resolve('/skills/summarizer', 'evals/files/input.txt');
 
     expect(result).toEqual([
       {
         description: 'eval case-1',
-        vars: { prompt: 'Summarize this input.' },
+        vars: {
+          prompt: `Summarize this input.\n\nFiles available for this eval:\n- ${inputFile}`,
+          files: [inputFile],
+        },
         assert: [{ type: 'llm-rubric', value: 'Is concise' }],
         metadata: { id: 'case-1', skill_name: 'summarizer' },
         options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
