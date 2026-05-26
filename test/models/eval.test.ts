@@ -2209,24 +2209,5 @@ describe('evaluator', () => {
       const safePath = buildSafeJsonPath(attackField);
       expect(safePath).toBe('$."field\'; DROP TABLE evals; --"');
     });
-
-    it('should safely handle search queries with SQL metacharacters', async () => {
-      // Search queries are handled via Drizzle's parameterized sql template strings:
-      // sql`response LIKE ${searchPattern}`
-      //
-      // The searchPattern is never interpolated into the SQL string.
-      // A malicious search like "'; SELECT * FROM evals; --" would be:
-      // 1. Wrapped in % for LIKE: "%'; SELECT * FROM evals; --%"
-      // 2. Passed as a parameterized value
-      // 3. Treated as a literal string to search for
-      //
-      // This is verified by inspection of buildFilterWhereSql:
-      // const searchPattern = `%${opts.searchQuery}%`;
-      // sql`response LIKE ${searchPattern}` - parameterized, not interpolated
-
-      // The existing "should sanitize SQL inputs properly" test at line 711
-      // exercises this with actual database queries and verifies no SQL error occurs.
-      expect(true).toBe(true);
-    });
   });
 });

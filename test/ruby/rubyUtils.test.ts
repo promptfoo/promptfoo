@@ -40,6 +40,8 @@ vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
     error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -92,5 +94,22 @@ describe('Ruby utilities', () => {
     const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
     expect(debugMessages).not.toContain('secret-input');
     expect(debugMessages).not.toContain('secret-result');
+  });
+
+  it('classifies routine stderr without reporting it as an error', async () => {
+    mockExecFileAsync
+      .mockReset()
+      .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
+      .mockResolvedValueOnce({
+        stdout: '',
+        stderr: 'INFO: loaded\nplain progress\nRuntimeError: boom\n',
+      });
+
+    await rubyUtils.runRuby('/path/to/script.rb', 'call_api', []);
+
+    expect(logger.info).toHaveBeenCalledWith('INFO: loaded');
+    expect(logger.warn).toHaveBeenCalledWith('plain progress');
+    expect(logger.error).toHaveBeenCalledWith('RuntimeError: boom');
+    expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining('plain progress'));
   });
 });
