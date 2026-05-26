@@ -26,17 +26,17 @@ function logStderr(stderr: string): void {
     if (levelMatch) {
       switch (levelMatch[1].toUpperCase()) {
         case 'DEBUG':
-          logger.debug(message);
+          logger.debug(line);
           continue;
         case 'INFO':
-          logger.info(message);
+          logger.info(line);
           continue;
         case 'WARN':
         case 'WARNING':
-          logger.warn(message);
+          logger.warn(line);
           continue;
         default:
-          logger.error(message);
+          logger.error(line);
           continue;
       }
     }
@@ -46,9 +46,9 @@ function logStderr(stderr: string): void {
       /(?:Error|Exception)\b/.test(message) ||
       /^from\s.+:\d+/.test(message)
     ) {
-      logger.error(message);
+      logger.error(line);
     } else {
-      logger.warn(message);
+      logger.warn(line);
     }
   }
 }

@@ -102,7 +102,8 @@ describe('Ruby utilities', () => {
       .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
       .mockResolvedValueOnce({
         stdout: '',
-        stderr: 'INFO: loaded\nplain progress\nRuntimeError: boom\n',
+        stderr:
+          "INFO: loaded\nplain progress\nRuntimeError: boom\n\tfrom /path/script.rb:12:in `call_api'\n",
       });
 
     await rubyUtils.runRuby('/path/to/script.rb', 'call_api', []);
@@ -110,6 +111,7 @@ describe('Ruby utilities', () => {
     expect(logger.info).toHaveBeenCalledWith('INFO: loaded');
     expect(logger.warn).toHaveBeenCalledWith('plain progress');
     expect(logger.error).toHaveBeenCalledWith('RuntimeError: boom');
+    expect(logger.error).toHaveBeenCalledWith("\tfrom /path/script.rb:12:in `call_api'");
     expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining('plain progress'));
   });
 });
