@@ -88,7 +88,12 @@ describe('writeOutput', () => {
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+          where: vi.fn().mockReturnValue({
+            all: vi.fn().mockResolvedValue([]),
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+            }),
+          }),
         }),
       }),
       insert: vi.fn().mockReturnValue({
@@ -1059,7 +1064,12 @@ describe('writeOutput', () => {
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+          where: vi.fn().mockReturnValue({
+            all: vi.fn().mockResolvedValue([]),
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+            }),
+          }),
         }),
       }),
       insert: vi.fn().mockReturnValue({
@@ -1087,7 +1097,12 @@ describe('writeOutput', () => {
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+          where: vi.fn().mockReturnValue({
+            all: vi.fn().mockResolvedValue([]),
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+            }),
+          }),
         }),
       }),
       insert: vi.fn().mockReturnValue({
