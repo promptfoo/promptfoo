@@ -39,6 +39,7 @@ import type {
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKAssistantMessageError,
   SDKResultMessage,
   SettingSource,
   Settings,
@@ -68,6 +69,22 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
+}
+
+/**
+ * Error reported by an assistant message during a Claude Agent SDK session. The
+ * SDK started populating `SDKAssistantMessage.error` with discriminated codes
+ * like `'model_not_found'` and `'rate_limit'` in 0.3.144 (previously these were
+ * collapsed into a generic `'invalid_request'`). Available in
+ * `response.metadata.assistantErrors` after a session completes.
+ */
+export interface AssistantErrorEntry {
+  error: SDKAssistantMessageError;
+  uuid: string;
+  parentToolUseId: string | null;
+  request_id?: string;
+  subagent_type?: string;
+  task_description?: string;
 }
 
 /** Hard cap for attribute body length on synthesized tool spans. */
@@ -228,7 +245,10 @@ function createClaudeResultMetrics(finalMsg: SDKResultMessage): {
 function createClaudeResultMetadata(
   finalMsg: SDKResultMessage,
   toolCalls: ToolCallEntry[],
+  assistantErrors: AssistantErrorEntry[],
 ): NonNullable<ProviderResponse['metadata']> {
+  const apiErrorStatus = 'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
+
   return {
     skillCalls: deriveSkillCalls(toolCalls),
     toolCalls,
@@ -238,6 +258,8 @@ function createClaudeResultMetadata(
     modelUsage: finalMsg.modelUsage,
     permissionDenials: finalMsg.permission_denials,
     ...(finalMsg.terminal_reason === undefined ? {} : { terminalReason: finalMsg.terminal_reason }),
+    ...(apiErrorStatus === undefined || apiErrorStatus === null ? {} : { apiErrorStatus }),
+    ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
   };
 }
 
@@ -245,6 +267,7 @@ function createClaudeResultResponse(
   finalMsg: SDKResultMessage,
   metrics: ReturnType<typeof createClaudeResultMetrics>,
   metadata: ReturnType<typeof createClaudeResultMetadata>,
+  assistantErrors: AssistantErrorEntry[],
 ): ProviderResponse {
   const raw = JSON.stringify(finalMsg);
   const response = {
@@ -254,9 +277,13 @@ function createClaudeResultResponse(
   };
 
   if (finalMsg.subtype !== 'success') {
+    const lastAssistantError =
+      assistantErrors.length > 0 ? assistantErrors[assistantErrors.length - 1].error : undefined;
     return {
       ...response,
-      error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+      error: lastAssistantError
+        ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
+        : `Claude Agent SDK call failed: ${finalMsg.subtype}`,
     };
   }
 
@@ -1426,6 +1453,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           // Collect tool calls and results from intermediate messages
           const toolCallsMap = new Map<string, ToolCallEntry>();
+          // Assistant message errors (model_not_found, rate_limit, etc.).
+          // The SDK only populates `SDKAssistantMessage.error` when the model
+          // call itself fails, so this stays empty on healthy runs.
+          const assistantErrors: AssistantErrorEntry[] = [];
           // Wall-clock start time per tool_use.id, captured when we first see the tool_use
           // message so we can synthesize child spans with realistic durations.
           const toolStartTimes = new Map<string, number>();
@@ -1478,6 +1509,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   toolStartTimes.set(block.id, Date.now());
                 }
               }
+              if (msg.error) {
+                assistantErrors.push({
+                  error: msg.error,
+                  uuid: msg.uuid,
+                  parentToolUseId: msg.parent_tool_use_id,
+                  ...(msg.request_id ? { request_id: msg.request_id } : {}),
+                  ...(msg.subagent_type ? { subagent_type: msg.subagent_type } : {}),
+                  ...(msg.task_description ? { task_description: msg.task_description } : {}),
+                });
+              }
             } else if (msg.type === 'user') {
               // Extract tool_result content blocks and match to tool calls
               const content = msg.message?.content;
@@ -1526,7 +1567,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           }
 
           const metrics = createClaudeResultMetrics(finalMsg);
-          const metadata = createClaudeResultMetadata(finalMsg, Array.from(toolCallsMap.values()));
+          const metadata = createClaudeResultMetadata(
+            finalMsg,
+            Array.from(toolCallsMap.values()),
+            assistantErrors,
+          );
 
           try {
             // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -1574,7 +1619,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               });
             }
 
-            const response = createClaudeResultResponse(finalMsg, metrics, metadata);
+            const response = createClaudeResultResponse(
+              finalMsg,
+              metrics,
+              metadata,
+              assistantErrors,
+            );
 
             if (finalMsg.subtype === 'success') {
               logger.debug(`Claude Agent SDK response: ${response.raw}`);
