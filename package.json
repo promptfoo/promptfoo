@@ -366,5 +366,6 @@
       "sharp"
     ],
     "ignoredBuiltDependencies": []
-  }
+  },
+  "homepage": "https://promptfoo.dev"
 }
