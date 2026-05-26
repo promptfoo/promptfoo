@@ -593,16 +593,16 @@ export async function doEval(
     }
 
     // Check for missing API keys after provider filtering
-    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
 
     if (missingApiKeys.size > 0) {
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
-        .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
+        .map(([envVar, providerDescriptions]) => `${envVar} (${providerDescriptions.join(', ')})`)
         .join('; ')}`;
       return failEvalRun(missingKeysMessage, isCliInvocation, {
         logForCli: () => {
-          for (const [envVar, providerIds] of missingApiKeys) {
-            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+          for (const [envVar, providerDescriptions] of missingApiKeys) {
+            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerDescriptions.join(', ')})`));
           }
           logger.error('');
           logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);

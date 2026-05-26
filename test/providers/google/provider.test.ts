@@ -647,6 +647,35 @@ describe('GoogleProvider', () => {
       expect(result.output).toBe('Hello world');
     });
 
+    it('should not mutate raw multipart chunks when accumulating streaming responses', async () => {
+      const firstPart = { functionCall: { name: 'look_up', args: { query: 'weather' } } };
+      const firstChunk = {
+        candidates: [{ content: { parts: [firstPart] } }],
+      };
+      const responseData = [
+        firstChunk,
+        {
+          candidates: [{ content: { parts: [{ text: 'done' }] } }],
+        },
+        {
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 },
+        },
+      ];
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: responseData,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toEqual([firstPart, { text: 'done' }]);
+      expect(firstChunk.candidates[0].content.parts).toEqual([firstPart]);
+      expect(result.raw).toBe(responseData);
+    });
+
     it('should reject streaming responses that never provide output', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
