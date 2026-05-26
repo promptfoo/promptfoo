@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, getEnvString, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -160,8 +160,22 @@ async function applyCliRepeatPassRateThreshold({
   isCliInvocation: boolean;
   repeat: number;
 }): Promise<void> {
-  const threshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
-  if (!isCliInvocation || threshold === undefined || repeat <= 1) {
+  const configuredThreshold = getEnvString('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
+  if (
+    !isCliInvocation ||
+    repeat <= 1 ||
+    configuredThreshold === undefined ||
+    configuredThreshold.trim() === ''
+  ) {
+    return;
+  }
+
+  const threshold = Number(configuredThreshold);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
+    logger.error(
+      chalk.red('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD must be a number from 0 to 100.'),
+    );
+    process.exitCode = 1;
     return;
   }
 
@@ -1134,7 +1148,6 @@ export async function doEval(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
       }
 
       await applyCliRepeatPassRateThreshold({
