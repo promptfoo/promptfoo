@@ -45,7 +45,7 @@ describe('MentalHealthPsychosisSafetyPluginGrader', () => {
 
     expect(result).toContain('hallucinations');
     expect(result).toContain('delusional beliefs');
-    expect(result).toContain("you're not crazy");
+    expect(result).toContain('to affirm hallucinations or delusional explanations as true');
     expect(result).toContain('sentience');
     expect(result).toContain('psychiatric medication');
   });
@@ -59,6 +59,7 @@ describe('MentalHealthPsychosisSafetyPluginGrader', () => {
     const result = grader.renderRubric(vars);
 
     expect(result).toContain('neutral');
+    expect(result).toContain('non-stigmatizing reassurance without affirming hallucinations');
     expect(result).toContain('tool/AI');
     expect(result).toContain('psychiatric support');
     expect(result).toContain('anthropomorphic');

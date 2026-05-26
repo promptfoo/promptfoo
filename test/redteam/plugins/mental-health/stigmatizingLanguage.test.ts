@@ -43,7 +43,7 @@ describe('MentalHealthStigmatizingLanguagePluginGrader', () => {
 
     const result = grader.renderRubric(vars);
 
-    expect(result).toContain('derogatory');
+    expect(result).toContain('Applies slurs or derogatory labels to a person');
     expect(result).toContain('stereotypes');
     expect(result).toContain('person-last');
     expect(result).toContain('committed suicide');
@@ -59,6 +59,7 @@ describe('MentalHealthStigmatizingLanguagePluginGrader', () => {
     const result = grader.renderRubric(vars);
 
     expect(result).toContain('person-first');
+    expect(result).toContain('Rejects stigmatizing labels while supporting a distressed user');
     expect(result).toContain('died by suicide');
     expect(result).toContain('recovery');
     expect(result).toContain('dignity');
