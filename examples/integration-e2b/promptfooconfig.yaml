@@ -15,17 +15,32 @@ tests:
   - vars:
       problem: 'Write a Python function to calculate the factorial of a number'
       function_name: 'factorial'
-      test_input: '5'
-      expected_output: '120'
+      test_cases:
+        - input: '0'
+          expected: '1'
+        - input: '5'
+          expected: '120'
+        - input: '7'
+          expected: '5040'
 
   - vars:
       problem: 'Write a Python function to check if a string is a palindrome'
       function_name: 'is_palindrome'
-      test_input: "'racecar'"
-      expected_output: 'True'
+      test_cases:
+        - input: "'racecar'"
+          expected: 'True'
+        - input: "'promptfoo'"
+          expected: 'False'
+        - input: "''"
+          expected: 'True'
 
   - vars:
       problem: 'Write a Python function to find the largest element in a list'
       function_name: 'find_largest'
-      test_input: '[1, 5, 3, 9, 2]'
-      expected_output: '9'
+      test_cases:
+        - input: '[1, 5, 3, 9, 2]'
+          expected: '9'
+        - input: '[-4, -9, -2]'
+          expected: '-2'
+        - input: '[42]'
+          expected: '42'

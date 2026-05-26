@@ -15,7 +15,8 @@ while a promptfoo Python assertion checks the result.
 The runnable example lives in
 [`examples/integration-e2b`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-e2b).
 It evaluates small Python functions, executes them in E2B with internet access
-disabled, and records per-test metrics.
+disabled, checks several hidden inputs per generated function, and records
+per-test metrics.
 
 ## Execution Flow
 
@@ -25,7 +26,8 @@ disabled, and records per-test metrics.
    APIs as a defense-in-depth check.
 4. The assertion starts an E2B sandbox with internet access disabled and runs
    the function with a five-second execution timeout.
-5. Promptfoo compares stdout to the expected result and records pass or fail.
+5. Promptfoo compares stdout for several hidden cases to their expected
+   results and records pass or fail.
 
 The static check is illustrative only. It is not a complete security policy.
 The security boundary for generated execution is the sandbox, its network
@@ -52,7 +54,7 @@ Create a Python virtual environment and install the E2B SDK:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'e2b-code-interpreter==2.6.2'
+pip install 'e2b-code-interpreter==2.7.0'
 ```
 
 Export the credentials and tell promptfoo to use that virtual environment for
@@ -106,14 +108,20 @@ assertion.
 
 ## Customize The Eval
 
-Add more cases under `tests` in `promptfooconfig.yaml`:
+Add a coding task with multiple hidden cases under `tests` in
+`promptfooconfig.yaml`:
 
 ```yaml
 - vars:
     problem: 'Write a Python function that returns the sum of a list'
     function_name: 'sum_values'
-    test_input: '[2, 3, 5]'
-    expected_output: '10'
+    test_cases:
+      - input: '[2, 3, 5]'
+        expected: '10'
+      - input: '[]'
+        expected: '0'
+      - input: '[-2, 8]'
+        expected: '6'
 ```
 
 You can also replace `openai:chat:gpt-5.4-mini` with another

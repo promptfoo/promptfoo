@@ -3,8 +3,8 @@
 This example evaluates LLM-generated Python functions by executing them in an
 [E2B](https://e2b.dev/docs) sandbox from a promptfoo Python assertion. The
 assertion disables internet access for the sandbox, imposes a five-second
-execution timeout, compares stdout to the expected result, and records metrics
-in `.promptfoo_results/`.
+execution timeout, checks several hidden input/output cases for each generated
+function, and records metrics in `.promptfoo_results/`.
 
 The lightweight static scan in `validate_and_run_code_e2b.py` is an additional
 example guard, not a complete security boundary. Configure E2B templates and
@@ -18,7 +18,7 @@ cd integration-e2b
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'e2b-code-interpreter==2.6.2'
+pip install 'e2b-code-interpreter==2.7.0'
 
 export E2B_API_KEY="e2b_your_key"
 export OPENAI_API_KEY="sk_your_key"
