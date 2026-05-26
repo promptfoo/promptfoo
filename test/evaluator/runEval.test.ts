@@ -802,6 +802,27 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it('should preserve literal variable input listed in skipRenderVars', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Task: {{prompt}}\nUser: {{name}}', label: 'test-label' },
+      test: {
+        vars: {
+          name: 'Alice',
+          prompt: 'Do not evaluate {{secret}}.',
+          secret: 'sensitive-value',
+        },
+        options: { skipRenderVars: ['prompt'] },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toBe('Task: Do not evaluate {{secret}}.\nUser: Alice');
+  });
+
   it('should skip rendering generated redteam exports without a top-level redteam block', async () => {
     const results = await runEval({
       ...defaultOptions,

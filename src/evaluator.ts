@@ -759,15 +759,18 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+  const skipRenderVars = [
+    ...(shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
+      ? [getRedteamInjectVar(test, promptForRender, testSuite)]
+      : []),
+    ...(test.options?.skipRenderVars ?? []),
+  ];
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
     filters,
     provider,
-    skipRenderVars,
+    skipRenderVars.length > 0 ? [...new Set(skipRenderVars)] : undefined,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);

@@ -390,10 +390,10 @@ type AgentSkillsEvalsFile = {
  * expected shape so callers can fall back to the generic JSON parser.
  *
  * The mapping is:
- *   - `prompt`           -> `vars.prompt`
+ *   - `prompt`           -> literal `vars.prompt`
  *   - `expected_output`  -> `llm-rubric` assertion (first)
  *   - `assertions[i]`    -> additional `llm-rubric` assertions
- *   - `files`            -> `vars.files`
+ *   - `files`            -> `vars.files` and a file-context list in `vars.prompt`
  *   - `id`               -> `metadata.id` and `description`
  *   - top-level `skill_name` -> `metadata.skill_name`
  */
@@ -418,32 +418,45 @@ function parseAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
       typeof (entry as Partial<AgentSkillsEvalCase>).prompt === 'string' &&
       Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
   );
-  return validCases.map((entry, idx) => agentSkillsEvalToTestCase(entry, idx, skillName));
+  return validCases.flatMap((entry, idx) => {
+    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName);
+    return testCase ? [testCase] : [];
+  });
 }
 
 function agentSkillsEvalToTestCase(
   entry: AgentSkillsEvalCase,
   idx: number,
   skillName: string,
-): TestCase {
+): TestCase | null {
+  const assertions = buildAgentSkillsAssertions(entry);
+  if (assertions.length === 0) {
+    return null;
+  }
+
   const idValue =
     typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
 
-  const vars: Record<string, VarValue> = { prompt: entry.prompt };
-  if (Array.isArray(entry.files)) {
-    vars.files = entry.files.filter((f): f is string => typeof f === 'string');
+  const files = Array.isArray(entry.files)
+    ? entry.files.filter((file): file is string => typeof file === 'string' && Boolean(file.trim()))
+    : [];
+  const prompt =
+    files.length > 0
+      ? `${entry.prompt}\n\nFiles available for this eval:\n${files.map((file) => `- ${file}`).join('\n')}`
+      : entry.prompt;
+  const vars: Record<string, VarValue> = { prompt };
+  if (files.length > 0) {
+    vars.files = files;
   }
 
-  const assertions = buildAgentSkillsAssertions(entry);
   const metadata = buildAgentSkillsMetadata(idValue, skillName);
 
   const testCase: TestCase = {
     description: idValue == null ? `Row #${idx + 1}` : `eval ${idValue}`,
     vars,
+    assert: assertions,
+    options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
   };
-  if (assertions.length > 0) {
-    testCase.assert = assertions;
-  }
   if (metadata) {
     testCase.metadata = metadata;
   }
@@ -681,6 +694,26 @@ export async function loadTestsFromGlob(
   return ret;
 }
 
+async function readTestsArrayStringSource(source: string, basePath: string): Promise<TestCase[]> {
+  // Extract path without function name (Windows-aware).
+  const lastColonIndex = source.lastIndexOf(':');
+  const pathWithoutFunction = lastColonIndex > 1 ? source.slice(0, lastColonIndex) : source;
+  // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1).
+  const pathWithoutSheet = source.split('#')[0];
+
+  if (
+    isJavascriptFile(pathWithoutFunction) ||
+    pathWithoutFunction.endsWith('.py') ||
+    pathWithoutSheet.endsWith('.xlsx') ||
+    pathWithoutSheet.endsWith('.xls') ||
+    source.replace(/^file:\/\//, '').includes(':')
+  ) {
+    return readStandaloneTestsFile(source, basePath);
+  }
+
+  return loadTestsFromGlob(source, basePath);
+}
+
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
@@ -708,25 +741,7 @@ export async function readTests(
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
-        // Extract path without function name (Windows-aware)
-        const lastColonIndex = globOrTest.lastIndexOf(':');
-        const pathWithoutFunction: string =
-          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
-        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-        const pathWithoutSheet = globOrTest.split('#')[0];
-        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
-        if (
-          isJavascriptFile(pathWithoutFunction) ||
-          pathWithoutFunction.endsWith('.py') ||
-          pathWithoutSheet.endsWith('.xlsx') ||
-          pathWithoutSheet.endsWith('.xls') ||
-          globOrTest.replace(/^file:\/\//, '').includes(':')
-        ) {
-          ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
-        } else {
-          // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
-        }
+        ret.push(...(await readTestsArrayStringSource(globOrTest, basePath)));
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {

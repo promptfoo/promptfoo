@@ -298,7 +298,7 @@ describe('readStandaloneTestsFile', () => {
               id: 1,
               prompt: 'Find the top 3 months by revenue from data/sales_2025.csv.',
               expected_output: 'A bar chart image showing the top 3 months by revenue.',
-              files: ['evals/files/sales_2025.csv'],
+              files: ['evals/files/sales_2025.csv', 'evals/files/chart-template.svg'],
               assertions: [
                 'The output includes a bar chart image file',
                 'The chart shows exactly 3 months',
@@ -320,8 +320,9 @@ describe('readStandaloneTestsFile', () => {
         {
           description: 'eval 1',
           vars: {
-            prompt: 'Find the top 3 months by revenue from data/sales_2025.csv.',
-            files: ['evals/files/sales_2025.csv'],
+            prompt:
+              'Find the top 3 months by revenue from data/sales_2025.csv.\n\nFiles available for this eval:\n- evals/files/sales_2025.csv\n- evals/files/chart-template.svg',
+            files: ['evals/files/sales_2025.csv', 'evals/files/chart-template.svg'],
           },
           assert: [
             {
@@ -332,12 +333,14 @@ describe('readStandaloneTestsFile', () => {
             { type: 'llm-rubric', value: 'The chart shows exactly 3 months' },
           ],
           metadata: { id: 1, skill_name: 'csv-analyzer' },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
         },
         {
           description: 'eval inv-2',
           vars: { prompt: 'Summarize the quarterly trends.' },
           assert: [{ type: 'llm-rubric', value: 'Mentions Q1 through Q4' }],
           metadata: { id: 'inv-2', skill_name: 'csv-analyzer' },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
         },
       ]);
     });
@@ -380,6 +383,7 @@ describe('readStandaloneTestsFile', () => {
           vars: { prompt: 'hello' },
           assert: [{ type: 'llm-rubric', value: 'greets the user' }],
           metadata: { skill_name: 'greeter' },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
         },
       ]);
     });
@@ -400,6 +404,7 @@ describe('readStandaloneTestsFile', () => {
         vars: { prompt: 'good entry' },
         assert: [{ type: 'llm-rubric', value: 'must answer' }],
         metadata: { skill_name: 'mixed' },
+        options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
       });
     });
 
@@ -407,7 +412,7 @@ describe('readStandaloneTestsFile', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({
           skill_name: 'invalid',
-          evals: [null, { prompt: '   ' }],
+          evals: [null, { prompt: '   ' }, { prompt: 'has no grading rubric' }],
         }),
       );
 
@@ -1498,6 +1503,7 @@ describe('readTests', () => {
         vars: { prompt: 'Summarize this input.' },
         assert: [{ type: 'llm-rubric', value: 'Is concise' }],
         metadata: { id: 'case-1', skill_name: 'summarizer' },
+        options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
       },
     ]);
   });
