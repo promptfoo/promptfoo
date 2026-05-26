@@ -72,6 +72,18 @@ describe('findUnknownTopLevelKeys', () => {
     );
   });
 
+  it('accepts extension keys and reusable local-ref definition containers', () => {
+    expect(
+      findUnknownTopLevelKeys({
+        'x-review-schema': { type: 'object' },
+        assertionTemplates: { reusable: { type: 'contains', value: 'ok' } },
+        $defs: { providerConfig: { type: 'object' } },
+        definitions: { legacyConfig: { type: 'object' } },
+        prompts: ['hi'],
+      }),
+    ).toEqual([]);
+  });
+
   it('returns [] for an empty config', () => {
     expect(findUnknownTopLevelKeys({})).toEqual([]);
   });
@@ -120,6 +132,8 @@ describe('findTestsWithoutAssertions', () => {
   it('requires a runnable leaf inside assertion sets', () => {
     const tests: TestCase[] = [
       { assert: [{ type: 'assert-set', assert: [] }] },
+      { assert: [{ type: 'assert-set', assert: [{ type: 'select-best', value: 'best' }] }] },
+      { assert: [{ type: 'assert-set', assert: [{ type: 'max-score' }] }] },
       {
         assert: [
           {
@@ -130,7 +144,7 @@ describe('findTestsWithoutAssertions', () => {
       },
     ];
 
-    expect(findTestsWithoutAssertions(tests)).toEqual([0]);
+    expect(findTestsWithoutAssertions(tests)).toEqual([0, 1, 2]);
   });
 
   it('does not treat an empty defaultTest.assert as a covering set', () => {

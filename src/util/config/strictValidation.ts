@@ -13,6 +13,11 @@ const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
   'targets',
   // Conventional JSON Schema declaration used for editor tooling.
   '$schema',
+  // Conventional JSON Schema reusable definition containers.
+  '$defs',
+  'definitions',
+  // Reusable assertion container supported by examples using local `$ref` values.
+  'assertionTemplates',
   // Deprecated aliases auto-migrated by the loader — not typos.
   'plugins',
   'strategies',
@@ -27,7 +32,9 @@ const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
  * renames, so that typos are still visible.
  */
 export function findUnknownTopLevelKeys(rawConfig: Record<string, unknown>): string[] {
-  return Object.keys(rawConfig).filter((key) => !KNOWN_TOP_LEVEL_KEYS.has(key));
+  return Object.keys(rawConfig).filter(
+    (key) => !KNOWN_TOP_LEVEL_KEYS.has(key) && !key.startsWith('x-'),
+  );
 }
 
 /**
@@ -60,11 +67,23 @@ export function findTestsWithoutAssertions(
   return offenders;
 }
 
-function hasEffectiveAssertions(assertions: AssertionOrSet[] | undefined): boolean {
+function hasEffectiveAssertions(
+  assertions: AssertionOrSet[] | undefined,
+  nestedInAssertionSet = false,
+): boolean {
   return (
     Array.isArray(assertions) &&
-    assertions.some(
-      (assertion) => assertion.type !== 'assert-set' || hasEffectiveAssertions(assertion.assert),
-    )
+    assertions.some((assertion) => {
+      if (assertion.type === 'assert-set') {
+        return hasEffectiveAssertions(assertion.assert, true);
+      }
+      if (
+        nestedInAssertionSet &&
+        (assertion.type.startsWith('select-') || assertion.type === 'max-score')
+      ) {
+        return false;
+      }
+      return true;
+    })
   );
 }

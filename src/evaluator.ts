@@ -1995,11 +1995,17 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
-function enforceStrictAssertionsOnEvaluatedRows(tests: AtomicTestCase[], testSuite: TestSuite) {
+function enforceStrictAssertionsOnEvaluatedRows(runEvalOptions: RunEvalOptions[]) {
   if (!getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
     return;
   }
-  const offenders = findTestsWithoutAssertions(tests, getDefaultTest(testSuite));
+  const offenders = [
+    ...new Set(
+      runEvalOptions
+        .filter(({ test }) => findTestsWithoutAssertions([test]).length > 0)
+        .map(({ testIdx }) => testIdx),
+    ),
+  ];
   if (offenders.length === 0) {
     return;
   }
@@ -4388,7 +4394,6 @@ class Evaluator {
 
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
-    enforceStrictAssertionsOnEvaluatedRows(tests, testSuite);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
@@ -4408,6 +4413,7 @@ class Evaluator {
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.evalRecord);
+    enforceStrictAssertionsOnEvaluatedRows(runEvalOptions);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,

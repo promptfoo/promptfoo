@@ -692,4 +692,19 @@ describe('defaultTest normalization for extensions', () => {
 
     await expect(evaluate(testSuite, evalRecord, { filterRange: '0:1' })).resolves.toBe(evalRecord);
   });
+
+  it('does not reject assertion-less rows that do not schedule a provider', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { assert: [{ type: 'contains', value: 'Test output' }] },
+        { description: 'excluded provider row', providers: ['provider-that-is-not-selected'] },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBe(evalRecord);
+  });
 });
