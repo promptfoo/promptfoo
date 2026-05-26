@@ -31,7 +31,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
-import { callApiJson } from '@app/utils/api';
+import { ApiResponseError, callApiJson } from '@app/utils/api';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
@@ -495,6 +495,14 @@ export default function Review({
             }
           }
         } catch (error) {
+          if (error instanceof ApiResponseError && error.status === 404) {
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setIsRunning(false);
+            clearJob();
+            showToast('Job was interrupted. Please try again.', 'error');
+            return;
+          }
           console.error('Error polling job status:', error);
         }
       }, 1000);
@@ -612,6 +620,17 @@ export default function Review({
       clearJob();
       showToast('Cancel request submitted', 'success');
     } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 400) {
+        if (pollIntervalRef.current) {
+          window.clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+
+        setIsRunning(false);
+        clearJob();
+        showToast('No running job was found. You can start a new evaluation.', 'warning');
+        return;
+      }
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');
     }

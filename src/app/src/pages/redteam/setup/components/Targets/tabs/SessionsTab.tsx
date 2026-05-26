@@ -22,7 +22,7 @@ import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { type ApiResponseError, callApiResult } from '@app/utils/api';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
+import { ProviderSchemas, type TestSessionResponse } from '@promptfoo/types/api/providers';
 import { ApiRoutes } from '@promptfoo/types/api/routes';
 import {
   AlertCircle,
@@ -283,27 +283,7 @@ interface SessionsTabProps {
   onTestComplete?: (success: boolean) => void;
 }
 
-interface SessionRequest {
-  prompt?: string;
-}
-
-interface TestResult {
-  success: boolean;
-  message: string;
-  reason?: string;
-  error?: string;
-  details?: {
-    sessionId?: string;
-    request1?: SessionRequest;
-    response1?: unknown;
-    request2?: SessionRequest;
-    response2?: unknown;
-    sessionSource?: string;
-    hasSessionIdTemplate?: boolean;
-    hasSessionParser?: boolean;
-    sessionParser?: string;
-  };
-}
+type TestResult = TestSessionResponse;
 
 function testResultFromError(error: ApiResponseError): TestResult {
   const message = typeof error.body.message === 'string' ? error.body.message : error.message;
@@ -354,7 +334,7 @@ async function runSessionTest({
     );
 
     if (response.ok) {
-      const data = response.data as TestResult;
+      const data: TestResult = response.data;
       setTestResult(data);
       setDetailsExpanded(!data.success);
       onTestComplete?.(data.success);

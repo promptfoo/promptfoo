@@ -239,6 +239,7 @@ describe('API schema red-team coverage', () => {
         reason: 'remote disabled',
         details: { request1: { prompt: 'one' } },
       });
+      expect(ProviderSchemas.TestSession.Response.safeParse({ success: true }).success).toBe(false);
     });
 
     it('keeps generator and discovery schemas from accepting empty or non-object envelopes', () => {

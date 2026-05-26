@@ -131,8 +131,33 @@ export const TestResponseTransformResponseSchema = ProviderTransformResultSchema
 export const TestSessionResponseSchema = z
   .object({
     success: z.boolean(),
-    message: z.string().optional(),
+    message: z.string(),
+    reason: z.string().optional(),
     error: z.string().optional(),
+    details: z
+      .object({
+        sessionId: z.string().optional(),
+        sessionSource: z.string().optional(),
+        request1: z
+          .object({
+            prompt: z.string(),
+            sessionId: z.string().optional(),
+          })
+          .optional(),
+        response1: z.unknown().optional(),
+        request2: z
+          .object({
+            prompt: z.string(),
+            sessionId: z.string().optional(),
+          })
+          .optional(),
+        response2: z.unknown().optional(),
+        hasSessionIdTemplate: z.boolean().optional(),
+        hasSessionParser: z.boolean().optional(),
+        sessionParser: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 

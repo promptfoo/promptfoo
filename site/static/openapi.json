@@ -5447,11 +5447,61 @@
                     "message": {
                       "type": "string"
                     },
+                    "reason": {
+                      "type": "string"
+                    },
                     "error": {
                       "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "properties": {
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "type": "string"
+                        },
+                        "request1": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["prompt"]
+                        },
+                        "response1": {},
+                        "request2": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["prompt"]
+                        },
+                        "response2": {},
+                        "hasSessionIdTemplate": {
+                          "type": "boolean"
+                        },
+                        "hasSessionParser": {
+                          "type": "boolean"
+                        },
+                        "sessionParser": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": {}
                     }
                   },
-                  "required": ["success"],
+                  "required": ["success", "message"],
                   "additionalProperties": {}
                 }
               }
