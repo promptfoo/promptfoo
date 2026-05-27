@@ -1,8 +1,9 @@
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
-
 import logger from '../logger';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
 import { runPython } from './pythonUtils';
 
 /**
@@ -17,12 +18,10 @@ export async function runPythonCode<T = unknown>(
   method: string,
   args: (string | object | undefined)[],
 ): Promise<T> {
-  const tempFilePath = path.join(
-    os.tmpdir(),
-    `temp-python-code-${Date.now()}-${Math.random().toString(16).slice(2)}.py`,
-  );
+  let tempDirectory: string | undefined;
   try {
-    await fs.writeFile(tempFilePath, code);
+    tempDirectory = await createSecureTempDirectory('promptfoo-python-code-');
+    const tempFilePath = await writeSecureTempFile(tempDirectory, 'script.py', code);
     // Necessary to await so temp file doesn't get deleted.
     const result = await runPython<T>(tempFilePath, method, args);
     return result;
@@ -30,10 +29,12 @@ export async function runPythonCode<T = unknown>(
     logger.error(`Error executing Python code: ${error}`);
     throw error;
   } finally {
-    try {
-      await fs.unlink(tempFilePath);
-    } catch (error) {
-      logger.error(`Error removing temporary file: ${error}`);
+    if (tempDirectory) {
+      try {
+        await removeSecureTempDirectory(tempDirectory);
+      } catch (error) {
+        logger.error(`Error removing temporary Python code directory: ${error}`);
+      }
     }
   }
 }
