@@ -117,6 +117,16 @@ interface CodexStreamingState {
   lastEventTime: number;
   reasoningTexts: string[];
   conversationMessages: Array<{ role: string; content: string }>;
+  /**
+   * Counter for LLM turns observed in this run. Codex emits explicit
+   * `turn.started` / `turn.completed` events around each LLM round-trip; we
+   * use those as turn boundaries and emit a `gen_ai.turn N` span per turn.
+   */
+  turnCount: number;
+  /** Active `gen_ai.turn` span, opened on `turn.started` and ended on `turn.completed`. */
+  activeTurnSpan?: Span;
+  /** 1-based index of the currently open turn, stamped on item spans for correlation. */
+  activeTurnIndex: number;
 }
 
 const MINIMAL_CLI_ENV_KEYS = [
@@ -1026,6 +1036,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           content: this.formatPromptInputForTrace(prompt),
         },
       ],
+      turnCount: 0,
+      activeTurnSpan: undefined,
+      activeTurnIndex: 0,
     };
   }
 
@@ -1048,21 +1061,26 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return;
       case 'turn.completed':
         state.usage = event.usage;
+        this.endTurnSpan(state, eventTime, event.usage);
         logger.debug('Codex turn completed', { usage: state.usage });
         return;
       case 'turn.failed': {
         const errorMsg = event.error?.message || 'Turn failed';
+        this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex turn failed', { error: errorMsg });
         throw new Error(`Codex turn failed: ${errorMsg}`);
       }
       case 'error': {
         const errorMsg =
           typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
+        this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex stream error', { error: errorMsg });
         throw new Error(`Codex stream error: ${errorMsg}`);
       }
       case 'thread.started':
+        return;
       case 'turn.started':
+        this.startTurnSpan(state, tracer, eventTime);
         return;
       default:
         logger.debug('Codex unknown event type', { type: event.type });
@@ -1088,7 +1106,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     const itemId = String(item.id);
-    const span = this.startStreamingItemSpan(tracer, item, itemId);
+    const span = this.startStreamingItemSpan(
+      tracer,
+      item,
+      itemId,
+      undefined,
+      state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+    );
     state.activeSpans.set(itemId, span);
     state.itemStartTimes.set(itemId, eventTime);
     logger.debug('Codex item started', { itemId, type: item.type });
@@ -1113,7 +1137,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     const span =
       state.activeSpans.get(itemId) ??
-      this.startStreamingItemSpan(tracer, item, itemId, state.lastEventTime);
+      this.startStreamingItemSpan(
+        tracer,
+        item,
+        itemId,
+        state.lastEventTime,
+        state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+      );
     const hadStartEvent = state.activeSpans.has(itemId);
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
     const durationMs = eventTime - startTime;
@@ -1157,6 +1187,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     item: any,
     itemId: string,
     startTime?: number,
+    turnIndex?: number,
   ): Span {
     return tracer.startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
@@ -1165,9 +1196,75 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         'codex.item.id': itemId,
         'codex.item.type': item.type,
         ...(startTime === undefined ? {} : { 'codex.timing.estimated': true }),
+        ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
       },
     });
+  }
+
+  private startTurnSpan(
+    state: CodexStreamingState,
+    tracer: ReturnType<typeof trace.getTracer>,
+    eventTime: number,
+  ): void {
+    if (state.activeTurnSpan) {
+      // Codex doesn't normally double-open turns, but if a `turn.started` arrives
+      // before the prior `turn.completed`, close the prior one to avoid a leak.
+      try {
+        state.activeTurnSpan.end(eventTime);
+      } catch {
+        // ignore
+      }
+      state.activeTurnSpan = undefined;
+    }
+    state.turnCount += 1;
+    state.activeTurnIndex = state.turnCount;
+    try {
+      state.activeTurnSpan = tracer.startSpan(`gen_ai.turn ${state.turnCount}`, {
+        kind: SpanKind.INTERNAL,
+        startTime: eventTime,
+        attributes: {
+          'gen_ai.turn.index': state.turnCount,
+          'gen_ai.system': 'openai',
+        },
+      });
+    } catch (err) {
+      logger.warn(`[CodexSDK] Failed to start turn span: ${err}`);
+      state.activeTurnSpan = undefined;
+    }
+  }
+
+  private endTurnSpan(
+    state: CodexStreamingState,
+    eventTime: number,
+    usage?: any,
+    errorMessage?: string,
+  ): void {
+    const span = state.activeTurnSpan;
+    if (!span) {
+      return;
+    }
+    try {
+      if (usage) {
+        const inputTokens = usage.input_tokens ?? usage.inputTokens;
+        const outputTokens = usage.output_tokens ?? usage.outputTokens;
+        if (typeof inputTokens === 'number') {
+          span.setAttribute('gen_ai.usage.input_tokens', inputTokens);
+        }
+        if (typeof outputTokens === 'number') {
+          span.setAttribute('gen_ai.usage.output_tokens', outputTokens);
+        }
+      }
+      if (errorMessage) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+      } else {
+        span.setStatus({ code: SpanStatusCode.OK });
+      }
+      span.end(eventTime);
+    } catch (err) {
+      logger.warn(`[CodexSDK] Failed to end turn span: ${err}`);
+    }
+    state.activeTurnSpan = undefined;
   }
 
   private collectStreamingItemText(item: any, state: CodexStreamingState): void {
@@ -1277,6 +1374,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
+    if (state.activeTurnSpan) {
+      try {
+        state.activeTurnSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'Turn span not properly closed',
+        });
+        state.activeTurnSpan.end();
+      } catch {
+        // ignore
+      }
+      state.activeTurnSpan = undefined;
+    }
   }
 
   private buildStreamingTurnResult(state: CodexStreamingState): {
