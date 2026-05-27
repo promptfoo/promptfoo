@@ -42,17 +42,37 @@ export interface ProviderConfig {
   audioOutputCost?: number;
 }
 
+export function getFiniteCostValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function getTokenCostOverrides(config: ProviderConfig): {
+  inputCost?: number;
+  outputCost?: number;
+} {
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  const numericCost = getFiniteCostValue(config.cost);
+
+  return {
+    inputCost:
+      getFiniteCostValue(config.inputCost) ?? getFiniteCostValue(objectCost?.input) ?? numericCost,
+    outputCost:
+      getFiniteCostValue(config.outputCost) ??
+      getFiniteCostValue(objectCost?.output) ??
+      numericCost,
+  };
+}
+
 export function getTokenCostRates(
   config: ProviderConfig,
   defaults: { input: number; output: number },
 ): { inputCost: number; outputCost: number } {
-  const objectCost =
-    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
-  const numericCost = typeof config.cost === 'number' ? config.cost : undefined;
+  const overrides = getTokenCostOverrides(config);
 
   return {
-    inputCost: config.inputCost ?? objectCost?.input ?? numericCost ?? defaults.input,
-    outputCost: config.outputCost ?? objectCost?.output ?? numericCost ?? defaults.output,
+    inputCost: overrides.inputCost ?? defaults.input,
+    outputCost: overrides.outputCost ?? defaults.output,
   };
 }
 
@@ -84,12 +104,10 @@ export function calculateCost(
 
   const model = models.find((m) => m.id === modelName);
   if (!model || !model.cost) {
-    if (config.cost != null && typeof config.cost !== 'object') {
-      return config.cost * promptTokens + config.cost * completionTokens;
-    }
-    if (typeof config.cost === 'object' && config.cost !== null) {
-      const { inputCost, outputCost } = getTokenCostRates(config, config.cost);
-      return inputCost * promptTokens + outputCost * completionTokens;
+    const { inputCost, outputCost } = getTokenCostOverrides(config);
+    if (inputCost !== undefined && outputCost !== undefined) {
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return Number.isFinite(cost) ? cost : undefined;
     }
     return undefined;
   }
@@ -102,7 +120,8 @@ export function calculateCost(
     input: longContextCost?.input ?? model.cost.input,
     output: longContextCost?.output ?? model.cost.output,
   });
-  return inputCost * promptTokens + outputCost * completionTokens;
+  const cost = inputCost * promptTokens + outputCost * completionTokens;
+  return Number.isFinite(cost) ? cost : undefined;
 }
 
 /**

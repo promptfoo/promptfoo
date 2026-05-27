@@ -1984,6 +1984,21 @@ Third line`;
       expect(result.cost).toBeUndefined();
     });
 
+    it('should not treat non-finite directional prices as free for unknown models', async () => {
+      const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
+        config: {
+          cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY },
+          region: 'us-east-1',
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeUndefined();
+    });
+
     it('should calculate cost for unknown models with both directional overrides', async () => {
       const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
         config: { inputCost: 0.01, outputCost: 0.02, region: 'us-east-1' },

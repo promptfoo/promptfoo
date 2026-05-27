@@ -1,5 +1,6 @@
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { getFiniteCostValue } from '../shared';
 import type {
   GetProductsCommand,
   GetProductsCommandOutput,
@@ -626,8 +627,8 @@ export function calculateCostWithFetchedPricing(
   }
 
   const effectivePricing = {
-    input: rateOverrides.input ?? modelPricing.input,
-    output: rateOverrides.output ?? modelPricing.output,
+    input: getFiniteCostValue(rateOverrides.input) ?? modelPricing.input,
+    output: getFiniteCostValue(rateOverrides.output) ?? modelPricing.output,
   };
 
   logger.debug('[Bedrock Pricing]: Using fetched pricing', {

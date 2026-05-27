@@ -118,6 +118,21 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(7.5, 10);
   });
 
+  it('does not price an unknown model from incomplete object-shaped rates', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'custom-audio-model',
+        { cost: { audioInput: 0.01, audioOutput: 0.03 } as any },
+        {
+          prompt_tokens: 1_200,
+          completion_tokens: 600,
+          prompt_tokens_details: { text_tokens: 1_000, audio_tokens: 200 },
+          completion_tokens_details: { text_tokens: 500, audio_tokens: 100 },
+        },
+      ),
+    ).toBeUndefined();
+  });
+
   it('prices cached input for GPT-5.3 coding models', () => {
     expect(
       calculateOpenAIUsageCost(

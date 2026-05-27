@@ -31,6 +31,7 @@ import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
+  getTokenCostOverrides,
   getTokenCostRates,
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -224,7 +225,12 @@ function calculateBedrockConverseCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (promptTokens === undefined || completionTokens === undefined) {
+  if (
+    promptTokens === undefined ||
+    completionTokens === undefined ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
     return undefined;
   }
 
@@ -236,20 +242,15 @@ function calculateBedrockConverseCost(
         input: pricing.input / 1_000_000,
         output: pricing.output / 1_000_000,
       });
-      return inputCost * promptTokens + outputCost * completionTokens;
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return Number.isFinite(cost) ? cost : undefined;
     }
   }
 
-  const hasCompleteExplicitCostOverride =
-    typeof config.cost === 'number' ||
-    (typeof config.cost === 'object' &&
-      config.cost !== null &&
-      config.cost.input !== undefined &&
-      config.cost.output !== undefined) ||
-    (config.inputCost !== undefined && config.outputCost !== undefined);
-  if (hasCompleteExplicitCostOverride) {
-    const { inputCost, outputCost } = getTokenCostRates(config, { input: 0, output: 0 });
-    return inputCost * promptTokens + outputCost * completionTokens;
+  const { inputCost, outputCost } = getTokenCostOverrides(config);
+  if (inputCost !== undefined && outputCost !== undefined) {
+    const cost = inputCost * promptTokens + outputCost * completionTokens;
+    return Number.isFinite(cost) ? cost : undefined;
   }
 
   return undefined;

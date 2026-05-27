@@ -222,6 +222,18 @@ describe('pricingFetcher', () => {
       expect(cost).toBeCloseTo(10.0075, 6);
     });
 
+    it('should ignore non-finite overrides rather than publishing an invalid cost', () => {
+      const cost = calculateCostWithFetchedPricing(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        mockPricingData,
+        1000,
+        500,
+        { input: Number.NaN, output: Number.POSITIVE_INFINITY },
+      );
+
+      expect(cost).toBeCloseTo(0.0105, 6);
+    });
+
     it('should not infer pricing from application inference-profile ARN names', () => {
       const cost = calculateCostWithFetchedPricing(
         'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-4-5-prod',

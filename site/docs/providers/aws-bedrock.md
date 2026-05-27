@@ -1136,6 +1136,10 @@ The Converse provider (`bedrock:converse:<model-id>`) currently uses Promptfoo's
 4. Subsequent evals use cached pricing (0ms overhead)
 5. Does not add an estimated automatic charge when regional pricing cannot be retrieved; use an explicit `cost` override when deterministic offline cost reporting is required
 
+Successful cached pricing is public regional catalog data and may be reused across
+provider instances. On a cache miss, the fetching provider's IAM credential context
+is used; a failed lookup is not shared with independent provider instances.
+
 **Requirements:**
 
 - **IAM credentials** with `pricing:GetProducts` permission

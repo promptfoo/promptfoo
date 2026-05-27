@@ -291,6 +291,30 @@ describe('Shared Provider Functions', () => {
       ).toBe(6.5);
     });
 
+    it('should ignore non-finite override rates when model defaults are available', () => {
+      expect(
+        calculateCost(
+          'model1',
+          { cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY } },
+          1000,
+          500,
+          models,
+        ),
+      ).toBe(2);
+    });
+
+    it('should not calculate unknown-model costs from incomplete explicit rates', () => {
+      expect(
+        calculateCost(
+          'nonexistent',
+          { cost: { input: Number.NaN, output: 0.007 } },
+          1000,
+          500,
+          models,
+        ),
+      ).toBeUndefined();
+    });
+
     it('should return undefined if tokens are not finite', () => {
       expect(calculateCost('model1', {}, Number.NaN, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, Infinity, models)).toBeUndefined();

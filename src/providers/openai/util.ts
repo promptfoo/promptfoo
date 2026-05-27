@@ -1,7 +1,12 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
-import { calculateCost, getTokenCostRates } from '../shared';
+import {
+  calculateCost,
+  getFiniteCostValue,
+  getTokenCostOverrides,
+  getTokenCostRates,
+} from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -690,44 +695,38 @@ export function calculateOpenAICost(
   const model = OPENAI_BILLING_MODELS.find((m) => m.id === modelName);
   const objectCost =
     typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
-  const defaultCost = model?.cost ?? objectCost;
-  if (!defaultCost) {
+  const textRates = model?.cost
+    ? getTokenCostRates(config, model.cost)
+    : getTokenCostOverrides(config);
+  if (textRates.inputCost === undefined || textRates.outputCost === undefined) {
     return undefined;
   }
 
-  let totalCost = 0;
-
-  const { inputCost, outputCost } = getTokenCostRates(config, defaultCost);
-  totalCost += inputCost * promptTokens + outputCost * completionTokens;
-
-  const hasDefaultAudioPricing = 'audioInput' in defaultCost || 'audioOutput' in defaultCost;
   const audioInputCost =
-    config.audioInputCost ??
-    config.audioCost ??
-    objectCost?.audioInput ??
-    (hasDefaultAudioPricing ? defaultCost.audioInput : undefined);
+    getFiniteCostValue(config.audioInputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioInput) ??
+    getFiniteCostValue(model?.cost?.audioInput);
   const audioOutputCost =
-    config.audioOutputCost ??
-    config.audioCost ??
-    objectCost?.audioOutput ??
-    (hasDefaultAudioPricing ? defaultCost.audioOutput : undefined);
+    getFiniteCostValue(config.audioOutputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioOutput) ??
+    getFiniteCostValue(model?.cost?.audioOutput);
 
   if (
-    !model &&
-    ((audioPromptTokens > 0 && audioInputCost === undefined) ||
-      (audioCompletionTokens > 0 && audioOutputCost === undefined))
+    (audioPromptTokens > 0 && audioInputCost === undefined) ||
+    (audioCompletionTokens > 0 && audioOutputCost === undefined)
   ) {
     return undefined;
   }
 
-  if (hasDefaultAudioPricing || audioInputCost !== undefined || audioOutputCost !== undefined) {
-    const modelAudioInputCost: number = typeof audioInputCost === 'number' ? audioInputCost : 0;
-    const modelAudioOutputCost: number = typeof audioOutputCost === 'number' ? audioOutputCost : 0;
-    totalCost +=
-      modelAudioInputCost * audioPromptTokens + modelAudioOutputCost * audioCompletionTokens;
-  }
+  const totalCost =
+    textRates.inputCost * promptTokens +
+    textRates.outputCost * completionTokens +
+    (audioInputCost ?? 0) * audioPromptTokens +
+    (audioOutputCost ?? 0) * audioCompletionTokens;
 
-  return totalCost;
+  return Number.isFinite(totalCost) ? totalCost : undefined;
 }
 
 export function failApiCall(err: any) {

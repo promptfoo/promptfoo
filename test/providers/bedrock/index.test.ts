@@ -3441,6 +3441,42 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockGetPricingData).toHaveBeenCalledWith('us-east-1', undefined);
   });
 
+  it('should ignore non-finite InvokeModel overrides and use fetched regional pricing', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    mockGetPricingData.mockResolvedValueOnce({
+      models: new Map([['Claude 3.7 Sonnet', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY },
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.05);
+    expect(mockGetPricingData).toHaveBeenCalledWith('us-east-1', undefined);
+  });
+
   it.each([
     ['global.amazon.nova-2-lite-v1:0', {}],
     [
