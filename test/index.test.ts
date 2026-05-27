@@ -764,6 +764,49 @@ describe('evaluate function', () => {
       );
     });
 
+    it('does not let a provider label silently shadow another provider id', async () => {
+      const providerById = createMockProvider({ id: 'judge' });
+      const providerWithCollidingLabel = createMockProvider({
+        id: 'litellm:judge',
+        label: 'judge',
+      });
+      loadApiProvidersSpy.mockResolvedValueOnce([providerById, providerWithCollidingLabel]);
+
+      const testSuite = {
+        prompts: ['test'],
+        providers: ['judge', 'litellm:judge'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals' as const,
+                value: 'expected',
+                provider: 'judge',
+              },
+            ],
+          },
+        ],
+      };
+
+      await evaluate(testSuite);
+
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: providerById,
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
     // Regression for GitHub issue #4111: model-graded assertions that specified
     // `provider` as a string ID were not resolved from the main providers
     // array/providerMap, causing those assertions to fail.

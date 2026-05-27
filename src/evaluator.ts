@@ -70,6 +70,7 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import { buildConfiguredProviderMap, GRADING_PROVIDER_TYPE_KEYS } from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
@@ -1990,19 +1991,6 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
   return promptIndexMap;
 }
 
-function buildConfiguredProviderMap(providers: ApiProvider[]): Record<string, ApiProvider> {
-  const providerMap: Record<string, ApiProvider> = Object.create(null);
-  for (const provider of providers) {
-    providerMap[provider.id()] = provider;
-    if (provider.label) {
-      providerMap[provider.label] = provider;
-    }
-  }
-  return providerMap;
-}
-
-const GRADING_PROVIDER_TYPE_KEYS = ['text', 'embedding', 'classification', 'moderation'] as const;
-
 function resolveConfiguredProviderReference<T>(
   provider: T,
   providerMap: Record<string, ApiProvider>,
@@ -2015,7 +2003,7 @@ function resolveConfiguredProviderReference<T>(
     typeof provider !== 'object' ||
     Array.isArray(provider) ||
     isApiProvider(provider) ||
-    'id' in provider
+    Object.hasOwn(provider, 'id')
   ) {
     return provider;
   }

@@ -12,6 +12,11 @@ import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
+import {
+  buildConfiguredProviderMap,
+  GRADING_PROVIDER_TYPE_KEYS,
+  isProviderTypeMap,
+} from './util/gradingProvider';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
@@ -25,7 +30,7 @@ import type {
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { ApiProvider, ProviderTypeMap } from './types/providers';
+import type { ApiProvider } from './types/providers';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -194,30 +199,6 @@ function createSerializableUnifiedConfig(
   return config;
 }
 
-function buildProviderMap(providers: ApiProvider[]): Record<string, ApiProvider> {
-  const providerMap: Record<string, ApiProvider> = Object.create(null);
-  for (const provider of providers) {
-    providerMap[provider.id()] = provider;
-    if (provider.label) {
-      providerMap[provider.label] = provider;
-    }
-  }
-  return providerMap;
-}
-
-const GRADING_PROVIDER_TYPE_KEYS = ['text', 'embedding', 'classification', 'moderation'] as const;
-
-function isProviderTypeMap(provider: unknown): provider is ProviderTypeMap {
-  return Boolean(
-    provider &&
-      typeof provider === 'object' &&
-      !Array.isArray(provider) &&
-      !isApiProvider(provider) &&
-      !('id' in provider) &&
-      GRADING_PROVIDER_TYPE_KEYS.some((providerType) => Object.hasOwn(provider, providerType)),
-  );
-}
-
 async function resolveGradingProvider(
   provider: GradingConfig['provider'],
   providerMap: Record<string, ApiProvider>,
@@ -352,7 +333,7 @@ export async function evaluateWithSource(
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
-  const providerMap = buildProviderMap(loadedProviders);
+  const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
