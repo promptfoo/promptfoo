@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
-import telemetry from '../telemetry';
+import telemetry, { sanitizeTelemetryIdentifier } from '../telemetry';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
@@ -243,7 +243,7 @@ async function recordRedteamCompletionTelemetry(
 ) {
   const { successes: numPasses, failures: numFails, errors: numErrors } = evalResult.getStats();
   const numTests = numPasses + numFails + numErrors;
-  const plugins = getConfigIds(config.redteam?.plugins);
+  const plugins = getConfigIds(config.redteam?.plugins).map(sanitizeTelemetryIdentifier);
   const strategies = getConfigIds(config.redteam?.strategies);
   const targets = config.targets;
   const isPromptfooSampleTarget =

@@ -39,7 +39,10 @@ import {
 import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
-import telemetry from './telemetry';
+import telemetry, {
+  sanitizeTelemetryProviderBreakdown,
+  sanitizeTelemetryProviderIdentifier,
+} from './telemetry';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -4256,7 +4259,9 @@ class Evaluator {
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: getProviderPrefixes(testSuite).sort(),
-      models: runStats.models.ids,
+      models: Array.from(
+        new Set(runStats.models.ids.map(sanitizeTelemetryProviderIdentifier)),
+      ).sort(),
       isModelComparison: runStats.models.isComparison,
       hasCustomProvider: runStats.models.hasCustom,
       assertionTypes: Array.from(assertionTypes).sort(),
@@ -4288,7 +4293,7 @@ class Evaluator {
       assertionPassRate: runStats.assertions.passRate,
       assertionTokenUsage: JSON.stringify(runStats.assertions.tokenUsage),
       assertionBreakdown: JSON.stringify(runStats.assertions.breakdown),
-      providerBreakdown: JSON.stringify(runStats.providers),
+      providerBreakdown: JSON.stringify(sanitizeTelemetryProviderBreakdown(runStats.providers)),
       errorTypes: runStats.errors.types,
       errorBreakdown: JSON.stringify(runStats.errors.breakdown),
       usesConversationVar,

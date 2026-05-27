@@ -202,6 +202,30 @@ describe('computeRunStats', () => {
     });
   });
 
+  it('should not classify an assertion miss as a provider failure', () => {
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          error: 'Expected output to include "approved"',
+          latencyMs: 100,
+          provider: { id: 'openai:gpt-4' },
+          response: { tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        },
+      ],
+      stats: createStats(),
+      providers: [createProvider('openai:gpt-4')],
+    });
+
+    expect(runStats.providers[0]).toMatchObject({
+      requests: 1,
+      successes: 1,
+      failures: 0,
+      successRate: 1,
+    });
+  });
+
   it('should detect custom providers', () => {
     const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'my-custom-provider' } },

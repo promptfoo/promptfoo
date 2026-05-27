@@ -2,18 +2,30 @@ import { randomUUID } from 'crypto';
 
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import {
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
+  retryCommand,
 } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
+import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
+import { resolveConfigs } from '../../src/util/config/load';
 import { shouldShareResults } from '../../src/util/sharing';
+
+vi.mock('../../src/evaluator', () => ({
+  evaluate: vi.fn(),
+}));
+vi.mock('../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/config/load')>()),
+  resolveConfigs: vi.fn(),
+}));
 
 /** Generate a unique eval ID to avoid UNIQUE constraint collisions when tests run in the same second */
 function uniqueEvalId(): string {
@@ -27,6 +39,9 @@ describe('retry command', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    cliState.resume = false;
+    cliState.retryMode = false;
+    delete cliState._retryErrorResultIds;
   });
 
   describe('getErrorResultIds', () => {
@@ -262,6 +277,44 @@ describe('retry command', () => {
         .where(eq(evalResultsTable.evalId, evalRecord.id));
 
       expect(remaining).toHaveLength(0);
+    });
+  });
+
+  describe('retryCommand telemetry filtering', () => {
+    it('provides stale error IDs while the retried evaluation records run stats', async () => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const staleErrorId = `${evalRecord.id}-retry-error`;
+      await getDb()
+        .insert(evalResultsTable)
+        .values({
+          id: staleErrorId,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+          testCase: { vars: {} },
+          provider: { id: 'test-provider' },
+          success: false,
+          score: 0,
+          error: 'Previous request timed out',
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        testSuite: { prompts: [], providers: [], tests: [] },
+        commandLineOptions: {},
+        config: {},
+      } as any);
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, originalEval) => {
+        expect(cliState.retryMode).toBe(true);
+        expect(cliState._retryErrorResultIds).toEqual([staleErrorId]);
+        return originalEval;
+      });
+
+      await retryCommand(evalRecord.id, { share: false });
+
+      expect(evaluate).toHaveBeenCalledOnce();
+      expect(cliState._retryErrorResultIds).toBeUndefined();
     });
   });
 

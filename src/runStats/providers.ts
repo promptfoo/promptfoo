@@ -1,3 +1,5 @@
+import { isOperationalError } from './errors';
+
 import type { ApiProvider } from '../types/index';
 import type { ProviderStats, StatableResult } from './types';
 
@@ -50,10 +52,10 @@ export function computeProviderStats(
     const acc = accumulators.get(providerId)!;
     acc.requests++;
 
-    if (result.success) {
-      acc.successes++;
-    } else {
+    if (isOperationalError(result)) {
       acc.failures++;
+    } else {
+      acc.successes++;
     }
 
     acc.totalLatencyMs += result.latencyMs || 0;

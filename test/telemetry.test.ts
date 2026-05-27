@@ -11,7 +11,13 @@ import {
 } from 'vitest';
 import * as envars from '../src/envars';
 import { getUserAuthInfo } from '../src/globalConfig/accounts';
-import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/telemetry';
+import {
+  sanitizeTelemetryIdentifier,
+  sanitizeTelemetryProviderIdentifier,
+  TELEMETRY_EVENTS,
+  Telemetry,
+  TelemetryEventSchema,
+} from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -45,6 +51,23 @@ vi.mock('../src/cliState', () => ({
     config: undefined,
   },
 }));
+
+describe('sanitizeTelemetryIdentifier', () => {
+  it('keeps standard model identifiers while hiding configured paths and endpoints', () => {
+    expect(sanitizeTelemetryIdentifier('openai:chat:gpt-4o')).toBe('openai:chat:gpt-4o');
+    expect(sanitizeTelemetryIdentifier('python:/Users/acme/private/grader.py:default')).toBe(
+      'python:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('https://internal.example/eval?token=secret')).toBe(
+      'https:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('file://./confidential/refund-policy.yaml')).toBe(
+      'file:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('pii')).toBe('pii');
+    expect(sanitizeTelemetryProviderIdentifier('internal-client-provider')).toBe('custom');
+  });
+});
 
 vi.mock('../src/envars', async () => {
   const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');

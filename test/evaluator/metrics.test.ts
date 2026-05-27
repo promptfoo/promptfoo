@@ -7,6 +7,7 @@ import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import telemetry from '../../src/telemetry';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { createEvaluateResult } from '../factories/eval';
 import { mockApiProvider, toPrompt } from './helpers';
@@ -31,13 +32,51 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(evalRecord.runStats?.providers[0]).toMatchObject({
       provider: 'test-provider',
       requests: 2,
-      successes: 1,
-      failures: 1,
+      successes: 2,
+      failures: 0,
     });
     expect(evalRecord.runStats?.assertions).toMatchObject({
       total: 2,
       passed: 1,
     });
+  });
+
+  it('sanitizes path-bearing provider identifiers in outbound telemetry', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('python:/Users/acme/private/grader.py:default'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const otherProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('python:/opt/private/other-grader.py:default'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const recordSpy = vi.spyOn(telemetry, 'record');
+    const testSuite: TestSuite = {
+      providers: [provider, otherProvider],
+      prompts: [toPrompt('Telemetry privacy')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(recordSpy).toHaveBeenCalledWith(
+      'eval_ran',
+      expect.objectContaining({
+        models: ['python:custom'],
+      }),
+    );
+    const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
+    expect(properties?.providerBreakdown).not.toContain('/Users/acme/private');
+    expect(properties?.providerBreakdown).not.toContain('/opt/private');
+    expect(JSON.parse(String(properties?.providerBreakdown))).toEqual([
+      expect.objectContaining({
+        provider: 'python:custom',
+        requests: 2,
+        successes: 2,
+        failures: 0,
+      }),
+    ]);
   });
 
   it('excludes stale retry-error rows from persisted run statistics', async () => {

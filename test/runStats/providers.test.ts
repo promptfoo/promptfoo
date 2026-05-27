@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { computeModelInfo, computeProviderStats } from '../../src/runStats/providers';
+import { type ApiProvider, ResultFailureReason } from '../../src/types/index';
 
 import type { StatableResult } from '../../src/runStats/types';
-import type { ApiProvider } from '../../src/types/index';
 
 describe('computeProviderStats', () => {
   it('should return empty array for empty results', () => {
@@ -13,7 +13,13 @@ describe('computeProviderStats', () => {
   it('should safely aggregate provider ids that overlap object prototype keys', () => {
     const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: '__proto__' } },
-      { success: false, latencyMs: 200, provider: { id: 'constructor' } },
+      {
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Provider request failed',
+        latencyMs: 200,
+        provider: { id: 'constructor' },
+      },
     ];
     const stats = computeProviderStats(results);
     expect(stats).toEqual(
@@ -28,7 +34,13 @@ describe('computeProviderStats', () => {
     const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
       { success: true, latencyMs: 200, provider: { id: 'openai:gpt-4' } },
-      { success: false, latencyMs: 50, provider: { id: 'openai:gpt-4' } },
+      {
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Provider request failed',
+        latencyMs: 50,
+        provider: { id: 'openai:gpt-4' },
+      },
     ];
 
     const stats = computeProviderStats(results);
@@ -40,6 +52,26 @@ describe('computeProviderStats', () => {
       failures: 1,
       successRate: 2 / 3,
       avgLatencyMs: 117, // (100+200+50)/3 = 116.67 rounded
+    });
+  });
+
+  it('should count assertion failures as successful provider requests', () => {
+    const stats = computeProviderStats([
+      {
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        error: 'Expected output to contain "safe"',
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        response: { tokenUsage: { total: 4, prompt: 2, completion: 2 } },
+      },
+    ]);
+
+    expect(stats[0]).toMatchObject({
+      requests: 1,
+      successes: 1,
+      failures: 0,
+      successRate: 1,
     });
   });
 

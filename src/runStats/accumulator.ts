@@ -172,10 +172,10 @@ export class RunStatsAccumulator {
     };
     provider.requests++;
     provider.totalLatencyMs += result.latencyMs || 0;
-    if (result.success) {
-      provider.successes++;
-    } else {
+    if (isOperationalError(result)) {
       provider.failures++;
+    } else {
+      provider.successes++;
     }
     this.providers.set(providerId, provider);
     provider.totalTokens += result.response?.tokenUsage?.total || 0;

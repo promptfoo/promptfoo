@@ -68,7 +68,8 @@ vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
     checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue(undefined),
   };
 });
-vi.mock('../../src/telemetry', () => ({
+vi.mock('../../src/telemetry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/telemetry')>()),
   default: {
     record: vi.fn().mockResolvedValue(undefined),
     send: vi.fn().mockResolvedValue(undefined),
@@ -240,6 +241,32 @@ describe('doRedteamRun', () => {
         strategies: ['jailbreak'],
         isPromptfooSampleTarget: true,
         loadedFromCloud: false,
+      }),
+    );
+  });
+
+  it('should not emit custom plugin file paths in completion telemetry', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
+      redteam: {
+        plugins: [{ id: 'file://./confidential/refund-policy.yaml', numTests: 1 }],
+        strategies: [],
+      },
+      targets: [{ id: 'test-provider' }],
+    });
+    vi.mocked(doEval).mockResolvedValueOnce({
+      getStats: vi.fn().mockReturnValue({ successes: 1, failures: 0, errors: 0 }),
+      setGenerationDurationMs: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
+      shared: false,
+    } as any);
+
+    await doRedteamRun({});
+
+    expect(telemetry.record).toHaveBeenCalledWith(
+      'redteam run',
+      expect.objectContaining({
+        phase: 'completed',
+        plugins: ['file:custom'],
       }),
     );
   });
