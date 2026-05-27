@@ -20,7 +20,11 @@ fi
 checked=0
 
 while IFS= read -r -d '' artifact; do
-  if ! readelf -h "$artifact" >/dev/null 2>&1; then
+  # Check the ELF magic with Bash before invoking readelf so text assets do
+  # not turn a bundle validation step into thousands of subprocesses.
+  magic=""
+  IFS= read -r -n 4 magic <"$artifact" || true
+  if [[ "$magic" != $'\x7fELF' ]]; then
     continue
   fi
 

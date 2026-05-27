@@ -953,6 +953,42 @@ test_install_script_dir_requires_value() {
   return 1
 }
 
+test_install_script_handles_unset_home() {
+  log_test "install.sh handles an unset HOME"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unset-home.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  if output=$(env -u HOME bash "$ROOT_DIR/scripts/install.sh" 0.0.0 2>&1); then
+    log_fail "install.sh installed to a default directory despite HOME being unavailable"
+    return 1
+  fi
+  if [[ "$output" != *"HOME is unset"* ]] || [[ "$output" != *"--dir DIR"* ]]; then
+    log_fail "install.sh did not explain how to install without HOME: $output"
+    return 1
+  fi
+
+  if output=$(
+    env -u HOME \
+      PATH="$fake_bin:$PATH" \
+      SHELL="/bin/bash" \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] && [[ "$output" == *"skipping shell PATH modification"* ]]; then
+      log_pass "install.sh accepts a custom directory without HOME and skips rc-file mutation"
+      return 0
+    fi
+  fi
+
+  log_fail "install.sh failed a custom-directory install without HOME: $output"
+  return 1
+}
+
 test_install_script_npm_fallback_preserves_shims() {
   log_test "install.sh npm fallback preserves npm-generated shims"
 
@@ -1432,6 +1468,7 @@ main() {
   test_install_script_syntax
   test_install_script_help
   test_install_script_dir_requires_value
+  test_install_script_handles_unset_home
   test_install_script_npm_fallback_preserves_shims
   test_install_script_dir_without_version_uses_latest
   test_install_script_unsupported_macos_uses_npm

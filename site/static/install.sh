@@ -25,8 +25,8 @@ readonly GITHUB_REPO="promptfoo/promptfoo"
 readonly GITHUB_RELEASES="https://github.com/${GITHUB_REPO}/releases"
 readonly NPM_LATEST_URL="https://registry.npmjs.org/promptfoo/latest"
 
-INSTALL_DIR="${PROMPTFOO_INSTALL_DIR:-$HOME/.promptfoo}"
-BIN_DIR="$INSTALL_DIR/bin"
+INSTALL_DIR="${PROMPTFOO_INSTALL_DIR:-}"
+BIN_DIR=""
 VERSION="${PROMPTFOO_VERSION:-latest}"
 INSTALLED_VERSION=""
 
@@ -144,6 +144,16 @@ parse_args() {
       ;;
     esac
   done
+}
+
+configure_install_directory() {
+  if [[ -z "$INSTALL_DIR" ]]; then
+    if [[ -z "${HOME:-}" ]]; then
+      error "HOME is unset. Set HOME, set PROMPTFOO_INSTALL_DIR, or pass --dir DIR."
+    fi
+    INSTALL_DIR="$HOME/.promptfoo"
+  fi
+  BIN_DIR="$INSTALL_DIR/bin"
 }
 
 # ─── Platform Detection ──────────────────────────────────────────────────────
@@ -442,6 +452,11 @@ setup_path() {
     return 0
   fi
 
+  if [[ -z "${HOME:-}" ]]; then
+    warn "HOME is unset; skipping shell PATH modification. Add $BIN_DIR to PATH manually."
+    return 0
+  fi
+
   local shell_name rc_file export_line fish_bin_dir
   local path_already_set=false
 
@@ -556,6 +571,7 @@ send_install_telemetry() {
 main() {
   setup_colors
   parse_args "$@"
+  configure_install_directory
 
   echo ""
   echo -e "${BOLD}${MAGENTA}Promptfoo Installer${NC}"
