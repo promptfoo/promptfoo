@@ -102,19 +102,28 @@ function resolveMinimumSeverityInput(): MinimumSeverityInput {
 
 function getActionInputs(): ActionInputs {
   const minimumSeverity = resolveMinimumSeverityInput();
+  const configPath = core.getInput('config-path');
   // `diffs-only` carries no default in action.yml so we can distinguish
   // "workflow set it" from "workflow omitted it" (a default would surface
   // as a non-empty `core.getInput` value and trip warnIgnoredInputsWhenConfigPathSet).
   // Treat absent as `false` ourselves so getBooleanInput's strict parser
   // is only invoked on an explicit value.
+  //
+  // When config-path is set the input is documented as ignored — and
+  // resolveConfigPath short-circuits before reading inputs.diffsOnly, so
+  // there's nothing to parse. Skip the strict parser entirely in that
+  // case so a stale or template-expression value (e.g. `diffs-only: 0` /
+  // `'yes'`) cannot fail the action for a setting the scan never reads.
+  // The `diffsOnlyInputProvided` flag still surfaces the divergence via
+  // warnIgnoredInputsWhenConfigPathSet.
   const diffsOnlyRaw = core.getInput('diffs-only').trim();
 
   return {
     apiHost: core.getInput('api-host'),
     minimumSeverity: minimumSeverity.value,
     minimumSeverityInputProvided: minimumSeverity.provided,
-    configPath: core.getInput('config-path'),
-    diffsOnly: diffsOnlyRaw ? core.getBooleanInput('diffs-only') : false,
+    configPath,
+    diffsOnly: diffsOnlyRaw && !configPath ? core.getBooleanInput('diffs-only') : false,
     diffsOnlyInputProvided: Boolean(diffsOnlyRaw),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),

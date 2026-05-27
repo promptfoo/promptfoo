@@ -596,6 +596,43 @@ describe('code-scan-action main', () => {
       );
     });
 
+    it('should not strictly parse diffs-only when config-path is set (regression for codex P2 on 43858c7292)', async () => {
+      // When `config-path` is set, the YAML supplies scan settings and the
+      // action ignores diffs-only. Workflows can set diffs-only to an
+      // expression-derived or stale value (e.g. `0`, `'yes'`) that
+      // core.getBooleanInput rejects with TypeError. The action must not
+      // fail input parsing for a setting the scan never reads.
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        if (name === 'diffs-only') {
+          return 'yes'; // not a valid boolean per @actions/core; would throw if parsed
+        }
+        return '';
+      });
+      // If the action did call getBooleanInput here, the real one would
+      // throw — make this mock fail loudly to lock that down.
+      mocks.core.getBooleanInput.mockImplementation((name: string) => {
+        if (name === 'diffs-only') {
+          throw new TypeError(
+            "Input does not meet YAML 1.2 'Core Schema' specification: diffs-only",
+          );
+        }
+        return false;
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', 'configs/code-scan.yaml');
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('ignored when config-path is set'),
+      );
+    });
+
     it('should not read guidance-file from disk when config-path is set', async () => {
       mocks.core.getInput.mockImplementation((name: string) => {
         if (name === 'github-token') {
