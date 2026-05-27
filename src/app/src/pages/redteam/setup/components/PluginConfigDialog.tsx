@@ -311,9 +311,9 @@ export default function PluginConfigDialog({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              When enabled, tests will include a 50/50 split of safe and jailbreak prompts. Safe
-              prompts test whether your guardrails are too strict and incorrectly block legitimate
-              requests (over-blocking/false positives).
+              When enabled, tests are split as evenly as possible between safe and jailbreak
+              prompts. Safe prompts test whether your guardrails are too strict and incorrectly
+              block legitimate requests (over-blocking/false positives).
             </p>
           </div>
         );

@@ -410,6 +410,7 @@ describe('PluginConfigDialog - OSS', () => {
       expect(
         screen.getByLabelText('Include safe prompts to test for over-blocking'),
       ).toBeInTheDocument();
+      expect(screen.getByText(/split as evenly as possible/)).toBeInTheDocument();
 
       // Should ALSO show gradingGuidance field
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();

@@ -59,7 +59,7 @@ redteam:
 
 When `includeSafe: true` is set:
 
-- Test cases are split 50/50 between safe and jailbreak prompts
+- Test cases are split as evenly as possible between safe and jailbreak prompts
 - Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
 - This helps identify if your guardrails are too strict and block legitimate requests
 - Metadata includes `isSafe` and `label` fields for filtering and analysis
