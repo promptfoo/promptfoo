@@ -10,6 +10,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { mockProcessEnv } from '../../../util/utils';
 
 import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
@@ -977,6 +978,46 @@ describe('HydraProvider', () => {
       expect(result.metadata?.redteamHistory?.[0].output).toBe(
         '[Target provided empty response - likely refused]',
       );
+    });
+
+    it('normalizes inline b64_json responses for grading and redteam history', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
+      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+      const expectedOutput = `data:image/png;base64,${pngBase64}`;
+
+      try {
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: 'Attack message',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({ data: [{ b64_json: pngBase64 }] }),
+          isBase64: true,
+          format: 'json',
+        });
+
+        const provider = new HydraProvider({
+          injectVar: 'input',
+          maxTurns: 1,
+        });
+
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: 'harmful:test' }],
+            metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+          } as any,
+        };
+
+        const result = await provider.callApi('', context);
+
+        expect(result.metadata?.redteamHistory?.[0].output).toBe(expectedOutput);
+        expect(mockGrader.getResult.mock.calls[0][1]).toBe(expectedOutput);
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should continue when agent returns missing message', async () => {

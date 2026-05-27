@@ -723,30 +723,28 @@ export class HydraProvider implements ApiProvider {
         context.vars['sessionId'] = targetResponse.sessionId;
       }
 
-      // Externalize blobs to avoid token bloat in Hydra/meta prompts
-      if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
-        const beforeOutput = targetResponse.output;
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
+      // Normalize inline media for grading, or externalize stored blobs before Hydra/meta history.
+      const beforeOutput = targetResponse.output;
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      });
+      if (targetResponse.output !== beforeOutput) {
+        logger.debug('[Hydra] Normalized binary output', {
+          turn,
+          beforeLength: beforeOutput?.length,
+          afterLength: targetResponse.output?.length,
+          blobUris:
+            targetResponse.metadata && 'blobUris' in targetResponse.metadata
+              ? targetResponse.metadata.blobUris
+              : undefined,
         });
-        if (targetResponse.output !== beforeOutput) {
-          logger.debug('[Hydra] Externalized binary output', {
-            turn,
-            beforeLength: beforeOutput?.length,
-            afterLength: targetResponse.output?.length,
-            blobUris:
-              targetResponse.metadata && 'blobUris' in targetResponse.metadata
-                ? targetResponse.metadata.blobUris
-                : undefined,
-          });
-        } else if (typeof targetResponse.output === 'string') {
-          logger.debug('[Hydra] Binary output not externalized (using in-band)', {
-            turn,
-            responseLength: targetResponse.output.length,
-          });
-        }
+      } else if (typeof targetResponse.output === 'string') {
+        logger.debug('[Hydra] Binary output unchanged (using in-band)', {
+          turn,
+          responseLength: targetResponse.output.length,
+        });
       }
 
       const historyOutput =

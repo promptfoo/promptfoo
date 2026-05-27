@@ -1078,9 +1078,13 @@ describe('EvalResult', () => {
   });
 
   describe('createManyFromEvaluateResult', () => {
-    it('normalizes inline b64_json image responses before bulk persistence', async () => {
+    it('preserves inline b64_json image response JSON during bulk import persistence', async () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
       const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+      const output = JSON.stringify({
+        created: 1234,
+        data: [{ b64_json: pngBase64, revised_prompt: 'Keep this imported metadata.' }],
+      });
 
       try {
         const results = await EvalResult.createManyFromEvaluateResult(
@@ -1088,7 +1092,7 @@ describe('EvalResult', () => {
             {
               ...mockEvaluateResult,
               response: {
-                output: JSON.stringify({ data: [{ b64_json: pngBase64 }] }),
+                output,
                 isBase64: true,
                 format: 'json',
               },
@@ -1097,7 +1101,7 @@ describe('EvalResult', () => {
           'test-bulk-inline-image-result',
         );
 
-        expect(results[0].response?.output).toBe(`data:image/png;base64,${pngBase64}`);
+        expect(results[0].response?.output).toBe(output);
       } finally {
         restoreEnv();
       }

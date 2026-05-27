@@ -491,6 +491,25 @@ async function handleB64JsonOutput(
       return true;
     }
 
+    const base64Items = imageItems.filter(
+      (item): item is Extract<ImageOutputItem, { type: 'b64' }> => item.type === 'b64',
+    );
+    if (
+      base64Items.some((item) => {
+        const parsedImage = parseBinary(item.value, detectImageMimeType(item.value));
+        return !parsedImage || !shouldExternalize(parsedImage.buffer);
+      })
+    ) {
+      logger.debug(
+        '[BlobExtractor] Preserving b64_json output because not all images are storable',
+        {
+          ...context,
+          totalCount: imageItems.length,
+        },
+      );
+      return false;
+    }
+
     const outputUris: string[] = [];
     for (const item of imageItems) {
       if (item.type === 'url') {
@@ -504,10 +523,8 @@ async function handleB64JsonOutput(
         'image',
       );
       if (!stored) {
-        const storedCount = outputUris.filter((uri) => uri.startsWith(BLOB_SCHEME)).length;
-        logger.debug('[BlobExtractor] Preserving b64_json output after partial blob storage', {
+        logger.debug('[BlobExtractor] Preserving b64_json output after blob storage failure', {
           ...context,
-          storedCount,
           totalCount: imageItems.length,
         });
         return false;

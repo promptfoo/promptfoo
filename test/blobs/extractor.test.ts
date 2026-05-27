@@ -443,7 +443,7 @@ describe('Cloud blob upload', () => {
     expect(result?.images?.[1].blobRef?.hash).toBe('existing');
   });
 
-  it('should preserve b64_json output when only some images can be stored', async () => {
+  it('should preserve b64_json output without writing blobs when any image cannot be stored', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
 
     const largePngBase64 = Buffer.concat([
@@ -461,9 +461,11 @@ describe('Cloud blob upload', () => {
     };
 
     const result = await extractAndStoreBinaryData(response);
+    const repeatedResult = await extractAndStoreBinaryData(response);
 
     expect(result?.output).toBe(output);
-    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(repeatedResult?.output).toBe(output);
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 
   it('should preserve URL siblings when storing mixed b64_json and URL output items', async () => {

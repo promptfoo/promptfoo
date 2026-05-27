@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
-import { extractAndStoreBinaryData } from '../blobs/extractor';
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
@@ -398,11 +398,15 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
-      const processedResponse = await extractAndStoreBinaryData(result.response, {
-        evalId,
-        testIdx: result.testIdx,
-        promptIdx: result.promptIdx,
-      });
+      // This bulk writer is used by imports. Preserve archival inline response payloads
+      // rather than normalizing their provider JSON during ingestion.
+      const processedResponse = isBlobStorageEnabled()
+        ? await extractAndStoreBinaryData(result.response, {
+            evalId,
+            testIdx: result.testIdx,
+            promptIdx: result.promptIdx,
+          })
+        : result.response;
       processedResults.push({ ...result, response: processedResponse ?? undefined });
     }
 
