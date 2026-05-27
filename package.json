@@ -29,7 +29,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
@@ -284,6 +284,7 @@
     "@inquirer/input": "^5.0.8",
     "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
+    "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",

@@ -46,6 +46,7 @@ import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
+import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -59,7 +60,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations({ suppressNativeAddonLogging: true });
+  await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
@@ -157,12 +158,19 @@ try {
 
 if (isMain) {
   let mainError: unknown;
+  let libsqlBindingErrorMessage: string | undefined;
   try {
     await main();
   } catch (error) {
     mainError = error;
     if (error instanceof ConfigResolutionError) {
       logConfigResolutionError(error);
+    }
+    libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
+    if (libsqlBindingErrorMessage) {
+      logger.debug('libsql platform binding missing (original error follows)', {
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      });
     }
     // Set exit code immediately so watchdog timeouts preserve the error state.
     // EvalRunError carries an explicit exit code (defaults to 1) so library
@@ -189,6 +197,9 @@ if (isMain) {
       mainError instanceof EvalRunError
     ) {
       // User-facing message has already been rendered.
+    } else if (libsqlBindingErrorMessage) {
+      console.error(libsqlBindingErrorMessage);
+      // exit code preserved by process.exitCode = 1 above
     } else {
       throw mainError;
     }

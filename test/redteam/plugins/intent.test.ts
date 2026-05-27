@@ -59,6 +59,8 @@ vi.mock('glob', async (importOriginal) => {
   };
 });
 
+vi.mock('libsql');
+
 describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();
 

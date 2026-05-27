@@ -1,8 +1,9 @@
-import { DatabaseSync } from 'node:sqlite';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { sql } from 'drizzle-orm';
+import Database from 'libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
@@ -25,7 +26,7 @@ describe('database WAL mode', () => {
     // Close the database connection if it exists
     try {
       const database = await import('../src/database');
-      database.closeDb();
+      await database.closeDb();
     } catch (err) {
       console.error('Error closing database:', err);
     }
@@ -55,14 +56,14 @@ describe('database WAL mode', () => {
   it('enables WAL journal mode by default', async () => {
     // First import and initialize the database to trigger WAL mode configuration
     const database = await import('../src/database');
-    database.getDb();
+    await database.getDb();
 
     // Close it to ensure we don't get resource conflicts
-    database.closeDb();
+    await database.closeDb();
 
     // Then independently verify the journal mode using a direct connection
     const dbPath = database.getDbPath();
-    const directDb = new DatabaseSync(dbPath);
+    const directDb = new Database(dbPath);
 
     try {
       const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
@@ -73,15 +74,26 @@ describe('database WAL mode', () => {
     }
   });
 
+  it('opens database paths with URL-reserved characters', async () => {
+    const configDir = path.join(tempDir, 'nested#config');
+    fs.mkdirSync(configDir);
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: configDir });
+
+    const database = await import('../src/database');
+    await database.getDb();
+
+    expect(fs.existsSync(database.getDbPath())).toBe(true);
+  });
+
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: 'true' });
 
     const database = await import('../src/database');
-    database.getDb();
-    database.closeDb();
+    await database.getDb();
+    await database.closeDb();
 
     const dbPath = database.getDbPath();
-    const directDb = new DatabaseSync(dbPath);
+    const directDb = new Database(dbPath);
 
     try {
       const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
@@ -92,14 +104,13 @@ describe('database WAL mode', () => {
     }
   });
 
-  it('does not enable WAL mode for in-memory databases', async () => {
+  it('does not enable WAL mode while testing', async () => {
     mockProcessEnv({ IS_TESTING: 'true' });
 
     const database = await import('../src/database');
-    const db = database.getDb();
+    const db = await database.getDb();
 
-    // For in-memory databases, we can't verify the journal mode
-    // but we can ensure it doesn't throw
+    // Unit tests use a shared in-memory DB and skip WAL setup.
     expect(db).toBeDefined();
   });
 
@@ -108,11 +119,11 @@ describe('database WAL mode', () => {
       const database = await import('../src/database');
 
       // Open the database
-      database.getDb();
+      await database.getDb();
       expect(database.isDbOpen()).toBe(true);
 
       // Close it using closeDbIfOpen
-      database.closeDbIfOpen();
+      await database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
     });
 
@@ -123,7 +134,7 @@ describe('database WAL mode', () => {
       expect(database.isDbOpen()).toBe(false);
 
       // closeDbIfOpen should not throw
-      expect(() => database.closeDbIfOpen()).not.toThrow();
+      await expect(database.closeDbIfOpen()).resolves.toBeUndefined();
       expect(database.isDbOpen()).toBe(false);
     });
 
@@ -131,38 +142,34 @@ describe('database WAL mode', () => {
       const database = await import('../src/database');
 
       // Open the database
-      database.getDb();
+      await database.getDb();
       expect(database.isDbOpen()).toBe(true);
 
       // Close multiple times - should not throw
-      database.closeDbIfOpen();
+      await database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
 
-      database.closeDbIfOpen();
+      await database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
 
-      database.closeDbIfOpen();
+      await database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
     });
   });
 
   it('verifies WAL checkpoint settings', async () => {
     const database = await import('../src/database');
-    const db = database.getDb();
+    const db = await database.getDb();
 
-    try {
-      const autocheckpoint = db.$client.prepare('PRAGMA wal_autocheckpoint;').get() as {
-        wal_autocheckpoint: number;
-      };
-      expect(autocheckpoint.wal_autocheckpoint).toBe(1000);
+    const autocheckpoint = (await db.get(sql`PRAGMA wal_autocheckpoint;`)) as unknown as {
+      wal_autocheckpoint: number;
+    };
+    expect(autocheckpoint.wal_autocheckpoint).toBe(1000);
 
-      const synchronous = db.$client.prepare('PRAGMA synchronous;').get() as {
-        synchronous: number;
-      };
-      // NORMAL = 1 in SQLite
-      expect(synchronous.synchronous).toBe(1);
-    } finally {
-      database.closeDb();
-    }
+    const synchronous = (await db.get(sql`PRAGMA synchronous;`)) as unknown as {
+      synchronous: number;
+    };
+    // NORMAL = 1 in SQLite
+    expect(synchronous.synchronous).toBe(1);
   });
 });

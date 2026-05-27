@@ -16,6 +16,16 @@ const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
 // Hoisted mock for importModule
 const mockImportModule = vi.hoisted(() => vi.fn());
 
+// Mock database
+vi.mock('libsql', () => {
+  return vi.fn().mockReturnValue({
+    prepare: vi.fn(),
+    transaction: vi.fn(),
+    exec: vi.fn(),
+    close: vi.fn(),
+  });
+});
+
 vi.mock('../../../src/database', async (importOriginal) => {
   return {
     ...(await importOriginal()),

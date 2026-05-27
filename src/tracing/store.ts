@@ -1,4 +1,4 @@
-import { asc, eq, lt } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
@@ -143,6 +143,30 @@ function serializeSpan(
   };
 }
 
+function sqliteTimestampFromMs(timestampMs: number): string {
+  return new Date(timestampMs).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function traceCreatedBefore(cutoffTime: number) {
+  const sqliteTimestampCutoff = sqliteTimestampFromMs(cutoffTime);
+  return sql`(
+    (
+      typeof(${tracesTable.createdAt}) in ('integer', 'real')
+      and ${tracesTable.createdAt} < ${cutoffTime}
+    )
+    or (
+      typeof(${tracesTable.createdAt}) = 'text'
+      and (
+        (
+          cast(${tracesTable.createdAt} as integer) > 1000000000000
+          and cast(${tracesTable.createdAt} as integer) < ${cutoffTime}
+        )
+        or datetime(${tracesTable.createdAt}) < datetime(${sqliteTimestampCutoff})
+      )
+    )
+  )`;
+}
+
 function computeDepth(
   span: SpanData,
   spanMap: Map<string, SpanData>,
@@ -177,12 +201,12 @@ function deriveSpanKind(span: SpanData): string {
 }
 
 export class TraceStore {
-  private db: ReturnType<typeof getDb> | null = null;
+  private db: Awaited<ReturnType<typeof getDb>> | null = null;
 
-  private getDatabase() {
+  private async getDatabase() {
     if (!this.db) {
       logger.debug('[TraceStore] Initializing database connection');
-      this.db = getDb();
+      this.db = await getDb();
     }
     return this.db;
   }
@@ -192,7 +216,7 @@ export class TraceStore {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
-      const db = this.getDatabase();
+      const db = await this.getDatabase();
       await db
         .insert(tracesTable)
         .values({
@@ -202,7 +226,8 @@ export class TraceStore {
           testCaseId: trace.testCaseId,
           metadata: trace.metadata,
         })
-        .onConflictDoNothing({ target: tracesTable.traceId });
+        .onConflictDoNothing({ target: tracesTable.traceId })
+        .run();
       logger.debug(`[TraceStore] Successfully created or found existing trace ${trace.traceId}`);
     } catch (error) {
       logger.error(`[TraceStore] Failed to create trace: ${error}`);
@@ -217,7 +242,7 @@ export class TraceStore {
   ): Promise<{ stored: boolean; reason?: string }> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
-      const db = this.getDatabase();
+      const db = await this.getDatabase();
 
       // Only verify trace exists if not skipping the check (for OTLP scenarios)
       if (options?.skipTraceCheck) {
@@ -261,7 +286,11 @@ export class TraceStore {
         };
       });
 
-      await db.insert(spansTable).values(spanRecords);
+      if (spanRecords.length === 0) {
+        return { stored: true };
+      }
+
+      await db.insert(spansTable).values(spanRecords).run();
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
@@ -278,7 +307,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
-      const db = this.getDatabase();
+      const db = await this.getDatabase();
 
       // Get all traces for the evaluation
       const traces = await db
@@ -323,7 +352,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
-      const db = this.getDatabase();
+      const db = await this.getDatabase();
 
       const traces = await db
         .select()
@@ -357,11 +386,24 @@ export class TraceStore {
   async deleteOldTraces(retentionDays: number): Promise<void> {
     try {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
-      const db = this.getDatabase();
+      const db = await this.getDatabase();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+      const cutoffCondition = traceCreatedBefore(cutoffTime);
 
-      // Delete old traces (spans will be cascade deleted due to foreign key)
-      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(spansTable)
+          .where(
+            sql`${spansTable.traceId} in (
+              select ${tracesTable.traceId}
+              from ${tracesTable}
+              where ${cutoffCondition}
+            )`,
+          )
+          .run();
+
+        await tx.delete(tracesTable).where(cutoffCondition).run();
+      });
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {
@@ -382,7 +424,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching spans for trace ${traceId}`);
-      const db = this.getDatabase();
+      const db = await this.getDatabase();
 
       const rows = await db
         .select()
