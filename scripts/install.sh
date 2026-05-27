@@ -522,7 +522,7 @@ setup_path() {
 
   # Check if export already exists in rc file
   if [[ -n "$rc_file" ]] && [[ -f "$rc_file" ]]; then
-    if grep -Fq "promptfoo" "$rc_file" 2>/dev/null || grep -Fq -- "$BIN_DIR" "$rc_file" 2>/dev/null; then
+    if grep -Fq -- "$BIN_DIR" "$rc_file" 2>/dev/null; then
       path_already_set=true
     fi
   fi

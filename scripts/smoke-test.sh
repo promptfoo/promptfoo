@@ -81,7 +81,7 @@ pf() {
 # Create isolated state and case directories for artifact tests.
 setup_test_environment() {
   umask 077
-  TEST_ROOT=$(mktemp -d)
+  TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/promptfoo-smoke.XXXXXXXX")
   export PROMPTFOO_CONFIG_DIR="$TEST_ROOT/state"
   export PROMPTFOO_CACHE_PATH="$TEST_ROOT/cache"
   export PROMPTFOO_DISABLE_SHARING=true
@@ -1344,7 +1344,7 @@ EOF
 }
 
 test_install_script_fish_path_handles_literal_special_characters() {
-  log_test "install.sh quotes literal PATH entries for fish"
+  log_test "install.sh distinguishes literal PATH entries for fish"
 
   local fake_root fake_bin fake_home install_dir output expected_path_line
   fake_root=$(mktemp -d "$TEST_ROOT/fish-path.XXXXXXXX")
@@ -1364,10 +1364,10 @@ test_install_script_fish_path_handles_literal_special_characters() {
   ); then
     expected_path_line="set -gx PATH '$install_dir/bin' \$PATH"
     if grep -Fqx "$expected_path_line" "$fake_home/.config/fish/config.fish"; then
-      log_pass "install.sh preserves literal spaced fish PATH entries with regex characters"
+      log_pass "install.sh preserves literal spaced fish PATH entries with unrelated matching text"
       return 0
     fi
-    log_fail "install.sh treated a literal fish PATH entry as a regex: $output"
+    log_fail "install.sh mistook an unrelated fish PATH entry for the install path: $output"
     return 1
   fi
 
