@@ -9,6 +9,37 @@ export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 // Free customers created before this date are grandfathered into auto-share.
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
 
+// Hostnames served by hosted Promptfoo Cloud — both the app/dashboard and
+// the API. The CLI's `promptfoo auth login` flow writes the same host
+// (currently `www.promptfoo.app`) into both `appUrl` and `apiHost`, so
+// either kind of hostname must be recognized as hosted regardless of
+// which slot it lands in.
+export const HOSTED_CLOUD_HOSTNAMES = new Set([
+  'promptfoo.app',
+  'www.promptfoo.app',
+  'app.promptfoo.app',
+  // Legacy hosted app domain — still appears in older locally-saved configs.
+  'app.promptfoo.com',
+  'api.promptfoo.app',
+]);
+
+/**
+ * True when `url` points at a known hosted Promptfoo domain (app or API).
+ * Invalid URLs and absent values are treated as not-hosted, matching the
+ * "we don't recognize this, treat as enterprise" fallthrough used by
+ * callers.
+ */
+export function isHostedCloudHost(url: string | null | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    return HOSTED_CLOUD_HOSTNAMES.has(new URL(url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 interface CloudUser {
   id: string;
   name: string;

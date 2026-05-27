@@ -8,7 +8,7 @@ import {
   getUserId,
   setUserEmail,
 } from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
+import { cloudConfig, isHostedCloudHost } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { UserSchemas } from '../../types/api/user';
@@ -135,43 +135,15 @@ function getHttpAppUrl(url: string | null): string | null {
   }
 }
 
-const HOSTED_CLOUD_APP_HOSTNAMES = new Set([
-  'promptfoo.app',
-  'www.promptfoo.app',
-  'app.promptfoo.app',
-  // Keep locally saved configs from the legacy hosted app domain branded as Cloud.
-  'app.promptfoo.com',
-]);
-const HOSTED_CLOUD_API_HOSTNAMES = new Set(['api.promptfoo.app']);
-// Any hostname that is a known hosted Promptfoo domain — app or api. The CLI
-// writes apiHost to the same value as appUrl after `promptfoo auth login`
-// (e.g. both become https://www.promptfoo.app), so an apiHost pointing at a
-// hosted-app hostname must NOT be classified as enterprise.
-const HOSTED_CLOUD_HOSTNAMES = new Set([
-  ...HOSTED_CLOUD_APP_HOSTNAMES,
-  ...HOSTED_CLOUD_API_HOSTNAMES,
-]);
-
 /**
- * Determines if a URL represents an enterprise deployment by checking
- * if it is a custom domain rather than a hosted Promptfoo Cloud domain.
+ * Determines if a URL represents an enterprise deployment — anything that
+ * is not a known hosted Promptfoo Cloud hostname (app or API). Invalid
+ * URLs and absent values are treated as non-enterprise so the caller can
+ * fall through to "not configured" rather than mislabel a missing config
+ * as enterprise.
  */
-function isEnterpriseUrl(url: string | null): boolean {
-  if (!url) {
-    return false;
-  }
-
-  const hostname = new URL(url).hostname.toLowerCase();
-
-  return !HOSTED_CLOUD_HOSTNAMES.has(hostname);
-}
-
-function isEnterpriseApiHost(url: string | null): boolean {
-  if (!url) {
-    return false;
-  }
-
-  return !HOSTED_CLOUD_HOSTNAMES.has(new URL(url).hostname.toLowerCase());
+function isEnterprise(url: string | null): boolean {
+  return Boolean(url) && !isHostedCloudHost(url);
 }
 
 // New API key authentication endpoint that mirrors CLI behavior
@@ -264,8 +236,8 @@ userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<vo
     const isEnabled = cloudConfig.isEnabled();
     const appUrl = getHttpAppUrl(cloudConfig.getAppUrl());
     const apiHost = getHttpAppUrl(cloudConfig.getApiHost());
-    const hasEnterpriseAppUrl = isEnterpriseUrl(appUrl);
-    const hasEnterpriseApiHost = isEnterpriseApiHost(apiHost);
+    const hasEnterpriseAppUrl = isEnterprise(appUrl);
+    const hasEnterpriseApiHost = isEnterprise(apiHost);
     const browserAppUrl = hasEnterpriseApiHost && !hasEnterpriseAppUrl ? null : appUrl;
 
     res.json(

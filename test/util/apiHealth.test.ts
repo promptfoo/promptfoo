@@ -15,9 +15,15 @@ const { mockIsEnabled, mockGetApiHost } = vi.hoisted(() => ({
   mockGetApiHost: vi.fn().mockReturnValue('https://custom.api.com'),
 }));
 
-// Mock CloudConfig as a class
-vi.mock('../../src/globalConfig/cloud', () => {
+// Mock CloudConfig as a class. Re-export the real isHostedCloudHost helper
+// instead of stubbing it — the hosted-cloud allowlist is the contract under
+// test and stubbing it would let the test pass while production drifts.
+vi.mock('../../src/globalConfig/cloud', async () => {
+  const actual = await vi.importActual<typeof import('../../src/globalConfig/cloud')>(
+    '../../src/globalConfig/cloud',
+  );
   return {
+    ...actual,
     CloudConfig: class MockCloudConfig {
       isEnabled = mockIsEnabled;
       getApiHost = mockGetApiHost;
@@ -76,8 +82,9 @@ describe('API Health Utilities', () => {
       expect(result.message).toBe('Cloud API is healthy');
     });
 
-    it('should include custom endpoint message when cloud config is enabled', async () => {
+    it('should include custom endpoint message when cloud config points at a non-hosted API host', async () => {
       mockIsEnabled.mockReturnValue(true);
+      mockGetApiHost.mockReturnValue('https://api.enterprise.example.com');
       mockedFetchWithTimeout.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'OK' }),
@@ -86,6 +93,29 @@ describe('API Health Utilities', () => {
       const result = await checkRemoteHealth('https://test.api/health');
       expect(result.status).toBe('OK');
       expect(result.message).toBe('Cloud API is healthy (using custom endpoint)');
+    });
+
+    it.each([
+      'https://api.promptfoo.app',
+      'https://www.promptfoo.app',
+      'https://promptfoo.app',
+      'https://app.promptfoo.app',
+      'https://app.promptfoo.com',
+    ])('should omit custom-endpoint suffix when cloud config points at hosted host %s', async (apiHost) => {
+      // Regression: previously the suffix was gated on isEnabled() alone, so a
+      // logged-in user on hosted Cloud (apiHost = https://www.promptfoo.app,
+      // which the CLI writes during `promptfoo auth login`) saw "(using custom
+      // endpoint)" even though their API host is the hosted one.
+      mockIsEnabled.mockReturnValue(true);
+      mockGetApiHost.mockReturnValue(apiHost);
+      mockedFetchWithTimeout.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'OK' }),
+      } as Response);
+
+      const result = await checkRemoteHealth('https://test.api/health');
+      expect(result.status).toBe('OK');
+      expect(result.message).toBe('Cloud API is healthy');
     });
 
     it('should handle non-OK response', async () => {
