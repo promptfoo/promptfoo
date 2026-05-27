@@ -901,7 +901,9 @@ function providerRawToolInputEvidence(
     });
   }
 
-  if (genericInput && genericInput !== toolCommand && genericInput !== authoredInput) {
+  // Do not re-emit extracted shell commands as output: command arguments can
+  // legitimately contain receipt values while investigating terminal output.
+  if (!toolCommand && genericInput && genericInput !== authoredInput) {
     evidence.push({
       evidenceSource: 'provider-output',
       location: `${itemLocation} ${toolName} input`,
