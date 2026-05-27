@@ -10,9 +10,10 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate } = vi.hoisted(() => ({
+const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
   mockNavigate: vi.fn(),
+  mockUpdateConfig: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -23,7 +24,7 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: () => ({
-    updateConfig: vi.fn(),
+    updateConfig: mockUpdateConfig,
   }),
 }));
 
@@ -121,7 +122,11 @@ vi.mock('./CompareEvalMenuItem', () => ({
 }));
 
 vi.mock('./EvalSelectorDialog', () => ({
-  default: () => <div>Eval Selector Dialog</div>,
+  default: ({ focusedDatasetId }: { focusedDatasetId?: string | null }) => (
+    <div data-testid="eval-selector-dialog" data-focused-dataset-id={focusedDatasetId ?? ''}>
+      Eval Selector Dialog
+    </div>
+  ),
 }));
 
 vi.mock('./EvalSelectorKeyboardShortcut', () => ({
@@ -230,6 +235,8 @@ function createCopyEvalResponse() {
 }
 
 beforeEach(() => {
+  mockNavigate.mockReset();
+  mockUpdateConfig.mockReset();
   mockUseFilterMode.mockReturnValue({
     filterMode: 'all',
     setFilterMode: vi.fn(),
@@ -376,6 +383,50 @@ describe('ResultsView Share Button', () => {
       expect(screen.getByText('View YAML')).toBeInTheDocument();
       // Use getAllByText since there may be multiple Delete elements (menu item + dialog)
       expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('passes the current dataset to the comparison eval selector', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={[
+          {
+            ...mockRecentEvals[0],
+            evalId: 'test-eval-id',
+            datasetId: 'dataset-for-comparison',
+          },
+        ]}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByTestId('eval-selector-dialog')
+        .some(
+          (dialog) => dialog.getAttribute('data-focused-dataset-id') === 'dataset-for-comparison',
+        ),
+    ).toBe(true);
+  });
+
+  it('carries the source eval id when editing and rerunning a redacted config', async () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ description: 'Test Evaluation' }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+      state: { sourceEvalId: 'test-eval-id' },
     });
   });
 

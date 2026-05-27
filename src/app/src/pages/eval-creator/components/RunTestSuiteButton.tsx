@@ -10,7 +10,7 @@ import { useStore } from '@app/stores/evalConfig';
 import { callApiJson } from '@app/utils/api';
 import { EvalSchemas } from '@promptfoo/types/api/eval';
 import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   countTests,
   normalizePrompts,
@@ -20,6 +20,7 @@ import {
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { config } = useStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const { showToast } = useToast();
@@ -73,6 +74,13 @@ const RunTestSuiteButton = () => {
     setRunError(null);
     setProgressPercent(0);
 
+    const sourceEvalId =
+      location.state &&
+      typeof location.state === 'object' &&
+      'sourceEvalId' in location.state &&
+      typeof location.state.sourceEvalId === 'string'
+        ? location.state.sourceEvalId
+        : undefined;
     const testSuite = {
       defaultTest,
       derivedMetrics,
@@ -84,6 +92,7 @@ const RunTestSuiteButton = () => {
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
       extensions,
+      ...(sourceEvalId && { sourceEvalId }),
     };
 
     const handleRunError = (error: unknown) => {

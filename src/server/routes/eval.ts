@@ -9,7 +9,11 @@ import { EvalSchemas } from '../../types/api/eval';
 import { ApiRoutes } from '../../types/api/routes';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { sanitizeObject } from '../../util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  restoreAzureBlobSasTokens,
+  sanitizeObject,
+} from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyError, replyValidationError, sendError } from '../utils/errors';
@@ -128,75 +132,96 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
   }
 }
 
-evalRouter.post(ApiRoutes.Eval.CreateJob.routerPath, (req: Request, res: Response): void => {
-  const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
-  if (!result.success) {
-    replyValidationError(res, result.error);
-    return;
-  }
+evalRouter.post(
+  ApiRoutes.Eval.CreateJob.routerPath,
+  async (req: Request, res: Response): Promise<void> => {
+    const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
+    if (!result.success) {
+      replyValidationError(res, result.error);
+      return;
+    }
 
-  // Use validated data but merge providers from req.body to preserve nested config fields.
-  // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
-  // nested provider schemas may strip. This keeps Zod transforms/coercions while
-  // preserving provider flexibility.
-  const { evaluateOptions, providers: _validatedProviders, ...restData } = result.data;
-  const testSuite = {
-    ...restData,
-    // Preserve raw providers from req.body to keep nested config fields
-    providers: (req.body as { providers?: unknown }).providers,
-  };
-  const id = crypto.randomUUID();
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
+    // Use validated data but merge providers from req.body to preserve nested config fields.
+    // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
+    // nested provider schemas may strip. This keeps Zod transforms/coercions while
+    // preserving provider flexibility.
+    const {
+      evaluateOptions,
+      sourceEvalId,
+      providers: _validatedProviders,
+      ...restData
+    } = result.data;
+    let testSuite = {
+      ...restData,
+      // Preserve raw providers from req.body to keep nested config fields
+      providers: (req.body as { providers?: unknown }).providers,
+    };
 
-  evaluateWithSource(
-    {
-      ...(testSuite as EvaluateTestSuite),
-      writeLatestResults: true,
-      sharing: testSuite.sharing ?? shouldShareResults({}),
-    },
-    {
-      ...evaluateOptions,
-      eventSource: 'web',
-      progressCallback: (progress: number, total: number) => {
-        const job = evalJobs.get(id);
-        invariant(job, 'Job not found');
-        job.progress = progress;
-        job.total = total;
-        console.log(`[${id}] ${progress}/${total}`);
-      },
-    },
-  )
-    .then(async (evalResult) => {
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.result = await evalResult.toEvaluateSummary();
-      job.evalId = evalResult.id;
-      job.status = 'complete';
-      console.log(`[${id}] Complete`);
-    })
-    .catch((error) => {
-      logger.error('Failed to eval tests', {
-        error,
-        body: sanitizeObject(testSuite, { context: 'request body' }),
-      });
+    if (sourceEvalId) {
+      try {
+        const sourceEval = await Eval.findById(sourceEvalId);
+        if (sourceEval) {
+          testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+        }
+      } catch (error) {
+        sendError(res, 500, 'Failed to prepare eval job', error);
+        return;
+      }
+    }
 
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.status = 'error';
-      job.result = null;
-      job.evalId = null;
-      job.logs = [String(error)];
+    const id = crypto.randomUUID();
+    evalJobs.set(id, {
+      evalId: null,
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      result: null,
+      logs: [],
     });
 
-  res.json(EvalSchemas.CreateJob.Response.parse({ id }));
-});
+    evaluateWithSource(
+      {
+        ...(testSuite as EvaluateTestSuite),
+        writeLatestResults: true,
+        sharing: testSuite.sharing ?? shouldShareResults({}),
+      },
+      {
+        ...evaluateOptions,
+        eventSource: 'web',
+        progressCallback: (progress: number, total: number) => {
+          const job = evalJobs.get(id);
+          invariant(job, 'Job not found');
+          job.progress = progress;
+          job.total = total;
+          console.log(`[${id}] ${progress}/${total}`);
+        },
+      },
+    )
+      .then(async (evalResult) => {
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.result = await evalResult.toEvaluateSummary();
+        job.evalId = evalResult.id;
+        job.status = 'complete';
+        console.log(`[${id}] Complete`);
+      })
+      .catch((error) => {
+        logger.error('Failed to eval tests', {
+          error,
+          body: sanitizeObject(testSuite, { context: 'request body' }),
+        });
+
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.status = 'error';
+        job.result = null;
+        job.evalId = null;
+        job.logs = [String(error)];
+      });
+
+    res.json(EvalSchemas.CreateJob.Response.parse({ id }));
+  },
+);
 
 evalRouter.get(ApiRoutes.Eval.GetJob.routerPath, (req: Request, res: Response): void => {
   const paramsResult = EvalSchemas.GetJob.Params.safeParse(req.params);
@@ -479,7 +504,7 @@ evalRouter.get(
       totalCount: table.totalCount,
       filteredCount: table.filteredCount,
       filteredMetrics,
-      config: eval_.config,
+      config: redactAzureBlobSasTokens(eval_.config),
       author: eval_.author || null,
       version: eval_.version(),
       id,

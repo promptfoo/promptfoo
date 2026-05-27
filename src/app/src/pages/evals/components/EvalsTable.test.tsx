@@ -184,6 +184,104 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
       expect(screen.queryByTestId('row-eval-3')).toBeNull();
     });
+    expect(callApiJson).toHaveBeenCalledWith(
+      ApiRoutes.Results.List,
+      expect.anything(),
+      expect.objectContaining({
+        cache: 'no-store',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it('should request only the focused dataset for comparison when its datasetId is known', async () => {
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable
+          onEvalSelected={vi.fn()}
+          focusedEvalId="eval-1"
+          focusedDatasetId="dataset-1"
+          filterByDatasetId={true}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(callApiJson).toHaveBeenCalledWith(
+        ApiRoutes.Results.List,
+        expect.anything(),
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
+    expect(vi.mocked(callApiJson).mock.calls[0][2]?.query?.toString()).toBe('datasetId=dataset-1');
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ] as const)('should request all evals and let the client narrow when focusedDatasetId is %s', async (_label, focusedDatasetId) => {
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvalsWithMultipleDatasets } as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable
+          onEvalSelected={vi.fn()}
+          focusedEvalId="eval-1"
+          focusedDatasetId={focusedDatasetId}
+          filterByDatasetId={true}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(callApiJson).toHaveBeenCalledWith(
+        ApiRoutes.Results.List,
+        expect.anything(),
+        expect.objectContaining({
+          query: undefined,
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+      // Client-side filter still narrows to focusedEval.datasetId.
+      expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
+      expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
+      expect(screen.queryByTestId('row-eval-3')).toBeNull();
+    });
+  });
+
+  it('should encode focusedDatasetId so dataset ids with special characters are safe', async () => {
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable
+          onEvalSelected={vi.fn()}
+          focusedEvalId="eval-1"
+          focusedDatasetId="dataset id with spaces & symbols"
+          filterByDatasetId={true}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(callApiJson).toHaveBeenCalledWith(
+        ApiRoutes.Results.List,
+        expect.anything(),
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
+    expect(vi.mocked(callApiJson).mock.calls[0][2]?.query?.toString()).toBe(
+      'datasetId=dataset+id+with+spaces+%26+symbols',
+    );
   });
 
   it('should call onEvalSelected when a row is clicked', async () => {

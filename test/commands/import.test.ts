@@ -9,7 +9,7 @@ import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
-import { evalsToPromptsTable } from '../../src/database/tables';
+import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -658,7 +658,7 @@ describe('importCommand', () => {
           id: evalId,
           createdAt: '2024-01-02T03:04:05.000Z',
           author: 'legacy-author',
-          config: { description: 'legacy import' },
+          config: { description: 'legacy import', redteam: {} },
           results: {
             version: 2,
             timestamp: '2024-01-02T03:04:05.000Z',
@@ -676,6 +676,12 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
+      const storedEval = getDb()
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(sql`${evalsTable.id} = ${evalId}`)
+        .get();
+      expect(storedEval?.isRedteam).toBe(true);
       expect(await importedEval!.toEvaluateSummary()).toMatchObject({
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
