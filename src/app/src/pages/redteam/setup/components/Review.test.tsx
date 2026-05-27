@@ -80,16 +80,14 @@ vi.mock('@app/utils/api', () => {
           query?: URLSearchParams;
         } & RequestInit = {},
       ) => {
+        const { params = {}, query, ...requestInit } = options;
         let path = route.clientPath;
-        for (const [name, value] of Object.entries(options.params ?? {})) {
+        for (const [name, value] of Object.entries(params)) {
           path = path.replace(`:${name}`, encodeURIComponent(String(value)));
         }
-        const query = options.query?.toString();
-        const requestPath = query ? `${path}?${query}` : path;
-        const response =
-          Object.keys(options).length === 0
-            ? await vi.mocked(callApi)(requestPath)
-            : await vi.mocked(callApi)(requestPath, options);
+        const queryString = query?.toString();
+        const requestPath = queryString ? `${path}?${queryString}` : path;
+        const response = await vi.mocked(callApi)(requestPath, requestInit);
         if (response.ok === false) {
           const body = await response.json();
           throw new MockApiResponseError(response.status, body, response);
@@ -1416,7 +1414,7 @@ Application Details:
 
       // Wait for the effect to run
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/redteam/status');
+        expect(callApi).toHaveBeenCalledWith('/redteam/status', {});
       });
     });
 
@@ -1582,9 +1580,7 @@ Application Details:
 
       // Wait for recovery to complete
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999', {
-          params: { id: 'saved-job-999' },
-        });
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999', {});
       });
 
       // Should clear job since it completed while away
@@ -1826,7 +1822,11 @@ Application Details:
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should NOT have checked the saved job since we're not hydrated
-      expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
+      expect(
+        vi
+          .mocked(callApi)
+          .mock.calls.some(([path]) => path === '/eval/job/saved-job-before-hydration'),
+      ).toBe(false);
     });
   });
 

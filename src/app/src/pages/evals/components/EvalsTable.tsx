@@ -58,14 +58,14 @@ export default function EvalsTable({
     async (signal: AbortSignal) => {
       try {
         setIsLoading(true);
-        const queryString =
+        const query =
           filterByDatasetId && focusedDatasetId
             ? new URLSearchParams({ datasetId: focusedDatasetId })
             : undefined;
         const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
-          query: queryString,
           cache: 'no-store',
           signal,
+          query,
         });
         setEvals(body.data as unknown as EvalSummary[]);
         setError(null);

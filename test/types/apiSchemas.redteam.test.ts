@@ -644,6 +644,20 @@ describe('API schema red-team coverage', () => {
       expect(
         EvalSchemas.AddResults.Request.safeParse([
           {
+            id: 'legacy-result-1',
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: 'echo',
+          },
+        ]).success,
+      ).toBe(true);
+      expect(
+        EvalSchemas.AddResults.Request.safeParse([
+          {
             id: 'result-1',
             promptIdx: -1,
             testIdx: 0,

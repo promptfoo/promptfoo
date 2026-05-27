@@ -394,6 +394,37 @@ describe('eval routes', () => {
         text: 'Salem',
       });
     });
+
+    it('appends a legacy shared result row whose provider is stored as a string', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      testEvalIds.add(eval_.id);
+
+      const appendRes = await api.post(`/api/eval/${eval_.id}/results`).send([
+        {
+          id: randomUUID(),
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          prompt: { raw: 'Say hello', label: 'Greeting' },
+          provider: 'echo',
+          response: { output: 'Hello' },
+          failureReason: ResultFailureReason.NONE,
+          success: true,
+          score: 1,
+          namedScores: {},
+        },
+      ]);
+
+      expect(appendRes.status).toBe(204);
+
+      const tableRes = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(tableRes.status).toBe(200);
+      expect(tableRes.body.table.body[0].outputs[0]).toMatchObject({
+        pass: true,
+        score: 1,
+        text: 'Hello',
+      });
+    });
   });
 
   describe('GET /:id/table - large payload handling', () => {

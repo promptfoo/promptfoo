@@ -209,16 +209,15 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApiJson).toHaveBeenCalledWith(
-        ApiRoutes.Results.List,
-        expect.anything(),
+      const options = vi.mocked(callApiJson).mock.calls[0][2];
+      expect(options).toEqual(
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
         }),
       );
+      expect(options?.query?.toString()).toBe('datasetId=dataset-1');
     });
-    expect(vi.mocked(callApiJson).mock.calls[0][2]?.query?.toString()).toBe('datasetId=dataset-1');
   });
 
   it.each([
@@ -239,15 +238,14 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApiJson).toHaveBeenCalledWith(
-        ApiRoutes.Results.List,
-        expect.anything(),
+      const options = vi.mocked(callApiJson).mock.calls[0][2];
+      expect(options).toEqual(
         expect.objectContaining({
-          query: undefined,
           cache: 'no-store',
           signal: expect.any(AbortSignal),
         }),
       );
+      expect(options?.query).toBeUndefined();
       // Client-side filter still narrows to focusedEval.datasetId.
       expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
@@ -270,18 +268,9 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApiJson).toHaveBeenCalledWith(
-        ApiRoutes.Results.List,
-        expect.anything(),
-        expect.objectContaining({
-          cache: 'no-store',
-          signal: expect.any(AbortSignal),
-        }),
-      );
+      const options = vi.mocked(callApiJson).mock.calls[0][2];
+      expect(options?.query?.toString()).toBe('datasetId=dataset+id+with+spaces+%26+symbols');
     });
-    expect(vi.mocked(callApiJson).mock.calls[0][2]?.query?.toString()).toBe(
-      'datasetId=dataset+id+with+spaces+%26+symbols',
-    );
   });
 
   it('should call onEvalSelected when a row is clicked', async () => {

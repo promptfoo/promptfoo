@@ -233,11 +233,14 @@ export const AddResultsRequestSchema = z
             label: z.string(),
           })
           .passthrough(),
-        provider: z
-          .object({
-            id: z.string().min(1),
-          })
-          .passthrough(),
+        provider: z.union([
+          z.string(),
+          z
+            .object({
+              id: z.string().min(1),
+            })
+            .passthrough(),
+        ]),
         success: z.boolean(),
         score: z.number(),
       })
