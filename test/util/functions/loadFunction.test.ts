@@ -315,4 +315,38 @@ describe('parseFileUrl', () => {
       functionName: 'functionName',
     });
   });
+
+  // Regression: caught by Codex on PR #9472. Filenames that legitimately
+  // contain colons (ISO timestamps, POSIX names like `foo:bar`) must not be
+  // mis-split into a truncated path + bogus function name. The tail after
+  // the last `:` only counts as a named export when it parses as a JS
+  // identifier.
+  it('does not split when the tail is not a valid JS identifier', () => {
+    expect(parseFileUrl('file://callbacks/2026-05-27T12:00:00.js')).toEqual({
+      filePath: 'callbacks/2026-05-27T12:00:00.js',
+    });
+    expect(parseFileUrl('file://foo:bar/cb.js')).toEqual({
+      filePath: 'foo:bar/cb.js',
+    });
+    // Trailing number-prefixed segment isn't a valid identifier either.
+    expect(parseFileUrl('file://cb.js:42abc')).toEqual({
+      filePath: 'cb.js:42abc',
+    });
+  });
+
+  it('splits at the last colon when the tail IS a valid identifier', () => {
+    // Sanity that the identifier path still works alongside the new check.
+    expect(parseFileUrl('file://path.js:handler')).toEqual({
+      filePath: 'path.js',
+      functionName: 'handler',
+    });
+    expect(parseFileUrl('file://path.js:$cb')).toEqual({
+      filePath: 'path.js',
+      functionName: '$cb',
+    });
+    expect(parseFileUrl('file://path.js:_init')).toEqual({
+      filePath: 'path.js',
+      functionName: '_init',
+    });
+  });
 });

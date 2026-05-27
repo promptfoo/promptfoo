@@ -89,18 +89,33 @@ export async function loadFunction<T extends Function>({
 }
 
 /**
+ * Matches a JavaScript identifier or a dotted member-access path
+ * (e.g. `handler`, `$cb`, `_init`, `module.deepExport.nested`). We use this
+ * to decide whether the trailing segment after the last `:` in a `file://`
+ * URL is a named-export reference or just part of the file path. Filenames
+ * that legitimately contain colons (`2026-05-27T12:00:00.js`, `foo:bar/cb.js`)
+ * never match because their tail starts with a digit, contains a slash, or
+ * otherwise isn't an identifier — Codex caught this regression in PR #9472.
+ */
+const JS_EXPORT_REF_RE = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
+
+/**
  * Extracts the file path and optional function name from a `file://` URL.
  *
  * Splits at the **last** `:` rather than the first so Windows drive-letter
  * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
  * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
- * with no function name) or at the empty-path edge case (`file://:fn`).
+ * with no function name) or at the empty-path edge case (`file://:fn`). The
+ * candidate function name must additionally look like a JS identifier — paths
+ * that legitimately contain a colon (POSIX timestamps, `foo:bar/cb.js`) are
+ * not split because their tail (`00.js`, `bar/cb.js`) is not an identifier.
  *
  * Examples:
- *   `file://callbacks.js`          → `{ filePath: 'callbacks.js' }`
- *   `file://callbacks.js:fn`       → `{ filePath: 'callbacks.js', functionName: 'fn' }`
- *   `file://C:/cb.js:fn`           → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
- *   `file://C:`                    → `{ filePath: 'C:' }` (drive-letter colon preserved)
+ *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
+ *   `file://callbacks.js:fn`          → `{ filePath: 'callbacks.js', functionName: 'fn' }`
+ *   `file://C:/cb.js:fn`              → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
+ *   `file://C:`                       → `{ filePath: 'C:' }` (drive-letter colon preserved)
+ *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (tail not an identifier)
  *
  * @param fileUrl The `file://` URL.
  * @returns The file path and optional function name.
@@ -117,10 +132,16 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   // Index > 1 (not >= 1) preserves single-letter drive prefixes like `C:` so
   // Windows paths don't get sliced to `C`. Do not "simplify" to >= 0.
   if (lastColonIndex > 1) {
-    return {
-      filePath: urlWithoutProtocol.slice(0, lastColonIndex),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
+    const candidateFn = urlWithoutProtocol.slice(lastColonIndex + 1);
+    // Only split when the tail is a plausible JS export identifier. This
+    // protects paths whose filenames legitimately contain colons (e.g.
+    // ISO timestamps like `2026-05-27T12:00:00.js` or POSIX `foo:bar`).
+    if (JS_EXPORT_REF_RE.test(candidateFn)) {
+      return {
+        filePath: urlWithoutProtocol.slice(0, lastColonIndex),
+        functionName: candidateFn,
+      };
+    }
   }
 
   return {
