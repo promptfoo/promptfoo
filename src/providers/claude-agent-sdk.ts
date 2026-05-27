@@ -39,6 +39,7 @@ import type {
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKAssistantMessageError,
   SDKResultMessage,
   SettingSource,
   Settings,
@@ -68,6 +69,22 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
+}
+
+/**
+ * Error reported by an assistant message during a Claude Agent SDK session. The
+ * SDK started populating `SDKAssistantMessage.error` with discriminated codes
+ * like `'model_not_found'` and `'rate_limit'` in 0.3.144 (previously these were
+ * collapsed into a generic `'invalid_request'`). Available in
+ * `response.metadata.assistantErrors` after a session completes.
+ */
+export interface AssistantErrorEntry {
+  error: SDKAssistantMessageError;
+  uuid: string;
+  parentToolUseId: string | null;
+  request_id?: string;
+  subagent_type?: string;
+  task_description?: string;
 }
 
 /** Hard cap for attribute body length on synthesized tool spans. */
@@ -1357,6 +1374,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           // Collect tool calls and results from intermediate messages
           const toolCallsMap = new Map<string, ToolCallEntry>();
+          // Assistant message errors (model_not_found, rate_limit, etc.).
+          // The SDK only populates `SDKAssistantMessage.error` when the model
+          // call itself fails, so this stays empty on healthy runs.
+          const assistantErrors: AssistantErrorEntry[] = [];
           // Wall-clock start time per tool_use.id, captured when we first see the tool_use
           // message so we can synthesize child spans with realistic durations.
           const toolStartTimes = new Map<string, number>();
@@ -1408,6 +1429,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   });
                   toolStartTimes.set(block.id, Date.now());
                 }
+              }
+              if (msg.error) {
+                assistantErrors.push({
+                  error: msg.error,
+                  uuid: msg.uuid,
+                  parentToolUseId: msg.parent_tool_use_id,
+                  ...(msg.request_id ? { request_id: msg.request_id } : {}),
+                  ...(msg.subagent_type ? { subagent_type: msg.subagent_type } : {}),
+                  ...(msg.task_description ? { task_description: msg.task_description } : {}),
+                });
               }
             } else if (msg.type === 'user') {
               // Extract tool_result content blocks and match to tool calls
@@ -1515,6 +1546,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             });
           }
 
+          // Only SDKResultSuccess carries `api_error_status` per the SDK types;
+          // guarding with `'api_error_status' in finalMsg` avoids leaking the
+          // field as `undefined` onto unrelated result shapes.
+          const apiErrorStatus =
+            'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
+
           if (finalMsg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
@@ -1543,6 +1580,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 ...(finalMsg.structured_output === undefined
                   ? {}
                   : { structuredOutput: finalMsg.structured_output }),
+                ...(apiErrorStatus === undefined || apiErrorStatus === null
+                  ? {}
+                  : { apiErrorStatus }),
+                ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
               },
             };
 
@@ -1551,8 +1592,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return response;
           }
 
+          // Surface the last assistant error code (`model_not_found`,
+          // `rate_limit`, etc.) alongside the subtype so callers can tell
+          // apart "ran out of turns" from "model doesn't exist" without
+          // digging into metadata.
+          const lastAssistantError =
+            assistantErrors.length > 0
+              ? assistantErrors[assistantErrors.length - 1].error
+              : undefined;
+          const errorMessage = lastAssistantError
+            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
+            : `Claude Agent SDK call failed: ${finalMsg.subtype}`;
           return {
-            error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+            error: errorMessage,
             tokenUsage,
             cost,
             raw,
@@ -1568,6 +1620,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               ...(finalMsg.terminal_reason === undefined
                 ? {}
                 : { terminalReason: finalMsg.terminal_reason }),
+              ...(apiErrorStatus === undefined || apiErrorStatus === null
+                ? {}
+                : { apiErrorStatus }),
+              ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
             },
           };
         },

@@ -2045,10 +2045,25 @@ describe('resolveProvider', () => {
     );
   });
 
-  it('should throw error for invalid provider type', async () => {
+  it.each([
+    ['number', 123],
+    ['boolean', false],
+    ['bigint', 1n],
+    ['symbol', Symbol('invalid-provider')],
+  ])('should identify invalid %s provider values', async (type, provider) => {
     const { resolveProvider } = await import('../../src/providers');
 
-    await expect(resolveProvider(123, mockProviderMap)).rejects.toThrow('Invalid provider type');
+    await expect(resolveProvider(provider as any, mockProviderMap)).rejects.toThrow(
+      `Invalid provider type. Expected a string (provider id), an object with an 'id' field, a ProviderOptionsMap, or a function. Got: ${type}`,
+    );
+  });
+
+  it('should report invalid arrays through object-shape diagnostics', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    await expect(resolveProvider([], mockProviderMap)).rejects.toThrow(
+      "Provider object must have an 'id' field or be a ProviderOptionsMap",
+    );
   });
 
   it('should handle function provider', async () => {
