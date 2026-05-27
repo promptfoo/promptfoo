@@ -20,7 +20,6 @@
 
 /docs/           @alandelong-oai @mldangelo-oai        # Internal agent docs
 /examples/       @mldangelo-oai @ianw-oai              # Example configurations
-/helm/           @jbeckwith-oai                        # Kubernetes Helm charts
 
 # ============================================================================
 # SOURCE - SHARED OWNERSHIP (multiple contributors >15%)
@@ -83,7 +82,7 @@
 /site/src/pages/**/*.tsx    @ianw-oai @mldangelo-oai      # Landing page content
 /site/src/pages/**/*.md     @ianw-oai @mldangelo-oai      # Landing page markdown
 /site/blog/                 @mldangelo-oai                # Blog posts
-/SECURITY.md                @mldangelo-oai @jbeckwith-oai # Security policy
+/SECURITY.md                @mldangelo-oai                # Security policy
 /CONTRIBUTING.md            @mldangelo-oai                # Contributing guide
 /site/docs/contributing.md  @mldangelo-oai                # Contributing docs
 
@@ -91,17 +90,7 @@
 # DEVELOPER PRODUCTIVITY (VP Eng: Justin)
 # ============================================================================
 
-/.github/                      @jbeckwith-oai             # CI/CD workflows
-/scripts/                      @jbeckwith-oai             # Build & dev scripts
-/biome.json                    @jbeckwith-oai             # Linting config
-/tsconfig.json                 @jbeckwith-oai             # TypeScript config
-/tsdown.config.ts              @jbeckwith-oai             # Build config
-/vitest.config.ts              @jbeckwith-oai             # Test config
-/vitest.integration.config.ts  @jbeckwith-oai             # Integration test config
 /knip.json                     @faizan-oai                # Dead code detection
-/renovate.json                 @jbeckwith-oai             # Dependency updates
-/package.json                  @jbeckwith-oai             # Dependencies & scripts
-/release-please-config.json    @jbeckwith-oai             # Release automation
 
 # ============================================================================
 # DATABASE
