@@ -335,14 +335,12 @@ describe('GoogleGenericProvider', () => {
       vi.mocked(importModule).mockResolvedValue(mockFn);
 
       const provider = new TestGoogleProvider('gemini-2.5-pro');
-      const fn = await provider['loadExternalFunction'](
-        'file://C:/test/base/path/test.js:myFunction',
-      );
+      const basePath = path.resolve('/test/base/path');
+      const callbackPath = path.join(basePath, 'test.js');
+      const callbackUrl = `file://${callbackPath.replace(/\\/g, '/')}`;
+      const fn = await provider['loadExternalFunction'](`${callbackUrl}:myFunction`);
 
-      expect(importModule).toHaveBeenCalledWith(
-        path.resolve('/test/base/path', 'C:/test/base/path/test.js'),
-        'myFunction',
-      );
+      expect(importModule).toHaveBeenCalledWith(callbackPath, 'myFunction');
       expect(fn).toBe(mockFn);
     });
 
