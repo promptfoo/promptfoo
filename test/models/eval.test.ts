@@ -1424,6 +1424,39 @@ describe('evaluator', () => {
       expect(containsRes.testIndices).toEqual([1]);
     });
 
+    it('filters by metadata not_contains without dropping missing fields', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 4,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"note":"contains risky phrase"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"note":"boring"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"other":"risky"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      const result = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'not_contains',
+            field: 'note',
+            value: 'risky',
+          }),
+        ],
+      });
+
+      expect(result.filteredCount).toBe(3);
+      expect(result.testIndices).toEqual([1, 2, 3]);
+    });
+
     it('filters by metadata exists operator (non-empty values only)', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,

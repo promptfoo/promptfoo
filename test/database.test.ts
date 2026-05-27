@@ -57,13 +57,18 @@ describe('database WAL mode', () => {
   it('enables WAL journal mode by default', async () => {
     // First import and initialize the database to trigger WAL mode configuration
     const database = await import('../src/database');
-    await database.getDb();
+    const db = await database.getDb();
+    const dbPath = database.getDbPath();
+
+    await db.run('CREATE TABLE wal_probe (id INTEGER PRIMARY KEY, value TEXT)');
+    await db.run("INSERT INTO wal_probe (value) VALUES ('uses wal')");
+
+    expect(fs.existsSync(`${dbPath}-wal`)).toBe(true);
 
     // Close it to ensure we don't get resource conflicts
     await database.closeDb();
 
     // Then independently verify the journal mode using a direct connection
-    const dbPath = database.getDbPath();
     const directDb = createClient({ url: pathToFileURL(dbPath).href });
 
     try {

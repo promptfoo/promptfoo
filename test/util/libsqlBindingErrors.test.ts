@@ -13,6 +13,15 @@ function makeBindingError(target: string): NodeJS.ErrnoException {
 }
 
 describe('libsql binding errors', () => {
+  it('extracts the missing libsql target from ESM import failures', () => {
+    const error: NodeJS.ErrnoException = new Error(
+      "Cannot find package '@libsql/linux-x64-gnu' imported from /app/node_modules/@libsql/client/lib-esm/node.js",
+    );
+    error.code = 'ERR_MODULE_NOT_FOUND';
+
+    expect(getLibsqlBindingTarget(error)).toBe('linux-x64-gnu');
+  });
+
   it('extracts the missing libsql target from the require stack', () => {
     expect(getLibsqlBindingTarget(makeBindingError('darwin-arm64'))).toBe('darwin-arm64');
     expect(getLibsqlBindingTarget(makeBindingError('linux-x64-musl'))).toBe('linux-x64-musl');
@@ -32,6 +41,18 @@ describe('libsql binding errors', () => {
 
     expect(getLibsqlBindingTarget(error)).toBeUndefined();
     expect(formatLibsqlBindingErrorMessage(error)).toBeUndefined();
+  });
+
+  it('ignores missing libsql wrapper packages that are not platform bindings', () => {
+    for (const packageName of ['client', 'client-wasm', 'core', 'hrana-client']) {
+      const error: NodeJS.ErrnoException = new Error(
+        `Cannot find module '@libsql/${packageName}'\nRequire stack:\n- /app/index.js`,
+      );
+      error.code = 'MODULE_NOT_FOUND';
+
+      expect(getLibsqlBindingTarget(error)).toBeUndefined();
+      expect(formatLibsqlBindingErrorMessage(error)).toBeUndefined();
+    }
   });
 
   it('ignores libsql-mentioning errors that are not MODULE_NOT_FOUND', () => {
