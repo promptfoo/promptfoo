@@ -678,8 +678,8 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
-      const importDb = await getDb();
-      const storedEval = await importDb
+      const db = await getDb();
+      const storedEval = await db
         .select({ isRedteam: evalsTable.isRedteam })
         .from(evalsTable)
         .where(sql`${evalsTable.id} = ${evalId}`)

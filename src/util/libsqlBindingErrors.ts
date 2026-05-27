@@ -3,8 +3,9 @@ import chalk from 'chalk';
 // Match only platform-binding packages (@libsql/darwin-arm64 etc.), not the
 // wrapper packages like @libsql/client or @libsql/core whose absence indicates
 // a different problem (broken install) and warrants a different message.
-const libsqlPlatformBindingPattern =
+const libsqlPlatformPackagePattern =
   /@libsql\/(?<target>(?:darwin|linux|win32|android|freebsd|netbsd|wasm32)-[a-z0-9-]+)/i;
+const moduleNotFoundCodes = new Set(['MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND']);
 
 /**
  * Detects the "Cannot find module '@libsql/<target>'" error that libsql throws
@@ -13,7 +14,7 @@ const libsqlPlatformBindingPattern =
  * libsql uses N-API bindings via `@neon-rs/load`, which require()s an optional
  * peer package per platform (e.g. `@libsql/darwin-arm64`). When that package is
  * absent — npm skipped it, the cache is corrupt, or the platform is unsupported —
- * the user sees a raw "MODULE_NOT_FOUND" stack with no remediation hint.
+ * the user sees a raw module-not-found stack with no remediation hint.
  *
  * Accepts both `MODULE_NOT_FOUND` (CJS require — emitted by @neon-rs/load) and
  * `ERR_MODULE_NOT_FOUND` (ESM dynamic import — emitted if the top-level
@@ -24,11 +25,10 @@ export function getLibsqlBindingTarget(error: unknown): string | undefined {
   if (!(error instanceof Error)) {
     return undefined;
   }
-  const code = (error as NodeJS.ErrnoException).code;
-  if (code !== 'MODULE_NOT_FOUND' && code !== 'ERR_MODULE_NOT_FOUND') {
+  if (!moduleNotFoundCodes.has(String((error as NodeJS.ErrnoException).code))) {
     return undefined;
   }
-  const match = libsqlPlatformBindingPattern.exec(error.message);
+  const match = libsqlPlatformPackagePattern.exec(error.message);
   return match?.groups?.target;
 }
 

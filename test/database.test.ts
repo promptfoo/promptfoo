@@ -1,9 +1,10 @@
+import { pathToFileURL } from 'node:url';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { createClient } from '@libsql/client/node';
 import { sql } from 'drizzle-orm';
-import Database from 'libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
@@ -56,18 +57,24 @@ describe('database WAL mode', () => {
   it('enables WAL journal mode by default', async () => {
     // First import and initialize the database to trigger WAL mode configuration
     const database = await import('../src/database');
-    await database.getDb();
+    const db = await database.getDb();
+    const dbPath = database.getDbPath();
+
+    await db.run('CREATE TABLE wal_probe (id INTEGER PRIMARY KEY, value TEXT)');
+    await db.run("INSERT INTO wal_probe (value) VALUES ('uses wal')");
+
+    expect(fs.existsSync(`${dbPath}-wal`)).toBe(true);
 
     // Close it to ensure we don't get resource conflicts
     await database.closeDb();
 
     // Then independently verify the journal mode using a direct connection
-    const dbPath = database.getDbPath();
-    const directDb = new Database(dbPath);
+    const directDb = createClient({ url: pathToFileURL(dbPath).href });
 
     try {
-      const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
-      expect(result.journal_mode.toLowerCase()).toBe('wal');
+      const result = await directDb.execute('PRAGMA journal_mode;');
+      const journalMode = String(result.rows[0]?.journal_mode ?? '');
+      expect(journalMode.toLowerCase()).toBe('wal');
     } finally {
       // Make sure to close this connection too
       directDb.close();
@@ -93,12 +100,13 @@ describe('database WAL mode', () => {
     await database.closeDb();
 
     const dbPath = database.getDbPath();
-    const directDb = new Database(dbPath);
+    const directDb = createClient({ url: pathToFileURL(dbPath).href });
 
     try {
-      const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
+      const result = await directDb.execute('PRAGMA journal_mode;');
+      const journalMode = String(result.rows[0]?.journal_mode ?? '');
       // Should be in default mode (delete) when WAL is disabled
-      expect(result.journal_mode.toLowerCase()).toBe('delete');
+      expect(journalMode.toLowerCase()).toBe('delete');
     } finally {
       directDb.close();
     }
