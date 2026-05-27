@@ -305,6 +305,31 @@ describe('FunctionCallbackHandler', () => {
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
+    it('should load specific function from Windows file URL with drive letter', async () => {
+      const mockSpecificFunction = vi.fn().mockResolvedValue('windows result');
+      const mockModule = {
+        default: vi.fn(),
+        specificFunction: mockSpecificFunction,
+      };
+      mockImportModule.mockResolvedValue(mockModule);
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://C:/path/to/functions.js:specificFunction',
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: 'windows result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'C:/path/to/functions.js'),
+      );
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+    });
+
     it('should handle inline function strings', async () => {
       const callbacks: FunctionCallbackConfig = {
         testFunction: '() => "inline result"',
