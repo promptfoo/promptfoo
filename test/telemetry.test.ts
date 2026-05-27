@@ -119,6 +119,8 @@ describe('sanitizeTelemetryIdentifier', () => {
     expect(sanitizeTelemetryProviderIdentifier('openai:ft:gpt-4o-mini:acme:billing:job-id')).toBe(
       'openai:custom',
     );
+    expect(sanitizeTelemetryProviderIdentifier('python:custom')).toBe('python:custom');
+    expect(sanitizeTelemetryProviderIdentifier('file:custom')).toBe('file:custom');
   });
 });
 

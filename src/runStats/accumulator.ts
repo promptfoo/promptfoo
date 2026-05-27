@@ -221,7 +221,7 @@ export class RunStatsAccumulator {
             accumulated.totalTokens > 0 ? accumulated.cachedTokens / accumulated.totalTokens : 0,
         };
       })
-      .sort((a, b) => b.requests - a.requests)
+      .sort((a, b) => b.requests - a.requests || a.provider.localeCompare(b.provider))
       .slice(0, 10);
   }
 

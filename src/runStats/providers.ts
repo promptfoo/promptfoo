@@ -83,7 +83,7 @@ export function computeProviderStats(
         cacheRate: acc.totalTokens > 0 ? acc.cachedTokens / acc.totalTokens : 0,
       };
     })
-    .sort((a, b) => b.requests - a.requests)
+    .sort((a, b) => b.requests - a.requests || a.provider.localeCompare(b.provider))
     .slice(0, maxProviders);
 }
 

@@ -142,9 +142,15 @@ export function sanitizeTelemetryProviderIdentifier(identifier: string): string 
   if (sanitized !== identifier) {
     return sanitized;
   }
-  return PUBLIC_MODEL_IDENTIFIER_PREFIXES.has(prefix) ? identifier : 'custom';
+  return identifier;
 }
 
 export function isCustomTelemetryProviderIdentifier(identifier: string): boolean {
-  return sanitizeTelemetryProviderIdentifier(identifier) !== identifier;
+  const sanitized = sanitizeTelemetryProviderIdentifier(identifier);
+  const separatorIndex = sanitized.indexOf(':');
+  const prefix = separatorIndex === -1 ? '' : sanitized.slice(0, separatorIndex).toLowerCase();
+  return (
+    sanitized !== identifier ||
+    (REDACTED_TELEMETRY_IDENTIFIER_PREFIXES.has(prefix) && sanitized === `${prefix}:custom`)
+  );
 }

@@ -91,6 +91,15 @@ describe('computeProviderStats', () => {
     expect(stats[1].requests).toBe(1);
   });
 
+  it('should sort providers with equal request counts by provider id', () => {
+    const stats = computeProviderStats([
+      { success: true, latencyMs: 100, provider: { id: 'provider-z' } },
+      { success: true, latencyMs: 100, provider: { id: 'provider-a' } },
+    ]);
+
+    expect(stats.map((stat) => stat.provider)).toEqual(['provider-a', 'provider-z']);
+  });
+
   it('should use "unknown" for missing provider id', () => {
     const results: StatableResult[] = [
       { success: true, latencyMs: 100 },
@@ -245,6 +254,12 @@ describe('computeModelInfo', () => {
       createProvider('internal:private-model'),
     ];
     const info = computeModelInfo(providers);
+    expect(info.hasCustom).toBe(true);
+  });
+
+  it('should retain custom classification for already redacted provider buckets', () => {
+    const info = computeModelInfo([createProvider('python:custom')]);
+
     expect(info.hasCustom).toBe(true);
   });
 

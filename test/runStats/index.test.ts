@@ -202,6 +202,22 @@ describe('computeRunStats', () => {
     });
   });
 
+  it('should sort equal-count provider stats deterministically', () => {
+    const runStats = computeRunStats({
+      results: [
+        { success: true, latencyMs: 100, provider: { id: 'provider-z' } },
+        { success: true, latencyMs: 100, provider: { id: 'provider-a' } },
+      ],
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.providers.map((provider) => provider.provider)).toEqual([
+      'provider-a',
+      'provider-z',
+    ]);
+  });
+
   it('should not classify an assertion miss as a provider failure', () => {
     const runStats = computeRunStats({
       results: [
