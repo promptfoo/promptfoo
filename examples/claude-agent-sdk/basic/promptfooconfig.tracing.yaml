@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK: count LLM turns via gen_ai.turn marker spans'
+
+prompts:
+  - '{{task}}'
+
+providers:
+  - id: anthropic:claude-agent-sdk
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '127.0.0.1'
+      acceptFormats: ['json']
+
+tests:
+  # Single tool call: 2 LLM turns (one to emit the tool, one to summarize the result).
+  - vars:
+      task: 'Run `pwd` and report the result. Use only one tool call.'
+    metadata:
+      tracingEnabled: true
+    assert:
+      - type: trace-span-count
+        value:
+          pattern: 'gen_ai.turn *'
+          min: 1
+          max: 2
+
+  # Multi-step plan: more turns because each tool call depends on the previous.
+  - vars:
+      task: 'First run `pwd`. Then based on the result, list files in that directory.'
+    metadata:
+      tracingEnabled: true
+    assert:
+      - type: trace-span-count
+        value:
+          pattern: 'gen_ai.turn *'
+          min: 3

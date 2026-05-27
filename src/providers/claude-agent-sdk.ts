@@ -39,6 +39,7 @@ import type {
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKAssistantMessage,
   SDKAssistantMessageError,
   SDKResultMessage,
   SettingSource,
@@ -159,6 +160,7 @@ function emitToolSpan(
   endTimeMs: number,
   isError: boolean,
   incomplete = false,
+  turnIndex?: number,
 ): void {
   try {
     const tracer = getGenAITracer();
@@ -179,6 +181,9 @@ function emitToolSpan(
     }
     if (entry.parentToolUseId) {
       attributes['tool.parent_id'] = entry.parentToolUseId;
+    }
+    if (typeof turnIndex === 'number') {
+      attributes['gen_ai.turn.index'] = turnIndex;
     }
 
     const span = tracer.startSpan(`tool ${entry.name}`, {
@@ -1381,6 +1386,51 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Wall-clock start time per tool_use.id, captured when we first see the tool_use
           // message so we can synthesize child spans with realistic durations.
           const toolStartTimes = new Map<string, number>();
+          // Counter for LLM turns observed in this run. Each `assistant` message
+          // emitted by the SDK corresponds to one LLM round; we surface that as a
+          // `gen_ai.turn N` marker span so trace assertions can count rounds.
+          // Tool spans are tagged with the active turn index via `toolTurnIndex`.
+          let turnCount = 0;
+          const toolTurnIndex = new Map<string, number>();
+          const emitTurnSpan = (msg: SDKAssistantMessage): number => {
+            const index = turnCount + 1;
+            try {
+              turnCount = index;
+              const turnSpanTracer = getGenAITracer();
+              const attributes: Record<string, string | number | boolean> = {
+                'gen_ai.turn.index': index,
+                'gen_ai.system': 'anthropic',
+              };
+              if (msg.parent_tool_use_id) {
+                attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
+                attributes['gen_ai.turn.is_subagent'] = true;
+              }
+              if (msg.subagent_type) {
+                attributes['gen_ai.turn.subagent_type'] = msg.subagent_type;
+              }
+              if (msg.message?.model) {
+                attributes['gen_ai.response.model'] = msg.message.model;
+              }
+              const usage = msg.message?.usage;
+              if (usage) {
+                if (typeof usage.input_tokens === 'number') {
+                  attributes['gen_ai.usage.input_tokens'] = usage.input_tokens;
+                }
+                if (typeof usage.output_tokens === 'number') {
+                  attributes['gen_ai.usage.output_tokens'] = usage.output_tokens;
+                }
+              }
+              const now = Date.now();
+              const span = turnSpanTracer.startSpan(`gen_ai.turn ${index}`, {
+                startTime: now,
+                attributes,
+              });
+              span.end(now);
+            } catch (err) {
+              logger.warn(`[ClaudeAgentSDK] Failed to emit turn span: ${err}`);
+            }
+            return index;
+          };
 
           // Drain any tool_use entries that never saw a matching tool_result. Without
           // this, aborted runs and stop-hook terminations silently drop the tool span.
@@ -1392,7 +1442,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             for (const [toolUseId, startMs] of toolStartTimes) {
               const entry = toolCallsMap.get(toolUseId);
               if (entry) {
-                emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true);
+                emitToolSpan(
+                  entry,
+                  startMs,
+                  endedAt,
+                  false,
+                  /* incomplete */ true,
+                  toolTurnIndex.get(toolUseId),
+                );
               }
             }
             toolStartTimes.clear();
@@ -1416,6 +1473,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
+              const turnIndex = emitTurnSpan(msg);
               // Extract tool_use content blocks from assistant messages
               for (const block of msg.message.content) {
                 if (block.type === 'tool_use') {
@@ -1428,6 +1486,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                     parentToolUseId: msg.parent_tool_use_id,
                   });
                   toolStartTimes.set(block.id, Date.now());
+                  toolTurnIndex.set(block.id, turnIndex);
                 }
               }
               if (msg.error) {
@@ -1452,8 +1511,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {
-                        emitToolSpan(entry, startMs, Date.now(), entry.is_error);
+                        emitToolSpan(
+                          entry,
+                          startMs,
+                          Date.now(),
+                          entry.is_error,
+                          false,
+                          toolTurnIndex.get(block.tool_use_id),
+                        );
                         toolStartTimes.delete(block.tool_use_id);
+                        toolTurnIndex.delete(block.tool_use_id);
                       }
                     }
                   }
