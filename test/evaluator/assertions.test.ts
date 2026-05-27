@@ -306,6 +306,45 @@ describeEvaluator('evaluator assertions', () => {
     expect(summary.results[0].success).toBe(true);
   });
 
+  it('reuses configured text and embedding graders for answer relevance', async () => {
+    const textJudge: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:text-judge'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test prompt' }),
+    };
+    const embeddingJudge: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:embedding:judge'),
+      callApi: vi.fn().mockResolvedValue({ output: '' }),
+      callEmbeddingApi: vi.fn().mockResolvedValue({ embedding: [1, 0] }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider, textJudge, embeddingJudge],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          providers: ['test-provider'],
+          assert: [
+            {
+              type: 'answer-relevance',
+              threshold: 0.8,
+              provider: {
+                text: 'litellm:text-judge',
+                embedding: 'litellm:embedding:judge',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(textJudge.callApi).toHaveBeenCalledTimes(3);
+    expect(embeddingJudge.callEmbeddingApi).toHaveBeenCalledTimes(4);
+    expect(summary.stats.successes).toBe(1);
+  });
+
   it('evaluate with grading expected value does not pass', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
