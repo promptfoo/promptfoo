@@ -189,6 +189,28 @@ describe('inline server API DTO validation', () => {
     expect(response.body).toEqual({ error: 'Result not found' });
   });
 
+  it('redacts Azure Blob SAS tokens from result and dataset response DTOs', async () => {
+    const sasUri = 'az://account/container/tests.yaml?sp=r&sig=azure-secret';
+    mockedReadResult.mockResolvedValue({
+      id: 'eval-1',
+      createdAt: new Date(),
+      result: { config: { tests: sasUri } },
+    } as never);
+    mockedGetTestCases.mockResolvedValue([{ testCases: sasUri }] as never);
+
+    const resultResponse = await api.get('/api/results/eval-1');
+    const datasetsResponse = await api.get('/api/datasets');
+
+    expect(resultResponse.status).toBe(200);
+    expect(resultResponse.body.data.config.tests).toBe(
+      'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+    );
+    expect(datasetsResponse.status).toBe(200);
+    expect(datasetsResponse.body.data[0].testCases).toBe(
+      'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+    );
+  });
+
   it('validates prompt hash params and returns prompt DTOs', async () => {
     const hash = 'a'.repeat(64);
     mockedGetPromptsForTestCasesHash.mockResolvedValue([{ raw: 'hello', label: 'hello' }] as never);
