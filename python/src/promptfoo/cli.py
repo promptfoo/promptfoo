@@ -46,7 +46,9 @@ def find_binary() -> Path:
         try:
             current_mode = binary_path.stat().st_mode
             if not (current_mode & stat.S_IXUSR):
-                binary_path.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                binary_path.chmod(
+                    current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                )
         except OSError as exc:
             raise RuntimeError(
                 f"promptfoo binary permissions could not be updated at {binary_path}: {exc}\n"
