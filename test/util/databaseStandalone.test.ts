@@ -46,7 +46,7 @@ async function createEvalWithPrompts(config: Partial<Parameters<typeof Eval.crea
 }
 
 async function resetEvalTables() {
-  const db = getDb();
+  const db = await getDb();
   await db.run('DELETE FROM eval_results');
   await db.run('DELETE FROM evals_to_datasets');
   await db.run('DELETE FROM evals_to_prompts');
@@ -55,8 +55,9 @@ async function resetEvalTables() {
   clearStandaloneEvalCache();
 }
 
-function setIsRedteam(evalId: string, value: boolean) {
-  getDb().update(evalsTable).set({ isRedteam: value }).where(eq(evalsTable.id, evalId)).run();
+async function setIsRedteam(evalId: string, value: boolean) {
+  const db = await getDb();
+  await db.update(evalsTable).set({ isRedteam: value }).where(eq(evalsTable.id, evalId)).run();
 }
 
 describe('getStandaloneEvals', () => {
@@ -71,8 +72,8 @@ describe('getStandaloneEvals', () => {
     const regularEval = await createEvalWithPrompts({});
 
     // Flip the column away from what the JSON config would imply; the query must trust the column.
-    setIsRedteam(redteamEval.id, false);
-    setIsRedteam(regularEval.id, true);
+    await setIsRedteam(redteamEval.id, false);
+    await setIsRedteam(regularEval.id, true);
 
     const rows = await getStandaloneEvals();
     const byId = new Map(rows.map((row) => [row.evalId, row.isRedteam] as const));
@@ -99,7 +100,8 @@ describe('getStandaloneEvals', () => {
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
     const eval_ = await createEvalWithPrompts({ redteam: null as any });
 
-    const stored = getDb()
+    const db = await getDb();
+    const stored = await db
       .select({ isRedteam: evalsTable.isRedteam })
       .from(evalsTable)
       .where(eq(evalsTable.id, eval_.id))
@@ -119,7 +121,7 @@ describe('migration 0024 repair semantics', () => {
   beforeEach(resetEvalTables);
 
   it('classifies {redteam: null} as redteam via json_type (not json_extract)', async () => {
-    const db = getDb();
+    const db = await getDb();
     const evalNullRedteam = await Eval.create({ redteam: null as any }, []);
     const evalNoRedteam = await Eval.create({}, []);
     const evalWithRedteam = await Eval.create({ redteam: {} as any }, []);
@@ -137,9 +139,9 @@ describe('migration 0024 repair semantics', () => {
         .where(eq(evalsTable.id, id))
         .get();
 
-    const nullRow = classify(evalNullRedteam.id);
-    const missingRow = classify(evalNoRedteam.id);
-    const presentRow = classify(evalWithRedteam.id);
+    const nullRow = await classify(evalNullRedteam.id);
+    const missingRow = await classify(evalNoRedteam.id);
+    const presentRow = await classify(evalWithRedteam.id);
 
     expect(nullRow?.fromMigration).toBe(1);
     expect(missingRow?.fromMigration).toBe(0);
@@ -152,19 +154,19 @@ describe('migration 0024 repair semantics', () => {
   });
 
   it('idempotently repairs only stale rows', async () => {
-    const db = getDb();
+    const db = await getDb();
     const evalWithRedteam = await Eval.create({ redteam: {} as any }, []);
     const evalRegular = await Eval.create({}, []);
 
-    setIsRedteam(evalWithRedteam.id, false);
-    setIsRedteam(evalRegular.id, true);
+    await setIsRedteam(evalWithRedteam.id, false);
+    await setIsRedteam(evalRegular.id, true);
 
     const repairSql = sql`UPDATE evals SET is_redteam = ${isRedteamCase} WHERE is_redteam != ${isRedteamCase}`;
 
-    expect(db.run(repairSql).changes).toBe(2);
-    expect(db.run(repairSql).changes).toBe(0);
+    expect((await db.run(repairSql)).rowsAffected).toBe(2);
+    expect((await db.run(repairSql)).rowsAffected).toBe(0);
 
-    const rows = db
+    const rows = await db
       .select({ id: evalsTable.id, isRedteam: evalsTable.isRedteam })
       .from(evalsTable)
       .all();
