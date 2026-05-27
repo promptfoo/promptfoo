@@ -331,6 +331,7 @@ jobs:
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
 
       - name: Upload bundle to release
+        shell: bash
         env:
           ARCHIVE_NAME: ${{ env.ARCHIVE_NAME }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

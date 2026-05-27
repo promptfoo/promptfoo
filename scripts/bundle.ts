@@ -333,7 +333,6 @@ function createStubModules(nodeModulesDir: string): void {
     { name: 'langfuse', exports: ['Langfuse', 'LangfuseTraceClient'] },
     { name: 'google-auth-library', exports: ['GoogleAuth', 'Compute', 'JWT', 'OAuth2Client'] },
     // Other optional deps
-    { name: 'sharp', exports: [] },
     { name: 'pdf-parse', exports: [] },
     { name: 'read-excel-file', exports: [] },
     { name: 'fluent-ffmpeg', exports: [] },

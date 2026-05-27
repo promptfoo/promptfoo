@@ -173,8 +173,9 @@ detect_platform() {
     ;;
   Linux)
     os="linux"
-    # Check for musl (Alpine, etc.)
-    if ldd --version 2>&1 | grep -q musl; then
+    # Check for musl (Alpine, etc.). Missing ldd is handled through the
+    # glibc probe below and otherwise falls back to npm.
+    if command -v ldd &>/dev/null && ldd --version 2>&1 | grep -q musl; then
       os="linux-musl"
     else
       if command -v getconf &>/dev/null; then
@@ -325,7 +326,7 @@ install_npm() {
 install_binary() {
   local version="$1"
   local platform="$2"
-  local archive_name download_url temp_file
+  local archive_name download_url temp_file extract_dir archive_entry
 
   case "$platform" in
   linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64) ;;
@@ -344,9 +345,6 @@ install_binary() {
   info "Installing promptfoo v$version for $platform..."
   info "Downloading from $download_url"
 
-  # Create installation directory
-  mkdir -p "$BIN_DIR"
-
   # Download archive
   if ! download "$download_url" "$temp_file"; then
     warn "Binary release not found for $platform."
@@ -356,9 +354,51 @@ install_binary() {
     return $?
   fi
 
-  # Extract archive
-  info "Extracting to $BIN_DIR"
-  tar -xzf "$temp_file" -C "$BIN_DIR"
+  extract_dir=$(mktemp -d "${TMPDIR:-/tmp}/promptfoo-extract.XXXXXXXX")
+
+  # Reject entries that could escape the extraction root, and reject links so
+  # later entries cannot write through a link created by the archive.
+  if ! tar -tzf "$temp_file" >"$extract_dir/entries"; then
+    rm -f "$temp_file"
+    rm -rf "$extract_dir"
+    error "Downloaded archive is invalid and could not be inspected."
+  fi
+  while IFS= read -r archive_entry; do
+    case "$archive_entry" in
+    /* | .. | ../* | */.. | */../*)
+      rm -f "$temp_file"
+      rm -rf "$extract_dir"
+      error "Downloaded archive contains an unsafe path: $archive_entry"
+      ;;
+    esac
+  done <"$extract_dir/entries"
+  if ! tar -tvzf "$temp_file" >"$extract_dir/listing"; then
+    rm -f "$temp_file"
+    rm -rf "$extract_dir"
+    error "Downloaded archive is invalid and could not be inspected."
+  fi
+  if grep -Eq '^[lh]' "$extract_dir/listing"; then
+    rm -f "$temp_file"
+    rm -rf "$extract_dir"
+    error "Downloaded archive contains unsupported link entries."
+  fi
+
+  # Extract into an empty staging directory, then copy validated payload files.
+  mkdir -p "$extract_dir/payload"
+  if ! tar --no-same-owner --no-same-permissions -xzf "$temp_file" -C "$extract_dir/payload"; then
+    rm -f "$temp_file"
+    rm -rf "$extract_dir"
+    error "Downloaded archive could not be extracted safely."
+  fi
+  if [[ ! -x "$extract_dir/payload/promptfoo" ]]; then
+    rm -f "$temp_file"
+    rm -rf "$extract_dir"
+    error "Downloaded archive does not contain an executable promptfoo binary."
+  fi
+
+  info "Installing to $BIN_DIR"
+  mkdir -p "$BIN_DIR"
+  cp -R "$extract_dir/payload/." "$BIN_DIR/"
   chmod +x "$BIN_DIR/promptfoo"
 
   # Create 'pf' alias
@@ -366,6 +406,7 @@ install_binary() {
 
   # Cleanup
   rm -f "$temp_file"
+  rm -rf "$extract_dir"
 
   return 0
 }

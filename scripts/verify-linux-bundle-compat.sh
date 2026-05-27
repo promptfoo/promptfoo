@@ -36,7 +36,11 @@ while IFS= read -r -d '' artifact; do
       echo "error: $artifact requires unsupported $symbol (maximum GLIBCXX_3.4.25)" >&2
       exit 1
     fi
-  done < <(readelf --version-info "$artifact" | grep -Eo 'GLIBC(XX)?_[0-9]+(\.[0-9]+)+' | sort -u)
+  done < <(
+    readelf --version-info "$artifact" |
+      grep -Eo 'GLIBC(XX)?_[0-9]+(\.[0-9]+)+' |
+      sort -u || true
+  )
 done < <(find "$BUNDLE_DIR" -type f -print0)
 
 if ((checked == 0)); then

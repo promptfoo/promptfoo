@@ -1170,6 +1170,88 @@ EOF
   return 1
 }
 
+test_install_script_rejects_unsafe_archive_paths() {
+  log_test "install.sh rejects archive path traversal"
+
+  local fake_root fake_bin install_dir payload archive output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsafe-archive.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  payload="$fake_root/payload"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$payload"
+
+  cat >"$payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo compromised
+EOF
+  chmod +x "$payload/promptfoo"
+  tar -czf "$archive" --transform='s#^promptfoo$#../escaped#' -C "$payload" promptfoo
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh extracted an archive containing path traversal"
+    return 1
+  fi
+
+  if [[ "$output" == *"unsafe path"* ]] && [[ ! -e "$install_dir/escaped" ]]; then
+    log_pass "install.sh rejects traversal entries before extraction"
+    return 0
+  fi
+
+  log_fail "install.sh did not safely reject a traversal archive: $output"
+  return 1
+}
+
+test_install_script_rejects_archive_link_entries() {
+  log_test "install.sh rejects archive link entries"
+
+  local fake_root fake_bin install_dir payload archive output entry
+  fake_root=$(mktemp -d "$TEST_ROOT/unsafe-links.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  payload="$fake_root/payload"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$payload/entries"
+
+  cat >"$payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo valid
+EOF
+  chmod +x "$payload/promptfoo"
+  ln -s ../escaped "$payload/unsafe-link"
+  for entry in {1..2048}; do
+    : >"$payload/entries/file-$entry"
+  done
+  tar -czf "$archive" -C "$payload" unsafe-link promptfoo entries
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh extracted an archive containing a link entry"
+    return 1
+  fi
+
+  if [[ "$output" == *"unsupported link entries"* ]] && [[ ! -e "$install_dir/unsafe-link" ]]; then
+    log_pass "install.sh rejects link entries before extraction"
+    return 0
+  fi
+
+  log_fail "install.sh did not safely reject an archive link entry: $output"
+  return 1
+}
+
 test_install_script_fish_path_handles_spaces() {
   log_test "install.sh quotes spaced PATH entries for fish"
 
@@ -1213,6 +1295,8 @@ test_install_ps1_uses_package_entrypoint() {
     grep -q "Get-Command npm" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q "PROMPTFOO_NO_AUTO_INSTALL" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q '\$nodeMajor -eq 20' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '\$PSVersionTable.PSVersion.Major -lt 6' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q 'Invoke-WebRequest .*UseBasicParsing' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q 'download/v\$Version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q 'cmd /c \$promptfooCmd' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
@@ -1258,6 +1342,7 @@ test_packaged_assets() {
     [[ -d "$ROOT_DIR/bundle/tracing/proto" ]] &&
     [[ -f "$ROOT_DIR/bundle/app/index.html" ]] &&
     [[ -f "$ROOT_DIR/bundle/tableOutput.html" ]] &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/sharp" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/@huggingface/transformers" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/onnxruntime-node" ]]; then
     log_pass "bundle contains runtime assets and omits npm-only Transformers dependencies"
@@ -1354,6 +1439,8 @@ main() {
   test_install_script_npm_fallback_requires_npm
   test_install_script_npm_fallback_requires_supported_node
   test_install_script_downloads_unprefixed_release_tag
+  test_install_script_rejects_unsafe_archive_paths
+  test_install_script_rejects_archive_link_entries
   test_install_script_fish_path_handles_spaces
   test_install_ps1_uses_package_entrypoint
   test_install_ps1_syntax

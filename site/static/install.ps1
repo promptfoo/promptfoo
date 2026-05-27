@@ -184,7 +184,14 @@ function Install-PromptfooBinary {
     try {
         try {
             # Download archive
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
+            $webRequestParameters = @{
+                Uri = $downloadUrl
+                OutFile = $tempFile
+            }
+            if ($PSVersionTable.PSVersion.Major -lt 6) {
+                $webRequestParameters.UseBasicParsing = $true
+            }
+            Invoke-WebRequest @webRequestParameters
         } catch {
             Write-Warn "Binary release not found for $Platform."
             Write-Warn "Falling back to npm installation..."
