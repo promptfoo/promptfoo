@@ -74,7 +74,7 @@ function isPotentialHomebrewPath(realPath: string): boolean {
  */
 export function findGitRepositoryRoot(cwd: string): string | undefined {
   try {
-    const pathApi = process.platform === 'win32' ? path.win32 : path;
+    const pathApi = process.platform === 'win32' ? path.win32 : path.posix;
     let currentDirectory = pathApi.resolve(cwd);
 
     while (true) {
