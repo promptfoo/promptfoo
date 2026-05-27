@@ -356,12 +356,13 @@ async function createImportedV3Eval(
   return evalRecord.id;
 }
 
-function createImportedV2Eval(evalData: any, context: ImportedEvalContext): string {
+async function createImportedV2Eval(evalData: any, context: ImportedEvalContext): Promise<string> {
   logger.debug('Importing v2 eval');
   const evalId = context.newId
     ? createEvalId(context.importCreatedAt)
     : context.importId || createEvalId(context.importCreatedAt);
-  getDb()
+  const db = await getDb();
+  await db
     .insert(evalsTable)
     .values({
       id: evalId,
@@ -370,6 +371,7 @@ function createImportedV2Eval(evalData: any, context: ImportedEvalContext): stri
       description: evalData.description || evalData.config?.description,
       results: evalData.results,
       config: evalData.config,
+      isRedteam: evalData.config?.redteam !== undefined,
     })
     .run();
   return evalId;
@@ -445,7 +447,7 @@ export function importCommand(program: Command) {
         };
         evalId = importV3
           ? await createImportedV3Eval(evalData, traces, blobAssets, context)
-          : createImportedV2Eval(evalData, context);
+          : await createImportedV2Eval(evalData, context);
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
 
