@@ -630,7 +630,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     providers,
     prompts,
     tests,
-    scenarios: configs.flatMap((config) => config.scenarios || []),
+    scenarios: configs.some((config) => config.scenarios !== undefined)
+      ? configs.flatMap((config) => config.scenarios || [])
+      : undefined,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {

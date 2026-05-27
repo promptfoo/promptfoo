@@ -4397,6 +4397,11 @@ class Evaluator {
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
+    // Preserve configured/transformed variable order before concurrent rows finish.
+    // Result-only variables discovered at runtime are appended as they appear.
+    for (const varName of varNames) {
+      vars.add(varName);
+    }
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     const runEvalOptions = await buildRunEvalOptions({
       concurrency,
