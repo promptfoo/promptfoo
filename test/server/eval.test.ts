@@ -394,6 +394,37 @@ describe('eval routes', () => {
         text: 'Salem',
       });
     });
+
+    it('appends a legacy shared result row whose provider is stored as a string', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      testEvalIds.add(eval_.id);
+
+      const appendRes = await api.post(`/api/eval/${eval_.id}/results`).send([
+        {
+          id: randomUUID(),
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          prompt: { raw: 'Say hello', label: 'Greeting' },
+          provider: 'echo',
+          response: { output: 'Hello' },
+          failureReason: ResultFailureReason.NONE,
+          success: true,
+          score: 1,
+          namedScores: {},
+        },
+      ]);
+
+      expect(appendRes.status).toBe(204);
+
+      const tableRes = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(tableRes.status).toBe(200);
+      expect(tableRes.body.table.body[0].outputs[0]).toMatchObject({
+        pass: true,
+        score: 1,
+        text: 'Hello',
+      });
+    });
   });
 
   describe('GET /:id/table - large payload handling', () => {
@@ -415,6 +446,33 @@ describe('eval routes', () => {
       const updatedEval = await Eval.findById(eval_.id);
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.config.tests).toHaveLength(2);
+    });
+
+    it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {
+      const sasUri =
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=azure-secret&sv={{ version }}';
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.config.tests = sasUri;
+      await eval_.save();
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config.tests).toBe(
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=%5BREDACTED%5D&sv={{ version }}',
+      );
+
+      const patchRes = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toBe(sasUri);
+      expect(updatedEval.config.description).toBe('renamed eval');
     });
 
     it('returns table data with only the largest per-cell prompt stripped when possible', async () => {

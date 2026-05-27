@@ -39,8 +39,9 @@ const OpenApiCreateJobRequestSchema = z
   .object({
     prompts: z.array(z.union([z.string(), OpenApiLooseObjectSchema])),
     providers: OpenApiProvidersSchema,
-    tests: z.array(z.unknown()).optional(),
+    tests: z.union([z.string(), z.array(z.unknown()), OpenApiLooseObjectSchema]).optional(),
     evaluateOptions: OpenApiLooseObjectSchema.optional(),
+    sourceEvalId: z.string().min(1).optional(),
   })
   .passthrough();
 
@@ -209,6 +210,14 @@ export function createServerOpenApiRegistry() {
     contract: ApiRouteContract,
     config: Omit<RouteConfig, 'method' | 'path'>,
   ) {
+    const unsafeMethodResponses: Record<string, ResponseConfig> =
+      contract.method === 'get'
+        ? {}
+        : {
+            400: validationError(),
+            403: errorResponse('CSRF protection rejected request'),
+          };
+
     register({
       method: contract.method,
       path: contract.openApiPath,
@@ -216,6 +225,10 @@ export function createServerOpenApiRegistry() {
       tags: [contract.tag],
       summary: contract.summary,
       ...config,
+      responses: {
+        ...unsafeMethodResponses,
+        ...config.responses,
+      },
     });
   }
 

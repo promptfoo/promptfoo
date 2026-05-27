@@ -29,6 +29,7 @@ interface EvalsTableProps {
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
+  focusedDatasetId?: string | null;
   deletionEnabled?: boolean;
 }
 
@@ -37,6 +38,7 @@ export default function EvalsTable({
   focusedEvalId,
   showUtilityButtons = false,
   filterByDatasetId = false,
+  focusedDatasetId,
   deletionEnabled = false,
 }: EvalsTableProps) {
   if (filterByDatasetId) {
@@ -52,25 +54,33 @@ export default function EvalsTable({
   const location = useLocation();
 
   // Fetch evals from the API
-  const fetchEvals = useCallback(async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
-        cache: 'no-store',
-        signal,
-      });
-      setEvals(body.data as unknown as EvalSummary[]);
-      setError(null);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError((err as Error).message);
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
+        const query =
+          filterByDatasetId && focusedDatasetId
+            ? new URLSearchParams({ datasetId: focusedDatasetId })
+            : undefined;
+        const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
+          cache: 'no-store',
+          signal,
+          query,
+        });
+        setEvals(body.data as unknown as EvalSummary[]);
+        setError(null);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [filterByDatasetId, focusedDatasetId],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -234,7 +244,11 @@ export default function EvalsTable({
           ]
         : []),
       {
-        accessorKey: 'description',
+        id: 'description',
+        // accessorFn (not accessorKey) ensures every row is searched. TanStack Table
+        // infers column types from the first row, so a leading row with description:
+        // null would silently drop this column from global search.
+        accessorFn: (row) => row.description || row.label,
         header: 'Description',
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;

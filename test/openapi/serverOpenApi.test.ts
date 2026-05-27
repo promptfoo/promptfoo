@@ -133,6 +133,18 @@ describe('server OpenAPI generation', () => {
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
     ).toEqual(expect.arrayContaining(['prompts', 'providers']));
+    const createEvalJobSchema =
+      createEvalJobOperation?.requestBody?.content?.['application/json']?.schema;
+    expect(createEvalJobSchema?.properties?.sourceEvalId).toEqual(
+      expect.objectContaining({ minLength: 1, type: 'string' }),
+    );
+    expect(createEvalJobSchema?.properties?.tests?.oneOf).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'string' })]),
+    );
+    expect(
+      addEvalResultsOperation?.requestBody?.content?.['application/json']?.schema?.items?.properties
+        ?.provider?.oneOf,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'string' })]));
     expect(
       getMediaOperation?.responses['200']?.content?.['application/octet-stream']?.schema,
     ).toEqual(expect.objectContaining({ format: 'binary', type: 'string' }));
@@ -221,6 +233,21 @@ describe('server OpenAPI generation', () => {
     for (const operation of explicitServerErrorOperations) {
       expect(operation?.responses?.['500']).toEqual(
         expect.objectContaining({ description: 'Server error' }),
+      );
+    }
+  });
+
+  it('documents shared parser and CSRF failures for mutation routes', () => {
+    const mutationOperations = operations(createServerOpenApiDocument()).filter(
+      ({ path, method }) => path.startsWith('/api/') && method !== 'get',
+    );
+
+    for (const { operation } of mutationOperations) {
+      expect((operation as any).responses?.['400']).toEqual(
+        expect.objectContaining({ description: expect.any(String) }),
+      );
+      expect((operation as any).responses?.['403']).toEqual(
+        expect.objectContaining({ description: 'CSRF protection rejected request' }),
       );
     }
   });
