@@ -70,14 +70,31 @@ function isPotentialHomebrewPath(realPath: string): boolean {
 }
 
 /**
- * Check if running in a git repository
+ * Find the containing git repository for a working directory.
  */
-export function isGitRepository(cwd: string): boolean {
+export function findGitRepositoryRoot(cwd: string): string | undefined {
   try {
-    return fs.existsSync(path.join(cwd, '.git'));
+    const pathApi = process.platform === 'win32' ? path.win32 : path;
+    let currentDirectory = pathApi.resolve(cwd);
+
+    while (true) {
+      if (fs.existsSync(pathApi.join(currentDirectory, '.git'))) {
+        return currentDirectory;
+      }
+
+      const parentDirectory = pathApi.dirname(currentDirectory);
+      if (parentDirectory === currentDirectory) {
+        return undefined;
+      }
+      currentDirectory = parentDirectory;
+    }
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+export function isGitRepository(cwd: string): boolean {
+  return findGitRepositoryRoot(cwd) !== undefined;
 }
 
 /**
@@ -131,8 +148,7 @@ export function detectPackageManagerFromPath(
   try {
     // Normalize path separators to forward slashes for consistent matching
     const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
-    const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
-    const isGit = isGitRepository(process.cwd());
+    const gitRoot = findGitRepositoryRoot(projectRoot);
 
     // Check for Docker environment
     if (sourceEnvironment.DOCKER === 'true' || fs.existsSync('/.dockerenv')) {
@@ -140,12 +156,7 @@ export function detectPackageManagerFromPath(
     }
 
     // Check for local git clone first
-    if (
-      isGit &&
-      normalizedProjectRoot &&
-      pathStartsWith(realPath, normalizedProjectRoot) &&
-      !pathContains(realPath, '/node_modules/')
-    ) {
+    if (gitRoot && pathStartsWith(realPath, gitRoot) && !pathContains(realPath, '/node_modules/')) {
       return PackageManager.UNKNOWN; // Git clone, not managed by package manager
     }
 

@@ -4,8 +4,8 @@ import * as fs from 'node:fs';
 import logger from '../logger';
 import {
   detectPackageManagerFromPath,
+  findGitRepositoryRoot,
   findLocalInstallationRoot,
-  isGitRepository,
   PackageManager,
   pathContains,
   pathStartsWith,
@@ -183,8 +183,7 @@ export function getInstallationInfo(
 
   try {
     const packageManager = detectPackageManagerFromPath(cliPath, projectRoot, sourceEnvironment);
-    const isGit = isGitRepository(process.cwd());
-    const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
+    const gitRoot = findGitRepositoryRoot(projectRoot);
     const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
 
     // Build installation info based on detected package manager
@@ -199,7 +198,7 @@ export function getInstallationInfo(
 
       case PackageManager.UNKNOWN:
         // Check if it's a git clone
-        if (isGit && normalizedProjectRoot && pathStartsWith(realPath, normalizedProjectRoot)) {
+        if (gitRoot && pathStartsWith(realPath, gitRoot)) {
           return {
             packageManager,
             isGlobal: false,

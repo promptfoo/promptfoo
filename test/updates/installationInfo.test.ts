@@ -144,6 +144,20 @@ describe('getInstallationInfo', () => {
     (process.cwd as Mock).mockRestore();
   });
 
+  it('should detect a local git clone when invoked from a nested directory', () => {
+    process.argv = ['node', '/project/dist/src/main.js'];
+    mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
+    mockFs.existsSync.mockImplementation((candidate) => candidate === '/project/.git');
+
+    const result = getInstallationInfo('/project/packages/example', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.UNKNOWN,
+      isGlobal: false,
+      updateMessage: 'Running from a local git clone. Please update with "git pull".',
+    });
+  });
+
   it('should detect NPX installation', () => {
     process.argv = ['node', '/home/user/.npm/_npx/12345/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue(
@@ -575,7 +589,7 @@ describe('getInstallationInfo', () => {
     mockChildProcess.execFileSync.mockReturnValue('/usr/local/lib/node_modules\n');
 
     const result = getInstallationInfo('/untrusted/project', false, {
-      PATH: '/safe/bin',
+      PATH: '/untrusted/project/node_modules/.bin:/safe/bin',
       HOME: '/home/user',
       NPM_CONFIG_PREFIX: '/safe/npm-global',
       npm_config_userconfig: '/home/user/.npmrc',

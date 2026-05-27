@@ -32,17 +32,30 @@ const mockCheckForUpdates = checkForUpdates as MockedFunction<typeof checkForUpd
 const mockGetInstallationInfo = getInstallationInfo as MockedFunction<typeof getInstallationInfo>;
 const mockSpawn = spawn as MockedFunction<typeof spawn>;
 
-function createMockProcess({ closeCode, error }: { closeCode?: number; error?: Error }) {
+function createMockProcess({
+  closeCode,
+  closeSignal,
+  error,
+}: {
+  closeCode?: number | null;
+  closeSignal?: NodeJS.Signals | null;
+  error?: Error;
+}) {
   const mockProcess = {
-    on: vi.fn((event: string, callback: (value: Error | number) => void) => {
-      if (event === 'close' && closeCode !== undefined) {
-        setTimeout(() => callback(closeCode), 10);
-      }
-      if (event === 'error' && error) {
-        setTimeout(() => callback(error), 10);
-      }
-      return mockProcess;
-    }),
+    on: vi.fn(
+      (
+        event: string,
+        callback: (value: Error | number | null, signal?: NodeJS.Signals | null) => void,
+      ) => {
+        if (event === 'close' && (closeCode !== undefined || closeSignal !== undefined)) {
+          setTimeout(() => callback(closeCode ?? null, closeSignal ?? null), 10);
+        }
+        if (event === 'error' && error) {
+          setTimeout(() => callback(error), 10);
+        }
+        return mockProcess;
+      },
+    ),
     removeAllListeners: vi.fn(),
     stdin: null,
     stdout: null,
@@ -83,7 +96,10 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({
+      throwOnError: true,
+      ignoreDisableUpdate: true,
+    });
     expect(telemetry.record).not.toHaveBeenCalled();
   });
 
@@ -93,7 +109,10 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({
+      throwOnError: true,
+      ignoreDisableUpdate: true,
+    });
     expect(mockGetInstallationInfo).not.toHaveBeenCalled();
     expect(mockSpawn).not.toHaveBeenCalled();
   });
@@ -111,20 +130,25 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({
+      throwOnError: true,
+      ignoreDisableUpdate: true,
+    });
     expect(logger.info).toHaveBeenCalledWith(UPDATE_INSTRUCTIONS);
   });
 
-  it('should report a skipped check when update checks are disabled', async () => {
+  it('should allow explicit checks when update notifications are disabled', async () => {
     vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
+    mockCheckForUpdates.mockResolvedValue(null);
 
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    expect(mockCheckForUpdates).not.toHaveBeenCalled();
-    expect(logger.info).toHaveBeenCalledWith(
-      'Update check skipped because PROMPTFOO_DISABLE_UPDATE is enabled.',
-    );
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({
+      throwOnError: true,
+      ignoreDisableUpdate: true,
+    });
+    expect(logger.info).toHaveBeenCalledWith('✓ You are running the latest version');
   });
 
   it('should handle installation info and run update command', async () => {
@@ -292,7 +316,7 @@ describe('update command', () => {
     mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
 
     updateCommand(program, {
-      PATH: '/safe/bin',
+      PATH: '/untrusted/project/node_modules/.bin:/safe/bin',
       HOME: '/home/user',
       NPM_CONFIG_PREFIX: '/safe/npm-global',
       OPENAI_API_KEY: 'not-for-installer',
@@ -330,6 +354,32 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update']);
 
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('should report signal termination for the manual update command', async () => {
+    mockCheckForUpdates.mockResolvedValue({
+      message: 'Update available: 1.0.0 → 1.1.0',
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
+    });
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: null, closeSignal: 'SIGTERM' }));
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update']);
+
+    expect(logger.error).toHaveBeenCalledWith('Update failed after receiving signal SIGTERM');
     expect(process.exitCode).toBe(1);
   });
 

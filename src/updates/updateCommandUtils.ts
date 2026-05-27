@@ -40,6 +40,14 @@ const UPDATE_ENV_KEYS = [
   'npm_config_globalconfig',
 ] as const;
 
+function sanitizeExecutableSearchPath(pathValue: string): string {
+  const delimiter = process.platform === 'win32' ? ';' : ':';
+  return pathValue
+    .split(delimiter)
+    .filter((entry) => !entry.replace(/\\/g, '/').toLowerCase().includes('/node_modules/.bin'))
+    .join(delimiter);
+}
+
 export function getPackageManagerExecutable(executable: PackageManagerExecutable): string {
   if (process.platform !== 'win32') {
     return executable;
@@ -56,7 +64,7 @@ export function getUpdateSpawnContext(sourceEnvironment: NodeJS.ProcessEnv): {
   for (const key of UPDATE_ENV_KEYS) {
     const value = sourceEnvironment[key];
     if (value !== undefined) {
-      env[key] = value;
+      env[key] = key === 'PATH' || key === 'Path' ? sanitizeExecutableSearchPath(value) : value;
     }
   }
 

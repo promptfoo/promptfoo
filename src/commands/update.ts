@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
 
 import { Command } from 'commander';
-import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getInstallationInfo } from '../updates/installationInfo';
 import { checkForUpdates, UPDATE_INSTRUCTIONS } from '../updates/updateCheck';
@@ -24,14 +23,9 @@ export function updateCommand(
       try {
         logger.info('Checking for updates...');
 
-        if (!options.force && getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
-          logger.info('Update check skipped because PROMPTFOO_DISABLE_UPDATE is enabled.');
-          return;
-        }
-
         let updateInfo: Awaited<ReturnType<typeof checkForUpdates>>;
         try {
-          updateInfo = await checkForUpdates({ throwOnError: true });
+          updateInfo = await checkForUpdates({ throwOnError: true, ignoreDisableUpdate: true });
         } catch (error) {
           if (!options.force || options.check) {
             throw error;
@@ -90,18 +84,24 @@ export function updateCommand(
             shell: false, // Safer: no shell injection
           });
 
-          updateProcess.on('close', (code) => {
+          updateProcess.on('close', (code, signal) => {
             if (code === 0) {
               logger.info('✓ Update completed successfully!');
               logger.info('The new version will be used on your next run.');
               resolve();
             } else {
-              logger.error(`Update failed with exit code ${code}`);
+              const failureMessage =
+                code === null
+                  ? signal
+                    ? `Update failed after receiving signal ${signal}`
+                    : 'Update failed without an exit code'
+                  : `Update failed with exit code ${code}`;
+              logger.error(failureMessage);
               if (installationInfo.updateMessage) {
                 logger.info('Manual update instructions:');
                 logger.info(installationInfo.updateMessage);
               }
-              reject(new Error(`Update failed with exit code ${code}`));
+              reject(new Error(failureMessage));
             }
           });
 

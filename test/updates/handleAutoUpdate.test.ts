@@ -230,7 +230,7 @@ describe('handleAutoUpdate', () => {
     });
 
     const updatePromise = handleAutoUpdate(info, false, false, '/untrusted/project', mockSpawn, {
-      PATH: '/safe/bin',
+      PATH: '/untrusted/project/node_modules/.bin:/safe/bin',
       HOME: '/home/user',
       OPENAI_API_KEY: 'not-for-installer',
       NPM_TOKEN: 'not-for-installer',

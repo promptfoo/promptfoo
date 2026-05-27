@@ -17,6 +17,7 @@ export interface UpdateObject {
 
 export interface CheckForUpdatesOptions {
   throwOnError?: boolean;
+  ignoreDisableUpdate?: boolean;
 }
 
 const PACKAGE_NAME = 'promptfoo';
@@ -27,12 +28,7 @@ export async function checkForUpdates(
   options: CheckForUpdatesOptions = {},
 ): Promise<UpdateObject | null> {
   try {
-    if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
-      return null;
-    }
-
-    // Skip update check when running from source (development mode)
-    if (process.env.NODE_ENV === 'development') {
+    if (!options.ignoreDisableUpdate && getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
       return null;
     }
 

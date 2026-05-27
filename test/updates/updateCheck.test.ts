@@ -27,11 +27,18 @@ describe('checkForUpdates', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should return null in development mode', async () => {
+  it('should check for updates when the evaluated application uses development mode', async () => {
     vi.stubEnv('NODE_ENV', 'development');
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.0.0' }),
+    } as any);
+    mockSemverGt.mockReturnValue(false);
+
     const result = await checkForUpdates();
+
     expect(result).toBeNull();
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockFetchWithTimeout).toHaveBeenCalled();
   });
 
   it('should return null without a request when update checks are disabled', async () => {
@@ -40,6 +47,21 @@ describe('checkForUpdates', () => {
     await expect(checkForUpdates({ throwOnError: true })).resolves.toBeNull();
 
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it('should perform an explicit update request when update notifications are disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.0.0' }),
+    } as any);
+    mockSemverGt.mockReturnValue(false);
+
+    await expect(
+      checkForUpdates({ throwOnError: true, ignoreDisableUpdate: true }),
+    ).resolves.toBeNull();
+
+    expect(mockFetchWithTimeout).toHaveBeenCalled();
   });
 
   it('should return update info when update is available', async () => {
