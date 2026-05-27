@@ -122,6 +122,18 @@
     "webpack-dev-server": {
       "express": "^4.22.2"
     },
+    "engine.io": {
+      ".": "6.6.8",
+      "ws": "$ws"
+    },
+    "engine.io-client": {
+      ".": "6.6.5",
+      "ws": "$ws"
+    },
+    "socket.io-adapter": {
+      ".": "2.5.7",
+      "ws": "$ws"
+    },
     "qs": ">=6.15.2 <7.0.0",
     "@isaacs/brace-expansion": ">=5.0.1",
     "brace-expansion@5": "^5.0.6",
@@ -152,15 +164,15 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.106.2",
-    "dompurify": "3.4.3",
+    "webpack": "5.107.0",
+    "dompurify": "3.4.5",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.3"
+      "dompurify": "3.4.5"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.143",
+    "@anthropic-ai/claude-agent-sdk": "0.3.145",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -219,7 +231,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.143",
+    "@anthropic-ai/claude-agent-sdk": "0.3.145",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -264,7 +276,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.97.1",
+    "@anthropic-ai/sdk": "0.97.1",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -366,5 +378,6 @@
       "sharp"
     ],
     "ignoredBuiltDependencies": []
-  }
+  },
+  "homepage": "https://promptfoo.dev"
 }
