@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { UserSchemas } from '../../../src/types/api/user';
 
 // Mock dependencies before imports
 vi.mock('../../../src/globalConfig/accounts');
@@ -291,6 +292,16 @@ describe('User Routes', () => {
           isEnterprise: false,
         });
       }
+    });
+
+    it('should reject credential-bearing cloud app URLs in the response schema', () => {
+      expect(() =>
+        UserSchemas.CloudConfig.Response.parse({
+          appUrl: 'https://user:password@example.com',
+          isEnabled: true,
+          isEnterprise: false,
+        }),
+      ).toThrow();
     });
 
     it('should detect enterprise deployment even when cloud is not configured', async () => {

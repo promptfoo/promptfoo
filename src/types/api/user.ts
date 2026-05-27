@@ -112,7 +112,7 @@ export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
 
 // GET /api/user/cloud-config
 
-/** Browser-safe Promptfoo Cloud app URL. */
+/** Browser-safe Promptfoo Cloud app URL without embedded credentials. */
 const HttpUrlSchema = z.url().refine(
   (url) => {
     try {
@@ -126,7 +126,7 @@ const HttpUrlSchema = z.url().refine(
       return false;
     }
   },
-  { message: 'URL must use HTTP or HTTPS without embedded credentials' },
+  { message: 'URL must use HTTP or HTTPS and omit embedded credentials' },
 );
 
 /** Response from cloud config endpoint. */
