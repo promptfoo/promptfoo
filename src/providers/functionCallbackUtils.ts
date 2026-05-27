@@ -2,6 +2,7 @@ import logger from '../logger';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
+  wrapError,
 } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 
@@ -77,7 +78,9 @@ export class FunctionCallbackHandler {
       // attempt isn't indistinguishable from "no callback registered". The
       // generic loader/runtime errors stay at debug to avoid log noise from
       // expected user mistakes (missing file, syntax error in callback, etc.).
-      const cause = (error as Error)?.cause;
+      // Reach for `.cause` via a cast: it exists at runtime on Node 18+ but
+      // isn't on the ES2020 Error type that some downstream tsconfigs use.
+      const cause = (error as Error & { cause?: unknown })?.cause;
       const isTraversal =
         error instanceof CallbackPathTraversalError || cause instanceof CallbackPathTraversalError;
       if (isTraversal) {
@@ -221,9 +224,10 @@ export class FunctionCallbackHandler {
     try {
       return (await loadCallbackFromFileUrl(fileRef, { lenient: true })) as FunctionCallback;
     } catch (error) {
-      throw new Error(`Failed to load function from ${fileRef}: ${(error as Error).message}`, {
-        cause: error,
-      });
+      throw wrapError(
+        `Failed to load function from ${fileRef}: ${(error as Error).message}`,
+        error,
+      );
     }
   }
 

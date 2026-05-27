@@ -11,6 +11,7 @@ import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReaso
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
+  wrapError,
 } from '../../util/functions/loadFunction';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -92,9 +93,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (error instanceof CallbackPathTraversalError) {
         throw error;
       }
-      throw new Error(`Error loading function from ${fileRef}: ${(error as Error).message}`, {
-        cause: error,
-      });
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 

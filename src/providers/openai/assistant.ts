@@ -3,6 +3,7 @@ import logger from '../../logger';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
+  wrapError,
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
@@ -107,9 +108,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       if (error instanceof CallbackPathTraversalError) {
         throw error;
       }
-      throw new Error(`Error loading function from ${fileRef}: ${(error as Error).message}`, {
-        cause: error,
-      });
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 

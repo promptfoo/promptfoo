@@ -128,6 +128,20 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 }
 
 /**
+ * Build a wrapped Error that preserves the original error via the `cause`
+ * property. We assign `cause` manually rather than using the ES2022
+ * `new Error(msg, { cause })` form so the code typechecks under tsconfigs
+ * that target ES2020 (e.g. `src/app/tsconfig.app.json`). Runtimes that
+ * understand `Error.cause` (Node 18+, modern browsers) will display the
+ * cause chain and `getCause(err)` helpers can traverse it.
+ */
+export function wrapError(message: string, cause: unknown): Error {
+  const err = new Error(message);
+  (err as Error & { cause?: unknown }).cause = cause;
+  return err;
+}
+
+/**
  * Error thrown when a callback `file://` reference resolves outside the active
  * base directory. Distinct class so callers can surface it differently from
  * other load errors (e.g. log at warn, surface to users) — a path-traversal

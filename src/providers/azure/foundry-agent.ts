@@ -10,6 +10,7 @@ import {
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
+  wrapError,
 } from '../../util/functions/loadFunction';
 import {
   maybeLoadResponseFormatFromExternalFile,
@@ -216,9 +217,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       if (error instanceof CallbackPathTraversalError) {
         throw error;
       }
-      throw new Error(`Error loading function from ${fileRef}: ${(error as Error).message}`, {
-        cause: error,
-      });
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
