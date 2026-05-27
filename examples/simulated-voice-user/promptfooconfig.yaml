@@ -33,7 +33,7 @@ providers:
       # Turn detection (voice activity detection)
       turnDetectionMode: server_vad
       silenceThresholdMs: 500
-      vadThreshold: 0.5
+      vadThreshold: 0.02
 
 # Test various customer scenarios
 tests:
