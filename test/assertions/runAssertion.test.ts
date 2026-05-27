@@ -15,9 +15,6 @@ vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-// Causes a SIGSEGV in github actions.
-vi.mock('better-sqlite3');
-
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));

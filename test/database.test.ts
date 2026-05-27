@@ -1,8 +1,8 @@
+import { DatabaseSync } from 'node:sqlite';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
@@ -62,7 +62,7 @@ describe('database WAL mode', () => {
 
     // Then independently verify the journal mode using a direct connection
     const dbPath = database.getDbPath();
-    const directDb = new Database(dbPath);
+    const directDb = new DatabaseSync(dbPath);
 
     try {
       const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
@@ -81,7 +81,7 @@ describe('database WAL mode', () => {
     database.closeDb();
 
     const dbPath = database.getDbPath();
-    const directDb = new Database(dbPath);
+    const directDb = new DatabaseSync(dbPath);
 
     try {
       const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
@@ -148,23 +148,21 @@ describe('database WAL mode', () => {
 
   it('verifies WAL checkpoint settings', async () => {
     const database = await import('../src/database');
-    database.getDb();
-    database.closeDb();
-
-    const dbPath = database.getDbPath();
-    const directDb = new Database(dbPath);
+    const db = database.getDb();
 
     try {
-      const autocheckpoint = directDb.prepare('PRAGMA wal_autocheckpoint;').get() as {
+      const autocheckpoint = db.$client.prepare('PRAGMA wal_autocheckpoint;').get() as {
         wal_autocheckpoint: number;
       };
       expect(autocheckpoint.wal_autocheckpoint).toBe(1000);
 
-      const synchronous = directDb.prepare('PRAGMA synchronous;').get() as { synchronous: number };
+      const synchronous = db.$client.prepare('PRAGMA synchronous;').get() as {
+        synchronous: number;
+      };
       // NORMAL = 1 in SQLite
       expect(synchronous.synchronous).toBe(1);
     } finally {
-      directDb.close();
+      database.closeDb();
     }
   });
 });

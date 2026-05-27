@@ -29,7 +29,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": "^20.20.0 || >=22.22.0"
+    "node": ">=22.22.0"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
@@ -188,7 +188,6 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cli-progress": "^3.11.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -297,7 +296,6 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "^12.10.0",
     "binary-extensions": "^3.1.0",
     "cache-manager": "^7.2.8",
     "chalk": "^5.6.2",
@@ -370,7 +368,6 @@
       "@huggingface/transformers",
       "@playwright/browser-chromium",
       "@swc/core",
-      "better-sqlite3",
       "core-js",
       "core-js-pure",
       "esbuild",

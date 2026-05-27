@@ -1,11 +1,11 @@
+import { DatabaseSync } from 'node:sqlite';
 import * as path from 'path';
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { drizzle } from './nodeSqlite';
 
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
@@ -16,7 +16,7 @@ export class DrizzleLogWriter implements LogWriter {
 }
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
-let sqliteInstance: Database.Database | null = null;
+let sqliteInstance: DatabaseSync | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
@@ -31,16 +31,16 @@ export function getDb() {
     const isMemoryDb = getEnvBool('IS_TESTING');
     const dbPath = isMemoryDb ? ':memory:' : getDbPath();
 
-    sqliteInstance = new Database(dbPath);
+    sqliteInstance = new DatabaseSync(dbPath, { enableForeignKeyConstraints: true, timeout: 5000 });
 
     // Enable foreign key constraints (required for referential integrity)
-    sqliteInstance.pragma('foreign_keys = ON');
+    sqliteInstance.exec('PRAGMA foreign_keys = ON');
 
     // Configure WAL mode unless explicitly disabled or using in-memory database
     if (!isMemoryDb && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
       try {
         // Enable WAL mode for better concurrency
-        sqliteInstance.pragma('journal_mode = WAL');
+        sqliteInstance.exec('PRAGMA journal_mode = WAL');
 
         // Verify WAL mode was actually enabled
         const result = sqliteInstance.prepare('PRAGMA journal_mode').get() as {
@@ -58,8 +58,8 @@ export function getDb() {
         }
 
         // Additional WAL configuration for optimal performance
-        sqliteInstance.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
-        sqliteInstance.pragma('synchronous = NORMAL'); // Good balance of safety and speed with WAL
+        sqliteInstance.exec('PRAGMA wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
+        sqliteInstance.exec('PRAGMA synchronous = NORMAL'); // Good balance of safety and speed with WAL
       } catch (err) {
         logger.warn(
           `Error configuring SQLite WAL mode: ${err}. ` +
@@ -82,7 +82,7 @@ export function closeDb() {
       // Attempt to checkpoint WAL file before closing
       if (!getEnvBool('IS_TESTING') && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
-          sqliteInstance.pragma('wal_checkpoint(TRUNCATE)');
+          sqliteInstance.exec('PRAGMA wal_checkpoint(TRUNCATE)');
           logger.debug('Successfully checkpointed WAL file before closing');
         } catch (err) {
           logger.debug(`Could not checkpoint WAL file: ${err}`);

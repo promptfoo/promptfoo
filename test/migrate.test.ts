@@ -1,10 +1,6 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
-
-const TEST_CURRENT_NODE_ABI = '137';
-const TEST_INSTALLED_BETTER_SQLITE3_ABI = '115';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
@@ -31,7 +27,7 @@ vi.mock('../src/logger', () => ({
   default: mockLogger,
 }));
 
-vi.mock('drizzle-orm/better-sqlite3/migrator', () => ({
+vi.mock('../src/database/nodeSqlite', () => ({
   migrate: mockMigrate,
 }));
 
@@ -118,49 +114,6 @@ describe('migrate', () => {
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Database migration failed:'),
-      );
-      expect(mockMigrate).not.toHaveBeenCalled();
-    });
-
-    it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
-      const nativeAddonError = createNativeAddonVersionMismatchError();
-      mockGetDb.mockImplementation(() => {
-        throw nativeAddonError;
-      });
-
-      const { runDbMigrations } = await import('../src/migrate');
-      await expect(runDbMigrations()).rejects.toBe(nativeAddonError);
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-        {
-          currentNodeVersion: process.version,
-          currentNodeAbi: TEST_CURRENT_NODE_ABI,
-          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
-        },
-      );
-      expect(mockMigrate).not.toHaveBeenCalled();
-    });
-
-    it('should demote ABI mismatch log to debug when suppressNativeAddonLogging is set', async () => {
-      const nativeAddonError = createNativeAddonVersionMismatchError();
-      mockGetDb.mockImplementation(() => {
-        throw nativeAddonError;
-      });
-
-      const { runDbMigrations } = await import('../src/migrate');
-      await expect(runDbMigrations({ suppressNativeAddonLogging: true })).rejects.toBe(
-        nativeAddonError,
-      );
-
-      expect(mockLogger.error).not.toHaveBeenCalled();
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-        {
-          currentNodeVersion: process.version,
-          currentNodeAbi: TEST_CURRENT_NODE_ABI,
-          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
-        },
       );
       expect(mockMigrate).not.toHaveBeenCalled();
     });
