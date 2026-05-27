@@ -371,6 +371,7 @@ async function createImportedV2Eval(evalData: any, context: ImportedEvalContext)
       description: evalData.description || evalData.config?.description,
       results: evalData.results,
       config: evalData.config,
+      isRedteam: evalData.config?.redteam !== undefined,
     })
     .run();
   return evalId;
