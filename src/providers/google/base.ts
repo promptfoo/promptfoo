@@ -14,12 +14,8 @@
  * - callApi(): The main API call implementation
  */
 
-import path from 'path';
-
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
@@ -254,58 +250,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @returns The loaded function
    */
   protected async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const basePath = cliState.basePath || process.cwd();
-      const resolvedPath = path.resolve(basePath, filePath);
-
-      // Path traversal protection: ensure resolved path is within the base directory
-      // Use path.relative() to get relative path from base to target
-      // If path starts with '..' or is absolute, it's outside the base directory
-      const normalizedBase = path.resolve(basePath);
-      const normalizedResolved = path.resolve(resolvedPath);
-      const relativePath = path.relative(normalizedBase, normalizedResolved);
-
-      // Check if path escapes the base directory:
-      // - Starts with '..' means it goes up out of base
-      // - path.isAbsolute() handles edge cases on Windows where relative might return absolute path
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-        throw new Error(
-          `Path traversal detected: '${filePath}' resolves outside the base directory. ` +
-            `Resolved path '${normalizedResolved}' is not within '${normalizedBase}'.`,
-        );
-      }
-
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
+      return await loadCallbackFromFileUrl(fileRef);
     } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw new Error(`Error loading function from ${fileRef}: ${error.message || String(error)}`);
     }
   }
 

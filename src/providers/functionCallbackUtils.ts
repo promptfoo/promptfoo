@@ -1,9 +1,6 @@
-import path from 'path';
-
-import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { parseFileUrl } from '../util/functions/loadFunction';
+import { parseFileUrl, resolveCallbackPath } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 
 import type {
@@ -204,7 +201,7 @@ export class FunctionCallbackHandler {
     const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      const resolvedPath = resolveCallbackPath(filePath);
       logger.debug(
         `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
       );

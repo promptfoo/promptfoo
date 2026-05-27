@@ -1807,6 +1807,10 @@ describe('GoogleLiveProvider', () => {
       const mockExternalFunction = vi.fn().mockResolvedValue('Windows result');
       mockImportModule.mockResolvedValue(mockExternalFunction);
 
+      // Use 'C:/' as basePath so the resolved Windows absolute path stays
+      // inside the base directory on real Windows.
+      cliState.basePath = 'C:/';
+
       provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
         config: {
           generationConfig: { response_modalities: ['text'] },
@@ -1836,7 +1840,7 @@ describe('GoogleLiveProvider', () => {
       const response = await provider.callApi('Call external function');
 
       expect(mockImportModule).toHaveBeenCalledWith(
-        path.resolve('/test/base/path', 'C:/test/callbacks.js'),
+        path.resolve('C:/', 'C:/test/callbacks.js'),
         'testFunction',
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');

@@ -110,3 +110,84 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
     filePath: urlWithoutProtocol,
   };
 }
+
+/**
+ * Resolves a file path against the active basePath and asserts it stays inside
+ * that base directory. Throws if the resolved path escapes (path traversal).
+ *
+ * @param filePath The (untrusted) relative or absolute path to resolve.
+ * @param basePath The trusted base directory. Defaults to cliState.basePath or cwd.
+ * @returns The resolved absolute path.
+ */
+export function resolveCallbackPath(filePath: string, basePath?: string): string {
+  const effectiveBase = basePath ?? cliState.basePath ?? process.cwd();
+  const normalizedBase = path.resolve(effectiveBase);
+  const resolvedPath = path.resolve(normalizedBase, filePath);
+  const relativePath = path.relative(normalizedBase, resolvedPath);
+
+  // Reject paths that escape the base directory:
+  // - relative path starting with '..' walks up out of base
+  // - an absolute relative path (Windows edge case) means a different drive/root
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error(
+      `Path traversal detected: '${filePath}' resolves outside the base directory. ` +
+        `Resolved path '${resolvedPath}' is not within '${normalizedBase}'.`,
+    );
+  }
+
+  return resolvedPath;
+}
+
+/**
+ * Loads a callback function from a `file://path[:functionName]` reference.
+ *
+ * Used by provider tool / function-call callback loaders. Combines:
+ *   1. parseFileUrl to extract the file path and optional named export
+ *   2. resolveCallbackPath to apply path-traversal protection against basePath
+ *   3. importModule to load the file
+ *   4. extracting the named export, default export, or module-as-function
+ *
+ * @param fileRef The `file://` reference (e.g. `file://callbacks.js:handler`).
+ * @param options.logPrefix Optional prefix for the debug log line.
+ * @returns The loaded callback as a Function.
+ * @throws If the path escapes basePath, the file cannot be imported, or the
+ *         expected export is missing / not a function.
+ */
+export async function loadCallbackFromFileUrl(
+  fileRef: string,
+  options: { logPrefix?: string } = {},
+): Promise<Function> {
+  const { filePath, functionName } = parseFileUrl(fileRef);
+  const resolvedPath = resolveCallbackPath(filePath);
+
+  const prefix = options.logPrefix ? `${options.logPrefix} ` : '';
+  logger.debug(
+    `${prefix}Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+  );
+
+  const requiredModule = await importModule(resolvedPath, functionName);
+
+  if (typeof requiredModule === 'function') {
+    return requiredModule;
+  }
+
+  if (
+    requiredModule &&
+    typeof requiredModule === 'object' &&
+    functionName &&
+    functionName in requiredModule
+  ) {
+    const fn = (requiredModule as Record<string, unknown>)[functionName];
+    if (typeof fn === 'function') {
+      return fn as Function;
+    }
+  }
+
+  throw new Error(
+    `Function callback malformed: ${filePath} must export ${
+      functionName
+        ? `a named function '${functionName}'`
+        : 'a function or have a default export as a function'
+    }`,
+  );
+}

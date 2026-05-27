@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
@@ -313,21 +314,50 @@ describe('FunctionCallbackHandler', () => {
       };
       mockImportModule.mockResolvedValue(mockModule);
 
+      // Override the basePath so the resolved Windows path stays inside the
+      // base on both Windows (where C:/... is absolute) and POSIX (where
+      // C:/... is treated as relative). Otherwise the path-traversal guard
+      // would reject the resolved absolute path on the Windows runner.
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = 'C:/';
+
+      try {
+        const callbacks: FunctionCallbackConfig = {
+          testFunction: 'file://C:/path/to/functions.js:windowsHandler',
+        };
+        const call = { name: 'testFunction', arguments: '{}' };
+
+        const result = await handler.processCall(call, callbacks);
+
+        expect(result).toEqual({
+          output: 'windows result',
+          isError: false,
+        });
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('C:/', 'C:/path/to/functions.js'),
+        );
+        expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
+    });
+
+    it('rejects path traversal attempts in external file references', async () => {
       const callbacks: FunctionCallbackConfig = {
-        testFunction: 'file://C:/path/to/functions.js:windowsHandler',
+        testFunction: 'file://../../../etc/passwd:handler',
       };
       const call = { name: 'testFunction', arguments: '{}' };
 
       const result = await handler.processCall(call, callbacks);
 
-      expect(result).toEqual({
-        output: 'windows result',
-        isError: false,
-      });
-      expect(mockImportModule).toHaveBeenCalledWith(
-        path.resolve('/test/basePath', 'C:/path/to/functions.js'),
+      // processCall swallows the load error and surfaces it as isError, so
+      // assert that (a) the import was never attempted and (b) the traversal
+      // failure was logged.
+      expect(result.isError).toBe(true);
+      expect(mockImportModule).not.toHaveBeenCalled();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Path traversal detected'),
       );
-      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
     it('should handle inline function strings', async () => {
