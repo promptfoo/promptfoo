@@ -124,7 +124,7 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
-  private pricingData?: BedrockPricingData | null;
+  private pricingData?: BedrockPricingData;
   private pricingDataPromise?: Promise<BedrockPricingData | null>;
 
   constructor(
@@ -245,39 +245,40 @@ export abstract class AwsBedrockGenericProvider {
    * Returns cached data if available, or null if pricing fetch fails.
    */
   async getPricingDataForCost(): Promise<BedrockPricingData | null> {
-    // Return cached result if we have it
     if (this.pricingData !== undefined) {
       return this.pricingData;
     }
 
-    // If a fetch is already in progress, wait for it
     if (this.pricingDataPromise !== undefined) {
       return this.pricingDataPromise;
     }
 
-    // Pricing API can still use explicit credentials or the default AWS credential
-    // chain even when Bedrock requests themselves use bearer-token auth.
-    let credentials: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined;
-    try {
-      credentials = await this.getCredentials();
-    } catch (err) {
-      logger.debug('[Bedrock]: Failed to resolve credentials for pricing fetch', {
-        error: String(err),
-      });
-      this.pricingData = null;
-      return null;
-    }
-
-    this.pricingDataPromise = getPricingData(this.getRegion(), credentials)
-      .then((data) => {
-        this.pricingData = data;
-        return data;
-      })
-      .catch((err) => {
-        logger.debug('[Bedrock]: Failed to fetch pricing data', { error: String(err) });
-        this.pricingData = null;
+    this.pricingDataPromise = (async () => {
+      // Pricing API can still use explicit credentials or the default AWS credential
+      // chain even when Bedrock requests themselves use bearer-token auth.
+      let credentials: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined;
+      try {
+        credentials = await this.getCredentials();
+      } catch (err) {
+        logger.debug('[Bedrock]: Failed to resolve credentials for pricing fetch', {
+          error: String(err),
+        });
         return null;
-      });
+      }
+
+      try {
+        const data = await getPricingData(this.getRegion(), credentials);
+        if (data) {
+          this.pricingData = data;
+        }
+        return data;
+      } catch (err) {
+        logger.debug('[Bedrock]: Failed to fetch pricing data', { error: String(err) });
+        return null;
+      }
+    })().finally(() => {
+      this.pricingDataPromise = undefined;
+    });
 
     return this.pricingDataPromise;
   }

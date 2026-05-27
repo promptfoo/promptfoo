@@ -1171,7 +1171,11 @@ providers:
         output: 0.0002 # USD per token (AWS lists prices per 1K tokens - divide by 1000)
 ```
 
-Custom pricing takes precedence over real-time pricing.
+Custom pricing takes precedence over real-time pricing. For `bedrock:<model-id>`,
+supplying only `inputCost` or only `outputCost` overrides that token direction
+and uses retrieved regional standard pricing for the other direction. If the
+remaining rate cannot be retrieved, Promptfoo omits the automatic cost rather
+than treating unpriced tokens as free.
 
 **Note:** AWS Bedrock pricing is typically shown per 1,000 tokens on their pricing page. When configuring `cost` overrides, convert to per-token rates by dividing by 1000. For example, if AWS shows $0.05 per 1K input tokens, use `input: 0.00005` (0.05 / 1000).
 

@@ -252,6 +252,38 @@ describe('AwsBedrockGenericProvider', () => {
     expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 
+  it('should share one in-flight pricing lookup while credentials resolve', async () => {
+    let resolveCredentials!: (credentials: undefined) => void;
+    const credentialsPromise = new Promise<undefined>((resolve) => {
+      resolveCredentials = resolve;
+    });
+    const provider = new TestBedrockProvider({ region: 'us-east-1' });
+    vi.spyOn(provider, 'getCredentials').mockReturnValue(credentialsPromise);
+    mockGetPricingData.mockResolvedValue(null);
+
+    const firstLookup = provider.getPricingDataForCost();
+    const secondLookup = provider.getPricingDataForCost();
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+
+    resolveCredentials(undefined);
+    await expect(Promise.all([firstLookup, secondLookup])).resolves.toEqual([null, null]);
+    expect(mockGetPricingData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry pricing after a transient failed lookup', async () => {
+    const pricingData = {
+      models: new Map([['Nova Micro', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    };
+    const provider = new TestBedrockProvider({ region: 'us-east-1' });
+    mockGetPricingData.mockResolvedValueOnce(null).mockResolvedValueOnce(pricingData);
+
+    await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+    await expect(provider.getPricingDataForCost()).resolves.toEqual(pricingData);
+    expect(mockGetPricingData).toHaveBeenCalledTimes(2);
+  });
+
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
     mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '10' });
     const provider = new (class extends AwsBedrockGenericProvider {
@@ -3360,6 +3392,68 @@ describe('AwsBedrockCompletionProvider', () => {
     });
 
     expect(result.cost).toBeCloseTo(0.5);
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
+  it('should combine a partial InvokeModel cost override with fetched regional pricing', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    mockGetPricingData.mockResolvedValueOnce({
+      models: new Map([['Claude 3.7 Sonnet', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          inputCost: 0.01,
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.14);
+    expect(mockGetPricingData).toHaveBeenCalledWith('us-east-1', undefined);
+  });
+
+  it.each([
+    ['global.amazon.nova-2-lite-v1:0', {}],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/prod-profile',
+      { inferenceModelType: 'nova2' },
+    ],
+  ])('should not fetch pricing for an unpriceable inference profile: %s', async (modelName, config) => {
+    mockInvokeModel.mockResolvedValueOnce({
+      body: {
+        transformToString: () =>
+          JSON.stringify({
+            output: { message: { content: [{ text: 'test response' }] } },
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          }),
+      },
+    });
+    const provider = new AwsBedrockCompletionProvider(modelName, {
+      config: { region: 'us-east-1', ...config } as any,
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cost).toBeUndefined();
     expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 

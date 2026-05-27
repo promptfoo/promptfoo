@@ -5,6 +5,7 @@ import {
   calculateCostWithFetchedPricing,
   getPricingData,
   mapBedrockModelIdToApiName,
+  supportsAutomaticBedrockPricing,
 } from '../../../src/providers/bedrock/pricingFetcher';
 
 // Mock the cache module
@@ -133,6 +134,27 @@ describe('pricingFetcher', () => {
       );
     });
 
+    it('should map current Mistral models to AWS pricing catalog names', () => {
+      expect(mapBedrockModelIdToApiName('mistral.devstral-2-123b')).toBe('Devstral');
+      expect(mapBedrockModelIdToApiName('mistral.magistral-small-2509')).toBe('Magistral');
+      expect(mapBedrockModelIdToApiName('mistral.ministral-3-14b-instruct')).toBe(
+        'Ministral 14B 3.0',
+      );
+      expect(mapBedrockModelIdToApiName('mistral.ministral-3-8b-instruct')).toBe(
+        'Ministral 8B 3.0',
+      );
+      expect(mapBedrockModelIdToApiName('mistral.ministral-3-3b-instruct')).toBe(
+        'Ministral 3B 3.0',
+      );
+      expect(mapBedrockModelIdToApiName('mistral.mistral-large-3-675b-instruct')).toBe(
+        'Mistral Large 3',
+      );
+      expect(mapBedrockModelIdToApiName('mistral.voxtral-mini-3b-2507')).toBe('Voxtral Mini 1.0');
+      expect(mapBedrockModelIdToApiName('mistral.voxtral-small-24b-2507')).toBe(
+        'Voxtral Small 1.0',
+      );
+    });
+
     it('should map Cohere models correctly', () => {
       expect(mapBedrockModelIdToApiName('cohere.command-r-plus-v1:0')).toBe('Command R+');
     });
@@ -189,6 +211,18 @@ describe('pricingFetcher', () => {
       expect(cost).toBeCloseTo(0.0105, 6);
     });
 
+    it('should apply a partial explicit rate over fetched pricing', () => {
+      const cost = calculateCostWithFetchedPricing(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        mockPricingData,
+        1000,
+        500,
+        { input: 0.01 },
+      );
+
+      expect(cost).toBeCloseTo(10.0075, 6);
+    });
+
     it('should not infer pricing from application inference-profile ARN names', () => {
       const cost = calculateCostWithFetchedPricing(
         'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-4-5-prod',
@@ -209,6 +243,16 @@ describe('pricingFetcher', () => {
       );
 
       expect(cost).toBeUndefined();
+    });
+
+    it('should identify profile IDs that cannot use regional automatic pricing', () => {
+      expect(supportsAutomaticBedrockPricing('anthropic.claude-3-haiku-20240307-v1:0')).toBe(true);
+      expect(supportsAutomaticBedrockPricing('global.amazon.nova-2-lite-v1:0')).toBe(false);
+      expect(
+        supportsAutomaticBedrockPricing(
+          'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/prod-profile',
+        ),
+      ).toBe(false);
     });
 
     it('should calculate cost for Nova Micro correctly', () => {

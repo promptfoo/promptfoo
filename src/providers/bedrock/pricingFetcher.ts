@@ -117,6 +117,14 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'mistral.mistral-large-2402-v1': 'Mistral Large',
     'mistral.mistral-large-2407-v1': 'Mistral Large 2407',
     'mistral.mistral-small-2402-v1': 'Mistral Small',
+    'mistral.devstral-2-123b': 'Devstral',
+    'mistral.magistral-small-2509': 'Magistral',
+    'mistral.ministral-3-14b-instruct': 'Ministral 14B 3.0',
+    'mistral.ministral-3-8b-instruct': 'Ministral 8B 3.0',
+    'mistral.ministral-3-3b-instruct': 'Ministral 3B 3.0',
+    'mistral.mistral-large-3-675b-instruct': 'Mistral Large 3',
+    'mistral.voxtral-mini-3b-2507': 'Voxtral Mini 1.0',
+    'mistral.voxtral-small-24b-2507': 'Voxtral Small 1.0',
 
     // Cohere models
     'cohere.command-r-v1': 'Command R',
@@ -549,6 +557,12 @@ function calculateModelCost(
   return promptTokens * modelPricing.input + completionTokens * modelPricing.output;
 }
 
+export function supportsAutomaticBedrockPricing(modelId: string): boolean {
+  return (
+    !isApplicationInferenceProfileArn(modelId) && !/^global\./.test(getPricingModelId(modelId))
+  );
+}
+
 /**
  * Calculates cost using fetched pricing data.
  *
@@ -563,6 +577,7 @@ export function calculateCostWithFetchedPricing(
   pricingData: BedrockPricingData | null | undefined,
   promptTokens: number | undefined,
   completionTokens: number | undefined,
+  rateOverrides: Partial<BedrockModelPricing> = {},
 ): number | undefined {
   if (
     promptTokens === undefined ||
@@ -575,19 +590,13 @@ export function calculateCostWithFetchedPricing(
     return undefined;
   }
 
-  if (isApplicationInferenceProfileArn(modelId)) {
+  if (!supportsAutomaticBedrockPricing(modelId)) {
     logger.debug(
-      '[Bedrock Pricing]: Skipping automatic pricing for application inference profile ARN',
-      { modelId },
+      '[Bedrock Pricing]: Skipping automatic pricing for unsupported inference profile',
+      {
+        modelId,
+      },
     );
-    return undefined;
-  }
-
-  const pricingModelId = getPricingModelId(modelId);
-  if (/^global\./.test(pricingModelId)) {
-    logger.debug('[Bedrock Pricing]: Skipping automatic pricing for global inference profile', {
-      modelId,
-    });
     return undefined;
   }
 
@@ -611,14 +620,19 @@ export function calculateCostWithFetchedPricing(
     return undefined;
   }
 
+  const effectivePricing = {
+    input: rateOverrides.input ?? modelPricing.input,
+    output: rateOverrides.output ?? modelPricing.output,
+  };
+
   logger.debug('[Bedrock Pricing]: Using fetched pricing', {
     modelId,
     modelName,
-    inputCostPerToken: modelPricing.input,
-    outputCostPerToken: modelPricing.output,
+    inputCostPerToken: effectivePricing.input,
+    outputCostPerToken: effectivePricing.output,
     promptTokens,
     completionTokens,
   });
 
-  return calculateModelCost(modelPricing, promptTokens, completionTokens);
+  return calculateModelCost(effectivePricing, promptTokens, completionTokens);
 }

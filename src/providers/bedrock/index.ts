@@ -6,9 +6,9 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
-import { getTokenCostRates, parseChatPrompt } from '../shared';
+import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateCostWithFetchedPricing } from './pricingFetcher';
+import { calculateCostWithFetchedPricing, supportsAutomaticBedrockPricing } from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
@@ -2660,23 +2660,23 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       // Calculate cost if we have token usage
       let cost: number | undefined;
       if (tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
-        const hasExplicitCostOverride =
-          resolvedConfig.cost !== undefined ||
-          resolvedConfig.inputCost !== undefined ||
-          resolvedConfig.outputCost !== undefined;
+        const objectCost =
+          typeof resolvedConfig.cost === 'object' && resolvedConfig.cost !== null
+            ? resolvedConfig.cost
+            : undefined;
+        const numericCost =
+          typeof resolvedConfig.cost === 'number' ? resolvedConfig.cost : undefined;
+        const inputCost = resolvedConfig.inputCost ?? objectCost?.input ?? numericCost;
+        const outputCost = resolvedConfig.outputCost ?? objectCost?.output ?? numericCost;
 
-        if (hasExplicitCostOverride) {
-          const { inputCost, outputCost } = getTokenCostRates(resolvedConfig, {
-            input: 0,
-            output: 0,
-          });
+        if (inputCost !== undefined && outputCost !== undefined) {
           cost = tokenUsage.prompt * inputCost + tokenUsage.completion * outputCost;
           logger.debug('[Bedrock]: Using custom cost override', {
             cost,
             inputCost,
             outputCost,
           });
-        } else {
+        } else if (supportsAutomaticBedrockPricing(this.modelName)) {
           // Fetch pricing data and calculate cost
           const pricingData = await this.getPricingDataForCost();
           cost = calculateCostWithFetchedPricing(
@@ -2684,6 +2684,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
             pricingData,
             tokenUsage.prompt,
             tokenUsage.completion,
+            { input: inputCost, output: outputCost },
           );
           if (cost !== undefined) {
             logger.debug('[Bedrock]: Calculated cost from pricing data', {
