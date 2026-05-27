@@ -116,12 +116,17 @@ export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
 const HttpUrlSchema = z.url().refine(
   (url) => {
     try {
-      return ['http:', 'https:'].includes(new URL(url).protocol);
+      const parsedUrl = new URL(url);
+      return (
+        ['http:', 'https:'].includes(parsedUrl.protocol) &&
+        !parsedUrl.username &&
+        !parsedUrl.password
+      );
     } catch {
       return false;
     }
   },
-  { message: 'URL must use HTTP or HTTPS' },
+  { message: 'URL must use HTTP or HTTPS without embedded credentials' },
 );
 
 /** Response from cloud config endpoint. */

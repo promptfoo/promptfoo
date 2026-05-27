@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -57,9 +58,12 @@ export default function CloudStatusIndicator() {
   const isEnterprise = data?.isEnterprise ?? false;
   const serviceName = getServiceName(isEnterprise);
   const teamName = isEnterprise ? 'organization' : 'team';
-  const hasInvalidAppUrl = isConfigured && !appUrl;
+  const hasUnavailableAppUrl = isConfigured && !appUrl;
   const canOpenDashboard = isConfigured && Boolean(appUrl) && !error;
   const connectDestination = getConnectDestination(isEnterprise, appUrl);
+  const configurationIssueDescription = error
+    ? 'Unable to check cloud configuration. Please check your connection and try again.'
+    : `A safe ${serviceName} dashboard URL is unavailable. Sign in again or refresh after updating your configuration.`;
 
   const statusLabel = (() => {
     if (isLoading) {
@@ -68,8 +72,8 @@ export default function CloudStatusIndicator() {
     if (error) {
       return 'Unable to check cloud configuration';
     }
-    if (hasInvalidAppUrl) {
-      return `${serviceName} configuration has an invalid application URL.`;
+    if (hasUnavailableAppUrl) {
+      return `${serviceName} dashboard URL is unavailable.`;
     }
     if (isConfigured) {
       return `Configured for ${serviceName}. Open dashboard.`;
@@ -81,7 +85,7 @@ export default function CloudStatusIndicator() {
     if (isLoading) {
       return Loader2;
     }
-    if (error || hasInvalidAppUrl || !isConfigured) {
+    if (error || hasUnavailableAppUrl || !isConfigured) {
       return CloudOff;
     }
     return Cloud;
@@ -127,8 +131,9 @@ export default function CloudStatusIndicator() {
             onClick={handleIconClick}
             className={cn(
               'text-foreground/60 focus-visible:ring-2 focus-visible:ring-offset-2 [&_svg]:size-5',
-              canOpenDashboard && 'text-emerald-600 hover:text-emerald-700',
-              (error || hasInvalidAppUrl) && 'text-destructive hover:text-destructive',
+              canOpenDashboard &&
+                'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300',
+              (error || hasUnavailableAppUrl) && 'text-destructive hover:text-destructive',
             )}
             aria-label={statusLabel}
           >
@@ -142,19 +147,22 @@ export default function CloudStatusIndicator() {
       </Tooltip>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent
+          className="max-w-md"
+          hideDescription={false}
+          aria-describedby="cloud-status-dialog-description"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CloudCog className="size-5 text-primary" />
               Configure {serviceName}
             </DialogTitle>
+            <DialogDescription id="cloud-status-dialog-description">
+              Configure {serviceName} to unlock {isEnterprise ? 'enterprise' : 'team'} workflows.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Configure {serviceName} to unlock {isEnterprise ? 'enterprise' : 'team'} workflows.
-            </p>
-
             <div className="space-y-3 rounded-md border border-border p-3">
               <div className="flex items-center gap-2 text-sm">
                 <Share2 className="size-4 text-primary" />
@@ -186,13 +194,11 @@ export default function CloudStatusIndicator() {
               </AlertContent>
             </Alert>
 
-            {(error || hasInvalidAppUrl) && (
+            {(error || hasUnavailableAppUrl) && (
               <Alert variant="destructive">
                 <AlertCircle className="size-4" />
                 <AlertContent>
-                  <AlertDescription>
-                    Unable to check cloud configuration. Please check your connection and try again.
-                  </AlertDescription>
+                  <AlertDescription>{configurationIssueDescription}</AlertDescription>
                 </AlertContent>
               </Alert>
             )}

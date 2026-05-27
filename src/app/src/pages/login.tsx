@@ -13,6 +13,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
+import { notifyCloudConfigUpdated } from '@app/hooks/useCloudConfig';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
@@ -101,6 +102,7 @@ export default function LoginPage() {
   // Handle successful login
   useEffect(() => {
     if (state.success && state.email) {
+      notifyCloudConfigUpdated();
       setEmail(state.email);
       handleRedirect();
     }

@@ -135,9 +135,18 @@ function getHttpAppUrl(url: string | null): string | null {
   }
 }
 
+const HOSTED_CLOUD_APP_HOSTNAMES = new Set([
+  'promptfoo.app',
+  'www.promptfoo.app',
+  'app.promptfoo.app',
+  // Keep locally saved configs from the legacy hosted app domain branded as Cloud.
+  'app.promptfoo.com',
+]);
+const HOSTED_CLOUD_API_HOSTNAMES = new Set(['api.promptfoo.app']);
+
 /**
  * Determines if a URL represents an enterprise deployment by checking
- * if it's a custom domain (not the standard promptfoo.app domain).
+ * if it is a custom domain rather than a hosted Promptfoo Cloud domain.
  */
 function isEnterpriseUrl(url: string | null): boolean {
   if (!url) {
@@ -145,9 +154,16 @@ function isEnterpriseUrl(url: string | null): boolean {
   }
 
   const hostname = new URL(url).hostname.toLowerCase();
-  const standardDomains = ['promptfoo.app', 'www.promptfoo.app', 'app.promptfoo.app'];
 
-  return !standardDomains.includes(hostname);
+  return !HOSTED_CLOUD_APP_HOSTNAMES.has(hostname);
+}
+
+function isEnterpriseApiHost(url: string | null): boolean {
+  if (!url) {
+    return false;
+  }
+
+  return !HOSTED_CLOUD_API_HOSTNAMES.has(new URL(url).hostname.toLowerCase());
 }
 
 // New API key authentication endpoint that mirrors CLI behavior
@@ -236,14 +252,19 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
  */
 userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
+    cloudConfig.reload();
     const isEnabled = cloudConfig.isEnabled();
     const appUrl = getHttpAppUrl(cloudConfig.getAppUrl());
+    const apiHost = getHttpAppUrl(cloudConfig.getApiHost());
+    const hasEnterpriseAppUrl = isEnterpriseUrl(appUrl);
+    const hasEnterpriseApiHost = isEnterpriseApiHost(apiHost);
+    const browserAppUrl = hasEnterpriseApiHost && !hasEnterpriseAppUrl ? null : appUrl;
 
     res.json(
       UserSchemas.CloudConfig.Response.parse({
-        appUrl,
+        appUrl: browserAppUrl,
         isEnabled,
-        isEnterprise: isEnterpriseUrl(appUrl),
+        isEnterprise: hasEnterpriseAppUrl || hasEnterpriseApiHost,
       }),
     );
   } catch (error) {

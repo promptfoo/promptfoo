@@ -15,6 +15,7 @@ vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
       getApiHost: vi.fn(),
       getAppUrl: vi.fn(),
       isEnabled: vi.fn(),
+      reload: vi.fn(),
       validateAndSetApiToken: vi.fn(),
     },
   };
@@ -172,6 +173,10 @@ describe('User Routes', () => {
   });
 
   describe('GET /api/user/cloud-config', () => {
+    beforeEach(() => {
+      mockedCloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.app');
+    });
+
     it('should return configured cloud state', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
       mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
@@ -184,6 +189,7 @@ describe('User Routes', () => {
         isEnabled: true,
         isEnterprise: false,
       });
+      expect(mockedCloudConfig.reload).toHaveBeenCalledOnce();
     });
 
     it('should retain a valid app URL when cloud is not configured', async () => {
@@ -214,11 +220,27 @@ describe('User Routes', () => {
       });
     });
 
-    it('should not detect enterprise for standard promptfoo domains', async () => {
+    it('should not link a hosted dashboard for a configured custom API deployment', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedCloudConfig.getApiHost.mockReturnValue('https://api.enterprise.company.com');
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://www.promptfoo.app');
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        appUrl: null,
+        isEnabled: true,
+        isEnterprise: true,
+      });
+    });
+
+    it('should not detect enterprise for hosted promptfoo domains, including saved legacy URLs', async () => {
       const standardUrls = [
         'https://promptfoo.app',
         'https://www.promptfoo.app',
         'https://app.promptfoo.app',
+        'https://app.promptfoo.com',
       ];
 
       for (const url of standardUrls) {

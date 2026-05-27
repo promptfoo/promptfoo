@@ -132,7 +132,7 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
-  it('does not open an invalid configured app URL', async () => {
+  it('does not open a configured app when a safe dashboard URL is unavailable', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
@@ -149,12 +149,15 @@ describe('CloudStatusIndicator', () => {
 
     await user.click(
       screen.getByRole('button', {
-        name: /promptfoo cloud configuration has an invalid application url/i,
+        name: /promptfoo cloud dashboard url is unavailable/i,
       }),
     );
 
     expect(mockWindowOpen).not.toHaveBeenCalled();
-    expect(screen.getByText(/unable to check cloud configuration/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/safe promptfoo cloud dashboard url is unavailable/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/please check your connection/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
@@ -229,6 +232,9 @@ describe('CloudStatusIndicator', () => {
     await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
 
     expect(screen.getByText('Configure Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+      /configure promptfoo cloud to unlock team workflows/i,
+    );
     expect(screen.getByText(/share evaluation results with your team/i)).toBeInTheDocument();
     expect(screen.getByText(/open centralized dashboards and reports/i)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {

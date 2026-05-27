@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     getApiHost: vi.fn(),
     getAppUrl: vi.fn(),
     isEnabled: vi.fn(),
+    reload: vi.fn(),
     validateAndSetApiToken: vi.fn(),
   },
   createShareableUrl: vi.fn(),

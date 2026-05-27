@@ -150,7 +150,11 @@ export class CloudConfig {
     this.reload();
   }
 
-  private reload(): void {
+  /**
+   * Reload persisted cloud settings so long-running processes observe changes
+   * made by a separate CLI authentication command.
+   */
+  reload(): void {
     const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',

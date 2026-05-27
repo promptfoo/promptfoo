@@ -1,3 +1,4 @@
+import useApiConfig from '@app/stores/apiConfig';
 import {
   createMockResponse,
   getCallApiMock,
@@ -9,8 +10,8 @@ import {
 } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import useCloudConfig from './useCloudConfig';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import useCloudConfig, { notifyCloudConfigUpdated } from './useCloudConfig';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -24,10 +25,16 @@ const mockCloudConfig = {
   appUrl: 'https://app.promptfoo.app',
   isEnterprise: false,
 };
+const initialApiBaseUrl = useApiConfig.getState().apiBaseUrl;
 
 describe('useCloudConfig', () => {
   beforeEach(() => {
     resetCallApiMock();
+    useApiConfig.setState({ apiBaseUrl: initialApiBaseUrl });
+  });
+
+  afterEach(() => {
+    useApiConfig.setState({ apiBaseUrl: initialApiBaseUrl });
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
@@ -94,6 +101,26 @@ describe('useCloudConfig', () => {
 
     expect(result.current.data?.isEnterprise).toBe(true);
     expect(result.current.data?.appUrl).toBe('https://enterprise.company.com');
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,<h1>Unsafe</h1>',
+    'https://user:password@enterprise.company.com',
+  ])('should discard unsafe browser destinations from API responses: %s', async (appUrl) => {
+    mockCallApiResponse({
+      isEnabled: true,
+      appUrl,
+      isEnterprise: true,
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.data?.appUrl).toBeNull();
   });
 
   it('should default isEnterprise to false for older responses', async () => {
@@ -283,6 +310,53 @@ describe('useCloudConfig', () => {
       expect(result.current.error).toBeNull();
       expect(callApi).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('should refetch when the selected API base URL changes', async () => {
+    mockCallApiResponseOnce(mockCloudConfig);
+    mockCallApiResponseOnce({
+      ...mockCloudConfig,
+      appUrl: 'https://enterprise.company.com',
+      isEnterprise: true,
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.data?.isEnterprise).toBe(false);
+    });
+
+    act(() => {
+      useApiConfig.getState().setApiBaseUrl('https://api.enterprise.company.com');
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.appUrl).toBe('https://enterprise.company.com');
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('should refetch when login updates cloud configuration', async () => {
+    mockCallApiResponseOnce(mockCloudConfig);
+    mockCallApiResponseOnce({
+      ...mockCloudConfig,
+      isEnabled: false,
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.data?.isEnabled).toBe(true);
+    });
+
+    act(() => {
+      notifyCloudConfigUpdated();
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.isEnabled).toBe(false);
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
   });
 
   it('should only call the API once on mount and not on rerender', async () => {

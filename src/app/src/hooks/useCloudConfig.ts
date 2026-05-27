@@ -1,6 +1,33 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '../utils/api';
+
+const CLOUD_CONFIG_UPDATED_EVENT = 'promptfoo:cloud-config-updated';
+
+export function notifyCloudConfigUpdated(): void {
+  window.dispatchEvent(new Event(CLOUD_CONFIG_UPDATED_EVENT));
+}
+
+function getBrowserSafeAppUrl(appUrl: unknown): string | null {
+  if (typeof appUrl !== 'string') {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(appUrl);
+    if (
+      !['http:', 'https:'].includes(parsedUrl.protocol) ||
+      parsedUrl.username ||
+      parsedUrl.password
+    ) {
+      return null;
+    }
+    return appUrl;
+  } catch {
+    return null;
+  }
+}
 
 export type CloudConfigData = {
   appUrl: string | null;
@@ -36,9 +63,9 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
       const responseData = await response.json();
       setState({
         data: {
-          appUrl: responseData.appUrl,
-          isEnabled: responseData.isEnabled,
-          isEnterprise: responseData.isEnterprise ?? false,
+          appUrl: getBrowserSafeAppUrl(responseData.appUrl),
+          isEnabled: responseData.isEnabled === true,
+          isEnterprise: responseData.isEnterprise === true,
         },
         isLoading: false,
         error: null,
@@ -55,6 +82,19 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
 
   useEffect(() => {
     fetchCloudConfig();
+    const handleCloudConfigUpdated = () => {
+      fetchCloudConfig();
+    };
+    const unsubscribeFromApiConfig = useApiConfig.subscribe((current, previous) => {
+      if (current.apiBaseUrl !== previous.apiBaseUrl) {
+        fetchCloudConfig();
+      }
+    });
+    window.addEventListener(CLOUD_CONFIG_UPDATED_EVENT, handleCloudConfigUpdated);
+    return () => {
+      unsubscribeFromApiConfig();
+      window.removeEventListener(CLOUD_CONFIG_UPDATED_EVENT, handleCloudConfigUpdated);
+    };
   }, [fetchCloudConfig]);
 
   return {
