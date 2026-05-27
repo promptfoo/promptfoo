@@ -73,7 +73,7 @@ describe('canGenerateRemote property and behavior', () => {
   });
 
   describe('Plugin canGenerateRemote property', () => {
-    it('should mark dataset-based plugins as not requiring remote generation', () => {
+    it('should mark dataset-based and intentionally local-only plugins as local-only', () => {
       expect(BeavertailsPlugin.canGenerateRemote).toBe(false);
       expect(CustomPlugin.canGenerateRemote).toBe(false);
       expect(CyberSecEvalPlugin.canGenerateRemote).toBe(false);

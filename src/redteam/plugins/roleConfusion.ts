@@ -23,6 +23,7 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class RoleConfusionPlugin extends RedteamPluginBase {
+  // The hosted generation service does not expose this task yet; use the configured local provider.
   static readonly canGenerateRemote = false;
   readonly id = PLUGIN_ID;
 

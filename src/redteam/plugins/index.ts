@@ -516,10 +516,6 @@ const pluginFactories: PluginFactory[] = [
         Array.isArray(config.examples),
         'Role confusion plugin config.examples must be an array of strings',
       );
-      invariant(
-        config.examples.length > 0,
-        'Role confusion plugin config.examples must not be empty if provided',
-      );
       config.examples.forEach((example, index) => {
         invariant(
           typeof example === 'string' && example.trim().length > 0,
