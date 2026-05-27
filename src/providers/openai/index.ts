@@ -51,8 +51,15 @@ export class OpenAiGenericProvider implements ApiProvider {
   getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
+    let sendsToOpenAiApi = false;
+    try {
+      sendsToOpenAiApi = new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+    } catch {
+      // Leave malformed custom URLs to the request path to validate.
+    }
+
     return {
-      [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR,
+      ...(sendsToOpenAiApi ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
       ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
       ...customHeaders,
     };

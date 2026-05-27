@@ -62,6 +62,21 @@ describe('OpenAI Provider', () => {
       });
     });
 
+    it('should not attribute compatible endpoints unless explicitly configured', () => {
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.api.com/openai' },
+      });
+
+      expect(customProvider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORIGINATOR_HEADER);
+      expect(
+        customProvider.getOpenAiRequestHeaders({
+          [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+        }),
+      ).toMatchObject({
+        [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
+    });
+
     it('should get API key', () => {
       expect(provider.getApiKey()).toBe('test-key');
     });
