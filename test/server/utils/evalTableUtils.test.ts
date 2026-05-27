@@ -198,6 +198,49 @@ describe('evalTableUtils', () => {
         expect(lines[1]).toContain('0.85');
       });
 
+      it('should add dedicated metric columns for named scores', () => {
+        const tableWithNamedScores = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'First scored output',
+                  score: 0.85,
+                  namedScores: {
+                    clarity: 0.9,
+                    accuracy: 0.8,
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+            {
+              ...mockTable.body[1],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'Second scored output',
+                  score: 0.75,
+                  namedScores: {
+                    clarity: 0.7,
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithNamedScores);
+        const lines = csv.split('\n');
+
+        expect(lines[0]).toContain('Metric: accuracy');
+        expect(lines[0]).toContain('Metric: clarity');
+        expect(lines[1]).toContain('0.80,0.90');
+        expect(lines[2]).toContain(',0.70');
+      });
+
       it('should handle empty named scores', () => {
         const tableWithEmptyNamedScores = {
           ...mockTable,
@@ -1180,6 +1223,67 @@ describe('evalTableUtils', () => {
       const thirdIdx = lines[1].indexOf('Third output');
       expect(firstIdx).toBeLessThan(secondIdx);
       expect(secondIdx).toBeLessThan(thirdIdx);
+    });
+
+    it('should include dedicated metric columns when streaming CSV', async () => {
+      const mockResults = [
+        {
+          testIdx: 0,
+          promptIdx: 0,
+          testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
+          response: { output: 'First output' },
+          success: true,
+          score: 0.8,
+          namedScores: { accuracy: 0.7, relevance: 0.9 },
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+        {
+          testIdx: 1,
+          promptIdx: 0,
+          testCase: { vars: { name: 'Bob' }, description: 'Test 2' },
+          response: { output: 'Second output' },
+          success: true,
+          score: 0.6,
+          namedScores: { relevance: 0.5 },
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+      ];
+
+      const mockEval = {
+        vars: ['name'],
+        prompts: [
+          {
+            raw: 'Prompt 1',
+            label: 'Prompt 1',
+            metrics: {
+              namedScores: { accuracy: 0.7, relevance: 1.4 },
+            },
+          } as Prompt,
+        ],
+        fetchResultsBatched: async function* () {
+          yield mockResults;
+        },
+      } as unknown as Eval;
+
+      const chunks: string[] = [];
+      await streamEvalCsv(mockEval, {
+        isRedteam: false,
+        write: (data: string) => {
+          chunks.push(data);
+        },
+      });
+
+      const csv = chunks.join('');
+      const lines = csv.split('\n').filter((line) => line.trim());
+
+      expect(lines[0]).toContain('Metric: accuracy');
+      expect(lines[0]).toContain('Metric: relevance');
+      expect(lines[1]).toContain('0.70,0.90');
+      expect(lines[2]).toContain(',0.50');
     });
 
     it('should handle multiple test cases with out-of-order results', async () => {

@@ -112,6 +112,31 @@ function formatNamedScores(namedScores: Record<string, number> | undefined): str
   return JSON.stringify(rounded);
 }
 
+function formatNamedScoreValue(value: number | undefined): string {
+  return typeof value === 'number' && !Number.isNaN(value) ? value.toFixed(2) : '';
+}
+
+function collectNamedScoreNamesByPrompt(table: {
+  head: { prompts: Prompt[]; vars: string[] };
+  body: EvaluateTableRow[];
+}): string[][] {
+  return table.head.prompts.map((_, promptIndex) => {
+    const names = new Set<string>();
+    for (const row of table.body) {
+      const namedScores = row.outputs[promptIndex]?.namedScores;
+      if (!namedScores) {
+        continue;
+      }
+      for (const [name, value] of Object.entries(namedScores)) {
+        if (typeof value === 'number' && !Number.isNaN(value)) {
+          names.add(name);
+        }
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  });
+}
+
 /**
  * Build CSV headers for an evaluation table.
  *
@@ -123,15 +148,30 @@ function formatNamedScores(namedScores: Record<string, number> | undefined): str
 export function buildCsvHeaders(
   vars: string[],
   prompts: Prompt[],
-  options: { hasDescriptions?: boolean; isRedteam?: boolean } = {},
+  options: {
+    hasDescriptions?: boolean;
+    isRedteam?: boolean;
+    namedScoreNamesByPrompt?: string[][];
+  } = {},
 ): string[] {
   const headers: string[] = [
     ...(options.hasDescriptions ? ['Description'] : []),
     ...vars,
-    ...prompts.flatMap((prompt) => {
+    ...prompts.flatMap((prompt, promptIndex) => {
       const provider = (prompt as CompletedPrompt).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      return [label, 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
+      const metricColumns = (options.namedScoreNamesByPrompt?.[promptIndex] || []).map(
+        (name) => `Metric: ${name}`,
+      );
+      return [
+        label,
+        'Status',
+        'Score',
+        'Named Scores',
+        ...metricColumns,
+        'Grader Reason',
+        'Comment',
+      ];
     }),
   ];
 
@@ -151,25 +191,34 @@ export function buildCsvHeaders(
  */
 export function tableRowToCsvValues(
   row: EvaluateTableRow,
-  options: { hasDescriptions?: boolean; isRedteam?: boolean } = {},
+  options: {
+    hasDescriptions?: boolean;
+    isRedteam?: boolean;
+    namedScoreNamesByPrompt?: string[][];
+  } = {},
 ): (string | number | boolean)[] {
   const rowValues: (string | number | boolean)[] = [
     ...(options.hasDescriptions ? [row.test.description || ''] : []),
     ...row.vars,
-    ...row.outputs.flatMap((output) => {
+    ...row.outputs.flatMap((output, outputIndex) => {
+      const namedScoreNames = options.namedScoreNamesByPrompt?.[outputIndex] || [];
       if (!output) {
-        return ['', '', '', '', '', ''];
+        return ['', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
       }
 
       const status = getOutputStatus(output);
       const score = output.score?.toFixed(2) ?? '';
       const namedScores = formatNamedScores(output.namedScores);
+      const namedScoreValues = namedScoreNames.map((name) =>
+        formatNamedScoreValue(output.namedScores?.[name]),
+      );
 
       return [
         output.text || '',
         status,
         score,
         namedScores,
+        ...namedScoreValues,
         output.gradingResult?.reason || '',
         output.gradingResult?.comment || '',
       ];
@@ -227,14 +276,18 @@ export function evalTableToCsv(
   const { isRedteam } = options;
   const hasDescriptions = table.body.some((row) => row.test.description);
 
+  const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
   const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
     hasDescriptions,
     isRedteam,
+    namedScoreNamesByPrompt,
   });
 
   const csvRows = [
     headers,
-    ...table.body.map((row) => tableRowToCsvValues(row, { hasDescriptions, isRedteam })),
+    ...table.body.map((row) =>
+      tableRowToCsvValues(row, { hasDescriptions, isRedteam, namedScoreNamesByPrompt }),
+    ),
   ];
 
   return csvStringify(csvRows);
@@ -453,6 +506,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
+  const namedScoreNamesByPrompt = prompts.map((prompt) =>
+    Object.keys((prompt as CompletedPrompt).metrics?.namedScores || {}).sort((a, b) =>
+      a.localeCompare(b),
+    ),
+  );
 
   // Track whether we've written headers yet
   let headersWritten = false;
@@ -529,6 +587,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       const headers = buildCsvHeaders(varNames, prompts, {
         hasDescriptions,
         isRedteam,
+        namedScoreNamesByPrompt,
       });
       await write(csvStringify([headers]));
       headersWritten = true;
@@ -552,7 +611,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       }
       // Write the buffered first batch
       const bufferedCsvRows = firstBatchBuffer.map((row) =>
-        tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+        tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+          hasDescriptions,
+          isRedteam,
+          namedScoreNamesByPrompt,
+        }),
       );
       if (bufferedCsvRows.length > 0) {
         await write(csvStringify(bufferedCsvRows));
@@ -562,7 +625,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
 
     // Convert to CSV rows and write
     const csvRows = rows.map((row) =>
-      tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+      tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+        hasDescriptions,
+        isRedteam,
+        namedScoreNamesByPrompt,
+      }),
     );
 
     if (csvRows.length > 0) {
@@ -573,7 +640,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // Handle case where we only had one batch and it was buffered
   if (firstBatchBuffer !== null) {
     const bufferedCsvRows = firstBatchBuffer.map((row) =>
-      tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+      tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+        hasDescriptions,
+        isRedteam,
+        namedScoreNamesByPrompt,
+      }),
     );
     if (bufferedCsvRows.length > 0) {
       await write(csvStringify(bufferedCsvRows));
@@ -585,6 +656,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     const headers = buildCsvHeaders(varNames, prompts, {
       hasDescriptions: false,
       isRedteam,
+      namedScoreNamesByPrompt,
     });
     await write(csvStringify([headers]));
   }
