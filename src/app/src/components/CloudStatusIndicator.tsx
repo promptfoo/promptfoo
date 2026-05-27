@@ -179,7 +179,7 @@ export default function CloudStatusIndicator() {
       </Tooltip>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md" hideDescription={false}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CloudCog className="size-5 text-primary" />
