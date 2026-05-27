@@ -171,6 +171,17 @@ describe('OpenAIRealtimeConnection', () => {
       );
       vi.useRealTimers();
     });
+
+    it('should reject when the WebSocket closes during its handshake', async () => {
+      const connectPromise = connection.connect();
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+
+      ws.simulateClose(1006, 'authorization closed');
+
+      await expect(connectPromise).rejects.toThrow(
+        'WebSocket closed while connecting (1006): authorization closed',
+      );
+    });
   });
 
   describe('sendAudio', () => {
@@ -387,6 +398,31 @@ describe('OpenAIRealtimeConnection', () => {
           format: 'g711_ulaw',
           sampleRate: 8000,
           timestamp: 0,
+        }),
+      );
+    });
+
+    it('defaults G.711 audio chunks to the Realtime 8 kHz sample rate', () => {
+      const g711Connection = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat: 'g711_ulaw',
+        sampleRate: undefined,
+      });
+      const handler = vi.fn();
+      g711Connection.on('audio_delta', handler);
+
+      (g711Connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio.delta',
+          delta: Buffer.alloc(800).toString('base64'),
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          duration: 100,
+          format: 'g711_ulaw',
+          sampleRate: 8000,
         }),
       );
     });

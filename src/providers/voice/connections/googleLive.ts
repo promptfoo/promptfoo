@@ -80,6 +80,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     logger.debug('[GoogleLive] Connecting to:', { url: url.replace(apiKey, '***') });
 
     return new Promise((resolve, reject) => {
+      this.setPendingConnectionReject(reject);
       this.setConnectionTimeout(CONNECTION_TIMEOUT_MS, reject);
 
       this.ws = new WebSocket(url);
@@ -87,6 +88,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       this.ws.on('open', () => {
         logger.debug('[GoogleLive] WebSocket connected');
         this.clearConnectionTimeout();
+        this.clearPendingConnectionReject();
         this.state = 'connected';
         this.startPingInterval();
         resolve();
@@ -96,6 +98,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
         logger.error('[GoogleLive] WebSocket error:', { error });
         this.clearConnectionTimeout();
         if (this.state === 'connecting') {
+          this.clearPendingConnectionReject();
           reject(error);
         } else {
           this.handleError(error);

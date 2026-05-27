@@ -17,6 +17,7 @@ const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 const DEFAULT_MODEL = 'gpt-realtime';
 const DEFAULT_AUDIO_FORMAT: AudioFormat = 'pcm16';
 const DEFAULT_SAMPLE_RATE = 24000;
+const G711_SAMPLE_RATE = 8000;
 const CONNECTION_TIMEOUT_MS = 15000;
 
 function toRealtimeAudioFormat(format: AudioFormat, sampleRate: number) {
@@ -48,6 +49,12 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     this.model = config.model || DEFAULT_MODEL;
   }
 
+  private getAudioSampleRate(audioFormat: AudioFormat): number {
+    return (
+      this.config.sampleRate || (audioFormat === 'pcm16' ? DEFAULT_SAMPLE_RATE : G711_SAMPLE_RATE)
+    );
+  }
+
   /**
    * Connect to the OpenAI Realtime API.
    */
@@ -63,6 +70,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     logger.debug('[OpenAIRealtime] Connecting to:', { url: url.replace(apiKey, '***') });
 
     return new Promise((resolve, reject) => {
+      this.setPendingConnectionReject(reject);
       this.setConnectionTimeout(CONNECTION_TIMEOUT_MS, reject);
 
       this.ws = new WebSocket(url, {
@@ -74,6 +82,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       this.ws.on('open', () => {
         logger.debug('[OpenAIRealtime] WebSocket connected');
         this.clearConnectionTimeout();
+        this.clearPendingConnectionReject();
         this.state = 'connected';
         this.startPingInterval();
         resolve();
@@ -83,6 +92,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         logger.error('[OpenAIRealtime] WebSocket error:', { error });
         this.clearConnectionTimeout();
         if (this.state === 'connecting') {
+          this.clearPendingConnectionReject();
           reject(error);
         } else {
           this.handleError(error);
@@ -115,7 +125,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     const audioFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
     const realtimeAudioFormat = toRealtimeAudioFormat(
       audioFormat,
-      this.config.sampleRate || DEFAULT_SAMPLE_RATE,
+      this.getAudioSampleRate(audioFormat),
     );
     const sessionConfig = {
       type: 'session.update',
@@ -248,8 +258,8 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
 
       // Audio output events
       case 'response.output_audio.delta': {
-        const sampleRate = this.config.sampleRate || DEFAULT_SAMPLE_RATE;
         const audioFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
+        const sampleRate = this.getAudioSampleRate(audioFormat);
         const audioData = Buffer.from(msg.delta as string, 'base64');
         const durationMs = calculateDuration(audioData.length, sampleRate, audioFormat);
 

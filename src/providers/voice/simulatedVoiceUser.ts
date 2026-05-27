@@ -30,6 +30,7 @@ import type {
 } from './types';
 
 const DEFAULT_SAMPLE_RATE = 24000;
+const G711_SAMPLE_RATE = 8000;
 const DEFAULT_AUDIO_FORMAT = 'pcm16';
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_TIMEOUT_MS = 120000;
@@ -73,7 +74,6 @@ export class SimulatedVoiceUser implements ApiProvider {
     this.voiceConfig = {
       maxTurns: DEFAULT_MAX_TURNS,
       timeoutMs: DEFAULT_TIMEOUT_MS,
-      sampleRate: DEFAULT_SAMPLE_RATE,
       audioFormat: DEFAULT_AUDIO_FORMAT as 'pcm16',
       ...config,
     };
@@ -101,6 +101,14 @@ export class SimulatedVoiceUser implements ApiProvider {
     };
   }
 
+  private getAudioSampleRate(): number {
+    const audioFormat = this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT;
+    return (
+      this.voiceConfig.sampleRate ||
+      (audioFormat === 'pcm16' ? DEFAULT_SAMPLE_RATE : G711_SAMPLE_RATE)
+    );
+  }
+
   /**
    * Build the target voice provider config.
    */
@@ -113,7 +121,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       voice: this.voiceConfig.targetVoice ?? (provider === 'openai' ? 'alloy' : undefined),
       instructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
-      sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
+      sampleRate: this.getAudioSampleRate(),
       // The orchestrator commits routed audio and requests each response itself.
       // Leaving VAD on here creates duplicate target responses for the same turn.
       turnDetection: undefined,
@@ -135,7 +143,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       voice: this.voiceConfig.simulatedUserVoice ?? (provider === 'openai' ? 'echo' : undefined),
       instructions: simulatedUserInstructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
-      sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
+      sampleRate: this.getAudioSampleRate(),
       // IMPORTANT: Disable turn detection on simulated user to prevent auto-responses.
       // We explicitly call requestResponse() after the target finishes speaking.
       // Using VAD here causes the user to start speaking while the target is still talking.
@@ -184,6 +192,10 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       (targetProvider !== 'openai' || simulatedUserProvider !== 'openai')
     ) {
       return `${audioFormat} audio is supported only when both local voice endpoints use OpenAI. Use pcm16 with Google Live or Amazon Nova Sonic.`;
+    }
+
+    if (targetProvider === 'bedrock' && simulatedUserProvider === 'bedrock') {
+      return 'Local Amazon Nova Sonic conversations require at least one non-Bedrock endpoint to initiate an audio turn.';
     }
 
     return undefined;
@@ -300,7 +312,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
             timeoutMs: this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS,
             targetSpeaksFirst: this.shouldTargetSpeakFirst(),
             audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
-            sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
+            sampleRate: this.getAudioSampleRate(),
             recordConversation: this.shouldRecordConversation(),
             turnDetection: this.buildTurnDetectionConfig(),
           }),

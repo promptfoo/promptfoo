@@ -36,6 +36,7 @@ export abstract class BaseVoiceConnection extends EventEmitter {
   protected config: VoiceProviderConfig;
   protected connectionTimeout: NodeJS.Timeout | null = null;
   protected pingInterval: NodeJS.Timeout | null = null;
+  private pendingConnectionReject: ((error: Error) => void) | null = null;
 
   constructor(config: VoiceProviderConfig) {
     super();
@@ -106,6 +107,7 @@ export abstract class BaseVoiceConnection extends EventEmitter {
    */
   disconnect(): void {
     this.clearTimers();
+    this.clearPendingConnectionReject();
 
     if (this.ws) {
       try {
@@ -185,7 +187,16 @@ export abstract class BaseVoiceConnection extends EventEmitter {
         code,
         reason: reason.toString(),
       });
+      const wasConnecting = this.state === 'connecting';
+      this.clearTimers();
       this.state = 'disconnected';
+      if (wasConnecting) {
+        const reasonText = reason.toString();
+        const detail = reasonText ? `: ${reasonText}` : '';
+        this.rejectPendingConnection(
+          new Error(`WebSocket closed while connecting (${code})${detail}`),
+        );
+      }
       this.emit('close');
     });
 
@@ -247,6 +258,23 @@ export abstract class BaseVoiceConnection extends EventEmitter {
         this.disconnect();
       }
     }, ms);
+  }
+
+  /**
+   * Track a pending connect promise so a socket close rejects startup.
+   */
+  protected setPendingConnectionReject(reject: (error: Error) => void): void {
+    this.pendingConnectionReject = reject;
+  }
+
+  protected clearPendingConnectionReject(): void {
+    this.pendingConnectionReject = null;
+  }
+
+  private rejectPendingConnection(error: Error): void {
+    const reject = this.pendingConnectionReject;
+    this.pendingConnectionReject = null;
+    reject?.(error);
   }
 
   /**

@@ -12,6 +12,8 @@ import { DEFAULT_TURN_DETECTION } from './types';
 
 import type { AudioChunk, TurnDetectionConfig } from './types';
 
+const DEFAULT_LOCAL_VAD_THRESHOLD = 0.02;
+
 /**
  * Events emitted by TurnDetector.
  */
@@ -42,8 +44,16 @@ export class TurnDetector extends EventEmitter {
 
   constructor(config: Partial<TurnDetectionConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_TURN_DETECTION, ...config };
-    this.silenceDetector = new SilenceDetector(config.vadThreshold);
+    const defaultVadThreshold =
+      config.mode === 'silence' || config.mode === 'hybrid'
+        ? DEFAULT_LOCAL_VAD_THRESHOLD
+        : DEFAULT_TURN_DETECTION.vadThreshold;
+    this.config = {
+      ...DEFAULT_TURN_DETECTION,
+      vadThreshold: defaultVadThreshold,
+      ...config,
+    };
+    this.silenceDetector = new SilenceDetector(this.config.vadThreshold);
   }
 
   /**
@@ -157,9 +167,18 @@ export class TurnDetector extends EventEmitter {
    * Update configuration.
    */
   updateConfig(config: Partial<TurnDetectionConfig>): void {
-    this.config = { ...this.config, ...config };
-    if (config.vadThreshold !== undefined) {
-      this.silenceDetector = new SilenceDetector(config.vadThreshold);
+    const switchingToLocalMode =
+      config.mode !== undefined &&
+      config.mode !== 'server_vad' &&
+      this.config.mode === 'server_vad' &&
+      config.vadThreshold === undefined;
+    this.config = {
+      ...this.config,
+      ...(switchingToLocalMode ? { vadThreshold: DEFAULT_LOCAL_VAD_THRESHOLD } : {}),
+      ...config,
+    };
+    if (config.vadThreshold !== undefined || switchingToLocalMode) {
+      this.silenceDetector = new SilenceDetector(this.config.vadThreshold);
     }
   }
 
@@ -220,7 +239,7 @@ export class TurnDetector extends EventEmitter {
  */
 export class SilenceDetector {
   private threshold: number;
-  private readonly defaultThreshold = 0.02; // 2% of max amplitude
+  private readonly defaultThreshold = DEFAULT_LOCAL_VAD_THRESHOLD; // 2% of max amplitude
 
   constructor(threshold?: number) {
     this.threshold = threshold ?? this.defaultThreshold;

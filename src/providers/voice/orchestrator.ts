@@ -114,6 +114,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       this.config.simulatedUserConfig.audioFormat,
       this.config.simulatedUserConfig.sampleRate || DEFAULT_SAMPLE_RATE,
     );
+    this.setupTurnDetectorHandlers();
   }
 
   /**
@@ -165,7 +166,6 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       // Setup event handlers before connecting
       this.setupTargetHandlers();
       this.setupSimulatedUserHandlers();
-      this.setupTurnDetectorHandlers();
 
       // Connect to both endpoints
       await this.targetConnection.connect();
@@ -250,10 +250,14 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
   private completeTranscriptTurn(speaker: 'agent' | 'user', text: string): boolean {
     const turn = this.transcript.completeWithText(speaker, text);
+    if (!turn.trim()) {
+      return false;
+    }
+
     this.turnCount++;
     this.emit('turn_complete', { speaker, text: turn });
 
-    if (speaker === 'user' && text.includes(STOP_MARKER)) {
+    if (speaker === 'user' && turn.includes(STOP_MARKER)) {
       logger.debug(`[Orchestrator] Stop marker detected in ${speaker} speech`);
       void this.completeConversation('goal_achieved');
       return true;
@@ -391,8 +395,10 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     // Error handling
     this.targetConnection.on('error', (error: Error) => {
       logger.error('[Orchestrator] Target connection error:', { error });
-      this.emit('error', error);
       void this.completeConversation('error');
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', error);
+      }
     });
 
     this.targetConnection.on('close', () => {
@@ -497,8 +503,10 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     // Error handling
     this.simulatedUserConnection.on('error', (error: Error) => {
       logger.error('[Orchestrator] Simulated user connection error:', { error });
-      this.emit('error', error);
       void this.completeConversation('error');
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', error);
+      }
     });
 
     this.simulatedUserConnection.on('close', () => {

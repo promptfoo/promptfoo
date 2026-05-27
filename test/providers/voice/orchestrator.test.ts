@@ -280,7 +280,6 @@ describe('VoiceConversationOrchestrator', () => {
     await hangup.stop();
 
     const targetFailure = new VoiceConversationOrchestrator(config());
-    targetFailure.on('error', vi.fn());
     const targetStart = await startConversation(targetFailure);
     targetStart.target.emit('error', new Error('target failed'));
     await expect(targetStart.result).resolves.toEqual(
@@ -339,6 +338,20 @@ describe('VoiceConversationOrchestrator', () => {
     );
   });
 
+  it('does not count empty transcript notifications as conversation turns', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(config());
+    const { result, target, user } = await startConversation(orchestrator);
+
+    target.emit('transcript_done', '');
+    expect(orchestrator.getTurnCount()).toBe(0);
+
+    user.emit('transcript_done', STOP_MARKER);
+    await expect(result).resolves.toEqual(
+      expect.objectContaining({ stopReason: 'goal_achieved', turnCount: 1 }),
+    );
+    expect((await result).turns).toHaveLength(1);
+  });
+
   it('omits recordings when audio retention is disabled', async () => {
     const orchestrator = new VoiceConversationOrchestrator(config({ recordFullAudio: false }));
     const { result, target, user } = await startConversation(orchestrator);
@@ -363,6 +376,9 @@ describe('VoiceConversationOrchestrator', () => {
     await first.result;
 
     const second = await startConversation(orchestrator);
+    second.target.emit('audio_delta', chunk(0));
+    (orchestrator as any).turnDetector.emit('turn_timeout');
+    expect(second.target.cancelResponse).toHaveBeenCalledTimes(1);
     second.target.emit('transcript_done', 'Fresh target response');
     second.user.emit('transcript_done', STOP_MARKER);
     const result = await second.result;

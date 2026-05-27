@@ -234,6 +234,28 @@ describe('SimulatedVoiceUser', () => {
     expect(providerMocks.start).not.toHaveBeenCalled();
   });
 
+  it('uses the fixed 8 kHz rate for local OpenAI G.711 audio by default', () => {
+    const builder = createConfigBuilder({ audioFormat: 'g711_ulaw' });
+
+    expect(builder.buildTargetConfig('agent instructions').sampleRate).toBe(8000);
+    expect(builder.buildSimulatedUserConfig('caller goal').sampleRate).toBe(8000);
+  });
+
+  it('rejects local conversations where neither Bedrock endpoint can initiate audio', async () => {
+    await expect(
+      new SimulatedVoiceUser({
+        config: {
+          targetProvider: 'bedrock',
+          simulatedUserProvider: 'bedrock',
+        },
+      }).callApi('Target prompt'),
+    ).resolves.toEqual({
+      error:
+        'Local Amazon Nova Sonic conversations require at least one non-Bedrock endpoint to initiate an audio turn.',
+    });
+    expect(providerMocks.start).not.toHaveBeenCalled();
+  });
+
   it('uses caller-first startup for local Bedrock targets and honors recording opt-out', async () => {
     providerMocks.start.mockResolvedValue({
       combinedAudio: Buffer.from('stereo'),

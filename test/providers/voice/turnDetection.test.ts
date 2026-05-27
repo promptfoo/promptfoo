@@ -235,6 +235,26 @@ describe('TurnDetector', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('uses the local threshold when switching from server VAD to silence mode', () => {
+      const switchedDetector = new TurnDetector({ mode: 'server_vad' });
+      const handler = vi.fn();
+      switchedDetector.on('turn_start', handler);
+      switchedDetector.updateConfig({ mode: 'silence' });
+      const audibleAudio = Buffer.alloc(100);
+      for (let i = 0; i < audibleAudio.length; i += 2) {
+        audibleAudio.writeInt16LE(1000, i);
+      }
+
+      switchedDetector.onAudioChunk({
+        data: bufferToBase64(audibleAudio),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
     it('should decode G.711 audio before local silence detection', () => {
       const handler = vi.fn();
       detector.on('turn_start', handler);

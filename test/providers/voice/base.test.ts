@@ -52,6 +52,11 @@ class TestVoiceConnection extends BaseVoiceConnection {
     this.setConnectionTimeout(ms);
   }
 
+  setConnectingReject(reject: (error: Error) => void): void {
+    this.state = 'connecting';
+    this.setPendingConnectionReject(reject);
+  }
+
   startPing(ms: number): void {
     this.startPingInterval(ms);
   }
@@ -136,6 +141,22 @@ describe('BaseVoiceConnection', () => {
     connection.setState('connected');
     socket.emit('close', 1000, Buffer.from('done'));
     expect(closed).toHaveBeenCalled();
+    expect(connection.getState()).toBe('disconnected');
+  });
+
+  it('rejects a pending connection when the socket closes before opening', () => {
+    const socket = new MockSocket();
+    const reject = vi.fn();
+    connection.setConnectingReject(reject);
+    connection.attachSocket(socket);
+
+    socket.emit('close', 1006, Buffer.from('handshake failed'));
+
+    expect(reject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'WebSocket closed while connecting (1006): handshake failed',
+      }),
+    );
     expect(connection.getState()).toBe('disconnected');
   });
 

@@ -159,6 +159,17 @@ describe('GoogleLiveConnection', () => {
         expect.objectContaining({ message: 'Connection timeout' }),
       );
     });
+
+    it('should reject when the WebSocket closes during its handshake', async () => {
+      const connectPromise = connection.connect();
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+
+      ws.simulateClose(1006, 'authorization closed');
+
+      await expect(connectPromise).rejects.toThrow(
+        'WebSocket closed while connecting (1006): authorization closed',
+      );
+    });
   });
 
   describe('sendAudio', () => {
