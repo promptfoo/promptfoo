@@ -325,6 +325,7 @@ function createStubModules(nodeModulesDir: string): void {
     { name: '@redis/json', exports: [] },
     { name: '@redis/graph', exports: [] },
   ];
+  let createdStubCount = 0;
 
   for (const { name: moduleName, exports: namedExports } of stubModules) {
     const moduleDir = path.join(nodeModulesDir, moduleName);
@@ -408,9 +409,10 @@ ${namedExports.map((exp) => `module.exports.${exp} = module.exports;`).join('\n'
 `.trim();
 
     fs.writeFileSync(path.join(moduleDir, 'index.cjs'), cjsStubCode);
+    createdStubCount++;
   }
 
-  console.log(`[bundle] Created ${stubModules.length} stub modules`);
+  console.log(`[bundle] Created ${createdStubCount} stub modules`);
 }
 
 /**
@@ -519,9 +521,6 @@ if (isSEA) {
 }
 `.trim();
 
-  // Footer for CJS to handle async entry point
-  const cjsFooter = forSea ? '' : '';
-
   try {
     const result = await esbuild.build({
       entryPoints: [path.join(ROOT, 'src', 'main.ts')],
@@ -548,9 +547,6 @@ if (isSEA) {
         __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
         __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
         __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
-        __PROMPTFOO_INSTALL_METHOD__: JSON.stringify(
-          forSea ? 'binary' : process.env.PROMPTFOO_INSTALL_METHOD || 'bundle',
-        ),
         BUILD_FORMAT: JSON.stringify(format),
         'process.env.BUILD_FORMAT': JSON.stringify(format),
       },
@@ -559,8 +555,6 @@ if (isSEA) {
       banner: {
         js: format === 'esm' ? esmBanner : cjsBanner,
       },
-
-      footer: cjsFooter ? { js: cjsFooter } : undefined,
 
       // Preserve dynamic imports for optional features
       splitting: false,

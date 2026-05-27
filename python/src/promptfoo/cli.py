@@ -6,7 +6,6 @@ It executes the bundled standalone binary (SEA - Single Executable Application) 
 includes the Node.js runtime, so no separate Node.js installation is required.
 """
 
-import os
 import stat
 import subprocess
 import sys
@@ -76,15 +75,9 @@ def main() -> int:
     # Build the command: promptfoo [args...]
     cmd = [str(binary_path)] + sys.argv[1:]
 
-    # Set up environment
-    env = os.environ.copy()
-
-    # Indicate pip installation for telemetry
-    env["PROMPTFOO_INSTALL_METHOD"] = "pip"
-
     # Execute the binary
     try:
-        result = subprocess.run(cmd, env=env)
+        result = subprocess.run(cmd)
         return result.returncode
     except KeyboardInterrupt:
         return 130  # Standard exit code for SIGINT
