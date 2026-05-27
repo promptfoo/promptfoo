@@ -1288,15 +1288,16 @@ EOF
   return 1
 }
 
-test_install_script_fish_path_handles_spaces() {
-  log_test "install.sh quotes spaced PATH entries for fish"
+test_install_script_fish_path_handles_literal_special_characters() {
+  log_test "install.sh quotes literal PATH entries for fish"
 
   local fake_root fake_bin fake_home install_dir output expected_path_line
   fake_root=$(mktemp -d "$TEST_ROOT/fish-path.XXXXXXXX")
   fake_bin="$fake_root/bin"
   fake_home="$fake_root/home"
-  install_dir="$fake_root/install dir"
-  mkdir -p "$fake_bin" "$fake_home"
+  install_dir="$fake_root/install[dir] with space"
+  mkdir -p "$fake_bin" "$fake_home/.config/fish"
+  printf "set -gx PATH '%s/bin' \$PATH\n" "$fake_root/installd with space" >"$fake_home/.config/fish/config.fish"
   create_fake_unsupported_macos_bin "$fake_bin"
 
   if output=$(
@@ -1308,14 +1309,14 @@ test_install_script_fish_path_handles_spaces() {
   ); then
     expected_path_line="set -gx PATH '$install_dir/bin' \$PATH"
     if grep -Fqx "$expected_path_line" "$fake_home/.config/fish/config.fish"; then
-      log_pass "install.sh preserves spaced fish PATH entries"
+      log_pass "install.sh preserves literal spaced fish PATH entries with regex characters"
       return 0
     fi
-    log_fail "install.sh wrote an unsafe fish PATH entry: $output"
+    log_fail "install.sh treated a literal fish PATH entry as a regex: $output"
     return 1
   fi
 
-  log_fail "install.sh fish PATH install failed: $output"
+  log_fail "install.sh literal fish PATH install failed: $output"
   return 1
 }
 
@@ -1336,6 +1337,8 @@ test_install_ps1_uses_package_entrypoint() {
     ! grep -q 'download/v\$Version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q 'cmd /c \$promptfooCmd' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q 'Test-Path -LiteralPath \$promptfooExe -PathType Leaf' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q 'Downloaded archive does not contain promptfoo.exe' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q '& \$promptfooCmd --version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
     log_pass "install.ps1 uses the package entrypoint and safe fallback/download guards"
     return 0
@@ -1478,7 +1481,7 @@ main() {
   test_install_script_downloads_unprefixed_release_tag
   test_install_script_rejects_unsafe_archive_paths
   test_install_script_rejects_archive_link_entries
-  test_install_script_fish_path_handles_spaces
+  test_install_script_fish_path_handles_literal_special_characters
   test_install_ps1_uses_package_entrypoint
   test_install_ps1_syntax
   test_site_installer_mirrors

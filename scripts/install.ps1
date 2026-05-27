@@ -204,9 +204,10 @@ function Install-PromptfooBinary {
 
         # Create pf alias
         $promptfooExe = Join-Path $binDir "promptfoo.exe"
-        if (Test-Path $promptfooExe) {
-            Copy-Item -Path $promptfooExe -Destination (Join-Path $binDir "pf.exe") -Force
+        if (-not (Test-Path -LiteralPath $promptfooExe -PathType Leaf)) {
+            throw "Downloaded archive does not contain promptfoo.exe."
         }
+        Copy-Item -LiteralPath $promptfooExe -Destination (Join-Path $binDir "pf.exe") -Force
 
         return $true
     } finally {
