@@ -3,8 +3,7 @@ export function isMissingPackageImportError(error: unknown, packageName: string)
     return false;
   }
 
-  const code =
-    'code' in error && typeof error.code === 'string' ? error.code : undefined;
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : undefined;
 
   return (
     code === 'MODULE_NOT_FOUND' ||

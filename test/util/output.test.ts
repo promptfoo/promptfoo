@@ -101,7 +101,7 @@ describe('writeOutput', () => {
     );
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue(createEmptyResultsDbMock());
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
   });
 
   afterEach(() => {
@@ -111,7 +111,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue(createEmptyResultsDbMock());
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
     const outputPath = 'output.csv';
     const results: EvaluateResult[] = [
       {
@@ -1073,7 +1073,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue(createEmptyResultsDbMock());
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
     const config: Record<string, unknown> = {};
     Object.defineProperty(config, 'bad', {
       enumerable: true,
@@ -1090,7 +1090,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue(createEmptyResultsDbMock());
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
     const config: Record<string, unknown> = {};
     Object.defineProperty(config, 'bad', {
       enumerable: true,
