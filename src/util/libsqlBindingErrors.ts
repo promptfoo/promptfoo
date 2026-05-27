@@ -1,6 +1,10 @@
 import chalk from 'chalk';
 
-const libsqlPackagePattern = /@libsql\/(?<target>[a-z0-9-]+)/i;
+// Match only platform-binding packages (@libsql/darwin-arm64 etc.), not the
+// wrapper packages like @libsql/client or @libsql/core whose absence indicates
+// a different problem (broken install) and warrants a different message.
+const libsqlPlatformBindingPattern =
+  /@libsql\/(?<target>(?:darwin|linux|win32|android|freebsd|netbsd|wasm32)-[a-z0-9-]+)/i;
 
 /**
  * Detects the "Cannot find module '@libsql/<target>'" error that libsql throws
@@ -10,15 +14,21 @@ const libsqlPackagePattern = /@libsql\/(?<target>[a-z0-9-]+)/i;
  * peer package per platform (e.g. `@libsql/darwin-arm64`). When that package is
  * absent — npm skipped it, the cache is corrupt, or the platform is unsupported —
  * the user sees a raw "MODULE_NOT_FOUND" stack with no remediation hint.
+ *
+ * Accepts both `MODULE_NOT_FOUND` (CJS require — emitted by @neon-rs/load) and
+ * `ERR_MODULE_NOT_FOUND` (ESM dynamic import — emitted if the top-level
+ * @libsql/client package itself is missing). The regex only matches platform
+ * targets, so a missing @libsql/client falls through to the generic handler.
  */
 export function getLibsqlBindingTarget(error: unknown): string | undefined {
   if (!(error instanceof Error)) {
     return undefined;
   }
-  if ((error as NodeJS.ErrnoException).code !== 'MODULE_NOT_FOUND') {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code !== 'MODULE_NOT_FOUND' && code !== 'ERR_MODULE_NOT_FOUND') {
     return undefined;
   }
-  const match = libsqlPackagePattern.exec(error.message);
+  const match = libsqlPlatformBindingPattern.exec(error.message);
   return match?.groups?.target;
 }
 
