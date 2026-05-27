@@ -25,13 +25,18 @@ export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider
   config: githubConfig,
 });
 
+function getGitHubRedteamConfig(env?: EnvOverrides) {
+  return {
+    ...githubConfig,
+    apiKey: env?.GITHUB_TOKEN,
+    temperature: getDefaultRedteamTemperature(env),
+  };
+}
+
 function createGitHubRedteamProvider(env?: EnvOverrides) {
   return new OpenAiChatCompletionProvider('openai/gpt-5', {
     env,
-    config: {
-      ...githubConfig,
-      temperature: getDefaultRedteamTemperature(env),
-    },
+    config: getGitHubRedteamConfig(env),
   });
 }
 
@@ -39,8 +44,7 @@ function createGitHubRedteamJsonProvider(env?: EnvOverrides) {
   return new OpenAiChatCompletionProvider('openai/gpt-5', {
     env,
     config: {
-      ...githubConfig,
-      temperature: getDefaultRedteamTemperature(env),
+      ...getGitHubRedteamConfig(env),
       response_format: { type: 'json_object' },
     },
   });

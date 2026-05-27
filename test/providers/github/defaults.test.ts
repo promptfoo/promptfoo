@@ -121,6 +121,23 @@ describe('GitHub Models Default Providers', () => {
     );
   });
 
+  it('should prefer GitHub env override tokens over ambient tokens for redteam providers', async () => {
+    mockedGetEnvString.mockImplementation(function (key: string, defaultValue = '') {
+      return key === 'GITHUB_TOKEN' ? 'ambient-github-token' : defaultValue;
+    });
+
+    const providers = await getDefaultProviders({
+      GITHUB_TOKEN: 'override-github-token',
+    });
+
+    expect((providers.redteamProvider as OpenAiChatCompletionProvider).getApiKey()).toBe(
+      'override-github-token',
+    );
+    expect((providers.redteamJsonProvider as OpenAiChatCompletionProvider).getApiKey()).toBe(
+      'override-github-token',
+    );
+  });
+
   it('should use GitHub redteam temperature from env overrides', async () => {
     mockedGetEnvString.mockImplementation(function (_key: string, defaultValue = '') {
       return defaultValue;

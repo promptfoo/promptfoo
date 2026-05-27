@@ -7,6 +7,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { getDefaultRedteamTemperature } from '../../providers/redteamDefaults';
 import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
 import {
   type ApiProvider,
@@ -29,7 +30,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -120,7 +121,7 @@ async function loadRedteamProvider({
       logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
       ret = new OpenAiChatCompletionProvider(defaultModel, {
         config: {
-          temperature: TEMPERATURE,
+          temperature: getDefaultRedteamTemperature(),
           response_format: jsonOnly ? { type: 'json_object' } : undefined,
         },
       });

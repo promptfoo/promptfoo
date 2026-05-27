@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { setEnvOverridesProvider } from '../../../src/envOverrides';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -108,6 +109,7 @@ function setCliStateConfig(config: typeof cliState.config) {
 
 describe('shared redteam provider utilities', () => {
   afterEach(() => {
+    setEnvOverridesProvider(undefined);
     resetRedteamProviderLoader();
     vi.resetAllMocks();
   });
@@ -136,6 +138,7 @@ describe('shared redteam provider utilities', () => {
         provider: undefined,
       },
     });
+    setEnvOverridesProvider(() => cliState.config?.env);
   });
 
   describe('RedteamProviderManager', () => {
@@ -151,6 +154,17 @@ describe('shared redteam provider utilities', () => {
         temperature: TEMPERATURE,
         response_format: undefined,
       });
+    });
+
+    it('uses runtime-configured redteam temperature for the OpenAI fallback', async () => {
+      setCliStateConfig({
+        env: { PROMPTFOO_JAILBREAK_TEMPERATURE: '0' },
+        redteam: { provider: undefined },
+      });
+
+      await redteamProviderManager.getProvider({});
+
+      expect(mockOpenAiInstances[0].config.temperature).toBe(0);
     });
 
     it('clears cached providers', async () => {
