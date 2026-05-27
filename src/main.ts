@@ -47,7 +47,11 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { ServerError } from './server/errors';
-import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
+import {
+  AUTO_UPDATE_TIMEOUT_MS,
+  handleAutoUpdate,
+  setUpdateHandler,
+} from './updates/handleAutoUpdate';
 import { checkForUpdates, UPDATE_INSTRUCTIONS } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
@@ -256,6 +260,7 @@ if (isMain) {
                 autoUpdateToRun.sourceEnvironment,
               )
           : undefined,
+        autoUpdateToRun ? AUTO_UPDATE_TIMEOUT_MS + 1_000 : undefined,
       );
     } catch (shutdownError) {
       // Log shutdown error but preserve the original main error if it exists

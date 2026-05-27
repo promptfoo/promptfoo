@@ -64,7 +64,11 @@ export async function handleAutoUpdate(
       updateProcess.unref();
       finish('background', null);
     }, AUTO_UPDATE_TIMEOUT_MS);
-    const finish = (event: 'close' | 'error' | 'background', detail: number | Error | null) => {
+    const finish = (
+      event: 'close' | 'error' | 'background',
+      detail: number | Error | null,
+      signal: NodeJS.Signals | null = null,
+    ) => {
       if (settled) {
         return;
       }
@@ -76,8 +80,14 @@ export async function handleAutoUpdate(
           message: 'Update successful! The new version will be used on your next run.',
         });
       } else if (event === 'close') {
+        const failureStatus =
+          detail === null
+            ? signal
+              ? `after receiving signal ${signal}`
+              : 'before reporting an exit code'
+            : `with exit code ${detail}`;
         updateEventEmitter.emit('update-failed', {
-          message: `Automatic update failed with exit code ${detail}. Please try updating manually: ${installationInfo.updateCommand}`,
+          message: `Automatic update failed ${failureStatus}. Please try updating manually: ${installationInfo.updateCommand}`,
         });
       } else if (event === 'error') {
         const errorName = detail instanceof Error ? detail.name : 'Error';
@@ -92,8 +102,8 @@ export async function handleAutoUpdate(
       resolve();
     };
 
-    updateProcess.on('close', (code) => {
-      finish('close', code);
+    updateProcess.on('close', (code, signal) => {
+      finish('close', code, signal);
     });
     updateProcess.on('error', (err) => {
       finish('error', err);

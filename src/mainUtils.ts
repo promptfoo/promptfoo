@@ -224,8 +224,11 @@ export function addCommonOptionsRecursively(command: Command) {
   });
 }
 
+const CLEANUP_OP_TIMEOUT_MS = 1000;
+
 export const shutdownGracefully = async (
   afterResourcesReleased?: () => Promise<void>,
+  afterResourcesReleasedTimeoutMs = CLEANUP_OP_TIMEOUT_MS,
 ): Promise<void> => {
   const FORCE_EXIT_TIMEOUT_MS = 3000;
   const forceExitTimeout = setTimeout(() => {
@@ -237,16 +240,18 @@ export const shutdownGracefully = async (
 
   logger.debug('Shutting down gracefully...');
 
-  const CLEANUP_OP_TIMEOUT_MS = 1000;
-
-  const withTimeout = async <T>(promise: Promise<T>, name: string): Promise<T | undefined> => {
+  const withTimeout = async <T>(
+    promise: Promise<T>,
+    name: string,
+    timeoutMs = CLEANUP_OP_TIMEOUT_MS,
+  ): Promise<T | undefined> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<undefined>((resolveTimeout) => {
       timeoutId = setTimeout(() => {
         // eslint-disable-next-line no-console
         console.warn(`${name} timed out during shutdown`);
         resolveTimeout(undefined);
-      }, CLEANUP_OP_TIMEOUT_MS);
+      }, timeoutMs);
       timeoutId.unref();
     });
 
@@ -281,7 +286,11 @@ export const shutdownGracefully = async (
 
   try {
     if (afterResourcesReleased) {
-      await afterResourcesReleased();
+      await withTimeout(
+        afterResourcesReleased(),
+        'afterResourcesReleased()',
+        afterResourcesReleasedTimeoutMs,
+      );
     }
   } finally {
     logger.debug('Closing logger file transports');

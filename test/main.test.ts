@@ -570,6 +570,24 @@ describe('shutdownGracefully', () => {
     expect(callOrder).toEqual(['database', 'dispatcher', 'update', 'logger']);
   });
 
+  it('bounds post-resource work using the caller-provided timeout', async () => {
+    let postResourceWorkStarted = false;
+    const shutdownPromise = shutdownGracefully(() => {
+      postResourceWorkStarted = true;
+      return new Promise(() => {});
+    }, 60_000);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(postResourceWorkStarted).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(mockCloseLogger).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(58_900);
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+  });
+
   it('should handle telemetry shutdown timeout', async () => {
     // Make telemetry.shutdown() hang forever
     mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));

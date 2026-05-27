@@ -294,6 +294,31 @@ describe('handleAutoUpdate', () => {
     });
   });
 
+  it('should report signal termination without a null exit code', async () => {
+    const info: UpdateObject = {
+      message: 'Update available',
+      update: { current: '1.0.0', latest: '1.1.0', name: 'promptfoo' },
+    };
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+    });
+
+    const updatePromise = handleAutoUpdate(info, false, false, '/project', mockSpawn);
+
+    const closeHandler =
+      getProcessEventHandler<(code: number | null, signal: NodeJS.Signals | null) => void>('close');
+    closeHandler(null, 'SIGTERM');
+    await updatePromise;
+
+    expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-failed', {
+      message:
+        'Automatic update failed after receiving signal SIGTERM. Please try updating manually: npm install -g promptfoo@latest',
+    });
+  });
+
   it('should emit update-failed on process error with sanitized message', async () => {
     const info: UpdateObject = {
       message: 'Update available',
