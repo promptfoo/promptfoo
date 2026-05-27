@@ -8,26 +8,26 @@ branding:
 
 inputs:
   api-host:
-    description: 'Promptfoo API host URL; when set, overrides apiHost from config-path'
+    description: 'Promptfoo API host URL; when set, overrides apiHost from config-path.'
     required: false
   min-severity:
-    description: 'Minimum severity level to report (low|medium|high|critical); defaults to medium when neither severity alias is set'
+    description: 'Minimum severity level to report (low|medium|high|critical). Applied to the generated action-input config; ignored when config-path is set. Defaults to medium when neither min-severity nor minimum-severity is set.'
     required: false
   minimum-severity:
-    description: 'Alias for min-severity (low|medium|high|critical); defaults to medium when neither severity alias is set'
+    description: 'Alias for min-severity (low|medium|high|critical). Applied to the generated action-input config; ignored when config-path is set. Has no default; takes effect only when min-severity is not set.'
     required: false
   config-path:
-    description: 'Path to YAML configuration file; when set, the file supplies scan settings unless api-host is explicitly provided'
+    description: 'Path to YAML configuration file. When set, the file supplies scan settings instead of action inputs (diffs-only, min-severity, guidance, guidance-file); api-host still overrides when explicitly provided.'
     required: false
   diffs-only:
-    description: 'Scan only PR diffs instead of tracing into surrounding repository context'
+    description: 'Scan only PR diffs instead of tracing into surrounding repository context. Applied to the generated action-input config; ignored when config-path is set.'
     required: false
     default: 'false'
   guidance:
-    description: 'Custom guidance for the security scan'
+    description: 'Custom guidance for the security scan. Applied to the generated action-input config; ignored when config-path is set.'
     required: false
   guidance-file:
-    description: 'Path to file containing custom guidance'
+    description: 'Path to file containing custom guidance. Applied to the generated action-input config; ignored when config-path is set.'
     required: false
   github-token:
     description: 'GitHub token for authentication (default: github.token)'

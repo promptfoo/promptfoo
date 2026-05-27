@@ -40,17 +40,17 @@ When using the GitHub App:
 
 Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-| Input               | Description                                                      | Default                                        |
-| ------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| `api-host`          | Promptfoo API host URL; overrides config when explicitly set     | Config value, then `https://api.promptfoo.app` |
-| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | Effective `medium` when both aliases are unset |
-| `minimum-severity`  | Alias for `min-severity`                                         | Effective `medium` when both aliases are unset |
-| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | None; omitted actions use generated defaults   |
-| `diffs-only`        | Scan only PR diffs; skip repository tracing                      | `false`                                        |
-| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                                           |
-| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                                           |
-| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                                        |
-| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                                           |
+| Input               | Description                                                                                                                                                                 | Default                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `api-host`          | Promptfoo API host URL; overrides `apiHost` from `config-path` when explicitly set.                                                                                         | Config value, then `https://api.promptfoo.app` |
+| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`). Applied to the generated action-input config; ignored when `config-path` is set.                          | Effective `medium` when both aliases are unset |
+| `minimum-severity`  | Alias for `min-severity`. Takes effect only when `min-severity` is unset; if both are set, `min-severity` wins and a warning is emitted. Ignored when `config-path` is set. | Effective `medium` when both aliases are unset |
+| `config-path`       | Path to YAML config file. When set, the file supplies scan settings instead of action inputs (`diffs-only`, `min-severity`, `guidance`, `guidance-file`).                   | None; omitted actions use generated defaults   |
+| `diffs-only`        | Scan only PR diffs; skip repository tracing. Applied to the generated action-input config; ignored when `config-path` is set.                                               | `false`                                        |
+| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1]). Applied to the generated action-input config; ignored when `config-path` is set.                                    | None                                           |
+| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1]). Applied to the generated action-input config; ignored when `config-path` is set.                               | None                                           |
+| `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                                                                | `false`                                        |
+| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning                                                                                                                | None                                           |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
 
@@ -87,7 +87,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    min-severity: medium # Report medium, high, and critical severity issues only; medium is the default
+    min-severity: medium # Report medium, high, and critical issues (also the default when omitted)
 ```
 
 **Scan only PR diffs:**

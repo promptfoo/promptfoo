@@ -509,6 +509,38 @@ describe('code-scan-action main', () => {
       });
     });
 
+    it('should thread diffs-only through to the generated action-input config', async () => {
+      mocks.core.getBooleanInput.mockImplementation((name: string) => {
+        return name === 'diffs-only';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined, true);
+      expectCliArg(args, '--config', '/tmp/test-config.yaml');
+    });
+
+    it('should ignore diffs-only when config-path is set', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        return '';
+      });
+      mocks.core.getBooleanInput.mockImplementation((name: string) => {
+        return name === 'diffs-only';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', 'configs/code-scan.yaml');
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+      expect(args).not.toContain('--diffs-only');
+    });
+
     it('should keep using generated action-input config even when the workspace contains a repo config', async () => {
       const repositoryConfigPath = path.resolve('/test/workspace', '.promptfoo-code-scan.yaml');
       mocks.fs.existsSync.mockImplementation((candidatePath: string) => {
@@ -599,7 +631,7 @@ describe('code-scan-action main', () => {
       await importActionAndGetPromptfooCall();
 
       expect(mocks.core.warning).toHaveBeenCalledWith(
-        'Both min-severity and minimum-severity were provided; using min-severity.',
+        expect.stringContaining('Both min-severity (high) and minimum-severity (low) are set'),
       );
       expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
     });
@@ -710,6 +742,71 @@ describe('code-scan-action main', () => {
       expectCliArg(args, '--github-pr', 'test-owner/test-repo#123');
       expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
       expect(mocks.core.getIDToken).toHaveBeenCalled();
+    });
+
+    it('should surface skipReason when fork PR scanning awaits maintainer approval', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      const skipMessage =
+        'Fork PR scanning requires maintainer approval. See PR comment for options.';
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [],
+                  skipReason: skipMessage,
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(`🔀 Scan skipped: ${skipMessage}`);
+      });
+
+      // The generic "Comments posted to PR by scan server" log should NOT fire for skips —
+      // that message was misleading because no scan findings were actually posted.
+      expect(mocks.core.info).not.toHaveBeenCalledWith('✅ Comments posted to PR by scan server');
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('should preserve legacy text fork-authorization skips during CLI rollout', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options:
+            | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
+            | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stderr) {
+            options.listeners.stderr(Buffer.from('Fork PR scanning not authorized'));
+            return 1;
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Scan skipped: Fork PR scanning requires maintainer approval. See PR comment for options.',
+        );
+      });
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
   });
 
@@ -827,6 +924,40 @@ describe('code-scan-action main', () => {
       expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
     });
 
+    it('does not write SARIF when the scanner returns a skipReason without completing a scan', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [],
+                  skipReason: 'Fork PR scanning requires maintainer approval.',
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Scan skipped: Fork PR scanning requires maintainer approval.',
+        );
+      });
+
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
     it('does not write SARIF when a setup PR is skipped', async () => {
       mocks.actionGithub.getPRFiles.mockResolvedValue([
         {
@@ -850,35 +981,6 @@ describe('code-scan-action main', () => {
         expect.anything(),
         expect.anything(),
       );
-    });
-
-    it('does not write SARIF when fork PR scanning awaits maintainer approval', async () => {
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          _args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
-            options.listeners.stdout(Buffer.from('Fork PR scanning not authorized'));
-            return 1;
-          }
-          return 0;
-        },
-      );
-
-      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
-
-      await vi.waitFor(() => {
-        expect(mocks.exec.exec).toHaveBeenCalledWith(
-          'promptfoo',
-          expect.anything(),
-          expect.anything(),
-        );
-      });
-
-      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
-      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
     it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {
@@ -969,6 +1071,81 @@ describe('code-scan-action main', () => {
 
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('minimum severity input resolution', () => {
+    function mockSeverityInputs(values: {
+      'min-severity'?: string;
+      'minimum-severity'?: string;
+    }): void {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity') {
+          return values['min-severity'] ?? '';
+        }
+        if (name === 'minimum-severity') {
+          return values['minimum-severity'] ?? '';
+        }
+        return '';
+      });
+    }
+
+    it('uses min-severity when only min-severity is set', async () => {
+      mockSeverityInputs({ 'min-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined, false);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('uses minimum-severity when only the alias is set (regression test for #9427)', async () => {
+      mockSeverityInputs({ 'minimum-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined, false);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('falls back to medium when neither input is set', async () => {
+      mockSeverityInputs({});
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined, false);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('prefers min-severity and warns when both inputs disagree', async () => {
+      mockSeverityInputs({ 'min-severity': 'high', 'minimum-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Both min-severity (high) and minimum-severity (critical) are set'),
+      );
+    });
+
+    it('does not warn when both inputs are set to the same value', async () => {
+      mockSeverityInputs({ 'min-severity': 'high', 'minimum-severity': 'high' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('trims whitespace from severity inputs', async () => {
+      mockSeverityInputs({ 'minimum-severity': '  critical  ' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined, false);
     });
   });
 });

@@ -194,13 +194,14 @@ When using `--json`, the scan outputs a JSON object to stdout with the following
 
 ### Response Object
 
-| Field            | Type        | Description                             |
-| ---------------- | ----------- | --------------------------------------- |
-| `success`        | `boolean`   | Whether the scan completed successfully |
-| `review`         | `string`    | Overall review summary of the scan      |
-| `comments`       | `Comment[]` | Array of findings (see below)           |
-| `commentsPosted` | `boolean`   | Whether comments were posted to a PR    |
-| `error`          | `string`    | Error message if the scan failed        |
+| Field            | Type        | Description                                                                                                       |
+| ---------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `success`        | `boolean`   | Whether the scan completed successfully                                                                           |
+| `review`         | `string`    | Overall review summary of the scan                                                                                |
+| `comments`       | `Comment[]` | Array of findings (see below)                                                                                     |
+| `commentsPosted` | `boolean`   | Whether comments were posted to a PR                                                                              |
+| `skipReason`     | `string`    | Set when the scan was intentionally skipped (e.g. fork PR awaiting maintainer approval); `comments` will be empty |
+| `error`          | `string`    | Error message if the scan failed                                                                                  |
 
 ### Comment Object
 

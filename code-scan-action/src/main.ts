@@ -51,26 +51,51 @@ interface PullRequestForkPayload {
   } | null;
 }
 
+const FORK_PR_AUTH_SKIP_REASON =
+  'Fork PR scanning requires maintainer approval. See PR comment for options.';
+
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+const DEFAULT_MINIMUM_SEVERITY = 'medium';
 
 interface MinimumSeverityInput {
   value: string;
   provided: boolean;
 }
 
+/**
+ * Resolve the effective minimum severity from the two supported inputs.
+ *
+ * The two inputs do NOT carry defaults in `action.yml`. That keeps
+ * `core.getInput()` returning `''` when a workflow has not set the input,
+ * which is what lets a workflow that only sets the alias (`minimum-severity`)
+ * actually take effect. Precedence is:
+ *
+ *   1. `min-severity` if set
+ *   2. `minimum-severity` if set
+ *   3. fallback to `DEFAULT_MINIMUM_SEVERITY`
+ *
+ * If both are set to different values, `min-severity` wins and a warning is
+ * emitted so the workflow author can collapse the inputs. The `provided` flag
+ * lets callers (e.g. fallback-comment footer) distinguish a user-supplied
+ * severity from the default, which matters when `config-path` is set and the
+ * scan's effective severity comes from the YAML rather than these inputs.
+ */
 function resolveMinimumSeverityInput(): MinimumSeverityInput {
-  const minSeverity = core.getInput('min-severity');
-  const minimumSeverity = core.getInput('minimum-severity');
+  const primary = core.getInput('min-severity').trim();
+  const alias = core.getInput('minimum-severity').trim();
 
-  if (minSeverity && minimumSeverity && minSeverity !== minimumSeverity) {
-    core.warning('Both min-severity and minimum-severity were provided; using min-severity.');
+  if (primary && alias && primary !== alias) {
+    core.warning(
+      `Both min-severity (${primary}) and minimum-severity (${alias}) are set; using min-severity. minimum-severity is an alias and should only be set when min-severity is unset.`,
+    );
   }
 
   return {
-    value: minSeverity || minimumSeverity || 'medium',
-    provided: Boolean(minSeverity || minimumSeverity),
+    value: primary || alias || DEFAULT_MINIMUM_SEVERITY,
+    provided: Boolean(primary || alias),
   };
 }
 
@@ -319,7 +344,7 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+): Promise<ScanResponse> {
   const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
@@ -350,10 +375,14 @@ async function runPromptfooScan(
     return parseScanOutput(scanOutput);
   }
 
-  // Fork PR auth rejection is expected - server posts helpful comment to PR
-  if (scanOutput.includes('Fork PR scanning not authorized')) {
-    core.info('🔀 Fork PR detected - see PR comment for scan options');
-    return undefined;
+  // Keep compatibility with CLI releases that reported an authorized fork skip as text
+  // while the action and CLI roll out independently.
+  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+    return {
+      success: true,
+      comments: [],
+      skipReason: FORK_PR_AUTH_SKIP_REASON,
+    };
   }
 
   core.error(`CLI exited with code ${exitCode}`);
@@ -361,10 +390,7 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
@@ -624,7 +650,15 @@ async function handleScanResponse(
   finalConfigPath: ResolvedConfigPath,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review } = scanResponse;
+  const { comments, commentsPosted, review, skipReason } = scanResponse;
+
+  // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
+  // existing Code Scanning findings or imply that authorization-gated work ran.
+  if (skipReason) {
+    core.info(`🔀 Scan skipped: ${skipReason}`);
+    return;
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
   emitConfiguredSarifOutput(scanResponse, inputs);
@@ -718,10 +752,6 @@ async function runCodeScan(): Promise<void> {
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath.path, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken);
-
-    if (!scanResponse) {
-      return;
-    }
 
     await handleScanResponse(scanResponse, inputs, finalConfigPath, context);
     logActCommentPreview(scanResponse.comments);

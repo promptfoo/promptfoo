@@ -24,6 +24,7 @@ import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -639,14 +640,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         guardrails = { flaggedInput, flaggedOutput, flagged };
       }
 
-      // Extract grounding metadata
-      const candidateWithMetadata = dataWithResponse
-        .filter((datum) => datum.candidates?.length)
-        .map((datum) => getCandidate(datum))
-        .find(
-          (c) =>
-            c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
-        );
+      const grounding = collectGroundingMetadata(dataWithResponse);
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
@@ -670,20 +664,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: {
-          ...(candidateWithMetadata?.groundingMetadata && {
-            groundingMetadata: candidateWithMetadata.groundingMetadata,
-          }),
-          ...(candidateWithMetadata?.groundingChunks && {
-            groundingChunks: candidateWithMetadata.groundingChunks,
-          }),
-          ...(candidateWithMetadata?.groundingSupports && {
-            groundingSupports: candidateWithMetadata.groundingSupports,
-          }),
-          ...(candidateWithMetadata?.webSearchQueries && {
-            webSearchQueries: candidateWithMetadata.webSearchQueries,
-          }),
-        },
+        metadata: { ...grounding },
       };
 
       // Handle function tool callbacks
