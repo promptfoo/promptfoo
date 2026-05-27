@@ -440,6 +440,23 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('preserves whether scenarios were omitted', async () => {
+    const baseConfig = {
+      prompts: ['prompt'],
+      providers: ['provider'],
+    };
+
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(baseConfig))
+      .mockReturnValueOnce(JSON.stringify({ ...baseConfig, scenarios: [] }));
+
+    const configWithoutScenarios = await combineConfigs(['without-scenarios.json']);
+    const configWithEmptyScenarios = await combineConfigs(['with-empty-scenarios.json']);
+
+    expect(configWithoutScenarios.scenarios).toBeUndefined();
+    expect(configWithEmptyScenarios.scenarios).toEqual([]);
+  });
+
   it('combines configs with provider-specific prompts', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
