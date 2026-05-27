@@ -1,10 +1,5 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/constants';
-import {
-  type ApiProvider,
-  type AssertionType,
-  type EvaluateStats,
-  ResultFailureReason,
-} from '../types/index';
+import { type ApiProvider, type AssertionType, type EvaluateStats } from '../types/index';
 import {
   accumulateResultAssertionTokenUsage,
   createAssertionTokenAccumulator,
@@ -148,13 +143,9 @@ export class RunStatsAccumulator {
       this.errorCount++;
       const category = categorizeError(result.error || '');
       this.errors[category]++;
-    }
-
-    if (
-      result.failureReason === ResultFailureReason.ERROR &&
-      result.error?.toLowerCase().includes('timed out')
-    ) {
-      this.foundTimedOutResult = true;
+      if (category === 'timeout') {
+        this.foundTimedOutResult = true;
+      }
     }
     this.foundAssertionTokenUsage =
       accumulateResultAssertionTokenUsage(this.assertionTokenUsage, result) ||

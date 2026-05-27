@@ -86,6 +86,10 @@ function containsPrivateIdentifierData(
     return true;
   }
 
+  if (prefix === 'openai' && /(?:^|:)ft:/i.test(suffix)) {
+    return true;
+  }
+
   return (
     suffix.includes('://') ||
     /[\\?#]/.test(suffix) ||
@@ -111,6 +115,9 @@ function sanitizeNamespacedTelemetryIdentifier(identifier: string, allowCatalogS
  * Redact configurable identifiers such as redteam plugins and strategies.
  */
 export function sanitizeTelemetryIdentifier(identifier: string): string {
+  if (identifier.toLowerCase().startsWith('custom:')) {
+    return 'custom:custom';
+  }
   return sanitizeNamespacedTelemetryIdentifier(identifier, false);
 }
 

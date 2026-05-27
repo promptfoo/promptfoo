@@ -554,6 +554,37 @@ export default class EvalResult {
     }
   }
 
+  /**
+   * Streams only explicitly selected rows, preserving the order in which their
+   * IDs were captured by the current evaluation invocation.
+   */
+  static async *findManyByIdsBatched(
+    resultIds: readonly string[],
+    opts?: { batchSize?: number },
+  ): AsyncGenerator<EvalResult[]> {
+    if (resultIds.length === 0) {
+      return;
+    }
+
+    const db = await getDb();
+    const batchSize = opts?.batchSize || 100;
+
+    for (let offset = 0; offset < resultIds.length; offset += batchSize) {
+      const ids = resultIds.slice(offset, offset + batchSize);
+      const results = await db
+        .select()
+        .from(evalResultsTable)
+        .where(inArray(evalResultsTable.id, ids))
+        .all();
+      const resultById = new Map(results.map((result) => [result.id, result]));
+
+      yield ids.flatMap((id) => {
+        const result = resultById.get(id);
+        return result ? [new EvalResult({ ...result, persisted: true })] : [];
+      });
+    }
+  }
+
   id: string;
   evalId: string;
   description?: string | null;

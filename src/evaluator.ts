@@ -2993,6 +2993,7 @@ class Evaluator {
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly invocationResultIds: string[] = [];
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: InternalEvaluateOptions) {
     this.testSuite = testSuite;
@@ -3118,7 +3119,7 @@ class Evaluator {
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
-      await this.evalRecord.addResult(row);
+      await this.addResult(row);
     } catch (error) {
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
@@ -3130,6 +3131,14 @@ class Evaluator {
     for (const writer of this.fileWriters) {
       await writer.write(row);
     }
+  }
+
+  private async addResult(row: EvaluateResult): Promise<EvalResult> {
+    const result = await this.evalRecord.addResult(row);
+    if (this.evalRecord.persisted && cliState.resume) {
+      this.invocationResultIds.push(result.id);
+    }
+    return result;
   }
 
   private async updatePromptMetricsForRow({
@@ -3424,7 +3433,7 @@ class Evaluator {
       timeoutMs,
       error,
     );
-    await this.evalRecord.addResult(timeoutResult);
+    await this.addResult(timeoutResult);
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4219,7 +4228,7 @@ class Evaluator {
       }
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
-      await this.evalRecord.addResult(timeoutResult);
+      await this.addResult(timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -4249,7 +4258,7 @@ class Evaluator {
     });
   }
 
-  private async *getTelemetryResultBatches(): AsyncGenerator<EvalResult[]> {
+  private async *getCompleteRunStatsResultBatches(): AsyncGenerator<EvalResult[]> {
     const retryErrorResultIds =
       this.evalRecord.persisted && cliState.retryMode && cliState._retryErrorResultIds?.length
         ? new Set(cliState._retryErrorResultIds)
@@ -4261,6 +4270,15 @@ class Evaluator {
           ? batch.filter((result) => !retryErrorResultIds.has(result.id))
           : batch;
       }
+      return;
+    }
+
+    yield this.evalRecord.results;
+  }
+
+  private async *getInvocationTelemetryResultBatches(): AsyncGenerator<EvalResult[]> {
+    if (this.evalRecord.persisted) {
+      yield* this.evalRecord.fetchResultsByIdsBatched(this.invocationResultIds);
       return;
     }
 
@@ -4293,12 +4311,24 @@ class Evaluator {
     const totalEvalTimeMs = Date.now() - startTime;
     this.evalRecord.setDurationMs(totalEvalTimeMs);
 
-    const { runStats, resultCount, hasTimedOutResult } = await computeRunStatsBatched({
-      resultBatches: this.getTelemetryResultBatches(),
+    const completeRunStats = await computeRunStatsBatched({
+      resultBatches: this.getCompleteRunStatsResultBatches(),
       stats: this.stats,
       providers: testSuite.providers,
     });
-    this.evalRecord.runStats = runStats;
+    this.evalRecord.runStats = completeRunStats.runStats;
+
+    // A resumed evaluation includes historic persisted rows in its complete summary,
+    // but eval_ran describes only work performed by this invocation.
+    const telemetryRunStats =
+      this.evalRecord.persisted && cliState.resume
+        ? await computeRunStatsBatched({
+            resultBatches: this.getInvocationTelemetryResultBatches(),
+            stats: this.stats,
+            providers: testSuite.providers,
+          })
+        : completeRunStats;
+    const { runStats, resultCount, hasTimedOutResult } = telemetryRunStats;
 
     const timeoutOccurred = evalTimedOut || hasTimedOutResult;
 

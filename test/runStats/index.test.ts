@@ -502,7 +502,7 @@ describe('computeRunStats', () => {
         latencyMs: 300,
         provider: { id: 'openai:gpt-4' },
         response: { cached: false },
-        error: 'Request timed out',
+        error: 'ETIMEDOUT while waiting for provider response',
         failureReason: ResultFailureReason.ERROR,
         gradingResult: {
           componentResults: [

@@ -69,6 +69,7 @@ describe('sanitizeTelemetryIdentifier', () => {
     expect(sanitizeTelemetryIdentifier('custom:./private/redteam-plugin.yaml')).toBe(
       'custom:custom',
     );
+    expect(sanitizeTelemetryIdentifier('custom:acme-prod-bypass-plan')).toBe('custom:custom');
     expect(sanitizeTelemetryIdentifier('bedrock:us.anthropic.claude-sonnet-4-6')).toBe(
       'bedrock:us.anthropic.claude-sonnet-4-6',
     );
@@ -115,6 +116,9 @@ describe('sanitizeTelemetryIdentifier', () => {
     expect(sanitizeTelemetryIdentifier('pii')).toBe('pii');
     expect(sanitizeTelemetryProviderIdentifier('internal-client-provider')).toBe('custom');
     expect(sanitizeTelemetryProviderIdentifier('unknown:team-provider')).toBe('custom');
+    expect(sanitizeTelemetryProviderIdentifier('openai:ft:gpt-4o-mini:acme:billing:job-id')).toBe(
+      'openai:custom',
+    );
   });
 });
 

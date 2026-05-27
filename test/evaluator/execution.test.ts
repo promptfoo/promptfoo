@@ -220,10 +220,11 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     const addResult = evalRecord.addResult.bind(evalRecord);
     vi.spyOn(evalRecord, 'addResult').mockImplementation(async (row) => {
-      await addResult(row);
+      const result = await addResult(row);
       if (row.testIdx === 1) {
         releaseFirst();
       }
+      return result;
     });
 
     await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });

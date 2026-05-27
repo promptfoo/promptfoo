@@ -723,10 +723,17 @@ export default class Eval {
       // Notify watchers that new results are available, passing the eval ID
       updateSignalFile(this.id);
     }
+    return newResult;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
+      yield batch;
+    }
+  }
+
+  async *fetchResultsByIdsBatched(resultIds: readonly string[], batchSize: number = 100) {
+    for await (const batch of EvalResult.findManyByIdsBatched(resultIds, { batchSize })) {
       yield batch;
     }
   }
