@@ -270,7 +270,8 @@ describe('AwsBedrockGenericProvider', () => {
     expect(mockGetPricingData).toHaveBeenCalledTimes(1);
   });
 
-  it('should retry pricing after a transient failed lookup', async () => {
+  it('should retry pricing after a brief cooldown for a transient failed lookup', async () => {
+    vi.useFakeTimers();
     const pricingData = {
       models: new Map([['Nova Micro', { input: 0.001, output: 0.002 }]]),
       region: 'us-east-1',
@@ -279,9 +280,18 @@ describe('AwsBedrockGenericProvider', () => {
     const provider = new TestBedrockProvider({ region: 'us-east-1' });
     mockGetPricingData.mockResolvedValueOnce(null).mockResolvedValueOnce(pricingData);
 
-    await expect(provider.getPricingDataForCost()).resolves.toBeNull();
-    await expect(provider.getPricingDataForCost()).resolves.toEqual(pricingData);
-    expect(mockGetPricingData).toHaveBeenCalledTimes(2);
+    try {
+      await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+      await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+      expect(mockGetPricingData).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await expect(provider.getPricingDataForCost()).resolves.toEqual(pricingData);
+      expect(mockGetPricingData).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {

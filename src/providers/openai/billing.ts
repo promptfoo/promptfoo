@@ -523,6 +523,33 @@ function getModelRates(
   };
 }
 
+function getExplicitObjectCostRates(
+  config: ProviderConfig,
+  usage: OpenAIBillingUsage,
+): OpenAIModelRates | undefined {
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  if (!objectCost || usage.imageInputTokens > 0 || usage.imageOutputTokens > 0) {
+    return undefined;
+  }
+
+  const audioInputCost = config.audioInputCost ?? config.audioCost ?? objectCost.audioInput;
+  const audioOutputCost = config.audioOutputCost ?? config.audioCost ?? objectCost.audioOutput;
+  if (
+    (usage.audioInputTokens > 0 && audioInputCost === undefined) ||
+    (usage.audioOutputTokens > 0 && audioOutputCost === undefined)
+  ) {
+    return undefined;
+  }
+
+  return {
+    text: { input: objectCost.input, output: objectCost.output },
+    ...(usage.audioInputTokens > 0 || usage.audioOutputTokens > 0
+      ? { audio: { input: audioInputCost, output: audioOutputCost } }
+      : {}),
+  };
+}
+
 function getNumericValue(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -689,7 +716,9 @@ export function calculateOpenAIUsageCost(
 
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const rates = getModelRates(modelName, tier, usage.totalInputTokens);
+  const rates =
+    getModelRates(modelName, tier, usage.totalInputTokens) ??
+    getExplicitObjectCostRates(config, usage);
   if (!rates) {
     return undefined;
   }

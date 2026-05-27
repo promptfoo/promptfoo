@@ -688,31 +688,43 @@ export function calculateOpenAICost(
   }
 
   const model = OPENAI_BILLING_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  const defaultCost = model?.cost ?? objectCost;
+  if (!defaultCost) {
     return undefined;
   }
 
   let totalCost = 0;
 
-  const { inputCost, outputCost } = getTokenCostRates(config, model.cost);
+  const { inputCost, outputCost } = getTokenCostRates(config, defaultCost);
   totalCost += inputCost * promptTokens + outputCost * completionTokens;
 
-  if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
-    const objectCost =
-      typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
-    const modelAudioInputCost: number =
-      'audioInput' in model.cost && typeof model.cost.audioInput === 'number'
-        ? model.cost.audioInput
-        : 0;
-    const modelAudioOutputCost: number =
-      'audioOutput' in model.cost && typeof model.cost.audioOutput === 'number'
-        ? model.cost.audioOutput
-        : 0;
-    const audioInputCost =
-      config.audioInputCost ?? config.audioCost ?? objectCost?.audioInput ?? modelAudioInputCost;
-    const audioOutputCost =
-      config.audioOutputCost ?? config.audioCost ?? objectCost?.audioOutput ?? modelAudioOutputCost;
-    totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
+  const hasDefaultAudioPricing = 'audioInput' in defaultCost || 'audioOutput' in defaultCost;
+  const audioInputCost =
+    config.audioInputCost ??
+    config.audioCost ??
+    objectCost?.audioInput ??
+    (hasDefaultAudioPricing ? defaultCost.audioInput : undefined);
+  const audioOutputCost =
+    config.audioOutputCost ??
+    config.audioCost ??
+    objectCost?.audioOutput ??
+    (hasDefaultAudioPricing ? defaultCost.audioOutput : undefined);
+
+  if (
+    !model &&
+    ((audioPromptTokens > 0 && audioInputCost === undefined) ||
+      (audioCompletionTokens > 0 && audioOutputCost === undefined))
+  ) {
+    return undefined;
+  }
+
+  if (hasDefaultAudioPricing || audioInputCost !== undefined || audioOutputCost !== undefined) {
+    const modelAudioInputCost: number = typeof audioInputCost === 'number' ? audioInputCost : 0;
+    const modelAudioOutputCost: number = typeof audioOutputCost === 'number' ? audioOutputCost : 0;
+    totalCost +=
+      modelAudioInputCost * audioPromptTokens + modelAudioOutputCost * audioCompletionTokens;
   }
 
   return totalCost;

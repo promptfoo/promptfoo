@@ -500,6 +500,18 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBe(7.5);
   });
 
+  it('should use complete object custom rates for an unknown audio model', () => {
+    const cost = calculateOpenAICost(
+      'custom-audio-model',
+      { cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 } },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBe(7.5);
+  });
+
   it('should prefer custom audioCost over object custom audio costs', () => {
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',

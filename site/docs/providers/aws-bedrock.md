@@ -1131,7 +1131,7 @@ The Converse provider (`bedrock:converse:<model-id>`) currently uses Promptfoo's
 **How it works:**
 
 1. First eval checks the cache for pricing data
-2. If not cached, fetches from AWS Pricing API (~500ms)
+2. If not cached, fetches from AWS Pricing API; failed lookups are briefly suppressed on that provider before being retried
 3. Caches pricing data
 4. Subsequent evals use cached pricing (0ms overhead)
 5. Does not add an estimated automatic charge when regional pricing cannot be retrieved; use an explicit `cost` override when deterministic offline cost reporting is required

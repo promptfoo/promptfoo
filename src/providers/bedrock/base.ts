@@ -39,6 +39,7 @@ export interface BedrockOptions {
 }
 
 const BEDROCK_CACHE_KEY_HMAC_KEY = 'promptfoo:bedrock:cache-key:v1';
+const BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS = 30_000;
 
 function hashBedrockCacheValue(value: unknown) {
   return createHmac('sha256', BEDROCK_CACHE_KEY_HMAC_KEY)
@@ -126,6 +127,7 @@ export abstract class AwsBedrockGenericProvider {
   config: BedrockOptions;
   private pricingData?: BedrockPricingData;
   private pricingDataPromise?: Promise<BedrockPricingData | null>;
+  private pricingRetryAfter = 0;
 
   constructor(
     modelName: string,
@@ -249,6 +251,14 @@ export abstract class AwsBedrockGenericProvider {
       return this.pricingData;
     }
 
+    const pricingRetryDelay = this.pricingRetryAfter - Date.now();
+    if (pricingRetryDelay > 0) {
+      logger.debug('[Bedrock]: Skipping pricing fetch during failure retry delay', {
+        retryInMs: pricingRetryDelay,
+      });
+      return null;
+    }
+
     if (this.pricingDataPromise !== undefined) {
       return this.pricingDataPromise;
     }
@@ -263,6 +273,7 @@ export abstract class AwsBedrockGenericProvider {
         logger.debug('[Bedrock]: Failed to resolve credentials for pricing fetch', {
           error: String(err),
         });
+        this.pricingRetryAfter = Date.now() + BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS;
         return null;
       }
 
@@ -270,10 +281,14 @@ export abstract class AwsBedrockGenericProvider {
         const data = await getPricingData(this.getRegion(), credentials);
         if (data) {
           this.pricingData = data;
+          this.pricingRetryAfter = 0;
+        } else {
+          this.pricingRetryAfter = Date.now() + BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS;
         }
         return data;
       } catch (err) {
         logger.debug('[Bedrock]: Failed to fetch pricing data', { error: String(err) });
+        this.pricingRetryAfter = Date.now() + BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS;
         return null;
       }
     })().finally(() => {
