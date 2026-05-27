@@ -227,9 +227,11 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             archive: tar.gz
+            manylinux_image: quay.io/pypa/manylinux_2_28_x86_64@sha256:f5aac11b7b2e48e4bb417cbc9c65f7cd923514d6e9914e7066ce4613c3dd77b6
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             archive: tar.gz
+            manylinux_image: quay.io/pypa/manylinux_2_28_aarch64@sha256:78c91b48c278d82bab9a4b0e82e84fb2485a890bf62196d50bb0d91d550a64ad
           - os: macos-15-intel
             platform: darwin-x64
             archive: tar.gz
@@ -256,6 +258,27 @@ jobs:
       - run: npm install -g npm@11.11.0
       - run: npm ci
 
+      - name: Rebuild native module for manylinux compatibility
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          MANYLINUX_IMAGE: ${{ matrix.manylinux_image }}
+        run: |
+          set -euo pipefail
+          native_build_dir="$RUNNER_TEMP/better-sqlite3-manylinux"
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          cp -R node_modules/better-sqlite3 "$native_build_dir"
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --volume "$native_build_dir:/module" \
+            --volume "$node_root:/opt/node:ro" \
+            --workdir /module \
+            "$MANYLINUX_IMAGE" \
+            /bin/bash -lc 'export PATH=/opt/node/bin:$PATH; node /opt/node/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release --nodedir=/opt/node'
+          rm -rf node_modules/better-sqlite3/build
+          cp -R "$native_build_dir/build" node_modules/better-sqlite3/build
+
       - name: Build bundle
         run: npm run bundle:sea
         env:
@@ -267,6 +290,11 @@ jobs:
         run: ./scripts/smoke-test.sh
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 'true'
+
+      - name: Verify Linux compatibility floor
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash ./scripts/verify-linux-bundle-compat.sh
 
       - name: Create archive (Unix)
         if: matrix.archive == 'tar.gz'
@@ -327,17 +355,21 @@ jobs:
             # The bundled Node 24 runtime requires GLIBC_2.28.
             wheel_platform: manylinux_2_28_x86_64
             binary_name: promptfoo
+            manylinux_image: quay.io/pypa/manylinux_2_28_x86_64@sha256:f5aac11b7b2e48e4bb417cbc9c65f7cd923514d6e9914e7066ce4613c3dd77b6
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             wheel_platform: manylinux_2_28_aarch64
             binary_name: promptfoo
+            manylinux_image: quay.io/pypa/manylinux_2_28_aarch64@sha256:78c91b48c278d82bab9a4b0e82e84fb2485a890bf62196d50bb0d91d550a64ad
           - os: macos-15-intel
             platform: darwin-x64
-            wheel_platform: macosx_10_15_x86_64
+            # Bundled Node 24 requires macOS 13.5+, which wheel tags cannot
+            # represent without overstating compatibility. macOS 14 is safe.
+            wheel_platform: macosx_14_0_x86_64
             binary_name: promptfoo
           - os: macos-15
             platform: darwin-arm64
-            wheel_platform: macosx_11_0_arm64
+            wheel_platform: macosx_14_0_arm64
             binary_name: promptfoo
           - os: windows-latest
             platform: win32-x64
@@ -355,6 +387,7 @@ jobs:
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
         with:
           enable-cache: true
+          version: '0.11.16'
 
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
@@ -363,6 +396,27 @@ jobs:
 
       - run: npm install -g npm@11.11.0
       - run: npm ci
+
+      - name: Rebuild native module for manylinux compatibility
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          MANYLINUX_IMAGE: ${{ matrix.manylinux_image }}
+        run: |
+          set -euo pipefail
+          native_build_dir="$RUNNER_TEMP/better-sqlite3-manylinux"
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          cp -R node_modules/better-sqlite3 "$native_build_dir"
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --volume "$native_build_dir:/module" \
+            --volume "$node_root:/opt/node:ro" \
+            --workdir /module \
+            "$MANYLINUX_IMAGE" \
+            /bin/bash -lc 'export PATH=/opt/node/bin:$PATH; node /opt/node/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release --nodedir=/opt/node'
+          rm -rf node_modules/better-sqlite3/build
+          cp -R "$native_build_dir/build" node_modules/better-sqlite3/build
 
       - name: Build SEA binary
         run: npm run bundle:sea
@@ -384,6 +438,11 @@ jobs:
           sed -i.bak "s/__version__ = \".*\"/__version__ = \"${python_version}\"/" python/src/promptfoo/__init__.py
           rm -f python/src/promptfoo/__init__.py.bak
 
+      - name: Verify Linux compatibility floor
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash ./scripts/verify-linux-bundle-compat.sh
+
       - name: Build and tag wheel
         shell: bash
         working-directory: python
@@ -392,7 +451,7 @@ jobs:
         run: |
           set -euo pipefail
           uv build --wheel
-          uv pip install wheel --system
+          uv pip install wheel==0.45.1 --system
           wheel_file="$(ls dist/*.whl)"
           python -m wheel tags --platform-tag="$WHEEL_PLATFORM" --remove "$wheel_file"
           ls -la dist/

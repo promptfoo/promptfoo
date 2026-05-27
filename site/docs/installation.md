@@ -62,9 +62,11 @@ Install promptfoo using a standalone installer, [pip](https://pip.pypa.io/), [np
 </Tabs>
 
 :::note
-The standalone installers include their own runtime on macOS, Linux with glibc 2.28+
-(x64 and arm64), and Windows x64. Other environments fall back to npm and require
-[Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0`.
+The standalone installers include their own runtime on macOS 13.5+ (x64 and arm64),
+Linux with glibc 2.28+ (x64 and arm64), and Windows x64. The Python package supports
+those Linux and Windows platforms and macOS 14+ (x64 and arm64). Other environments
+fall back to npm and require [Node.js](https://nodejs.org/en/download) `^20.20.0` or
+`>=22.22.0`.
 
 Providers that rely on optional Node packages, such as local Transformers models,
 browser automation, or some cloud-provider SDKs, require the npm or npx installation

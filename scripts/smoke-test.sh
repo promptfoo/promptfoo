@@ -730,6 +730,34 @@ EOF
   chmod +x "$fake_bin/npm"
 }
 
+create_fake_unsupported_macos_bin() {
+  local fake_bin="$1"
+
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  cat >"$fake_bin/uname" <<'EOF'
+#!/bin/sh
+case "$1" in
+-s) echo Darwin ;;
+-m) echo x86_64 ;;
+*) exit 1 ;;
+esac
+EOF
+  chmod +x "$fake_bin/uname"
+
+  cat >"$fake_bin/sw_vers" <<'EOF'
+#!/bin/sh
+echo 13.4.1
+EOF
+  chmod +x "$fake_bin/sw_vers"
+
+  cat >"$fake_bin/sysctl" <<'EOF'
+#!/bin/sh
+echo 0
+EOF
+  chmod +x "$fake_bin/sysctl"
+}
+
 test_install_script_syntax() {
   log_test "install.sh syntax is valid"
 
@@ -827,6 +855,36 @@ test_install_script_dir_without_version_uses_latest() {
   fi
 
   log_fail "install.sh --dir without version failed: $output"
+  return 1
+}
+
+test_install_script_unsupported_macos_uses_npm() {
+  log_test "install.sh uses npm when macOS cannot run bundled Node"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsupported-macos.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_macos_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] &&
+      [[ "$output" == *"requires macOS 13.5+"* ]] &&
+      [[ "$output" == *"darwin-unsupported-x64"* ]]; then
+      log_pass "install.sh sends unsupported macOS versions through npm fallback"
+      return 0
+    fi
+    log_fail "install.sh did not describe or complete legacy macOS fallback: $output"
+    return 1
+  fi
+
+  log_fail "install.sh legacy macOS fallback failed: $output"
   return 1
 }
 
@@ -968,6 +1026,7 @@ main() {
   test_install_script_dir_requires_value
   test_install_script_npm_fallback_preserves_shims
   test_install_script_dir_without_version_uses_latest
+  test_install_script_unsupported_macos_uses_npm
   test_install_ps1_uses_package_entrypoint
   test_install_ps1_syntax
   test_site_installer_mirrors

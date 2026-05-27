@@ -149,14 +149,27 @@ parse_args() {
 # ─── Platform Detection ──────────────────────────────────────────────────────
 
 detect_platform() {
-  local os arch
+  local os arch macos_version major minor
 
   os="$(uname -s)"
   arch="$(uname -m)"
 
   case "$os" in
   Darwin)
-    os="darwin"
+    macos_version=$(sw_vers -productVersion 2>/dev/null || true)
+    if [[ "$macos_version" =~ ^([0-9]+)\.([0-9]+) ]]; then
+      major="${BASH_REMATCH[1]}"
+      minor="${BASH_REMATCH[2]}"
+      if ((major < 13 || (major == 13 && minor < 5))); then
+        warn "macOS $macos_version cannot run the standalone binary, which requires macOS 13.5+."
+        os="darwin-unsupported"
+      else
+        os="darwin"
+      fi
+    else
+      warn "Unable to determine macOS version; using npm installation instead of a standalone binary."
+      os="darwin-unsupported"
+    fi
     ;;
   Linux)
     os="linux"
