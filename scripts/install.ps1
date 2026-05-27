@@ -173,12 +173,11 @@ function Install-PromptfooBinary {
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("promptfoo-" + [Guid]::NewGuid().ToString("N"))
     $tempFile = Join-Path $tempDir $archiveName
     $binDir = Join-Path $InstallDir "bin"
+    $stagingBinDir = Join-Path $InstallDir (".bin-install-" + [Guid]::NewGuid().ToString("N"))
+    $previousBinDir = $null
 
     Write-Info "Installing promptfoo v$Version for $Platform..."
     Write-Info "Downloading from $downloadUrl"
-
-    # Create installation directory
-    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     try {
@@ -198,20 +197,38 @@ function Install-PromptfooBinary {
             return Install-PromptfooNpm -Version $Version -InstallDir $InstallDir
         }
 
-        # Extract archive
-        Write-Info "Extracting to $binDir"
-        Expand-Archive -Path $tempFile -DestinationPath $binDir -Force
+        # Extract and validate a complete replacement before altering an existing install.
+        Write-Info "Extracting to $stagingBinDir"
+        New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+        Expand-Archive -Path $tempFile -DestinationPath $stagingBinDir -Force
 
         # Create pf alias
-        $promptfooExe = Join-Path $binDir "promptfoo.exe"
+        $promptfooExe = Join-Path $stagingBinDir "promptfoo.exe"
         if (-not (Test-Path -LiteralPath $promptfooExe -PathType Leaf)) {
             throw "Downloaded archive does not contain promptfoo.exe."
         }
-        Copy-Item -LiteralPath $promptfooExe -Destination (Join-Path $binDir "pf.exe") -Force
+        Copy-Item -LiteralPath $promptfooExe -Destination (Join-Path $stagingBinDir "pf.exe") -Force
+
+        if (Test-Path -LiteralPath $binDir) {
+            $previousBinDir = Join-Path $InstallDir (".bin-backup-" + [Guid]::NewGuid().ToString("N"))
+            Move-Item -LiteralPath $binDir -Destination $previousBinDir
+        }
+        try {
+            Move-Item -LiteralPath $stagingBinDir -Destination $binDir
+        } catch {
+            if ($null -ne $previousBinDir -and -not (Test-Path -LiteralPath $binDir)) {
+                Move-Item -LiteralPath $previousBinDir -Destination $binDir
+            }
+            throw
+        }
+        if ($null -ne $previousBinDir) {
+            Remove-Item -LiteralPath $previousBinDir -Recurse -Force
+        }
 
         return $true
     } finally {
         Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stagingBinDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 

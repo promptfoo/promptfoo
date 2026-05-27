@@ -1206,6 +1206,61 @@ EOF
   return 1
 }
 
+test_install_script_replaces_existing_payload() {
+  log_test "install.sh replaces existing standalone payloads"
+
+  local fake_root fake_bin install_dir initial_payload updated_payload archive output
+  fake_root=$(mktemp -d "$TEST_ROOT/replace-payload.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  initial_payload="$fake_root/initial"
+  updated_payload="$fake_root/updated"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$initial_payload/assets" "$updated_payload"
+
+  cat >"$initial_payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo old
+EOF
+  chmod +x "$initial_payload/promptfoo"
+  printf "obsolete\n" >"$initial_payload/assets/obsolete.txt"
+  tar -czf "$archive" -C "$initial_payload" promptfoo assets
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if ! PATH="$fake_bin:$PATH" \
+    PROMPTFOO_TEST_ARCHIVE="$archive" \
+    PROMPTFOO_NO_MODIFY_PATH=1 \
+    PROMPTFOO_DISABLE_TELEMETRY=true \
+    bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 >/dev/null 2>&1; then
+    log_fail "install.sh failed to create the initial standalone install"
+    return 1
+  fi
+
+  cat >"$updated_payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo new
+EOF
+  chmod +x "$updated_payload/promptfoo"
+  tar -czf "$archive" -C "$updated_payload" promptfoo
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ "$("$install_dir/bin/promptfoo")" == "new" ]] &&
+      [[ ! -e "$install_dir/bin/assets/obsolete.txt" ]]; then
+      log_pass "install.sh swaps in a clean standalone payload on upgrade"
+      return 0
+    fi
+  fi
+
+  log_fail "install.sh retained stale standalone payload content: $output"
+  return 1
+}
+
 test_install_script_rejects_unsafe_archive_paths() {
   log_test "install.sh rejects archive path traversal"
 
@@ -1339,6 +1394,8 @@ test_install_ps1_uses_package_entrypoint() {
     ! grep -q 'cmd /c \$promptfooCmd' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q 'Test-Path -LiteralPath \$promptfooExe -PathType Leaf' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q 'Downloaded archive does not contain promptfoo.exe' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '\.bin-install-' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q 'Move-Item -LiteralPath \$stagingBinDir -Destination \$binDir' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q '& \$promptfooCmd --version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
     log_pass "install.ps1 uses the package entrypoint and safe fallback/download guards"
     return 0
@@ -1479,6 +1536,7 @@ main() {
   test_install_script_npm_fallback_requires_npm
   test_install_script_npm_fallback_requires_supported_node
   test_install_script_downloads_unprefixed_release_tag
+  test_install_script_replaces_existing_payload
   test_install_script_rejects_unsafe_archive_paths
   test_install_script_rejects_archive_link_entries
   test_install_script_fish_path_handles_literal_special_characters

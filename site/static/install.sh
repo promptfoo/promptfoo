@@ -336,7 +336,7 @@ install_npm() {
 install_binary() {
   local version="$1"
   local platform="$2"
-  local archive_name download_url temp_file extract_dir archive_entry
+  local archive_name download_url temp_file extract_dir archive_entry install_staging backup_parent
 
   case "$platform" in
   linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64) ;;
@@ -406,13 +406,39 @@ install_binary() {
     error "Downloaded archive does not contain an executable promptfoo binary."
   fi
 
+  # Prepare the complete replacement next to the current install so the final
+  # rename stays on one filesystem and stale files cannot survive an upgrade.
   info "Installing to $BIN_DIR"
-  mkdir -p "$BIN_DIR"
-  cp -R "$extract_dir/payload/." "$BIN_DIR/"
-  chmod +x "$BIN_DIR/promptfoo"
+  mkdir -p "$INSTALL_DIR"
+  install_staging=$(mktemp -d "$INSTALL_DIR/.bin-install.XXXXXXXX")
+  if ! cp -R "$extract_dir/payload/." "$install_staging/"; then
+    rm -f "$temp_file"
+    rm -rf "$extract_dir" "$install_staging"
+    error "Downloaded archive could not be staged for installation."
+  fi
+  chmod +x "$install_staging/promptfoo"
+  ln -sf "promptfoo" "$install_staging/pf"
 
-  # Create 'pf' alias
-  ln -sf "$BIN_DIR/promptfoo" "$BIN_DIR/pf"
+  backup_parent=""
+  if [[ -e "$BIN_DIR" ]]; then
+    backup_parent=$(mktemp -d "$INSTALL_DIR/.bin-backup.XXXXXXXX")
+    if ! mv "$BIN_DIR" "$backup_parent/bin"; then
+      rm -f "$temp_file"
+      rm -rf "$extract_dir" "$install_staging" "$backup_parent"
+      error "Existing installation could not be prepared for replacement."
+    fi
+  fi
+  if ! mv "$install_staging" "$BIN_DIR"; then
+    if [[ -n "$backup_parent" && -d "$backup_parent/bin" ]]; then
+      mv "$backup_parent/bin" "$BIN_DIR" || true
+    fi
+    rm -f "$temp_file"
+    rm -rf "$extract_dir" "$install_staging" "$backup_parent"
+    error "New installation could not replace the existing installation."
+  fi
+  if [[ -n "$backup_parent" ]]; then
+    rm -rf "$backup_parent"
+  fi
 
   # Cleanup
   rm -f "$temp_file"
