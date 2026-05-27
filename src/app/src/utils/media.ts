@@ -93,10 +93,20 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
     return withApiBase(`/api/media/${path}`);
   }
 
-  // Only allow safe internal paths and data URIs
-  // External URLs (http://, https://, //) are NOT allowed to prevent SSRF
+  // Only allow safe internal paths, the configured API origin, and data URIs.
+  // External URLs (http://, https://, //) are NOT allowed to prevent untrusted
+  // eval content from causing browser requests.
   // See SECURITY.md - test data and model outputs are untrusted inputs
   if (uri.startsWith('/api/') || uri.startsWith('data:')) {
+    return uri;
+  }
+
+  if (!uri.includes('/api/blobs/') && !uri.includes('/api/media/')) {
+    return undefined;
+  }
+
+  const apiBase = getApiBaseUrl();
+  if (apiBase && uri.startsWith(`${apiBase}/api/`)) {
     return uri;
   }
 

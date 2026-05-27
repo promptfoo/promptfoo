@@ -833,6 +833,22 @@ describe('EvalOutputCell', () => {
     ]);
   });
 
+  it('does not render external markdown images from untrusted output text', () => {
+    const propsWithExternalMarkdownImage: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: '![External image](https://attacker.example/track.png)',
+      },
+    };
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...propsWithExternalMarkdownImage} />,
+    );
+
+    expect(container.querySelector('img[src="https://attacker.example/track.png"]')).toBeNull();
+  });
+
   it('deduplicates inline image from structured images list', () => {
     const dataUri =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

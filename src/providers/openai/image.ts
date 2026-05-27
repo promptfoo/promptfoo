@@ -697,6 +697,7 @@ function isUnsafeIpv6Address(address: string): boolean {
   const isLoopback = bytes.slice(0, 15).every((byte) => byte === 0) && bytes[15] === 1;
   const isUniqueLocal = (bytes[0] & 0xfe) === 0xfc;
   const isLinkLocal = bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80;
+  const isDeprecatedSiteLocal = bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0;
   const isMulticast = bytes[0] === 0xff;
   const isDocumentation =
     bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x0d && bytes[3] === 0xb8;
@@ -707,6 +708,7 @@ function isUnsafeIpv6Address(address: string): boolean {
     isIpv4Compatible ||
     isUniqueLocal ||
     isLinkLocal ||
+    isDeprecatedSiteLocal ||
     isMulticast ||
     isDocumentation ||
     isLocalUseNat64 ||

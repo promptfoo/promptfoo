@@ -666,6 +666,15 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri('/api/media/test.png')).toBe('/api/media/test.png');
   });
 
+  it('should pass through paths on the configured API origin only', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+
+    expect(resolveBlobUri('https://api.example.com/api/blobs/abc123')).toBe(
+      'https://api.example.com/api/blobs/abc123',
+    );
+    expect(resolveBlobUri('https://api.example.com.evil/api/blobs/abc123')).toBeUndefined();
+  });
+
   it('should pass through data: URIs', () => {
     const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
     expect(resolveBlobUri(dataUri)).toBe(dataUri);
@@ -710,6 +719,15 @@ describe('resolveImageSource security', () => {
 
   it('should return promptfoo blob references', () => {
     expect(resolveImageSource('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
+  });
+
+  it('should return normalized blob paths on the configured API origin', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+
+    expect(resolveImageSource('https://api.example.com/api/blobs/abc123')).toBe(
+      'https://api.example.com/api/blobs/abc123',
+    );
+    expect(resolveImageSource('https://attacker.example/api/blobs/abc123')).toBeUndefined();
   });
 
   it('should return storage references', () => {

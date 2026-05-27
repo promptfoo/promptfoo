@@ -626,6 +626,16 @@ describe('OpenAI Image Provider Functions', () => {
       expect(lookup).not.toHaveBeenCalled();
     });
 
+    it('should block deprecated IPv6 site-local targets before fetching', async () => {
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://[fec0::1]/generated.png' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
+    });
+
     it('should block NAT64 IPv6 targets that translate to private IPv4 addresses before fetching', async () => {
       const result = await buildSafeStructuredImageOutputs({
         data: [{ url: 'https://[64:ff9b::0a00:0005]/generated.png' }],
