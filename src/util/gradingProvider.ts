@@ -9,6 +9,17 @@ export const GRADING_PROVIDER_TYPE_KEYS = [
   'moderation',
 ] as const;
 
+function isTypedProviderValue(value: unknown): boolean {
+  if (typeof value === 'string' || isApiProvider(value)) {
+    return true;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const id = (value as { id?: unknown }).id;
+  return typeof id === 'string' && id.length > 0;
+}
+
 export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMap {
   return Boolean(
     provider &&
@@ -16,7 +27,11 @@ export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMa
       !Array.isArray(provider) &&
       !isApiProvider(provider) &&
       !Object.hasOwn(provider, 'id') &&
-      GRADING_PROVIDER_TYPE_KEYS.some((providerType) => Object.hasOwn(provider, providerType)),
+      GRADING_PROVIDER_TYPE_KEYS.some(
+        (providerType) =>
+          Object.hasOwn(provider, providerType) &&
+          isTypedProviderValue((provider as Record<string, unknown>)[providerType]),
+      ),
   );
 }
 

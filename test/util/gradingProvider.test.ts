@@ -41,12 +41,15 @@ describe('isProviderTypeMap', () => {
       false,
     ],
     ['ProviderOptionsMap (unknown key)', { 'litellm:judge': { config: {} } }, false],
+    ['ProviderOptionsMap (type-named key)', { text: { config: {} } }, false],
+    ['type key with undefined value', { text: undefined }, false],
   ])('returns false for %s', (_label, value, expected) => {
     expect(isProviderTypeMap(value)).toBe(expected);
   });
 
   it.each([
     ['text', { text: 'litellm:judge' }],
+    ['text ProviderOptions', { text: { id: 'litellm:judge', config: {} } }],
     ['embedding', { embedding: 'litellm:embed' }],
     ['classification', { classification: 'classifier' }],
     ['moderation', { moderation: 'moderator' }],
