@@ -302,6 +302,17 @@ interface CodexAppServerTurnState {
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
+  /**
+   * Count of `turn/started` notifications received. Each corresponds to one
+   * Codex app-server LLM round-trip. We emit a `gen_ai.turn N` marker span
+   * between `turn/started` and `turn/completed` so trace assertions can count
+   * internal turns hidden inside the wrapping `chat *` provider span.
+   */
+  turnCount: number;
+  /** Active `gen_ai.turn` span, opened on `turn/started`. */
+  activeTurnSpan?: Span;
+  /** 1-based index of the currently open turn, stamped on item spans. */
+  activeTurnIndex: number;
 }
 
 interface ThreadHandle {
@@ -2149,6 +2160,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       activeSpans: new Map(),
       itemStartTimes: new Map(),
       lastEventTime: Date.now(),
+      turnCount: 0,
+      activeTurnSpan: undefined,
+      activeTurnIndex: 0,
     };
   }
 
@@ -2226,6 +2240,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         if (typeof params.turn?.id === 'string') {
           this.updateTurnStateId(state, params.turn.id);
         }
+        this.startTurnSpan(state, eventTime);
         break;
       case 'item/started':
         this.handleItemStarted(state, params.item, eventTime);
@@ -2248,6 +2263,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         if (params.turn?.status === 'failed') {
           state.error = params.turn?.error?.message ?? 'Codex app-server turn failed';
         }
+        this.endTurnSpan(state, eventTime, state.error);
         state.completed.resolve();
         break;
       case 'error':
@@ -2260,6 +2276,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           break;
         }
         state.error = params.error?.message ?? 'Codex app-server error';
+        this.endTurnSpan(state, eventTime, state.error);
         state.completed.resolve();
         break;
     }
@@ -2277,7 +2294,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     const itemId = String(item.id);
-    const span = this.startItemSpan(item, itemId);
+    const span = this.startItemSpan(
+      item,
+      itemId,
+      undefined,
+      state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+    );
     state.activeSpans.set(itemId, span);
     state.itemStartTimes.set(itemId, eventTime);
   }
@@ -2308,7 +2330,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();
     const span =
       state.activeSpans.get(itemId) ??
-      this.startItemSpan(completedItem, itemId, state.lastEventTime);
+      this.startItemSpan(
+        completedItem,
+        itemId,
+        state.lastEventTime,
+        state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+      );
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
     this.applyItemCompletionAttributes(span, completedItem, eventTime, startTime);
     span.end();
@@ -3095,16 +3122,83 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.deepTracingWarningShown = true;
   }
 
-  private startItemSpan(item: any, itemId: string, startTime?: number): Span {
+  private startItemSpan(
+    item: any,
+    itemId: string,
+    startTime?: number,
+    turnIndex?: number,
+  ): Span {
     return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
       attributes: {
         'codex.app_server.item.id': itemId,
         'codex.app_server.item.type': item?.type ?? 'unknown',
+        ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
       },
     });
+  }
+
+  private startTurnSpan(state: CodexAppServerTurnState, eventTime: number): void {
+    if (state.activeTurnSpan) {
+      try {
+        state.activeTurnSpan.end(eventTime);
+      } catch {
+        // ignore
+      }
+      state.activeTurnSpan = undefined;
+    }
+    state.turnCount += 1;
+    state.activeTurnIndex = state.turnCount;
+    try {
+      state.activeTurnSpan = trace
+        .getTracer('promptfoo.codex-app-server')
+        .startSpan(`gen_ai.turn ${state.turnCount}`, {
+          kind: SpanKind.INTERNAL,
+          startTime: eventTime,
+          attributes: {
+            'gen_ai.turn.index': state.turnCount,
+            'gen_ai.system': 'openai',
+          },
+        });
+    } catch (err) {
+      logger.warn(`[CodexAppServer] Failed to start turn span: ${err}`);
+      state.activeTurnSpan = undefined;
+    }
+  }
+
+  private endTurnSpan(
+    state: CodexAppServerTurnState,
+    eventTime: number,
+    errorMessage?: string,
+  ): void {
+    const span = state.activeTurnSpan;
+    if (!span) {
+      return;
+    }
+    try {
+      if (state.rawTokenUsage) {
+        const usage = state.rawTokenUsage as Record<string, unknown>;
+        const inputTokens = usage.input_tokens ?? usage.inputTokens;
+        const outputTokens = usage.output_tokens ?? usage.outputTokens;
+        if (typeof inputTokens === 'number') {
+          span.setAttribute('gen_ai.usage.input_tokens', inputTokens);
+        }
+        if (typeof outputTokens === 'number') {
+          span.setAttribute('gen_ai.usage.output_tokens', outputTokens);
+        }
+      }
+      if (errorMessage) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+      } else {
+        span.setStatus({ code: SpanStatusCode.OK });
+      }
+      span.end(eventTime);
+    } catch (err) {
+      logger.warn(`[CodexAppServer] Failed to end turn span: ${err}`);
+    }
+    state.activeTurnSpan = undefined;
   }
 
   private applyItemCompletionAttributes(
@@ -3132,6 +3226,19 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
+    if (state.activeTurnSpan) {
+      logger.warn('[CodexAppServer] Turn span not properly closed');
+      try {
+        state.activeTurnSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'Turn span not properly closed',
+        });
+        state.activeTurnSpan.end();
+      } catch {
+        // ignore
+      }
+      state.activeTurnSpan = undefined;
+    }
   }
 
   private getSpanNameForItem(item: any): string {
