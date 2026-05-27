@@ -562,11 +562,22 @@ function coerceToolPayload(value: unknown): string | undefined {
   return undefined;
 }
 
+function firstNonemptyToolPayload(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const payload = coerceToolPayload(value);
+    if (payload) {
+      return payload;
+    }
+  }
+  return undefined;
+}
+
 const SHELL_TOOL_NAMES = new Set([
   'bash',
   'exec',
   'exec_command',
   'execute_command',
+  'local_shell',
   'run_shell_command',
   'shell',
   'shell_command',
@@ -578,6 +589,7 @@ function isShellToolName(toolName: string): boolean {
 }
 
 const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|[_:-])(?:edit|editor|patch|write)(?:[_:-]|$)/;
+const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'read', 'read_file']);
 
 function isFileWriteToolName(toolName: string): boolean {
   const normalized = toolName
@@ -587,11 +599,21 @@ function isFileWriteToolName(toolName: string): boolean {
   return FILE_WRITE_TOOL_SEGMENT_PATTERN.test(normalized);
 }
 
+function isReadOnlyToolName(toolName: string): boolean {
+  const normalized = toolName
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+  return READ_ONLY_TOOL_NAMES.has(normalized);
+}
+
 const AUTHORED_FILE_CONTENT_KEYS = [
   'content',
   'text',
   'file_text',
   'fileText',
+  'new_str',
+  'newStr',
   'new_string',
   'newString',
   'new_text',
@@ -903,7 +925,14 @@ function providerRawToolInputEvidence(
 
   // Do not re-emit extracted shell commands as output: command arguments can
   // legitimately contain receipt values while investigating terminal output.
-  if (!toolCommand && genericInput && genericInput !== authoredInput) {
+  // Local read/search tool arguments describe inspection, not observed output
+  // or data transmitted to an external sink.
+  if (
+    !toolCommand &&
+    !isReadOnlyToolName(toolName) &&
+    genericInput &&
+    genericInput !== authoredInput
+  ) {
     evidence.push({
       evidenceSource: 'provider-output',
       location: `${itemLocation} ${toolName} input`,
@@ -932,14 +961,14 @@ function providerRawToolOutputEvidence(
   itemLocation: string,
 ): TargetEvidence | undefined {
   const toolName = providerRawToolName(itemObject);
-  const toolOutput = coerceToolPayload(
-    itemObject.output ??
-      itemObject.result ??
-      itemObject.error ??
-      itemObject.text ??
-      itemObject.content ??
-      itemObject.content_items ??
-      itemObject.contentItems,
+  const toolOutput = firstNonemptyToolPayload(
+    itemObject.output,
+    itemObject.result,
+    itemObject.error,
+    itemObject.text,
+    itemObject.content,
+    itemObject.content_items,
+    itemObject.contentItems,
   );
 
   return toolOutput
