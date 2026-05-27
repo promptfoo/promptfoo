@@ -978,7 +978,7 @@ describe('evaluate function', () => {
           providers: ['litellm:judge'],
           defaultTest: {
             options: {
-              provider: { text: 'litellm:judge' },
+              provider: { text: { id: 'litellm:judge' } },
             },
           },
           tests: [

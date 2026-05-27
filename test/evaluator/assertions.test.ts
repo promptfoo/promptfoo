@@ -219,8 +219,8 @@ describeEvaluator('evaluator assertions', () => {
                     { type: 'llm-rubric', value: 'Use the default grader option' },
                     {
                       type: 'llm-rubric',
-                      value: 'Use the explicit configured grader ID',
-                      provider: { text: 'litellm:judge' },
+                      value: 'Use the explicit configured grader ID option',
+                      provider: { text: { id: 'litellm:judge' } },
                     },
                   ],
                 },

@@ -80,6 +80,25 @@ export function buildConfiguredProviderMap(providers: ApiProvider[]): Record<str
   return providerMap;
 }
 
+function resolveConfiguredTypedProviderReference(
+  provider: ProviderTypeMap[keyof ProviderTypeMap],
+  providerMap: Record<string, ApiProvider>,
+): ProviderTypeMap[keyof ProviderTypeMap] {
+  // An id-only typed entry is a reference; entries with options stay inline.
+  if (
+    provider &&
+    typeof provider === 'object' &&
+    !isApiProvider(provider) &&
+    Object.keys(provider).length === 1 &&
+    typeof provider.id === 'string' &&
+    Object.hasOwn(providerMap, provider.id)
+  ) {
+    return providerMap[provider.id];
+  }
+
+  return resolveConfiguredProviderReference(provider, providerMap);
+}
+
 export function resolveConfiguredProviderReference<T>(
   provider: T,
   providerMap: Record<string, ApiProvider>,
@@ -104,7 +123,7 @@ export function resolveConfiguredProviderReference<T>(
       continue;
     }
 
-    const resolvedProvider = resolveConfiguredProviderReference(nestedProvider, providerMap);
+    const resolvedProvider = resolveConfiguredTypedProviderReference(nestedProvider, providerMap);
     if (resolvedProvider !== nestedProvider) {
       resolvedTypeMap ??= { ...(provider as ProviderTypeMap) };
       resolvedTypeMap[providerType] = resolvedProvider;

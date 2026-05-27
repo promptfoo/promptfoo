@@ -145,4 +145,21 @@ describe('resolveConfiguredProviderReference', () => {
       embedding: 'unsupported-provider:unused-embedding',
     });
   });
+
+  it('resolves an id-only typed provider option to a configured provider instance', () => {
+    const textProvider = makeProvider('litellm:judge');
+    const providerMap = buildConfiguredProviderMap([textProvider]);
+
+    expect(
+      resolveConfiguredProviderReference({ text: { id: 'litellm:judge' } }, providerMap),
+    ).toEqual({ text: textProvider });
+  });
+
+  it('keeps a typed provider option with overrides inline', () => {
+    const textProvider = makeProvider('litellm:judge');
+    const providerMap = buildConfiguredProviderMap([textProvider]);
+    const inlineProvider = { text: { id: 'litellm:judge', config: { temperature: 0 } } };
+
+    expect(resolveConfiguredProviderReference(inlineProvider, providerMap)).toBe(inlineProvider);
+  });
 });
