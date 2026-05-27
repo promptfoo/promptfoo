@@ -72,6 +72,29 @@ describe('providers command', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Override:'));
   });
 
+  it('accepts repeated environment-file options', async () => {
+    vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue({
+      selectedProvider: 'Anthropic',
+      reason: 'ANTHROPIC_API_KEY found',
+      detectedCredentials: ['ANTHROPIC_API_KEY'],
+      skippedProviders: [],
+      providerSlots: {},
+    });
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'providers',
+      '--env-file',
+      '.env.one',
+      '--env-file',
+      '.env.two,.env.three',
+    ]);
+
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(getDefaultProviderSelectionInfo).toHaveBeenCalledWith(defaultConfig.env);
+  });
+
   it('sets a non-zero exit code when provider selection fails', async () => {
     const error = new Error('no providers');
     vi.mocked(getDefaultProviderSelectionInfo).mockRejectedValue(error);

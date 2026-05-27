@@ -8,7 +8,7 @@ import type { UnifiedConfig } from '../types/index';
 import type { DefaultProviderSelectionInfo } from '../types/providers';
 
 const ProvidersCommandOptionsSchema = z.object({
-  envPath: z.string().optional(),
+  envPath: z.union([z.string(), z.array(z.string())]).optional(),
 });
 
 /**
@@ -19,7 +19,12 @@ export function providersCommand(program: Command, defaultConfig: Partial<Unifie
   program
     .command('providers')
     .description('Show information about default provider configuration')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .option(
+      '--env-file, --env-path <path>',
+      'Path(s) to .env file(s). Repeat the flag or use comma-separated values for multiple files.',
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
     .action(async (cmdObj: unknown) => {
       const parsedOptions = ProvidersCommandOptionsSchema.safeParse(cmdObj);
       if (!parsedOptions.success) {
