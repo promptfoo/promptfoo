@@ -423,5 +423,15 @@ describe('hasExplicitDefaultGradingProvider', () => {
         provider: 'promptfoo:simulated-user',
       } as any),
     ).toBe(false);
+    expect(
+      hasExplicitDefaultGradingProvider({
+        provider: { text: 'promptfoo:simulated-user' },
+      } as any),
+    ).toBe(false);
+    expect(
+      hasExplicitDefaultGradingProvider({
+        options: { provider: { text: 'promptfoo:simulated-user' } },
+      } as any),
+    ).toBe(false);
   });
 });

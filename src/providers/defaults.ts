@@ -53,6 +53,7 @@ const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
 ];
 
 const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
+const DEFAULT_AZURE_MODERATION_MODEL = 'text-content-safety';
 
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
@@ -388,7 +389,9 @@ async function resolveDefaultProviders(
 
   // If Azure Content Safety endpoint is available, use it for moderation
   if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
-    providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
+    providers.moderationProvider = new AzureModerationProvider(DEFAULT_AZURE_MODERATION_MODEL, {
+      env,
+    });
   }
 
   if (defaultCompletionProvider) {
@@ -668,7 +671,7 @@ function getDefaultProviderSlots({
   })();
 
   if (preferences.hasAzureContentSafety) {
-    selectedProviderSlots.moderation = { id: 'Azure Content Safety' };
+    selectedProviderSlots.moderation = { id: `azure:${DEFAULT_AZURE_MODERATION_MODEL}` };
   }
 
   if (defaultCompletionProvider) {

@@ -570,6 +570,8 @@ export const useTableStore = create<TableState>()(
     },
 
     setTableFromResultsFile: async (resultsFile: ResultsFile) => {
+      const defaultProviderInfo = resultsFile.results.defaultProviderInfo ?? null;
+
       if (resultsFile.version && resultsFile.version >= 4) {
         const table = convertResultsToTable(resultsFile);
 
@@ -582,7 +584,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table,
           version: resultsFile.version,
-          defaultProviderInfo: null,
+          defaultProviderInfo,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
           filters: {
@@ -607,7 +609,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table: results.table,
           version: resultsFile.version,
-          defaultProviderInfo: null,
+          defaultProviderInfo,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
           filters: {

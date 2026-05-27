@@ -1760,6 +1760,60 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().defaultProviderInfo).toBeNull();
     });
 
+    it('retains captured default provider info from current results files', async () => {
+      const defaultProviderInfo = {
+        selectedProvider: 'Anthropic',
+        reason: 'captured at evaluation time',
+        detectedCredentials: ['ANTHROPIC_API_KEY'],
+        skippedProviders: [],
+        providerSlots: {},
+      };
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {},
+        results: {
+          results: [],
+          defaultProviderInfo,
+        } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      expect(useTableStore.getState().defaultProviderInfo).toEqual(defaultProviderInfo);
+    });
+
+    it('retains captured default provider info from legacy results files', async () => {
+      const defaultProviderInfo = {
+        selectedProvider: 'Anthropic',
+        reason: 'captured at evaluation time',
+        detectedCredentials: ['ANTHROPIC_API_KEY'],
+        skippedProviders: [],
+        providerSlots: {},
+      };
+      const mockResultsFile = {
+        version: 3,
+        config: {},
+        results: {
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          defaultProviderInfo,
+        },
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as unknown as ResultsFile;
+
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      expect(useTableStore.getState().defaultProviderInfo).toEqual(defaultProviderInfo);
+    });
+
     it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,

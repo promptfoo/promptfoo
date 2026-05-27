@@ -685,6 +685,17 @@ describe('getDefaultProviderSelectionInfo', () => {
     });
   });
 
+  it('should report Azure Content Safety using the provider id used at runtime', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'openai-key',
+      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.providerSlots.moderation?.id).toBe('azure:text-content-safety');
+  });
+
   it('should avoid instantiating Codex providers when only selection info is requested', async () => {
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
     const getCodexDefaultProvidersSpy = vi.spyOn(codexDefaults, 'getCodexDefaultProviders');
