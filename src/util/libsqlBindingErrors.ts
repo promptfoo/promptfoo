@@ -1,8 +1,6 @@
 import chalk from 'chalk';
 
-// Match only platform-binding packages (@libsql/darwin-arm64 etc.), not the
-// wrapper packages like @libsql/client or @libsql/core whose absence indicates
-// a different problem (broken install) and warrants a different message.
+// Platform binding packages only — wrapper packages (@libsql/client etc.) fall through.
 const libsqlPlatformPackagePattern =
   /@libsql\/(?<target>(?:darwin|linux|win32|android|freebsd|netbsd|wasm32)-[a-z0-9-]+)/i;
 const moduleNotFoundCodes = new Set(['MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND']);
