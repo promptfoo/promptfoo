@@ -234,7 +234,9 @@ export abstract class BaseVoiceConnection extends EventEmitter {
    */
   protected handleError(error: Error): void {
     this.state = 'error';
-    this.emit('error', error);
+    if (this.listenerCount('error') > 0) {
+      this.emit('error', error);
+    }
   }
 
   /**

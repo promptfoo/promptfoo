@@ -187,6 +187,14 @@ describe('BaseVoiceConnection', () => {
     expect(connection.getState()).toBe('disconnected');
   });
 
+  it('does not throw unhandled error events when a direct caller has no listener', () => {
+    const socket = new MockSocket();
+    connection.attachSocket(socket);
+
+    expect(() => socket.emit('error', new Error('unobserved socket failure'))).not.toThrow();
+    expect(connection.getState()).toBe('error');
+  });
+
   it('cleans up connection and ping timers', async () => {
     const socket = new MockSocket();
     connection.attachSocket(socket);

@@ -103,10 +103,9 @@ export class SimulatedVoiceUser implements ApiProvider {
 
   private getAudioSampleRate(): number {
     const audioFormat = this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT;
-    return (
-      this.voiceConfig.sampleRate ||
-      (audioFormat === 'pcm16' ? DEFAULT_SAMPLE_RATE : G711_SAMPLE_RATE)
-    );
+    return audioFormat === 'pcm16'
+      ? this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE
+      : G711_SAMPLE_RATE;
   }
 
   /**
@@ -252,14 +251,39 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     // Setup event logging
     this.setupOrchestratorLogging(orchestrator);
 
+    const abortSignal = callApiOptions?.abortSignal;
+    if (abortSignal?.aborted) {
+      return { error: 'Voice conversation aborted' };
+    }
+
+    let abortHandler: (() => void) | undefined;
     try {
-      const result = await orchestrator.start();
+      const conversation = orchestrator.start();
+      const result = abortSignal
+        ? await Promise.race([
+            conversation,
+            new Promise<ConversationResult>((_, reject) => {
+              abortHandler = () => {
+                void orchestrator.stop('user_hangup');
+                reject(new Error('Voice conversation aborted'));
+              };
+              abortSignal.addEventListener('abort', abortHandler, { once: true });
+              if (abortSignal.aborted) {
+                abortHandler();
+              }
+            }),
+          ])
+        : await conversation;
       return this.formatResult(result);
     } catch (error) {
       logger.error('[SimulatedVoiceUser] Conversation failed:', { error });
       return {
         error: error instanceof Error ? error.message : String(error),
       };
+    } finally {
+      if (abortHandler) {
+        abortSignal?.removeEventListener('abort', abortHandler);
+      }
     }
   }
 

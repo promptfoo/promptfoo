@@ -7,6 +7,7 @@ const { providerMocks } = vi.hoisted(() => {
     config: unknown;
     listeners = new Map<string, Array<(...args: any[]) => void>>();
     start = vi.fn(() => providerMocks.start(this));
+    stop = vi.fn(async () => {});
 
     constructor(config: unknown) {
       this.config = config;
@@ -234,8 +235,8 @@ describe('SimulatedVoiceUser', () => {
     expect(providerMocks.start).not.toHaveBeenCalled();
   });
 
-  it('uses the fixed 8 kHz rate for local OpenAI G.711 audio by default', () => {
-    const builder = createConfigBuilder({ audioFormat: 'g711_ulaw' });
+  it('uses the fixed 8 kHz rate for local OpenAI G.711 audio', () => {
+    const builder = createConfigBuilder({ audioFormat: 'g711_ulaw', sampleRate: 24000 });
 
     expect(builder.buildTargetConfig('agent instructions').sampleRate).toBe(8000);
     expect(builder.buildSimulatedUserConfig('caller goal').sampleRate).toBe(8000);
@@ -316,6 +317,36 @@ describe('SimulatedVoiceUser', () => {
 
     await expect(new SimulatedVoiceUser({}).callApi('Target prompt')).resolves.toEqual({
       error: 'local failed',
+    });
+  });
+
+  it('stops an active local conversation when its abort signal is cancelled', async () => {
+    const controller = new AbortController();
+    let resolveStart: ((value: any) => void) | undefined;
+    providerMocks.start.mockReturnValue(
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      }),
+    );
+
+    const result = new SimulatedVoiceUser({}).callApi('Target prompt', undefined, {
+      abortSignal: controller.signal,
+    } as any);
+    await vi.waitFor(() => {
+      expect(providerMocks.MockOrchestrator.instances).toHaveLength(1);
+    });
+
+    controller.abort();
+
+    await expect(result).resolves.toEqual({ error: 'Voice conversation aborted' });
+    expect(providerMocks.MockOrchestrator.instances[0].stop).toHaveBeenCalledWith('user_hangup');
+    resolveStart?.({
+      duration: 0,
+      stopReason: 'user_hangup',
+      success: false,
+      transcript: '',
+      turnCount: 0,
+      turns: [],
     });
   });
 

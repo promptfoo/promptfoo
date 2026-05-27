@@ -172,6 +172,17 @@ describe('OpenAIRealtimeConnection', () => {
       vi.useRealTimers();
     });
 
+    it('should reject handshake timeouts without requiring an error listener', async () => {
+      vi.useFakeTimers();
+      const connectPromise = connection.connect();
+      const rejection = expect(connectPromise).rejects.toThrow('Connection timeout');
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      await rejection;
+      vi.useRealTimers();
+    });
+
     it('should reject when the WebSocket closes during its handshake', async () => {
       const connectPromise = connection.connect();
       const ws = mockWsInstances[mockWsInstances.length - 1];
@@ -195,6 +206,43 @@ describe('OpenAIRealtimeConnection', () => {
       });
 
       expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it('resamples routed PCM audio to the configured OpenAI input rate', () => {
+      const rateAdjusted = new OpenAIRealtimeConnection({
+        ...config,
+        sampleRate: 16000,
+      });
+      const sendSpy = vi.spyOn(rateAdjusted as any, 'send');
+      (rateAdjusted as any).setReady();
+
+      rateAdjusted.sendAudio({
+        data: Buffer.alloc(960).toString('base64'),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      const sent = sendSpy.mock.calls[0]?.[0] as { audio: string };
+      expect(Buffer.from(sent.audio, 'base64')).toHaveLength(640);
+    });
+
+    it('rejects unsupported routed format conversion into G.711 inputs', () => {
+      const compressed = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat: 'g711_ulaw',
+        sampleRate: undefined,
+      });
+      (compressed as any).setReady();
+
+      expect(() =>
+        compressed.sendAudio({
+          data: Buffer.alloc(8).toString('base64'),
+          timestamp: 0,
+          format: 'pcm16',
+          sampleRate: 24000,
+        }),
+      ).toThrow('without encoding support');
     });
   });
 
@@ -406,7 +454,7 @@ describe('OpenAIRealtimeConnection', () => {
       const g711Connection = new OpenAIRealtimeConnection({
         ...config,
         audioFormat: 'g711_ulaw',
-        sampleRate: undefined,
+        sampleRate: 24000,
       });
       const handler = vi.fn();
       g711Connection.on('audio_delta', handler);

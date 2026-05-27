@@ -8,7 +8,13 @@
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { calculateDuration } from '../audioBuffer';
+import {
+  audioDataToPcm16,
+  base64ToBuffer,
+  bufferToBase64,
+  calculateDuration,
+  resamplePcm16,
+} from '../audioBuffer';
 import { BaseVoiceConnection, waitForEvent } from './base';
 
 import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
@@ -50,9 +56,9 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   }
 
   private getAudioSampleRate(audioFormat: AudioFormat): number {
-    return (
-      this.config.sampleRate || (audioFormat === 'pcm16' ? DEFAULT_SAMPLE_RATE : G711_SAMPLE_RATE)
-    );
+    return audioFormat === 'pcm16'
+      ? this.config.sampleRate || DEFAULT_SAMPLE_RATE
+      : G711_SAMPLE_RATE;
   }
 
   /**
@@ -171,9 +177,27 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       return;
     }
 
+    const inputFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
+    const inputSampleRate = this.getAudioSampleRate(inputFormat);
+    let inputData: string;
+
+    if (chunk.format === inputFormat && chunk.sampleRate === inputSampleRate) {
+      inputData = chunk.data;
+    } else if (inputFormat === 'pcm16') {
+      const pcmData = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
+      inputData = bufferToBase64(resamplePcm16(pcmData, chunk.sampleRate, inputSampleRate));
+    } else {
+      if (chunk.format !== inputFormat || chunk.sampleRate !== inputSampleRate) {
+        throw new Error(
+          `Cannot route ${chunk.format} at ${chunk.sampleRate} Hz to OpenAI ${inputFormat} at ${inputSampleRate} Hz without encoding support`,
+        );
+      }
+      inputData = chunk.data;
+    }
+
     this.send({
       type: 'input_audio_buffer.append',
-      audio: chunk.data,
+      audio: inputData,
     });
   }
 
