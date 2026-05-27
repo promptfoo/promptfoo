@@ -29,6 +29,7 @@ interface TrajectoryGoalSuccessValue {
 
 interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
+  exclude?: unknown;
   arguments?: unknown;
   mode?: 'exact' | 'partial';
 }
@@ -264,12 +265,16 @@ function matchesToolArgs(
   actual: unknown,
   expected: unknown,
   mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
+  excludeRules: ToolArgsExcludeRule[],
 ): boolean {
+  const scrubbedActual = scrubToolArgs(actual, excludeRules);
+  const scrubbedExpected = scrubToolArgs(expected, excludeRules);
+
   if (mode === 'exact') {
-    return isDeepStrictEqual(actual, expected);
+    return isDeepStrictEqual(scrubbedActual, scrubbedExpected);
   }
 
-  return matchesExpectedArgsPartial(actual, expected);
+  return matchesExpectedArgsPartial(scrubbedActual, scrubbedExpected);
 }
 
 function resolveToolArgsMatchMode(
@@ -284,6 +289,49 @@ function resolveToolArgsMatchMode(
   }
 
   throw new Error('trajectory:tool-args-match assertion mode must be "partial" or "exact"');
+}
+
+type ToolArgsExcludeRule = string | Record<string, unknown>;
+
+function resolveToolArgsExcludeRules(exclude: unknown): ToolArgsExcludeRule[] {
+  if (exclude === undefined) {
+    return [];
+  }
+
+  const rules = Array.isArray(exclude) ? exclude : [exclude];
+  for (const rule of rules) {
+    const isValidStringRule = typeof rule === 'string' && rule.trim().length > 0;
+    const isValidObjectRule = isRecord(rule);
+    if (!isValidStringRule && !isValidObjectRule) {
+      throw new Error(
+        'trajectory:tool-args-match assertion exclude must contain strings or objects',
+      );
+    }
+  }
+
+  return rules as ToolArgsExcludeRule[];
+}
+
+function scrubToolArgs(value: unknown, excludeRules: ToolArgsExcludeRule[]): unknown {
+  if (excludeRules.length === 0 || !isRecord(value)) {
+    return value;
+  }
+
+  const scrubbed = { ...value };
+  for (const rule of excludeRules) {
+    if (typeof rule === 'string') {
+      delete scrubbed[rule];
+      continue;
+    }
+
+    for (const [key, excludedValue] of Object.entries(rule)) {
+      if (isDeepStrictEqual(scrubbed[key], excludedValue)) {
+        delete scrubbed[key];
+      }
+    }
+  }
+
+  return scrubbed;
 }
 
 function resolveToolArgsMatchValue(value: unknown) {
@@ -305,6 +353,7 @@ function resolveToolArgsMatchValue(value: unknown) {
   }
 
   return {
+    excludeRules: resolveToolArgsExcludeRules((value as TrajectoryToolArgsMatchValue).exclude),
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
@@ -385,14 +434,16 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode } = resolveToolArgsMatchValue(
+  const { excludeRules, matcher, expectedArgs, mode } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
-  const matchedStep = stepsWithArgs.find((step) => matchesToolArgs(step.args, expectedArgs, mode));
+  const matchedStep = stepsWithArgs.find((step) =>
+    matchesToolArgs(step.args, expectedArgs, mode, excludeRules),
+  );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
   const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);

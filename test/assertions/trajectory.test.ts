@@ -1023,6 +1023,102 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('supports exact mode with excluded default arguments', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'orders-with-defaults',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: {
+                  'tool.name': 'search_orders',
+                  'tool.args': '{"status":"Q","page":1,"page_size":5}',
+                },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: {
+              status: 'Q',
+            },
+            exclude: [{ page: 1 }, { page_size: 5 }],
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }, { page_size: 5 }],
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('does not exclude arguments with non-default values in exact mode', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'orders-with-non-default-page',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: {
+                  'tool.name': 'search_orders',
+                  'tool.args': '{"status":"Q","page":2}',
+                },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: {
+              status: 'Q',
+            },
+            exclude: [{ page: 1 }],
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          mode: 'exact',
+          args: {
+            status: 'Q',
+          },
+          exclude: [{ page: 1 }],
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('{"status":"Q","page":2}');
+    });
+
     it('matches Vercel AI SDK spans end-to-end against expected args', () => {
       const vercelTrace: TraceData = {
         ...mockTraceData,

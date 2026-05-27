@@ -742,8 +742,26 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
+- optional `exclude`, a string, object, or list of strings/objects to remove from the observed and expected payloads before matching
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+Use `exclude` when a tool has safe defaults that an agent may either omit or send explicitly, but you still want exact matching to catch hallucinated arguments:
+
+```yaml
+assert:
+  - type: trajectory:tool-args-match
+    value:
+      name: search_orders
+      mode: exact
+      args:
+        status: Q
+      exclude:
+        - page: 1
+        - page_size: 5
+```
+
+String exclude rules remove a key regardless of value. Object exclude rules remove a key only when the observed or expected value matches, so `page: 1` can be ignored while `page: 2` still fails exact matching.
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
