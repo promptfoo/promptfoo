@@ -2,8 +2,6 @@ import chalk from 'chalk';
 import { z } from 'zod';
 import logger from '../logger';
 import { getDefaultProviderSelectionInfo } from '../providers/defaults';
-import telemetry from '../telemetry';
-import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
@@ -29,9 +27,6 @@ export function providersCommand(program: Command, defaultConfig: Partial<Unifie
         process.exitCode = 1;
         return;
       }
-      setupEnv(parsedOptions.data.envPath);
-
-      telemetry.record('command_used', { name: 'providers' });
 
       let selectionInfo: DefaultProviderSelectionInfo;
       try {

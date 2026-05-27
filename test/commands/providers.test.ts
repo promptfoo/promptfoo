@@ -3,8 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { providersCommand } from '../../src/commands/providers';
 import logger from '../../src/logger';
 import { getDefaultProviderSelectionInfo } from '../../src/providers/defaults';
-import telemetry from '../../src/telemetry';
-import { setupEnv } from '../../src/util/index';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -15,16 +13,6 @@ vi.mock('../../src/logger', () => ({
 
 vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviderSelectionInfo: vi.fn(),
-}));
-
-vi.mock('../../src/telemetry', () => ({
-  default: {
-    record: vi.fn(),
-  },
-}));
-
-vi.mock('../../src/util/index', () => ({
-  setupEnv: vi.fn(),
 }));
 
 describe('providers command', () => {
@@ -58,9 +46,7 @@ describe('providers command', () => {
 
     await program.parseAsync(['node', 'test', 'providers', '--env-file', '.env.local']);
 
-    expect(setupEnv).toHaveBeenCalledWith('.env.local');
     expect(getDefaultProviderSelectionInfo).toHaveBeenCalledWith(defaultConfig.env);
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'providers' });
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default Provider Selection'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('AZURE_API_KEY'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Skipped Providers:'));
