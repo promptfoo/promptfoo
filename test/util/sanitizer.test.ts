@@ -1,5 +1,11 @@
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
-import { sanitizeBody, sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  restoreAzureBlobSasTokens,
+  sanitizeBody,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../../src/util/sanitizer';
 
 // Mock console methods to prevent test noise
 const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -61,10 +67,50 @@ describe('sanitizeObject', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
     });
+
+    it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
+      const result = sanitizeObject({
+        tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
+      });
+
+      expect(result.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    });
+
+    it('should redact SAS tokens without encoding Azure Blob URI templates', () => {
+      const result = redactAzureBlobSasTokens({
+        tests:
+          'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=azure-secret&sv={{ version }}',
+      });
+
+      expect(result.tests).toBe(
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=%5BREDACTED%5D&sv={{ version }}',
+      );
+    });
+
+    it('should restore only an unchanged redacted Azure Blob SAS URI', () => {
+      const stored = {
+        tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
+      };
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D' },
+          stored,
+        ),
+      ).toEqual(stored);
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: 'az://account/container/edited.yaml?sp=r&sig=%5BREDACTED%5D' },
+          stored,
+        ),
+      ).toEqual({
+        tests: 'az://account/container/edited.yaml?sp=r&sig=%5BREDACTED%5D',
+      });
+    });
   });
 
   describe('function handling', () => {
-    it('should convert named functions to string representation', () => {
+    it('should lose named functions during JSON serialization', () => {
       function namedFunction() {
         return 'test';
       }
@@ -73,7 +119,7 @@ describe('sanitizeObject', () => {
       expect(result.func).toBeUndefined();
     });
 
-    it('should convert anonymous functions to string representation', () => {
+    it('should lose anonymous functions during JSON serialization', () => {
       const anonymousFunc = function () {
         return 'test';
       };
@@ -82,7 +128,7 @@ describe('sanitizeObject', () => {
       expect(result.func).toBeUndefined();
     });
 
-    it('should convert arrow functions to string representation', () => {
+    it('should lose arrow functions during JSON serialization', () => {
       const arrowFunc = () => 'test';
       const result = sanitizeObject({ func: arrowFunc });
       // Functions get lost during JSON.parse/stringify cycle

@@ -190,10 +190,111 @@ function isClassInstance(obj: any): boolean {
   return hasMethods;
 }
 
+function redactAzureBlobSasToken(value: string): string {
+  if (!/^az:\/\//i.test(value)) {
+    return value;
+  }
+
+  const queryStart = value.indexOf('?');
+  if (queryStart === -1) {
+    return value;
+  }
+
+  const fragmentStart = value.indexOf('#', queryStart);
+  const queryEnd = fragmentStart === -1 ? value.length : fragmentStart;
+  let redacted = false;
+  const sanitizedQuery = value
+    .slice(queryStart + 1, queryEnd)
+    .split('&')
+    .map((parameter) => {
+      const equalsIndex = parameter.indexOf('=');
+      const encodedName = equalsIndex === -1 ? parameter : parameter.slice(0, equalsIndex);
+      let name: string;
+      try {
+        name = decodeURIComponent(encodedName.replace(/\+/g, ' '));
+      } catch {
+        return parameter;
+      }
+
+      if (name.toLowerCase() !== 'sig') {
+        return parameter;
+      }
+
+      redacted = true;
+      return `${encodedName}=${encodeURIComponent(REDACTED)}`;
+    })
+    .join('&');
+
+  return redacted
+    ? `${value.slice(0, queryStart + 1)}${sanitizedQuery}${value.slice(queryEnd)}`
+    : value;
+}
+
+/**
+ * Redact SAS credentials embedded in Azure Blob config references without
+ * applying broader output sanitization to configuration consumed by clients.
+ */
+export function redactAzureBlobSasTokens<T>(value: T): T {
+  if (typeof value === 'string') {
+    return redactAzureBlobSasToken(value) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAzureBlobSasTokens(item)) as T;
+  }
+
+  if (!value || typeof value !== 'object' || isClassInstance(value)) {
+    return value;
+  }
+
+  const redactedEntries = Object.entries(value).map(([key, item]) => [
+    key,
+    redactAzureBlobSasTokens(item),
+  ]);
+  return Object.fromEntries(redactedEntries) as T;
+}
+
+/**
+ * Preserve stored SAS credentials when a sanitized config is written back unchanged.
+ * If the caller edits the resource or supplies a replacement token, retain its value.
+ */
+export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T {
+  if (typeof value === 'string') {
+    if (typeof storedValue === 'string' && value === redactAzureBlobSasToken(storedValue)) {
+      return storedValue as T;
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const storedItems = Array.isArray(storedValue) ? storedValue : [];
+    return value.map((item, index) => restoreAzureBlobSasTokens(item, storedItems[index])) as T;
+  }
+
+  if (!value || typeof value !== 'object' || isClassInstance(value)) {
+    return value;
+  }
+
+  const storedObject =
+    storedValue && typeof storedValue === 'object' && !Array.isArray(storedValue)
+      ? (storedValue as Record<string, unknown>)
+      : {};
+  const restoredEntries = Object.entries(value).map(([key, item]) => [
+    key,
+    restoreAzureBlobSasTokens(item, storedObject[key]),
+  ]);
+  return Object.fromEntries(restoredEntries) as T;
+}
+
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
 function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+  const redactedAzureBlobUri = redactAzureBlobSasToken(str);
+  if (redactedAzureBlobUri !== str) {
+    return redactedAzureBlobUri;
+  }
+
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
