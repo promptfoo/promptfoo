@@ -382,6 +382,9 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
+  const currentDatasetId = recentEvals.find(
+    (recentEval) => recentEval.evalId === currentEvalId,
+  )?.datasetId;
 
   const handleShareButtonClick = async () => {
     if (IS_RUNNING_LOCALLY) {
@@ -802,7 +805,7 @@ export default function ResultsView({
             return;
           }
           updateConfig(config);
-          navigate(ROUTES.SETUP);
+          navigate(ROUTES.SETUP, { state: { sourceEvalId: evalId } });
         }}
       >
         <Play className="size-4 mr-2" />
@@ -1041,6 +1044,7 @@ export default function ResultsView({
         description="Only evals with the same dataset can be compared."
         focusedEvalId={currentEvalId}
         filterByDatasetId
+        focusedDatasetId={currentDatasetId}
       />
       <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
       <SettingsModal

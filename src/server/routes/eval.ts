@@ -21,7 +21,11 @@ import { loadFunction, parseFileUrl } from '../../util/functions/loadFunction';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { recalculatePromptMetrics } from '../../util/recalculatePromptMetrics';
-import { sanitizeObject } from '../../util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  restoreAzureBlobSasTokens,
+  sanitizeObject,
+} from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -362,7 +366,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
   }
 }
 
-evalRouter.post('/job', (req: Request, res: Response): void => {
+evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: z.prettifyError(result.error) });
@@ -373,12 +377,30 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
   // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
   // nested provider schemas may strip. This keeps Zod transforms/coercions while
   // preserving provider flexibility.
-  const { evaluateOptions, providers: _validatedProviders, ...restData } = result.data;
-  const testSuite = {
+  const {
+    evaluateOptions,
+    sourceEvalId,
+    providers: _validatedProviders,
+    ...restData
+  } = result.data;
+  let testSuite = {
     ...restData,
     // Preserve raw providers from req.body to keep nested config fields
     providers: (req.body as { providers?: unknown }).providers,
   };
+
+  if (sourceEvalId) {
+    try {
+      const sourceEval = await Eval.findById(sourceEvalId);
+      if (sourceEval) {
+        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+      }
+    } catch (error) {
+      sendError(res, 500, 'Failed to prepare eval job', error);
+      return;
+    }
+  }
+
   const id = crypto.randomUUID();
   evalJobs.set(id, {
     evalId: null,
@@ -410,9 +432,9 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     .then(async (evalResult) => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
-      job.status = 'complete';
       job.result = await evalResult.toEvaluateSummary();
       job.evalId = evalResult.id;
+      job.status = 'complete';
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
@@ -702,7 +724,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: eval_.config,
+    config: redactAzureBlobSasTokens(eval_.config),
     author: eval_.author || null,
     version: eval_.version(),
     id,

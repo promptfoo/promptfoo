@@ -7,6 +7,7 @@ import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { clearCountCache } from '../models/evalPerformance';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import {
@@ -60,9 +61,18 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   }
 
   const db = getDb();
+  const affectedEvals = await db
+    .selectDistinct({ evalId: evalResultsTable.evalId })
+    .from(evalResultsTable)
+    .where(inArray(evalResultsTable.id, resultIds))
+    .all();
 
   // Use batch delete with inArray for better performance
   await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds));
+
+  for (const { evalId } of affectedEvals) {
+    clearCountCache(evalId);
+  }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
 }
