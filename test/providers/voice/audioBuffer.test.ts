@@ -10,6 +10,7 @@ import {
   createStereoWav,
   mergeAudioBuffers,
   pcm16ToWav,
+  resamplePcm16,
   splitAudioBuffer,
 } from '../../../src/providers/voice/audioBuffer';
 
@@ -185,6 +186,22 @@ describe('AudioBuffer', () => {
       expect(wav.readUInt32LE(40)).toBe(encoded.length * 2);
       expect(wav.length).toBe(44 + encoded.length * 2);
     });
+
+    it('resamples emitted chunks to the recording sample rate', () => {
+      const sixteenKhzBuffer = new AudioBuffer('pcm16', 16000);
+      sixteenKhzBuffer.append({
+        data: bufferToBase64(Buffer.alloc(48000)),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      const wav = sixteenKhzBuffer.toWav();
+
+      expect(wav.readUInt32LE(24)).toBe(16000);
+      expect(wav.readUInt32LE(40)).toBe(32000);
+      expect(sixteenKhzBuffer.getDuration()).toBe(1000);
+    });
   });
 
   describe('getStartTime and getEndTime', () => {
@@ -324,6 +341,20 @@ describe('audioDataToPcm16', () => {
   });
 });
 
+describe('resamplePcm16', () => {
+  it('resamples PCM data while preserving duration', () => {
+    const input = Buffer.alloc(48000);
+    for (let i = 0; i < input.length; i += 2) {
+      input.writeInt16LE(1000, i);
+    }
+
+    const output = resamplePcm16(input, 24000, 16000);
+
+    expect(output).toHaveLength(32000);
+    expect(output.readInt16LE(0)).toBe(1000);
+  });
+});
+
 describe('createAudioChunk', () => {
   it('should create chunk from buffer', () => {
     const data = Buffer.alloc(4800); // 100ms at 24kHz PCM16
@@ -431,5 +462,37 @@ describe('createStereoWav', () => {
     expect(wav.readUInt16LE(22)).toBe(2);
     expect(wav.readUInt16LE(34)).toBe(16);
     expect(wav.readUInt32LE(40)).toBeGreaterThan(0);
+  });
+
+  it('resamples tracks with different rates before stereo placement', () => {
+    const agent = new AudioBuffer('pcm16', 24000);
+    const user = new AudioBuffer('pcm16', 8000);
+    const agentData = Buffer.alloc(48000);
+    const userData = Buffer.alloc(16000);
+    for (let i = 0; i < agentData.length; i += 2) {
+      agentData.writeInt16LE(1000, i);
+    }
+    for (let i = 0; i < userData.length; i += 2) {
+      userData.writeInt16LE(2000, i);
+    }
+    agent.append({
+      data: bufferToBase64(agentData),
+      duration: 1000,
+      format: 'pcm16',
+      sampleRate: 24000,
+      timestamp: 0,
+    });
+    user.append({
+      data: bufferToBase64(userData),
+      duration: 1000,
+      format: 'pcm16',
+      sampleRate: 8000,
+      timestamp: 0,
+    });
+
+    const wav = createStereoWav(agent, user);
+
+    expect(wav.readUInt32LE(24)).toBe(24000);
+    expect(wav.readInt16LE(44 + 16000 * 4 + 2)).toBe(2000);
   });
 });

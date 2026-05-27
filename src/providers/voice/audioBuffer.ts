@@ -55,11 +55,7 @@ export class AudioBuffer {
    * Get total duration in milliseconds.
    */
   getDuration(): number {
-    const totalBytes = this.chunks.reduce((sum, chunk) => {
-      return sum + base64ToBuffer(chunk.data).length;
-    }, 0);
-
-    return calculateDuration(totalBytes, this.sampleRate, this.format);
+    return calculateDuration(this.toPcm16Buffer().length, this.sampleRate, 'pcm16');
   }
 
   /**
@@ -78,8 +74,7 @@ export class AudioBuffer {
    * Convert the audio to WAV format.
    */
   toWav(): Buffer {
-    const pcmData = audioDataToPcm16(this.toBuffer(), this.format);
-    return pcm16ToWav(pcmData, this.sampleRate);
+    return pcm16ToWav(this.toPcm16Buffer(), this.sampleRate);
   }
 
   /**
@@ -128,6 +123,18 @@ export class AudioBuffer {
    */
   getSampleRate(): number {
     return this.sampleRate;
+  }
+
+  private toPcm16Buffer(): Buffer {
+    return Buffer.concat(
+      this.chunks.map((chunk) =>
+        resamplePcm16(
+          audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
+          chunk.sampleRate,
+          this.sampleRate,
+        ),
+      ),
+    );
   }
 }
 
@@ -241,6 +248,33 @@ export function audioDataToPcm16(data: Buffer, format: AudioFormat): Buffer {
     decoded.writeInt16LE(sample, i * 2);
   }
   return decoded;
+}
+
+/**
+ * Resample PCM16 audio using linear interpolation.
+ */
+export function resamplePcm16(data: Buffer, inputRate: number, outputRate: number): Buffer {
+  if (inputRate === outputRate || data.length === 0) {
+    return data;
+  }
+
+  const ratio = outputRate / inputRate;
+  const inputSamples = Math.floor(data.length / 2);
+  const outputSamples = Math.floor(inputSamples * ratio);
+  const output = Buffer.alloc(outputSamples * 2);
+
+  for (let i = 0; i < outputSamples; i++) {
+    const sourcePosition = i / ratio;
+    const lowerIndex = Math.floor(sourcePosition);
+    const upperIndex = Math.min(lowerIndex + 1, inputSamples - 1);
+    const fraction = sourcePosition - lowerIndex;
+    const lower = data.readInt16LE(lowerIndex * 2);
+    const upper = data.readInt16LE(upperIndex * 2);
+    const sample = Math.round(lower + (upper - lower) * fraction);
+    output.writeInt16LE(clampInt16(sample), i * 2);
+  }
+
+  return output;
 }
 
 /**
@@ -370,7 +404,11 @@ function placeStereoChunks(
   const bytesPerFrame = 4; // Stereo: 2 bytes x 2 channels
 
   for (const chunk of chunks) {
-    const pcmData = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
+    const pcmData = resamplePcm16(
+      audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
+      chunk.sampleRate,
+      sampleRate,
+    );
     const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
     const numSamples = pcmData.length / bytesPerSample;
 
@@ -407,7 +445,12 @@ export function createStereoWav(
   userBuffer: AudioBuffer,
   _turns?: StereoTurn[],
 ): Buffer {
-  const sampleRate = agentBuffer.getSampleRate();
+  const sampleRate = Math.max(
+    agentBuffer.getSampleRate(),
+    userBuffer.getSampleRate(),
+    ...agentBuffer.getChunks().map((chunk) => chunk.sampleRate),
+    ...userBuffer.getChunks().map((chunk) => chunk.sampleRate),
+  );
   const bytesPerSample = 2; // PCM16
   const bytesPerFrame = 4; // Stereo: 2 bytes × 2 channels
 
@@ -427,8 +470,24 @@ export function createStereoWav(
 
   if (allChunks.length === 0) {
     // No valid timestamps - fall back to simple sequential placement
-    const agentPcm = audioDataToPcm16(agentBuffer.toBuffer(), agentBuffer.getFormat());
-    const userPcm = audioDataToPcm16(userBuffer.toBuffer(), userBuffer.getFormat());
+    const agentPcm = Buffer.concat(
+      agentChunks.map((chunk) =>
+        resamplePcm16(
+          audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
+          chunk.sampleRate,
+          sampleRate,
+        ),
+      ),
+    );
+    const userPcm = Buffer.concat(
+      userChunks.map((chunk) =>
+        resamplePcm16(
+          audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
+          chunk.sampleRate,
+          sampleRate,
+        ),
+      ),
+    );
     const maxSamples = Math.max(agentPcm.length, userPcm.length) / bytesPerSample;
     const stereoBuffer = Buffer.alloc(Math.ceil(maxSamples) * bytesPerFrame);
 

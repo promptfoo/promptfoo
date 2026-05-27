@@ -43,7 +43,7 @@ export class TurnDetector extends EventEmitter {
   constructor(config: Partial<TurnDetectionConfig> = {}) {
     super();
     this.config = { ...DEFAULT_TURN_DETECTION, ...config };
-    this.silenceDetector = new SilenceDetector(this.config.vadThreshold);
+    this.silenceDetector = new SilenceDetector(config.vadThreshold);
   }
 
   /**
@@ -51,6 +51,7 @@ export class TurnDetector extends EventEmitter {
    */
   onSpeechStart(): void {
     if (this.isSpeaking) {
+      this.clearSilenceTimer();
       return;
     }
 
@@ -157,7 +158,9 @@ export class TurnDetector extends EventEmitter {
    */
   updateConfig(config: Partial<TurnDetectionConfig>): void {
     this.config = { ...this.config, ...config };
-    this.silenceDetector = new SilenceDetector(this.config.vadThreshold);
+    if (config.vadThreshold !== undefined) {
+      this.silenceDetector = new SilenceDetector(config.vadThreshold);
+    }
   }
 
   private endTurn(): void {

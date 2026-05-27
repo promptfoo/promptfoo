@@ -313,7 +313,7 @@ describe('OpenAIRealtimeConnection', () => {
   });
 
   describe('handleMessage', () => {
-    it('should emit session_configured on session.created', () => {
+    it('records session.created without marking configured settings ready', () => {
       const handler = vi.fn();
       connection.on('session_configured', handler);
 
@@ -324,8 +324,9 @@ describe('OpenAIRealtimeConnection', () => {
         }),
       );
 
-      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).not.toHaveBeenCalled();
       expect(connection.getSessionId()).toBe('test-session-id');
+      expect(connection.isReady()).toBe(false);
     });
 
     it('should emit session_configured on session.updated', () => {
@@ -543,7 +544,7 @@ describe('OpenAIRealtimeConnection', () => {
       (connection as any).handleMessage(
         Buffer.from(
           JSON.stringify({
-            type: 'session.created',
+            type: 'session.updated',
             session: { id: 'buffer-session' },
           }),
         ),

@@ -66,6 +66,11 @@ interface NovaSonicEvent {
   event: Record<string, unknown>;
 }
 
+interface NovaTextContentState {
+  role?: string;
+  generationStage?: string;
+}
+
 /**
  * Nova Sonic audio configuration.
  */
@@ -166,6 +171,9 @@ export class NovaSonicConnection extends EventEmitter {
   private cumulativeAudioPositionMs: number = 0;
   private hasReceivedAudio: boolean = false; // Track if we've received any audio
   private accumulatedTranscript: string = ''; // Accumulate transcript from textOutput events
+  private textContentState = new Map<string, NovaTextContentState>();
+  private currentTextContentState: NovaTextContentState = {};
+  private responseCompleted = false;
 
   constructor(config: VoiceProviderConfig) {
     super();
@@ -371,6 +379,10 @@ export class NovaSonicConnection extends EventEmitter {
       return;
     }
 
+    if (chunk.format !== 'pcm16') {
+      throw new Error('Amazon Nova Sonic supports only PCM16 audio input.');
+    }
+
     // Mark that we've received audio input
     this.hasReceivedAudio = true;
 
@@ -491,6 +503,15 @@ export class NovaSonicConnection extends EventEmitter {
     logger.debug('[NovaSonic] Response follows committed audio input');
   }
 
+  cancelResponse(): void {
+    logger.debug('[NovaSonic] Cancelling response by closing the bidirectional stream');
+    this.disconnect();
+  }
+
+  clearAudioBuffer(): void {
+    logger.debug('[NovaSonic] Audio buffer clearing is not supported');
+  }
+
   /**
    * Disconnect from the provider.
    */
@@ -536,6 +557,7 @@ export class NovaSonicConnection extends EventEmitter {
     this.session = null;
     this.sessionId = null;
     this.state = 'disconnected';
+    this.bedrockClient?.destroy?.();
     this.bedrockClient = null;
 
     this.emit('close');
@@ -717,12 +739,49 @@ export class NovaSonicConnection extends EventEmitter {
     const eventData = data.event[eventType] as Record<string, unknown>;
 
     switch (eventType) {
+      case 'completionStart':
+        this.responseCompleted = false;
+        this.accumulatedTranscript = '';
+        this.textContentState.clear();
+        this.currentTextContentState = {};
+        break;
+
+      case 'contentStart': {
+        if (eventData.type !== 'TEXT') {
+          break;
+        }
+
+        let generationStage: string | undefined;
+        const modelFields = eventData.additionalModelFields;
+        if (typeof modelFields === 'string') {
+          try {
+            generationStage = (JSON.parse(modelFields) as { generationStage?: string })
+              .generationStage;
+          } catch {
+            logger.debug('[NovaSonic] Failed to parse text content metadata');
+          }
+        }
+
+        const state = {
+          role: eventData.role as string | undefined,
+          generationStage,
+        };
+        this.currentTextContentState = state;
+
+        const contentId = eventData.contentId as string | undefined;
+        if (contentId) {
+          this.textContentState.set(contentId, state);
+        }
+        break;
+      }
+
       case 'textOutput': {
-        const role = eventData.role as string;
+        const state =
+          this.textContentState.get(eventData.contentId as string) ?? this.currentTextContentState;
+        const role = (eventData.role as string | undefined) ?? state.role;
         const content = eventData.content as string;
 
-        if (role === 'ASSISTANT' && content) {
-          // Accumulate transcript for when turn ends
+        if (role === 'ASSISTANT' && state.generationStage === 'FINAL' && content) {
           this.accumulatedTranscript += content;
           this.emit('transcript_delta', content);
         } else if (role === 'USER' && content) {
@@ -759,11 +818,11 @@ export class NovaSonicConnection extends EventEmitter {
         break;
       }
 
-      case 'contentEnd': {
+      case 'completionEnd': {
         const stopReason = eventData.stopReason as string;
-        if (stopReason === 'END_TURN') {
+        if (stopReason === 'END_TURN' && !this.responseCompleted) {
+          this.responseCompleted = true;
           this.emit('audio_done');
-          // Emit accumulated transcript and clear for next turn
           this.emit('transcript_done', this.accumulatedTranscript);
           this.accumulatedTranscript = '';
           this.emit('speech_stopped');

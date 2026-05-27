@@ -145,6 +145,10 @@ describe('SimulatedVoiceUser', () => {
     );
   });
 
+  it('uses an audible local VAD threshold by default', () => {
+    expect(createConfigBuilder({}).buildTurnDetectionConfig().vadThreshold).toBe(0.02);
+  });
+
   it('runs local orchestrated conversations and formats stereo audio output', async () => {
     const debug = vi.spyOn(logger, 'debug');
     const callerGoal = 'private account 0000111122223333 for {{ name }}';
@@ -215,6 +219,49 @@ describe('SimulatedVoiceUser', () => {
     expect(JSON.stringify(debug.mock.calls)).not.toContain('sensitive transcript 5555');
   });
 
+  it('rejects compressed local audio when a non-OpenAI endpoint is selected', async () => {
+    await expect(
+      new SimulatedVoiceUser({
+        config: {
+          audioFormat: 'g711_ulaw',
+          simulatedUserProvider: 'google',
+        },
+      }).callApi('Target prompt'),
+    ).resolves.toEqual({
+      error:
+        'g711_ulaw audio is supported only when both local voice endpoints use OpenAI. Use pcm16 with Google Live or Amazon Nova Sonic.',
+    });
+    expect(providerMocks.start).not.toHaveBeenCalled();
+  });
+
+  it('uses caller-first startup for local Bedrock targets and honors recording opt-out', async () => {
+    providerMocks.start.mockResolvedValue({
+      combinedAudio: Buffer.from('stereo'),
+      duration: 1,
+      stopReason: 'goal_achieved',
+      success: true,
+      transcript: '',
+      turnCount: 0,
+      turns: [],
+    });
+
+    const result = await new SimulatedVoiceUser({
+      config: {
+        recordConversation: false,
+        targetProvider: 'bedrock',
+      },
+    }).callApi('Target prompt');
+
+    expect(providerMocks.MockOrchestrator.instances[0].config).toEqual(
+      expect.objectContaining({
+        recordFullAudio: false,
+        targetSpeaksFirst: false,
+      }),
+    );
+    expect(result.audio).toBeUndefined();
+    expect(result.metadata).toEqual(expect.objectContaining({ audioTracks: undefined }));
+  });
+
   it('uses the instructions test variable for caller goals by default', async () => {
     providerMocks.start.mockResolvedValue({
       duration: 1,
@@ -282,9 +329,13 @@ describe('SimulatedVoiceUser', () => {
       'https://cloud.example.test/api/v1/task',
       expect.objectContaining({
         body: expect.stringContaining('"task":"voice-tau"'),
-        headers: expect.objectContaining({ Authorization: 'Bearer cloud-key' }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer cloud-key',
+          'x-promptfoo-silent': 'true',
+        }),
         method: 'POST',
       }),
+      expect.any(AbortSignal),
     );
     const remoteRequest = providerMocks.fetchWithProxy.mock.calls[0]?.[1] as RequestInit;
     const remoteBody = JSON.parse(String(remoteRequest.body));
@@ -307,7 +358,7 @@ describe('SimulatedVoiceUser', () => {
   });
 
   it('returns a clear remote error when no cloud token is configured', async () => {
-    vi.stubEnv('API_HOST', 'https://alt.example.test');
+    providerMocks.cloud.isEnabled.mockReturnValue(true);
     providerMocks.cloud.getApiKey.mockReturnValue(undefined);
 
     await expect(new SimulatedVoiceUser({}).callApi('Target prompt')).resolves.toEqual({
@@ -317,16 +368,55 @@ describe('SimulatedVoiceUser', () => {
     expect(providerMocks.fetchWithProxy).not.toHaveBeenCalled();
   });
 
-  it('uses API_HOST for remote errors and reports remote transport failures', async () => {
-    vi.stubEnv('API_HOST', 'https://alt.example.test');
-    providerMocks.fetchWithProxy.mockResolvedValueOnce(new Response('bad target', { status: 502 }));
+  it('does not log remote response bodies and reports remote transport failures', async () => {
+    providerMocks.cloud.isEnabled.mockReturnValue(true);
+    const error = vi.spyOn(logger, 'error');
+    providerMocks.fetchWithProxy.mockResolvedValueOnce(
+      new Response('private caller goal sentinel', { status: 502 }),
+    );
     providerMocks.fetchWithProxy.mockRejectedValueOnce(new Error('network down'));
 
     await expect(new SimulatedVoiceUser({}).callApi('Target prompt')).resolves.toEqual({
-      error: 'Remote voice-tau failed: 502 bad target',
+      error: 'Remote voice-tau failed: 502 private caller goal sentinel',
     });
     await expect(new SimulatedVoiceUser({}).callApi('Target prompt')).resolves.toEqual({
       error: 'network down',
     });
+    expect(JSON.stringify(error.mock.calls)).not.toContain('private caller goal sentinel');
+  });
+
+  it('keeps conversations local when remote generation is disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_REMOTE_GENERATION', 'true');
+    providerMocks.cloud.isEnabled.mockReturnValue(true);
+    providerMocks.start.mockResolvedValue({
+      duration: 1,
+      stopReason: 'goal_achieved',
+      success: true,
+      transcript: '',
+      turnCount: 0,
+      turns: [],
+    });
+
+    await new SimulatedVoiceUser({}).callApi('Target prompt');
+
+    expect(providerMocks.fetchWithProxy).not.toHaveBeenCalled();
+    expect(providerMocks.start).toHaveBeenCalled();
+  });
+
+  it('does not activate remote voice execution from API_HOST alone', async () => {
+    vi.stubEnv('API_HOST', 'https://untrusted.example.test');
+    providerMocks.start.mockResolvedValue({
+      duration: 1,
+      stopReason: 'goal_achieved',
+      success: true,
+      transcript: '',
+      turnCount: 0,
+      turns: [],
+    });
+
+    await new SimulatedVoiceUser({}).callApi('Target prompt');
+
+    expect(providerMocks.fetchWithProxy).not.toHaveBeenCalled();
+    expect(providerMocks.start).toHaveBeenCalled();
   });
 });

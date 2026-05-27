@@ -82,6 +82,20 @@ describe('TurnDetector', () => {
       expect(detector.isInTurn()).toBe(false);
     });
 
+    it('cancels a delayed turn end when speech resumes', () => {
+      const handler = vi.fn();
+      detector.on('turn_end', handler);
+
+      detector.onSpeechStart();
+      vi.advanceTimersByTime(50);
+      detector.onSpeechEnd();
+      detector.onSpeechStart();
+      vi.advanceTimersByTime(50);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(detector.isInTurn()).toBe(true);
+    });
+
     it('should not emit turn_end if not speaking', () => {
       const handler = vi.fn();
       detector.on('turn_end', handler);
@@ -192,6 +206,31 @@ describe('TurnDetector', () => {
       };
 
       detector.onAudioChunk(chunk);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a practical local threshold when none is configured', () => {
+      const defaultDetector = new TurnDetector({
+        mode: 'silence',
+        silenceThresholdMs: 500,
+        minTurnDurationMs: 100,
+        maxTurnDurationMs: 10000,
+        prefixPaddingMs: 300,
+      });
+      const handler = vi.fn();
+      defaultDetector.on('turn_start', handler);
+      const audibleAudio = Buffer.alloc(100);
+      for (let i = 0; i < audibleAudio.length; i += 2) {
+        audibleAudio.writeInt16LE(10000, i);
+      }
+
+      defaultDetector.onAudioChunk({
+        data: bufferToBase64(audibleAudio),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
 
       expect(handler).toHaveBeenCalledTimes(1);
     });

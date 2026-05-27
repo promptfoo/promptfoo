@@ -8,7 +8,13 @@
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { calculateDuration } from '../audioBuffer';
+import {
+  audioDataToPcm16,
+  base64ToBuffer,
+  bufferToBase64,
+  calculateDuration,
+  resamplePcm16,
+} from '../audioBuffer';
 import { BaseVoiceConnection, waitForEvent } from './base';
 
 import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
@@ -17,6 +23,7 @@ const GOOGLE_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws';
 const DEFAULT_MODEL = 'gemini-3.1-flash-live-preview';
 const DEFAULT_API_VERSION = 'v1beta';
 const DEFAULT_AUDIO_FORMAT: AudioFormat = 'pcm16';
+const GOOGLE_INPUT_SAMPLE_RATE = 16000;
 const GOOGLE_OUTPUT_SAMPLE_RATE = 24000;
 const CONNECTION_TIMEOUT_MS = 15000;
 const INITIAL_RESPONSE_PROMPT = 'Begin the conversation now.';
@@ -50,6 +57,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
   private inputActivityActive = false;
   private responseTriggeredByInput = false;
   private turnCompletionTimer: ReturnType<typeof setTimeout> | null = null;
+  private outputTurnClosed = false;
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -166,7 +174,8 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    const inputSampleRate = chunk.sampleRate || GOOGLE_OUTPUT_SAMPLE_RATE;
+    const pcmData = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
+    const inputData = resamplePcm16(pcmData, chunk.sampleRate, GOOGLE_INPUT_SAMPLE_RATE);
     if (!this.inputActivityActive) {
       this.send({ realtimeInput: { activityStart: {} } });
       this.inputActivityActive = true;
@@ -175,8 +184,8 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.send({
       realtimeInput: {
         audio: {
-          mimeType: `audio/pcm;rate=${inputSampleRate}`,
-          data: chunk.data,
+          mimeType: `audio/pcm;rate=${GOOGLE_INPUT_SAMPLE_RATE}`,
+          data: bufferToBase64(inputData),
         },
       },
     });
@@ -199,6 +208,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
 
     this.send({ realtimeInput: { activityEnd: {} } });
     this.inputActivityActive = false;
+    this.outputTurnClosed = false;
     this.responseTriggeredByInput = true;
   }
 
@@ -219,6 +229,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
+    this.outputTurnClosed = false;
     this.sendText(INITIAL_RESPONSE_PROMPT);
   }
 
@@ -249,17 +260,8 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    this.send({
-      clientContent: {
-        turns: [
-          {
-            role: 'user',
-            parts: [{ text }],
-          },
-        ],
-        turnComplete: true,
-      },
-    });
+    this.outputTurnClosed = false;
+    this.send({ realtimeInput: { text } });
   }
 
   /**
@@ -380,22 +382,30 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
   }
 
   private emitAudioDelta(data: string): void {
-    const format = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
     // Google Live outputs PCM audio at 24kHz regardless of accepted input rate.
     const sampleRate = GOOGLE_OUTPUT_SAMPLE_RATE;
-    const duration = calculateDuration(Buffer.from(data, 'base64').length, sampleRate, format);
+    const duration = calculateDuration(
+      Buffer.from(data, 'base64').length,
+      sampleRate,
+      DEFAULT_AUDIO_FORMAT,
+    );
 
     this.emit('audio_delta', {
       data,
       timestamp: this.cumulativeAudioPositionMs,
       duration,
-      format,
+      format: DEFAULT_AUDIO_FORMAT,
       sampleRate,
     });
     this.cumulativeAudioPositionMs += duration;
   }
 
   private appendTranscript(delta: string): void {
+    if (this.outputTurnClosed) {
+      logger.debug('[GoogleLive] Ignoring transcript received after turn completion');
+      return;
+    }
+
     this.accumulatedTranscript += delta;
     this.emit('transcript_delta', delta);
 
@@ -405,10 +415,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
   }
 
   private finishTranscript(): void {
-    if (!this.accumulatedTranscript) {
-      return;
-    }
-
     this.emit('transcript_done', this.accumulatedTranscript);
     this.accumulatedTranscript = '';
   }
@@ -418,6 +424,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.turnCompletionTimer = setTimeout(() => {
       this.turnCompletionTimer = null;
       this.finishTranscript();
+      this.outputTurnClosed = true;
       this.emit('audio_done');
       this.emit('speech_stopped');
     }, TRANSCRIPT_SETTLE_DELAY_MS);
@@ -434,6 +441,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.clearTurnCompletionTimer();
     this.inputActivityActive = false;
     this.responseTriggeredByInput = false;
+    this.outputTurnClosed = false;
     super.disconnect();
   }
 

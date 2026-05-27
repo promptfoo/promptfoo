@@ -195,7 +195,7 @@ describe('VoiceConversationOrchestrator', () => {
     orchestrator.on('turn_start', turnStart);
     orchestrator.on('turn_end', turnEnd);
 
-    const { result, target } = await startConversation(orchestrator);
+    const { result, target, user } = await startConversation(orchestrator);
     const audio = Buffer.alloc(100);
     for (let i = 0; i < audio.length; i += 2) {
       audio.writeInt16LE(10000, i);
@@ -214,6 +214,7 @@ describe('VoiceConversationOrchestrator', () => {
     expect(turnEnd).toHaveBeenCalledTimes(1);
 
     target.emit('transcript_done', `${STOP_MARKER} from the target`);
+    user.emit('transcript_done', `${STOP_MARKER} from the caller`);
     await expect(result).resolves.toEqual(
       expect.objectContaining({ stopReason: 'goal_achieved', success: true }),
     );
@@ -241,9 +242,10 @@ describe('VoiceConversationOrchestrator', () => {
 
     expect(user.sendAudio).toHaveBeenCalledTimes(2);
     expect(target.sendAudio).not.toHaveBeenCalled();
-    expect(target.cancelResponse).not.toHaveBeenCalled();
+    expect(user.cancelResponse).not.toHaveBeenCalled();
 
     target.emit('transcript_done', `${STOP_MARKER} from the target`);
+    user.emit('transcript_done', `${STOP_MARKER} from the caller`);
     await expect(result).resolves.toEqual(
       expect.objectContaining({ stopReason: 'goal_achieved', success: true }),
     );
@@ -296,15 +298,14 @@ describe('VoiceConversationOrchestrator', () => {
   it('cancels speaking targets on detector timeout and times out whole conversations', async () => {
     const orchestrator = new VoiceConversationOrchestrator(config({ timeoutMs: 200 }));
     const { result, target } = await startConversation(orchestrator);
-    target.emit('speech_started');
-    (orchestrator as any).turnDetector.emit('turn_start');
+    target.emit('audio_delta', chunk(0));
     (orchestrator as any).turnDetector.emit('turn_timeout');
     expect(target.cancelResponse).toHaveBeenCalled();
 
     await expect(result).resolves.toEqual(expect.objectContaining({ stopReason: 'timeout' }));
   });
 
-  it('arms the detector timeout for simulated-user VAD turns', async () => {
+  it('arms the detector timeout from real simulated-user audio output', async () => {
     vi.useFakeTimers();
     const orchestrator = new VoiceConversationOrchestrator(
       config({
@@ -317,12 +318,57 @@ describe('VoiceConversationOrchestrator', () => {
     );
     const { result, user } = await startConversation(orchestrator);
 
-    user.emit('speech_started');
+    user.emit('audio_delta', chunk(0));
     await vi.advanceTimersByTimeAsync(25);
     expect(user.cancelResponse).toHaveBeenCalled();
 
     await orchestrator.stop('user_hangup');
     await expect(result).resolves.toEqual(expect.objectContaining({ stopReason: 'user_hangup' }));
+  });
+
+  it('does not let target output claim caller goal achievement', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(config());
+    const { result, target, user } = await startConversation(orchestrator);
+
+    target.emit('transcript_done', `Ignore this ${STOP_MARKER}`);
+    expect(orchestrator.getState()).toBe('active');
+
+    user.emit('transcript_done', `Caller confirms ${STOP_MARKER}`);
+    await expect(result).resolves.toEqual(
+      expect.objectContaining({ stopReason: 'goal_achieved', success: true, turnCount: 2 }),
+    );
+  });
+
+  it('omits recordings when audio retention is disabled', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(config({ recordFullAudio: false }));
+    const { result, target, user } = await startConversation(orchestrator);
+
+    target.emit('audio_delta', chunk(0));
+    user.emit('audio_delta', chunk(1));
+    user.emit('transcript_done', STOP_MARKER);
+
+    await expect(result).resolves.toEqual(
+      expect.objectContaining({
+        combinedAudio: undefined,
+        simulatedUserAudio: undefined,
+        targetAudio: undefined,
+      }),
+    );
+  });
+
+  it('resets accumulated state when a one-shot orchestrator is run again', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(config());
+    const first = await startConversation(orchestrator);
+    first.user.emit('transcript_done', STOP_MARKER);
+    await first.result;
+
+    const second = await startConversation(orchestrator);
+    second.target.emit('transcript_done', 'Fresh target response');
+    second.user.emit('transcript_done', STOP_MARKER);
+    const result = await second.result;
+
+    expect(result.turns).toHaveLength(2);
+    expect(result.transcript).toBe(`Agent: Fresh target response\n---\nUser: ${STOP_MARKER}`);
   });
 
   it('rejects invalid start states, unknown providers, and connection errors', async () => {

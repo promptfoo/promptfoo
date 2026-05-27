@@ -384,6 +384,24 @@ describe('GoogleLiveConnection', () => {
       expect(audioDone).toHaveBeenCalledTimes(1);
     });
 
+    it('completes a turn without hanging when transcription arrives after the settle window', async () => {
+      vi.useFakeTimers();
+      const transcript = vi.fn();
+      const audioDone = vi.fn();
+      connection.on('transcript_done', transcript);
+      connection.on('audio_done', audioDone);
+
+      (connection as any).handleMessage(JSON.stringify({ serverContent: { turnComplete: true } }));
+      await vi.advanceTimersByTimeAsync(250);
+      (connection as any).handleMessage(
+        JSON.stringify({ serverContent: { outputTranscription: { text: 'too late' } } }),
+      );
+
+      expect(transcript).toHaveBeenCalledWith('');
+      expect(audioDone).toHaveBeenCalledTimes(1);
+      expect(transcript).not.toHaveBeenCalledWith('too late');
+    });
+
     it('should emit input_transcript for input transcription', () => {
       const handler = vi.fn();
       connection.on('input_transcript', handler);
@@ -523,52 +541,54 @@ describe('GoogleLiveConnection', () => {
   });
 
   describe('ready client messages', () => {
-    it('uses manual activity boundaries for routed audio and a kickoff for speak-first turns', () => {
+    it('resamples routed audio and uses realtime text for speak-first turns', () => {
       const sendSpy = vi.spyOn(connection as any, 'send');
       (connection as any).setReady();
+      const sourceAudio = Buffer.alloc(4800).toString('base64');
 
       connection.requestResponse();
       connection.sendAudio({
-        data: 'base64audio',
+        data: sourceAudio,
         timestamp: 0,
         format: 'pcm16',
-        sampleRate: 16000,
+        sampleRate: 24000,
       });
       connection.commitAudio();
       connection.requestResponse();
       connection.sendText('Hello');
 
       expect(sendSpy.mock.calls.map(([message]) => message)).toEqual([
-        {
-          clientContent: {
-            turns: [
-              {
-                role: 'user',
-                parts: [{ text: 'Begin the conversation now.' }],
-              },
-            ],
-            turnComplete: true,
-          },
-        },
+        { realtimeInput: { text: 'Begin the conversation now.' } },
         { realtimeInput: { activityStart: {} } },
         {
           realtimeInput: {
-            audio: { data: 'base64audio', mimeType: 'audio/pcm;rate=16000' },
+            audio: {
+              data: Buffer.alloc(3200).toString('base64'),
+              mimeType: 'audio/pcm;rate=16000',
+            },
           },
         },
         { realtimeInput: { activityEnd: {} } },
-        {
-          clientContent: {
-            turns: [
-              {
-                role: 'user',
-                parts: [{ text: 'Hello' }],
-              },
-            ],
-            turnComplete: true,
-          },
-        },
+        { realtimeInput: { text: 'Hello' } },
       ]);
+    });
+
+    it('decodes compressed chunks before sending PCM input to Google Live', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send');
+      (connection as any).setReady();
+
+      connection.sendAudio({
+        data: Buffer.from([0xff, 0x7f]).toString('base64'),
+        timestamp: 0,
+        format: 'g711_ulaw',
+        sampleRate: 8000,
+      });
+
+      const audio = sendSpy.mock.calls[1]?.[0] as {
+        realtimeInput: { audio: { data: string; mimeType: string } };
+      };
+      expect(audio.realtimeInput.audio.mimeType).toBe('audio/pcm;rate=16000');
+      expect(Buffer.from(audio.realtimeInput.audio.data, 'base64')).toHaveLength(8);
     });
   });
 

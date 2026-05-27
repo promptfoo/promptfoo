@@ -238,6 +238,8 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     switch (msg.type) {
       // Session events
       case 'session.created':
+        this.sessionId = (msg.session as { id?: string })?.id || null;
+        break;
       case 'session.updated':
         this.sessionId = (msg.session as { id?: string })?.id || null;
         this.setReady();

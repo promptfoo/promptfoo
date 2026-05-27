@@ -13,7 +13,7 @@ import { AudioBuffer, createStereoWav, type StereoTurn } from './audioBuffer';
 import { GoogleLiveConnection } from './connections/googleLive';
 import { NovaSonicConnection } from './connections/novaSonic';
 import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
-import { TranscriptAccumulator } from './transcriptAccumulator';
+import { STOP_MARKER, TranscriptAccumulator } from './transcriptAccumulator';
 import { TurnDetector } from './turnDetection';
 
 import type { BaseVoiceConnection } from './connections/base';
@@ -146,6 +146,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       throw new Error(`Cannot start conversation: already in state ${this.state}`);
     }
 
+    this.resetRunState();
     this.state = 'connecting';
     this.startTime = Date.now();
     this.emit('state_change', this.state);
@@ -230,17 +231,19 @@ export class VoiceConversationOrchestrator extends EventEmitter {
   }
 
   private feedTurnDetector(speaker: 'target' | 'user', chunk: AudioChunk): void {
-    if (!this.shouldUseLocalTurnDetection()) {
-      return;
-    }
-
     this.pendingTurnDetectorSpeaker = speaker;
-    this.turnDetector.onAudioChunk(chunk);
+    if (this.shouldUseLocalTurnDetection()) {
+      this.turnDetector.onAudioChunk(chunk);
+    } else {
+      // Provider VAD is disabled for manually routed conversations; output
+      // audio is the reliable activity signal for enforcing turn timeouts.
+      this.turnDetector.onSpeechStart();
+    }
     this.pendingTurnDetectorSpeaker = null;
   }
 
   private markAudioDoneForTurnDetection(speaker: 'target' | 'user'): void {
-    if (this.shouldUseLocalTurnDetection() && this.activeTurnDetectorSpeaker === speaker) {
+    if (this.activeTurnDetectorSpeaker === speaker) {
       this.turnDetector.onSpeechEnd();
     }
   }
@@ -250,7 +253,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.turnCount++;
     this.emit('turn_complete', { speaker, text: turn });
 
-    if (this.transcript.hasStopMarker()) {
+    if (speaker === 'user' && text.includes(STOP_MARKER)) {
       logger.debug(`[Orchestrator] Stop marker detected in ${speaker} speech`);
       void this.completeConversation('goal_achieved');
       return true;
@@ -316,7 +319,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         ...chunk,
         timestamp: this.targetAudioOffsetMs + relativePosition,
       };
-      this.targetAudioBuffer.append(adjustedChunk);
+      if (this.config.recordFullAudio !== false) {
+        this.targetAudioBuffer.append(adjustedChunk);
+      }
 
       // Track the furthest audio position in global timeline
       const chunkEnd = adjustedChunk.timestamp + (adjustedChunk.duration || 0);
@@ -421,7 +426,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         ...chunk,
         timestamp: this.userAudioOffsetMs + relativePosition,
       };
-      this.simulatedUserAudioBuffer.append(adjustedChunk);
+      if (this.config.recordFullAudio !== false) {
+        this.simulatedUserAudioBuffer.append(adjustedChunk);
+      }
 
       // Track the furthest audio position in global timeline
       const chunkEnd = adjustedChunk.timestamp + (adjustedChunk.duration || 0);
@@ -588,8 +595,11 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     }));
 
     // Create individual mono tracks
-    const targetAudio = this.targetAudioBuffer.toWav();
-    const simulatedUserAudio = this.simulatedUserAudioBuffer.toWav();
+    const shouldRecordAudio = this.config.recordFullAudio !== false;
+    const targetAudio = shouldRecordAudio ? this.targetAudioBuffer.toWav() : undefined;
+    const simulatedUserAudio = shouldRecordAudio
+      ? this.simulatedUserAudioBuffer.toWav()
+      : undefined;
 
     // Create combined stereo audio (left=agent, right=user for diarization)
     // Use turn timestamps for accurate time alignment
@@ -599,11 +609,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         speaker: t.speaker,
         timestamp: t.timestamp,
       }));
-    const combinedAudio = createStereoWav(
-      this.targetAudioBuffer,
-      this.simulatedUserAudioBuffer,
-      stereoTurns,
-    );
+    const combinedAudio = shouldRecordAudio
+      ? createStereoWav(this.targetAudioBuffer, this.simulatedUserAudioBuffer, stereoTurns)
+      : undefined;
 
     const result: ConversationResult = {
       success: reason === 'goal_achieved',
@@ -663,6 +671,29 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     }
 
     this.state = 'idle';
+  }
+
+  private resetRunState(): void {
+    this.turnDetector.reset();
+    this.transcript.reset();
+    this.targetAudioBuffer.clear();
+    this.simulatedUserAudioBuffer.clear();
+    this.isTargetSpeaking = false;
+    this.isSimulatedUserSpeaking = false;
+    this.pendingTurnDetectorSpeaker = null;
+    this.activeTurnDetectorSpeaker = null;
+    this.turnCount = 0;
+    this.globalAudioPositionMs = 0;
+    this.targetAudioOffsetMs = 0;
+    this.userAudioOffsetMs = 0;
+    this.targetBaselineMs = 0;
+    this.userBaselineMs = 0;
+    this.targetCurrentEndMs = 0;
+    this.userCurrentEndMs = 0;
+    this.targetAudioDonePending = false;
+    this.userAudioDonePending = false;
+    this.targetTranscriptDoneForTurn = false;
+    this.userTranscriptDoneForTurn = false;
   }
 }
 

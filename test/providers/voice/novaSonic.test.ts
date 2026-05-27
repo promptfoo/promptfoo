@@ -36,9 +36,11 @@ const { bedrockMocks } = vi.hoisted(() => {
       })(),
     };
   });
+  const destroy = vi.fn();
 
   class MockBedrockClient {
     send = send;
+    destroy = destroy;
 
     constructor(config: unknown) {
       if (state.constructError) {
@@ -48,7 +50,7 @@ const { bedrockMocks } = vi.hoisted(() => {
     }
   }
 
-  return { bedrockMocks: { MockBedrockClient, MockBidirectionalCommand, send, state } };
+  return { bedrockMocks: { MockBedrockClient, MockBidirectionalCommand, destroy, send, state } };
 });
 
 vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
@@ -63,7 +65,7 @@ import { NovaSonicConnection } from '../../../src/providers/voice/connections/no
 
 type NovaInternals = {
   accumulatedTranscript: string;
-  bedrockClient: { send: typeof bedrockMocks.send } | null;
+  bedrockClient: { destroy: typeof bedrockMocks.destroy; send: typeof bedrockMocks.send } | null;
   createAsyncIterable: () => AsyncIterable<{ chunk: { bytes: Uint8Array } }>;
   getRegion: () => string;
   handleNovaEvent: (data: { event?: Record<string, unknown> }) => void;
@@ -108,6 +110,7 @@ async function configure(connection: NovaSonicConnection) {
 describe('NovaSonicConnection', () => {
   beforeEach(() => {
     bedrockMocks.send.mockClear();
+    bedrockMocks.destroy.mockClear();
     bedrockMocks.state.clientConfigs.length = 0;
     bedrockMocks.state.constructError = undefined;
     bedrockMocks.state.responseEvents = [];
@@ -122,8 +125,19 @@ describe('NovaSonicConnection', () => {
 
   it('connects, configures a session, and exposes mapped configuration state', async () => {
     bedrockMocks.state.responseEvents = [
-      { event: { textOutput: { role: 'ASSISTANT', content: 'hello' } } },
-      { event: { contentEnd: { stopReason: 'END_TURN' } } },
+      { event: { completionStart: {} } },
+      {
+        event: {
+          contentStart: {
+            contentId: 'assistant-final',
+            type: 'TEXT',
+            role: 'ASSISTANT',
+            additionalModelFields: JSON.stringify({ generationStage: 'FINAL' }),
+          },
+        },
+      },
+      { event: { textOutput: { contentId: 'assistant-final', content: 'hello' } } },
+      { event: { completionEnd: { stopReason: 'END_TURN' } } },
     ];
     const transcript = vi.fn();
     const configured = vi.fn();
@@ -191,6 +205,9 @@ describe('NovaSonicConnection', () => {
     nova.session.audioContentActive = false;
     connection.sendAudio(audioChunk());
     expect(nova.session.audioContentActive).toBe(true);
+    expect(() => connection.sendAudio({ ...audioChunk(), format: 'g711_ulaw' })).toThrow(
+      'supports only PCM16',
+    );
 
     const session = nova.session;
     connection.disconnect();
@@ -205,6 +222,7 @@ describe('NovaSonicConnection', () => {
     expect(connection.isConnected()).toBe(false);
     expect(connection.getSessionId()).toBeNull();
     expect(closed).toHaveBeenCalled();
+    expect(bedrockMocks.destroy).toHaveBeenCalled();
   });
 
   it('handles not-ready operations, response events, stream errors, and region fallbacks', async () => {
@@ -228,18 +246,49 @@ describe('NovaSonicConnection', () => {
     connection.requestResponse();
 
     nova.handleNovaEvent({});
-    nova.handleNovaEvent({ event: { textOutput: { role: 'ASSISTANT', content: 'assistant' } } });
-    nova.handleNovaEvent({ event: { textOutput: { role: 'USER', content: 'caller' } } });
+    nova.handleNovaEvent({ event: { completionStart: {} } });
+    nova.handleNovaEvent({
+      event: {
+        contentStart: {
+          contentId: 'assistant-final',
+          type: 'TEXT',
+          role: 'ASSISTANT',
+          additionalModelFields: JSON.stringify({ generationStage: 'FINAL' }),
+        },
+      },
+    });
+    nova.handleNovaEvent({
+      event: { textOutput: { role: 'ASSISTANT', content: ' compatible' } },
+    });
+    nova.handleNovaEvent({
+      event: {
+        contentStart: {
+          contentId: 'caller-input',
+          type: 'TEXT',
+          role: 'USER',
+        },
+      },
+    });
+    nova.handleNovaEvent({
+      event: { textOutput: { contentId: 'assistant-final', content: 'assistant' } },
+    });
+    nova.handleNovaEvent({
+      event: { textOutput: { contentId: 'caller-input', content: 'caller' } },
+    });
     nova.handleNovaEvent({
       event: { audioOutput: { content: Buffer.from([0, 0, 1, 0]).toString('base64') } },
     });
     nova.handleNovaEvent({ event: { contentEnd: { stopReason: 'END_TURN' } } });
+    expect(done).not.toHaveBeenCalled();
+    nova.handleNovaEvent({ event: { completionEnd: { stopReason: 'END_TURN' } } });
+    nova.handleNovaEvent({ event: { completionEnd: { stopReason: 'END_TURN' } } });
     nova.handleNovaEvent({ event: { other: {} } });
 
     expect(deltas).toHaveBeenCalledWith('assistant');
+    expect(deltas).toHaveBeenCalledWith(' compatible');
     expect(input).toHaveBeenCalledWith('caller');
     expect(audio).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 24000 }));
-    expect(done).toHaveBeenCalled();
+    expect(done).toHaveBeenCalledTimes(1);
     expect(stopped).toHaveBeenCalled();
 
     nova.responsePromise = Promise.reject(new Error('stream failed'));
