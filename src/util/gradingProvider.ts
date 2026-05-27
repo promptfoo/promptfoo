@@ -47,19 +47,20 @@ export function addSuiteEnvToDeferredTypedProviders(
     return provider;
   }
 
-  const providerWithEnv = { ...provider };
+  let providerWithEnv: ProviderTypeMap | undefined;
   for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
     const nestedProvider = provider[providerType];
     if (!nestedProvider || isApiProvider(nestedProvider)) {
       continue;
     }
 
+    providerWithEnv ??= { ...provider };
     providerWithEnv[providerType] =
       typeof nestedProvider === 'string'
         ? { id: nestedProvider, env }
         : { ...nestedProvider, env: { ...env, ...nestedProvider.env } };
   }
-  return providerWithEnv;
+  return providerWithEnv ?? provider;
 }
 
 // Build a lookup of configured providers by both id() and label, with a

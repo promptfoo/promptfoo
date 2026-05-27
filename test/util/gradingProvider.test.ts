@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  addSuiteEnvToDeferredTypedProviders,
   buildConfiguredProviderMap,
   GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
@@ -57,6 +58,25 @@ describe('isProviderTypeMap', () => {
     ['multiple', { text: 'litellm:judge', embedding: 'litellm:embed' }],
   ])('returns true for typed map (%s)', (_label, value) => {
     expect(isProviderTypeMap(value)).toBe(true);
+  });
+});
+
+describe('addSuiteEnvToDeferredTypedProviders', () => {
+  it('preserves a fully resolved provider map when no entry needs env injection', () => {
+    const provider = makeProvider('litellm:judge');
+    const typeMap = { text: provider };
+
+    expect(addSuiteEnvToDeferredTypedProviders(typeMap, { API_KEY: 'suite-key' })).toBe(typeMap);
+  });
+
+  it('adds env only when a deferred typed provider must still be loaded', () => {
+    const embeddingProvider = makeProvider('litellm:embedding:judge');
+    const typeMap = { text: 'litellm:judge', embedding: embeddingProvider };
+
+    expect(addSuiteEnvToDeferredTypedProviders(typeMap, { API_KEY: 'suite-key' })).toEqual({
+      text: { id: 'litellm:judge', env: { API_KEY: 'suite-key' } },
+      embedding: embeddingProvider,
+    });
   });
 });
 
