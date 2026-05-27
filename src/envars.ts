@@ -20,6 +20,14 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
+  /**
+   * Disables the path-traversal guard applied to `file://` callback
+   * references (e.g. `functionToolCallbacks`). When unset (default), callback
+   * paths must resolve inside the config's basePath. Setting this to `true`
+   * restores pre-{path-traversal-PR} behavior — NOT recommended outside of
+   * legacy compatibility scenarios.
+   */
+  PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
   PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
