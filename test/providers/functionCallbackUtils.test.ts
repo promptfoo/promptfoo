@@ -18,7 +18,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/logger', () => ({
-  default: { debug: vi.fn() },
+  default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
   return {
@@ -350,13 +350,17 @@ describe('FunctionCallbackHandler', () => {
 
       const result = await handler.processCall(call, callbacks);
 
-      // processCall swallows the load error and surfaces it as isError, so
-      // assert that (a) the import was never attempted and (b) the traversal
-      // failure was logged.
+      // processCall swallows the load error and surfaces it as isError. The
+      // path-traversal rejection is a security event, so assert that
+      //   (a) the import was never attempted, and
+      //   (b) the failure was logged at WARN (not silently at debug).
       expect(result.isError).toBe(true);
       expect(mockImportModule).not.toHaveBeenCalled();
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Path traversal detected'),
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('[FunctionCallback] Rejected callback'),
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Path traversal rejected'),
       );
     });
 

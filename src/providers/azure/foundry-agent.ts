@@ -7,7 +7,10 @@ import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
-import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+} from '../../util/functions/loadFunction';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -209,8 +212,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private async loadExternalFunction(fileRef: string): Promise<Function> {
     try {
       return await loadCallbackFromFileUrl(fileRef);
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${fileRef}: ${error.message || String(error)}`);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
+      }
+      throw new Error(`Error loading function from ${fileRef}: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 

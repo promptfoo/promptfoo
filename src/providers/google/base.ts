@@ -15,7 +15,10 @@
  */
 
 import logger from '../../logger';
-import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
@@ -252,8 +255,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   protected async loadExternalFunction(fileRef: string): Promise<Function> {
     try {
       return await loadCallbackFromFileUrl(fileRef);
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${fileRef}: ${error.message || String(error)}`);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
+      }
+      throw new Error(`Error loading function from ${fileRef}: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 

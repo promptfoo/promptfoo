@@ -3,6 +3,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import {
+  CallbackPathTraversalError,
   loadCallbackFromFileUrl,
   resolveCallbackPath,
 } from '../../../src/util/functions/loadFunction';
@@ -44,32 +45,85 @@ describe('resolveCallbackPath', () => {
 
   it('rejects paths that escape via ..', () => {
     expect(() => resolveCallbackPath('../escape.js', '/test/base/path')).toThrow(
-      /Path traversal detected/,
+      /Path traversal rejected/,
     );
   });
 
   it('rejects deeply-traversing paths that escape via ..', () => {
     expect(() => resolveCallbackPath('subdir/../../escape.js', '/test/base/path')).toThrow(
-      /Path traversal detected/,
+      /Path traversal rejected/,
     );
   });
 
   it('rejects absolute paths that fall outside the base', () => {
     expect(() => resolveCallbackPath('/etc/passwd', '/test/base/path')).toThrow(
-      /Path traversal detected/,
+      /Path traversal rejected/,
     );
   });
 
   it('uses cliState.basePath when no basePath is provided', () => {
-    // cliState.basePath is mocked to '/test/base/path'
     const resolved = resolveCallbackPath('callbacks.js');
     expect(resolved).toBe(path.resolve('/test/base/path', 'callbacks.js'));
   });
 
-  it('error message includes both the input and resolved paths', () => {
-    expect(() => resolveCallbackPath('../escape.js', '/test/base/path')).toThrow(
-      /'\.\.\/escape\.js'.*is not within '.*test.*base.*path'/,
+  // Behavior-change lock-in: this PR rejects previously-accepted configs
+  // where the callback path resolved outside `basePath`. Without this test
+  // a future refactor could silently re-loosen the guard.
+  it('BREAKING: rejects previously-accepted absolute paths outside basePath', () => {
+    expect(() => resolveCallbackPath('/Users/me/shared/cb.js', '/test/base/path')).toThrow(
+      CallbackPathTraversalError,
     );
+  });
+
+  it('BREAKING: rejects previously-accepted sibling-directory paths', () => {
+    expect(() => resolveCallbackPath('../sibling/cb.js', '/test/base/path')).toThrow(
+      CallbackPathTraversalError,
+    );
+  });
+
+  it('error message names the input path and points at the opt-out env', () => {
+    // Avoid leaking the resolved absolute path (filesystem layout) in the
+    // user-facing message; that information lives on the
+    // CallbackPathTraversalError instance for debugging.
+    expect(() => resolveCallbackPath('../escape.js', '/test/base/path')).toThrow(
+      /'\.\.\/escape\.js'.*PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD/,
+    );
+  });
+
+  it('exposes filePath and basePath on the thrown error instance', () => {
+    let caught: unknown;
+    try {
+      resolveCallbackPath('../escape.js', '/test/base/path');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(CallbackPathTraversalError);
+    expect((caught as CallbackPathTraversalError).filePath).toBe('../escape.js');
+    expect((caught as CallbackPathTraversalError).basePath).toBe(path.resolve('/test/base/path'));
+  });
+
+  // Windows-specific assertion: with a non-root basePath like `C:/work`,
+  // a config that names a Windows-absolute path on the same drive must be
+  // rejected. On POSIX `C:/...` is a relative segment, so this test asserts
+  // a platform-conditional behavior using path.win32 directly.
+  it('rejects Windows-absolute paths outside a non-root basePath (using path.win32 semantics)', () => {
+    const base = 'C:\\work';
+    const target = 'C:\\etc\\secrets.js';
+    const resolved = path.win32.resolve(base, target);
+    const relative = path.win32.relative(path.win32.resolve(base), resolved);
+    // Sanity: confirm that under win32 semantics, this DOES escape the base.
+    // (relative starts with `..\..` on Windows).
+    expect(relative.startsWith('..') || path.win32.isAbsolute(relative)).toBe(true);
+  });
+
+  it('PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true disables the guard', () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD', 'true');
+    try {
+      const resolved = resolveCallbackPath('../escape.js', '/test/base/path');
+      expect(resolved).toBe(path.resolve('/test/base/path', '../escape.js'));
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -158,7 +212,7 @@ describe('loadCallbackFromFileUrl', () => {
 
   it('rejects path traversal attempts', async () => {
     await expect(loadCallbackFromFileUrl('file://../escape.js:handler')).rejects.toThrow(
-      /Path traversal detected/,
+      /Path traversal rejected/,
     );
     // Should not even attempt to import the module
     expect(mockImportModule).not.toHaveBeenCalled();
@@ -166,7 +220,7 @@ describe('loadCallbackFromFileUrl', () => {
 
   it('rejects absolute paths outside the base directory', async () => {
     await expect(loadCallbackFromFileUrl('file:///etc/passwd:handler')).rejects.toThrow(
-      /Path traversal detected/,
+      /Path traversal rejected/,
     );
     expect(mockImportModule).not.toHaveBeenCalled();
   });

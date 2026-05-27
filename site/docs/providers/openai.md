@@ -1556,6 +1556,20 @@ the output of a function tool call.
 
 This requires defining your config in a JavaScript file instead of YAML.
 
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal
+guard: the resolved path must stay inside the config's `basePath` (typically
+the directory containing your config). Paths that escape the base directory
+(e.g. `file:///etc/cb.js` when `basePath` is `~/projects/myeval`) are
+rejected with `Path traversal rejected: ...`.
+
+Move callback files into your project, or set
+`PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to opt out (not recommended —
+the guard mitigates malicious callback paths supplied via shared configs).
+
+:::
+
 ```js
 module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   prompts: 'Please add the following numbers together: {{a}} and {{b}}',

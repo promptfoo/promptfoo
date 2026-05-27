@@ -8,7 +8,10 @@ import {
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
-import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+} from '../../util/functions/loadFunction';
 import {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
@@ -83,8 +86,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private async loadExternalFunction(fileRef: string): Promise<Function> {
     try {
       return await loadCallbackFromFileUrl(fileRef);
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${fileRef}: ${error.message || String(error)}`);
+    } catch (error) {
+      // Preserve the underlying error (path-traversal, missing module, bad
+      // export, etc.) on `cause` so upstream code can downcast/classify it.
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
+      }
+      throw new Error(`Error loading function from ${fileRef}: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 

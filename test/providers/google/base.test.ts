@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../../src/envars', () => ({
   getEnvString: vi.fn(),
   getEnvInt: vi.fn().mockReturnValue(300000),
+  getEnvBool: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('../../../src/logger', () => ({
