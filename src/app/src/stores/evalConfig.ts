@@ -592,25 +592,62 @@ const walkValue = (
   }
 };
 
+// A provider can supply its own env overrides, which are merged before
+// credential templates in its headers or URLs are rendered. Remove only
+// provider-local env values referenced from those credential-bearing fields.
+const omitReferencedProviderEnv = (
+  value: unknown,
+  templatePaths: Set<string>,
+  parentKey?: string,
+): unknown => {
+  if (!value || typeof value !== 'object' || templatePaths.size === 0) {
+    return value;
+  }
+  const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+  if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => omitReferencedProviderEnv(item, templatePaths, parentKey));
+  }
+  if (normalizedParent === 'env' && isRecord(value)) {
+    return Array.from(templatePaths, deserializeCredentialTemplatePath)
+      .filter((path) => path[0] === 'env')
+      .reduce<Record<string, unknown>>(
+        (sanitized, path) => omitNestedPath(sanitized, path.slice(1)),
+        value,
+      );
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      omitReferencedProviderEnv(nestedValue, templatePaths, key),
+    ]),
+  );
+};
+
 const omitProviderCredentials = (
   value: unknown,
   parentKey?: string,
   templatePaths?: Set<string>,
 ): unknown => {
   const credentialEnvSelectors = new Set<string>();
+  const providerTemplatePaths = new Set<string>();
   collectCredentialEnvSelectors(value, credentialEnvSelectors, new WeakSet<object>(), 0);
   credentialEnvSelectors.forEach((name) =>
-    templatePaths?.add(serializeCredentialTemplatePath(['env', name])),
+    providerTemplatePaths.add(serializeCredentialTemplatePath(['env', name])),
   );
-  return walkValue(
+  const sanitized = walkValue(
     value,
     parentKey,
     new WeakSet<object>(),
     0,
-    templatePaths,
+    providerTemplatePaths,
     false,
     credentialEnvSelectors,
   );
+  providerTemplatePaths.forEach((path) => templatePaths?.add(path));
+  return omitReferencedProviderEnv(sanitized, providerTemplatePaths);
 };
 
 const PROVIDER_OPTION_KEYS = new Set([
@@ -897,6 +934,48 @@ const omitSharingCredentials = (sharing: unknown, templatePaths?: Set<string>): 
   };
 };
 
+const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
+  scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
+
+const omitProviderPromptMapCredentials = (
+  providerPromptMap: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(providerPromptMap)) {
+    return providerPromptMap;
+  }
+  return Object.fromEntries(
+    Object.entries(providerPromptMap).map(([providerId, prompts]) => [
+      scrubProviderIdentifier(providerId, templatePaths),
+      prompts,
+    ]),
+  );
+};
+
+const omitCommandLineOptionsCredentials = (
+  commandLineOptions: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(commandLineOptions)) {
+    return commandLineOptions;
+  }
+  return {
+    ...commandLineOptions,
+    ...(typeof commandLineOptions.grader === 'string'
+      ? { grader: scrubProviderIdentifier(commandLineOptions.grader, templatePaths) }
+      : {}),
+    ...(Array.isArray(commandLineOptions.providers)
+      ? {
+          providers: commandLineOptions.providers.map((provider) =>
+            typeof provider === 'string'
+              ? scrubProviderIdentifier(provider, templatePaths)
+              : provider,
+          ),
+        }
+      : {}),
+  };
+};
+
 const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedConfig>['env'] => {
   if (!env || typeof env !== 'object') {
     return env;
@@ -1000,6 +1079,10 @@ const omitRedteamContextCredentialVars = (
 const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
   const templatePaths = new Set<string>();
   const configWithoutAzureSas = redactAzureBlobSasTokens(config);
+  // The YAML editor may contain untyped fields before server-side schema parsing.
+  const rawEditorConfig = configWithoutAzureSas as Partial<UnifiedConfig> & {
+    providerPromptMap?: unknown;
+  };
   const sanitized = {
     ...configWithoutAzureSas,
     env: omitSensitiveEnv(configWithoutAzureSas.env),
@@ -1046,6 +1129,22 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
             configWithoutAzureSas.sharing,
             templatePaths,
           ) as Partial<UnifiedConfig>['sharing'],
+        }
+      : {}),
+    ...(hasOwn(rawEditorConfig, 'providerPromptMap')
+      ? {
+          providerPromptMap: omitProviderPromptMapCredentials(
+            rawEditorConfig.providerPromptMap,
+            templatePaths,
+          ),
+        }
+      : {}),
+    ...(hasOwn(configWithoutAzureSas, 'commandLineOptions')
+      ? {
+          commandLineOptions: omitCommandLineOptionsCredentials(
+            configWithoutAzureSas.commandLineOptions,
+            templatePaths,
+          ) as Partial<UnifiedConfig>['commandLineOptions'],
         }
       : {}),
   };

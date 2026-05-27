@@ -759,6 +759,39 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('provider-cloudflare-secret');
     });
 
+    it('redacts provider env values referenced by credential templates', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              headers: {
+                Authorization: 'Bearer {{ env.SERVICE_AUTH }}',
+                'X-Region': '{{ env.REGION }}',
+              },
+            },
+            env: {
+              SERVICE_AUTH: 'abc123',
+              REGION: 'us-east-1',
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0]).toEqual({
+        id: 'http',
+        config: {
+          headers: {
+            Authorization: 'Bearer {{ env.SERVICE_AUTH }}',
+            'X-Region': '{{ env.REGION }}',
+          },
+        },
+        env: { REGION: 'us-east-1' },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('abc123');
+    });
+
     it('preserves additional non-secret provider selectors and behavior flags', () => {
       useStore.getState().setConfig({
         providers: [
@@ -1088,6 +1121,50 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('share-password');
       expect(JSON.stringify(persisted)).not.toContain('share-secret');
       expect(JSON.stringify(persisted)).not.toContain('view-secret');
+    });
+
+    it('redacts provider identifiers in raw editor providerPromptMap fields', () => {
+      const provider =
+        'https://router-user:router-password@api.example.com/v1?token=routing-secret&region=us';
+      useStore.getState().setConfig({
+        providers: [provider],
+        prompts: ['main'],
+        providerPromptMap: { [provider]: ['main'] },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providerPromptMap).toEqual({
+        'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us': ['main'],
+      });
+      expect(JSON.stringify(persisted)).not.toContain('router-user');
+      expect(JSON.stringify(persisted)).not.toContain('router-password');
+      expect(JSON.stringify(persisted)).not.toContain('routing-secret');
+    });
+
+    it('redacts credential-bearing command-line provider options', () => {
+      useStore.getState().setConfig({
+        commandLineOptions: {
+          grader:
+            'https://grader-user:grader-password@grader.example.com/v1?api_key=grader-secret&mode=strict',
+          providers: [
+            'https://target-user:target-password@target.example.com/v1?token=target-secret&region=us',
+            'openai:gpt-4o-mini',
+          ],
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.commandLineOptions).toEqual({
+        grader: 'https://[REDACTED]@grader.example.com/v1?api_key=[REDACTED]&mode=strict',
+        providers: [
+          'https://[REDACTED]@target.example.com/v1?token=[REDACTED]&region=us',
+          'openai:gpt-4o-mini',
+        ],
+      });
+      expect(JSON.stringify(persisted)).not.toContain('grader-password');
+      expect(JSON.stringify(persisted)).not.toContain('grader-secret');
+      expect(JSON.stringify(persisted)).not.toContain('target-password');
+      expect(JSON.stringify(persisted)).not.toContain('target-secret');
     });
 
     it('redacts credentials in HTTP body strings', () => {
