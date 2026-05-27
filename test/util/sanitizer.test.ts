@@ -917,11 +917,16 @@ describe('sanitizeObject', () => {
         accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
         secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
         sessionToken: 'session-token-value',
+        AWS_SECRET_ACCESS_KEY: 'config-secret',
+        AWS_SESSION_TOKEN: 'config-session',
       };
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
-      // These don't match the predefined patterns, so they won't be redacted
-      // unless we add specific patterns for them
+      expect(result.accessKeyId).toBe('[REDACTED]');
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
+      expect(result.AWS_SECRET_ACCESS_KEY).toBe('[REDACTED]');
+      expect(result.AWS_SESSION_TOKEN).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {

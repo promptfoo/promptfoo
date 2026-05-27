@@ -43,6 +43,10 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 You can override this by setting the `provider` option (see below).
 
+When selected automatically, the DeepSeek judge requests non-thinking mode so final grading output
+is not mixed with reasoning text. Explicit DeepSeek grader configurations can choose a different
+mode through `config.passthrough.thinking.type`.
+
 Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
 It asks the model to output a JSON object that looks like this:

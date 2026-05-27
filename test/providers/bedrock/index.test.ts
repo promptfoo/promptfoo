@@ -62,6 +62,10 @@ const credentialProviderSsoFactory = vi.hoisted(() => ({
   fromSSO: vi.fn(() => 'sso-provider'),
 }));
 
+const credentialProviderIniFactory = vi.hoisted(() => ({
+  fromIni: vi.fn(() => 'ini-provider'),
+}));
+
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -81,6 +85,10 @@ const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
 
 vi.mock('@aws-sdk/credential-provider-sso', () => ({
   fromSSO: credentialProviderSsoFactory.fromSSO,
+}));
+
+vi.mock('@aws-sdk/credential-provider-ini', () => ({
+  fromIni: credentialProviderIniFactory.fromIni,
 }));
 
 // Preserve proxy variables so they can be restored after each test. These are
@@ -128,6 +136,8 @@ describe('AwsBedrockGenericProvider', () => {
     vi.clearAllMocks();
     credentialProviderSsoFactory.fromSSO.mockReset();
     credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
+    credentialProviderIniFactory.fromIni.mockReset();
+    credentialProviderIniFactory.fromIni.mockReturnValue('ini-provider');
     mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     // Ensure proxy environment variables do not force proxy-specific code paths
@@ -811,6 +821,19 @@ describe('AwsBedrockGenericProvider', () => {
         profile: 'test-profile',
       });
       expect(credentials).toBe('sso-provider');
+    });
+
+    it('should return shared profile credential provider for a generic AWS profile', async () => {
+      const provider = new TestBedrockProvider({
+        credentialProfile: 'test-profile',
+      });
+
+      const credentials = await provider.getCredentials();
+      expect(credentialProviderIniFactory.fromIni).toHaveBeenCalledWith({
+        profile: 'test-profile',
+      });
+      expect(credentials).toBe('ini-provider');
+      expect(credentialProviderSsoFactory.fromSSO).not.toHaveBeenCalled();
     });
 
     it('should return undefined when no credentials are provided', async () => {

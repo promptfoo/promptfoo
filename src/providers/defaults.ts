@@ -4,7 +4,11 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import { getBedrockProviders } from './bedrock/defaults';
+import {
+  getBedrockProviders,
+  hasBedrockAmbientCredentials,
+  hasBedrockBearerToken,
+} from './bedrock/defaults';
 import { getDeepSeekProviders } from './deepseek/defaults';
 import { getGitHubProviders } from './github/defaults';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
@@ -161,16 +165,6 @@ function hasAzureEmbeddingCredentials(env?: EnvOverrides): boolean {
   return (
     hasAzureApiCredential(env) && (hasAzureEmbeddingDeployment(env) || hasAzureChatDeployment(env))
   );
-}
-
-function hasBedrockBearerToken(env?: EnvOverrides): boolean {
-  return hasCredential('AWS_BEARER_TOKEN_BEDROCK', env);
-}
-
-function hasBedrockAmbientCredentials(env?: EnvOverrides): boolean {
-  const hasStaticCredentials =
-    hasCredential('AWS_ACCESS_KEY_ID', env) && hasCredential('AWS_SECRET_ACCESS_KEY', env);
-  return hasStaticCredentials || hasCredential('AWS_PROFILE', env);
 }
 
 async function hasGoogleDefaultCredentialsForSelection(

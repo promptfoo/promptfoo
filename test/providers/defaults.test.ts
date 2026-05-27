@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import { AwsBedrockConverseProvider } from '../../src/providers/bedrock/converse';
 import { DeepSeekProvider } from '../../src/providers/deepseek';
@@ -66,9 +67,11 @@ class MockProvider implements ApiProvider {
 
 describe('Provider override tests', () => {
   const originalEnv = { ...process.env };
+  const originalCliConfig = cliState.config;
 
   beforeEach(() => {
     mockProcessEnv({ ...originalEnv }, { clear: true });
+    cliState.config = undefined;
     setDefaultCompletionProviders(undefined);
     setDefaultEmbeddingProviders(undefined);
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
@@ -104,6 +107,7 @@ describe('Provider override tests', () => {
 
   afterEach(async () => {
     mockProcessEnv(originalEnv, { clear: true });
+    cliState.config = originalCliConfig;
     clearCodexDefaultProvidersForTesting();
     await providerRegistry.shutdownAll();
     vi.resetAllMocks();
@@ -461,6 +465,12 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       expect(providers.gradingProvider.id()).toBe('bedrock:converse:amazon.nova-pro-v1:0');
+      expect(
+        (providers.gradingProvider as AwsBedrockConverseProvider).config.profile,
+      ).toBeUndefined();
+      expect(
+        (providers.gradingProvider as AwsBedrockConverseProvider).config.credentialProfile,
+      ).toBeUndefined();
     });
 
     it('should use Bedrock providers when AWS bearer token authentication is set', async () => {
@@ -513,9 +523,48 @@ describe('Provider override tests', () => {
         AWS_PROFILE: 'override-profile',
       });
 
-      expect((providers.gradingProvider as AwsBedrockConverseProvider).config.profile).toBe(
-        'override-profile',
-      );
+      expect(
+        (providers.gradingProvider as AwsBedrockConverseProvider).config.credentialProfile,
+      ).toBe('override-profile');
+    });
+
+    it('should pass AWS credentials supplied through config env to Bedrock', async () => {
+      cliState.config = {
+        env: {
+          AWS_ACCESS_KEY_ID: 'config-access',
+          AWS_SECRET_ACCESS_KEY: 'config-secret',
+          AWS_SESSION_TOKEN: 'config-session',
+        },
+      };
+
+      const providers = await getDefaultProviders();
+      const credentials = await (
+        providers.gradingProvider as AwsBedrockConverseProvider
+      ).getCredentials();
+
+      expect(credentials).toEqual({
+        accessKeyId: 'config-access',
+        secretAccessKey: 'config-secret',
+        sessionToken: 'config-session',
+      });
+    });
+
+    it('should pass AWS profiles supplied through config env to Bedrock', async () => {
+      cliState.config = { env: { AWS_PROFILE: 'config-profile' } };
+
+      const providers = await getDefaultProviders();
+
+      expect(
+        (providers.gradingProvider as AwsBedrockConverseProvider).config.credentialProfile,
+      ).toBe('config-profile');
+    });
+
+    it('should not combine incomplete direct and ambient AWS credentials', async () => {
+      mockProcessEnv({ AWS_SECRET_ACCESS_KEY: 'ambient-secret' });
+
+      const providers = await getDefaultProviders({ AWS_ACCESS_KEY_ID: 'override-access' });
+
+      expect(providers.gradingProvider.id()).not.toContain('bedrock');
     });
 
     it('should not select Bedrock for an incomplete static AWS credential pair', async () => {
@@ -571,6 +620,27 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders({ DEEPSEEK_API_KEY: 'override-deepseek' });
 
       expect((providers.gradingProvider as DeepSeekProvider).getApiKey()).toBe('override-deepseek');
+    });
+
+    it('should disable thinking for automatic DeepSeek grading and synthesis providers', async () => {
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'test-key' });
+
+      const providers = await getDefaultProviders();
+      const gradingBody = await (providers.gradingProvider as DeepSeekProvider).getOpenAiBody(
+        'grade this',
+      );
+      const jsonBody = await (providers.gradingJsonProvider as DeepSeekProvider).getOpenAiBody(
+        'grade as json',
+      );
+      const synthesisBody = await (providers.synthesizeProvider as DeepSeekProvider).getOpenAiBody(
+        'synthesize this',
+      );
+
+      expect(gradingBody.body.thinking).toEqual({ type: 'disabled' });
+      expect(jsonBody.body.thinking).toEqual({ type: 'disabled' });
+      expect(jsonBody.body.response_format).toEqual({ type: 'json_object' });
+      expect(synthesisBody.body.thinking).toEqual({ type: 'disabled' });
+      expect((providers.synthesizeProvider as DeepSeekProvider).config.showThinking).toBe(false);
     });
 
     it('should not use DeepSeek providers when xAI credentials exist', async () => {

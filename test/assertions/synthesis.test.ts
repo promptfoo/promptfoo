@@ -5,6 +5,7 @@ import {
   generateNewQuestionsPrompt,
   synthesize,
 } from '../../src/assertions/synthesis';
+import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
 
@@ -12,6 +13,10 @@ import type { ApiProvider, TestCase } from '../../src/types/index';
 
 vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
+}));
+
+vi.mock('../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn(),
 }));
 
 describe('synthesize', () => {
@@ -41,6 +46,47 @@ describe('synthesize', () => {
 
     expect(result).toHaveLength(1);
     expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
+  });
+
+  it('should preserve default provider configuration when setting the conversion token budget', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'default-provider',
+      config: {
+        showThinking: false,
+        passthrough: { thinking: { type: 'disabled' } },
+      },
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i++ === 0) {
+          return Promise.resolve({
+            output:
+              '{"questions": [{"label": "metric1", "question": "test question", "question_source": "IMPLIED_IN_INSTRUCTIONS", "question_type": "CORE_FOR_APPLICATION"}]}',
+          });
+        }
+        return Promise.resolve({ output: 'None' });
+      }),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    await synthesize({
+      prompts: ['Test prompt'],
+      tests: [],
+      numQuestions: 1,
+      type: 'pi',
+    });
+
+    expect(mockProvider.config).toEqual({
+      showThinking: false,
+      passthrough: { thinking: { type: 'disabled' } },
+      maxTokens: 3000,
+    });
   });
 });
 

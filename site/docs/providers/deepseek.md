@@ -20,6 +20,9 @@ Basic configuration example:
 providers:
   - id: deepseek:deepseek-v4-flash
     config:
+      passthrough:
+        thinking:
+          type: disabled
       temperature: 0.7
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
@@ -36,7 +39,8 @@ providers:
 - `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
+- `showThinking` - Control whether returned reasoning content is included in promptfoo output (default: `true`); it does not disable thinking
+- `passthrough.thinking.type` - Set to `enabled` or `disabled` to select thinking mode for V4 requests
 
 ## Available Models
 
@@ -52,6 +56,7 @@ The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro
 - 1M context window, up to 384K output tokens
 - Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
 - Output: $0.28/1M
+- The automatically selected model-graded default requests non-thinking mode so judge responses contain only final output
 
 ### deepseek-v4-pro
 

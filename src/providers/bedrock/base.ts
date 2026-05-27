@@ -19,6 +19,7 @@ import type { EnvOverrides } from '../../types/env';
 export interface BedrockOptions {
   accessKeyId?: string;
   apiKey?: string;
+  credentialProfile?: string;
   profile?: string;
   region?: string;
   secretAccessKey?: string;
@@ -63,7 +64,7 @@ function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) 
   const accessKeyId = getNonEmptyString(config.accessKeyId);
   const secretAccessKey = getNonEmptyString(config.secretAccessKey);
   const sessionToken = getNonEmptyString(config.sessionToken);
-  const profile = getNonEmptyString(config.profile);
+  const profile = getNonEmptyString(config.profile || config.credentialProfile);
   const hasExplicitCredentials = Boolean(accessKeyId && secretAccessKey);
   const authSource = hasExplicitCredentials
     ? 'explicit-credentials'
@@ -187,7 +188,21 @@ export abstract class AwsBedrockGenericProvider {
       }
     }
 
-    // 4. AWS default credential chain (lowest priority)
+    // 4. Generic named profile supplied through Promptfoo configuration.
+    if (this.config.credentialProfile) {
+      logger.debug(`Using AWS credential profile: ${this.config.credentialProfile}`);
+      try {
+        const { fromIni } = await import('@aws-sdk/credential-provider-ini');
+        return fromIni({ profile: this.config.credentialProfile });
+      } catch (err) {
+        logger.error(`Error loading @aws-sdk/credential-provider-ini: ${err}`);
+        throw new Error(
+          'The @aws-sdk/credential-provider-ini package is required for AWS named profiles. Please install it: npm install @aws-sdk/credential-provider-ini',
+        );
+      }
+    }
+
+    // 5. AWS default credential chain (lowest priority)
     logger.debug(`No explicit credentials in config, falling back to AWS default chain`);
     return undefined;
   }
