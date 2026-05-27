@@ -194,6 +194,44 @@ describeEvaluator('evaluator execution control', () => {
     expect(maxActiveCalls).toBeGreaterThan(1);
   });
 
+  it('persists configured variable order when concurrent rows complete out of order', async () => {
+    let releaseFirst!: () => void;
+    const waitForSecond = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let invocation = 0;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('out-of-order-provider'),
+      callApi: vi.fn(async () => {
+        invocation += 1;
+        if (invocation === 1) {
+          await waitForSecond;
+        }
+        return {
+          output: 'ok',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Static prompt')],
+      tests: [{ vars: { zebra: 'first' } }, { vars: { apple: 'second' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addResult = evalRecord.addResult.bind(evalRecord);
+    vi.spyOn(evalRecord, 'addResult').mockImplementation(async (row) => {
+      await addResult(row);
+      if (row.testIdx === 1) {
+        releaseFirst();
+      }
+    });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(evalRecord.vars).toEqual(['zebra', 'apple']);
+  });
+
   it('forces concurrency to 1 for real _conversation template references', async () => {
     const { maxActiveCalls } = await runConcurrencyProbe(
       '{{ {"history": _conversation}["history"][0].output }} {{ question }}',

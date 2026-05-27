@@ -93,10 +93,7 @@ describe('Scanner fork PR auth rejection', () => {
 
   const SKIP_MESSAGE = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
 
-  it.each([
-    'json',
-    'sarif',
-  ] as const)('emits a structured skip response with skipReason in %s mode', async (format) => {
+  it('emits a structured skip response with skipReason in json mode', async () => {
     mockForkPrAuthScanner();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
@@ -107,7 +104,7 @@ describe('Scanner fork PR auth rejection', () => {
     const { processDiff } = await import('../../../src/codeScan/git/diffProcessor');
 
     await executeScan('/test/repo', {
-      format,
+      format: 'json',
       diffsOnly: true,
       githubPr: 'test-owner/test-repo#123',
     });
@@ -123,7 +120,7 @@ describe('Scanner fork PR auth rejection', () => {
       },
       expect.any(Number),
       {
-        format,
+        format: 'json',
         githubPr: 'test-owner/test-repo#123',
       },
     );
@@ -133,6 +130,27 @@ describe('Scanner fork PR auth rejection', () => {
     await cliState.postActionCallback?.();
 
     expect(process.exitCode).toBe(0);
+  });
+
+  it('does not emit empty SARIF when fork authorization skips the scan', async () => {
+    mockForkPrAuthScanner();
+    vi.doUnmock('../../../src/codeScan/scanner/output');
+
+    const stdoutSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { executeScan } = await import('../../../src/codeScan/scanner/index');
+    const cliState = (await import('../../../src/cliState')).default;
+
+    await executeScan('/test/repo', {
+      format: 'sarif',
+      diffsOnly: true,
+      githubPr: 'test-owner/test-repo#123',
+    });
+
+    await cliState.postActionCallback?.();
+
+    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
   });
 
   it('emits stdout JSON that the action can round-trip parse', async () => {
