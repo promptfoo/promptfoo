@@ -23,7 +23,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { ChevronDown, Cpu } from 'lucide-react';
+import { Check, ChevronDown, Cpu, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AuthorChip } from './AuthorChip';
 import { EvalIdChip } from './EvalIdChip';
@@ -67,7 +67,7 @@ export function DefaultProvidersDisplay({ info }: DefaultProvidersDisplayProps) 
           <ul className="text-xs text-muted-foreground space-y-0.5">
             {detectedCredentials.map((cred) => (
               <li key={cred} className="flex items-center gap-1">
-                <span className="text-emerald-500">✓</span> {cred}
+                <Check aria-hidden="true" className="size-3 text-emerald-500" /> {cred}
               </li>
             ))}
           </ul>
@@ -80,7 +80,7 @@ export function DefaultProvidersDisplay({ info }: DefaultProvidersDisplayProps) 
           <ul className="text-xs text-muted-foreground space-y-0.5">
             {skippedProviders.map((provider) => (
               <li key={provider.name} className="flex items-start gap-1">
-                <span className="text-muted-foreground/50">✗</span>
+                <X aria-hidden="true" className="mt-0.5 size-3 text-muted-foreground/50" />
                 <span>
                   {provider.name}: {provider.reason}
                 </span>

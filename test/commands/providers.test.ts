@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { providersCommand } from '../../src/commands/providers';
 import logger from '../../src/logger';
 import { getDefaultProviderSelectionInfo } from '../../src/providers/defaults';
@@ -29,6 +29,7 @@ vi.mock('../../src/util/index', () => ({
 
 describe('providers command', () => {
   let program: Command;
+  const originalExitCode = process.exitCode;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -37,12 +38,17 @@ describe('providers command', () => {
     providersCommand(program);
   });
 
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+    vi.resetAllMocks();
+  });
+
   it('prints detected credentials, skipped providers, and assignments', async () => {
     vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue({
       selectedProvider: 'Azure OpenAI',
       reason: 'AZURE_API_KEY found',
       detectedCredentials: ['AZURE_API_KEY'],
-      skippedProviders: [{ name: 'OpenAI', reason: 'OPENAI_API_KEY not set' }],
+      skippedProviders: [{ name: 'Anthropic', reason: 'Azure has higher priority' }],
       providerSlots: {
         grading: { id: 'azureopenai:chat:grading', model: 'gpt-4.1' },
         gradingJson: { id: 'azureopenai:chat:grading-json' },
@@ -56,7 +62,7 @@ describe('providers command', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default Provider Selection'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('AZURE_API_KEY'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Skipped Providers:'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('OpenAI'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Anthropic'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('grading'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('gpt-4.1'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('grading-json'));

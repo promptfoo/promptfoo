@@ -476,6 +476,8 @@ export interface EvaluateSummaryV3 {
   results: EvaluateResult[];
   prompts: CompletedPrompt[];
   stats: EvaluateStats;
+  /** Automatic default-provider selection captured when this evaluation ran. */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 }
 
 export interface EvaluateSummaryV2 {
@@ -484,6 +486,8 @@ export interface EvaluateSummaryV2 {
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
+  /** Automatic default-provider selection captured when this evaluation ran. */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 }
 
 export type EvalTableDTO = {
@@ -496,7 +500,7 @@ export type EvalTableDTO = {
   version: number;
   id: string;
   stats?: EvaluateStats;
-  /** Information about current automatic default-provider selection, when applicable */
+  /** Automatic default-provider selection captured when this evaluation ran, when applicable. */
   defaultProviderInfo?: DefaultProviderSelectionInfo;
 };
 
@@ -1351,6 +1355,8 @@ export interface ResultsFile {
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
+  /** Persisted display order for table variable columns. */
+  vars?: string[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }

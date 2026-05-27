@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { getGradingProvider } from '../../src/matchers/providers';
+import {
+  getGradingProvider,
+  hasExplicitDefaultGradingProvider,
+} from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
 
@@ -397,5 +400,28 @@ describe('getGradingProvider', () => {
       expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', { basePath: undefined });
       expect(result).toBe(explicitProvider);
     });
+  });
+});
+
+describe('hasExplicitDefaultGradingProvider', () => {
+  it('recognizes both supported explicit grader locations', () => {
+    expect(
+      hasExplicitDefaultGradingProvider({
+        provider: 'azureopenai:chat:gpt-4',
+      } as any),
+    ).toBe(true);
+    expect(
+      hasExplicitDefaultGradingProvider({
+        options: { provider: 'azureopenai:chat:gpt-4' },
+      } as any),
+    ).toBe(true);
+  });
+
+  it('does not treat simulated-user targets as grading overrides', () => {
+    expect(
+      hasExplicitDefaultGradingProvider({
+        provider: 'promptfoo:simulated-user',
+      } as any),
+    ).toBe(false);
   });
 });

@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
-import type { DefaultProviderSelectionInfo, TokenUsage } from '../../types/index';
+import type { TokenUsage } from '../../types/index';
+import type { DefaultProviderSelectionInfo } from '../../types/providers';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**

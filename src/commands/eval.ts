@@ -20,6 +20,7 @@ import {
 } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
+import { hasExplicitDefaultGradingProvider } from '../matchers/providers';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { getDefaultProviderSelectionInfo } from '../providers/defaults';
@@ -58,14 +59,9 @@ import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from 
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
-import type {
-  CommandLineOptions,
-  DefaultProviderSelectionInfo,
-  Scenario,
-  TestSuite,
-  UnifiedConfig,
-} from '../types/index';
+import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
+import type { DefaultProviderSelectionInfo } from '../types/providers';
 import type { FilterOptions } from './eval/filterTests';
 
 /**
@@ -561,6 +557,7 @@ export async function doEval(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
@@ -577,13 +574,24 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
-    const shouldApplyRangeToImplicitDefaultTest =
-      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+    const hasActiveTestFilter =
+      filterRange !== undefined ||
+      cmdObj.filterFailing !== undefined ||
+      cmdObj.filterFailingOnly !== undefined ||
+      cmdObj.filterErrorsOnly !== undefined ||
+      cmdObj.filterFirstN !== undefined ||
+      cmdObj.filterMetadata !== undefined ||
+      cmdObj.filterPattern !== undefined ||
+      cmdObj.filterSample !== undefined;
+    const shouldApplyFiltersToImplicitDefaultTest =
+      hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
-      if (shouldApplyRangeToImplicitDefaultTest) {
-        testSuite.tests = [{}];
+      if (shouldApplyFiltersToImplicitDefaultTest) {
+        const defaultMetadata =
+          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
+        testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
@@ -596,12 +604,10 @@ export async function doEval(
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
-      if (
-        filterRange !== undefined &&
-        !hasScenarios &&
-        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
-        testSuite.tests.length === 0
-      ) {
+      const shouldSuppressImplicitDefaultTest =
+        testSuite.tests.length === 0 &&
+        ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
+      if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
       }
     }
@@ -630,16 +636,16 @@ export async function doEval(
     }
 
     // Check for missing API keys after provider filtering
-    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
 
     if (missingApiKeys.size > 0) {
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
-        .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
+        .map(([envVar, providerDescriptions]) => `${envVar} (${providerDescriptions.join(', ')})`)
         .join('; ')}`;
       return failEvalRun(missingKeysMessage, isCliInvocation, {
         logForCli: () => {
-          for (const [envVar, providerIds] of missingApiKeys) {
-            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+          for (const [envVar, providerDescriptions] of missingApiKeys) {
+            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerDescriptions.join(', ')})`));
           }
           logger.error('');
           logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
@@ -800,17 +806,14 @@ export async function doEval(
     }
 
     // Display automatic default-provider configuration when no explicit grading provider is set.
-    const hasExplicitGradingProvider = Boolean(
-      typeof testSuite.defaultTest === 'object' &&
-        testSuite.defaultTest !== null &&
-        testSuite.defaultTest.options?.provider,
-    );
+    const hasExplicitGradingProvider = hasExplicitDefaultGradingProvider(testSuite.defaultTest);
 
     let defaultProviderSelectionInfo: DefaultProviderSelectionInfo | undefined;
     if (!hasExplicitGradingProvider && !resumeEval) {
       try {
         // Get the default provider selection info to display and store
         defaultProviderSelectionInfo = await getDefaultProviderSelectionInfo(config.env);
+        evalRecord.setDefaultProviderInfo(defaultProviderSelectionInfo);
         displayDefaultProviderInfo(defaultProviderSelectionInfo);
       } catch (error) {
         logger.debug('[eval] Failed to get default provider info', { error });

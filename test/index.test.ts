@@ -6,11 +6,24 @@ import { evaluate } from '../src/index';
 import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
+import { getDefaultProviderSelectionInfo } from '../src/providers/defaults';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import { createMockProvider } from './factories/provider';
+
+import type { DefaultProviderSelectionInfo } from '../src/types/providers';
+
+const defaultProviderInfo: DefaultProviderSelectionInfo = {
+  selectedProvider: 'Anthropic',
+  reason: 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set',
+  detectedCredentials: ['ANTHROPIC_API_KEY'],
+  skippedProviders: [],
+  providerSlots: {
+    grading: { id: 'anthropic:messages:claude-sonnet-4' },
+  },
+};
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
@@ -87,6 +100,15 @@ vi.mock('../src/providers', async () => {
     loadApiProviders: vi.fn(),
   };
 });
+vi.mock('../src/providers/defaults', async () => {
+  const originalModule = await vi.importActual<typeof import('../src/providers/defaults')>(
+    '../src/providers/defaults',
+  );
+  return {
+    ...originalModule,
+    getDefaultProviderSelectionInfo: vi.fn(),
+  };
+});
 vi.mock('../src/telemetry');
 vi.mock('../src/util');
 vi.mock('../src/util/file');
@@ -134,6 +156,7 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'ConversationMessageSchema',
+    'DefaultProviderSelectionInfoSchema',
     'DerivedMetricSchema',
     'DocumentMediaInjectionPlacementSchema',
     'DocumentMediaInjectionPlacementValues',
@@ -239,6 +262,7 @@ describe('evaluate function', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
+    vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue(defaultProviderInfo);
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -481,6 +505,45 @@ describe('evaluate function', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({ author: null }),
+    );
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should capture automatic default-provider selection when persisting results', async () => {
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    await evaluate({
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+    });
+
+    expect(getDefaultProviderSelectionInfo).toHaveBeenCalledOnce();
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ defaultProviderInfo }),
+    );
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should not capture automatic selection when a default grading provider is configured', async () => {
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    await evaluate({
+      prompts: ['test'],
+      providers: [],
+      defaultTest: { options: { provider: 'openai:chat:gpt-4.1' } },
+      writeLatestResults: true,
+    });
+
+    expect(getDefaultProviderSelectionInfo).not.toHaveBeenCalled();
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ defaultProviderInfo: undefined }),
     );
 
     createEvalSpy.mockRestore();

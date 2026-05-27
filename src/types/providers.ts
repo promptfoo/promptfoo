@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
@@ -352,7 +353,7 @@ export interface DefaultProviders {
 export interface SkippedProviderInfo {
   /** The name of the provider (e.g., "OpenAI", "Anthropic") */
   name: string;
-  /** The reason this provider was skipped (e.g., "OPENAI_API_KEY not set") */
+  /** The reason an available provider was skipped (e.g., "OpenAI has higher priority") */
   reason: string;
 }
 
@@ -375,7 +376,7 @@ export interface DefaultProviderSelectionInfo {
   selectedProvider: string;
   /** Human-readable reason for the selection (e.g., "ANTHROPIC_API_KEY found, OPENAI_API_KEY not set") */
   reason: string;
-  /** List of credentials that were detected in the environment */
+  /** List of available credential sources detected for automatic provider selection */
   detectedCredentials: string[];
   /** List of providers that were skipped and why */
   skippedProviders: SkippedProviderInfo[];
@@ -391,6 +392,28 @@ export interface DefaultProviderSelectionInfo {
     webSearch?: DefaultProviderSlotInfo;
   };
 }
+
+export const DefaultProviderSelectionInfoSchema = z.object({
+  selectedProvider: z.string(),
+  reason: z.string(),
+  detectedCredentials: z.array(z.string()),
+  skippedProviders: z.array(
+    z.object({
+      name: z.string(),
+      reason: z.string(),
+    }),
+  ),
+  providerSlots: z.object({
+    grading: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    gradingJson: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    embedding: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    moderation: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    suggestions: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    synthesize: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    llmRubric: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+    webSearch: z.object({ id: z.string(), model: z.string().optional() }).optional(),
+  }),
+});
 
 /**
  * Default providers bundled with selection metadata

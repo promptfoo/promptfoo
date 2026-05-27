@@ -86,7 +86,7 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
   });
 }
 
-function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
+export function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
   if (typeof provider === 'string') {
     return provider === 'promptfoo:simulated-user';
   }
@@ -107,6 +107,18 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
     isSimulatedUserProviderConfig(providerTypeConfig),
   );
+}
+
+export function hasExplicitDefaultGradingProvider(defaultTest: TestCase | string | undefined) {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+
+  return [
+    defaultTest.provider,
+    defaultTest.options?.provider?.text,
+    defaultTest.options?.provider,
+  ].some((provider) => Boolean(provider) && !isSimulatedUserProviderConfig(provider));
 }
 
 export async function getGradingProvider(

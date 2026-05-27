@@ -42,7 +42,7 @@ import type {
   DefaultProviders,
   DefaultProvidersWithInfo,
   SkippedProviderInfo,
-} from '../types/index';
+} from '../types/providers';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'gradingJsonProvider',
@@ -600,6 +600,14 @@ function getSkippedProviders({
       );
       break;
     case 'OpenAI':
+      addSkippedProvider(
+        'Azure OpenAI',
+        (preferences.hasAzureApiKey ||
+          preferences.hasAzureOpenAiApiKey ||
+          preferences.hasAzureClientCreds) &&
+          preferences.hasAzureDeploymentName,
+        'OpenAI has higher priority',
+      );
       addSkippedProvider(
         'Anthropic',
         preferences.hasAnthropicCredentials,

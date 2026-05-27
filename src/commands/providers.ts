@@ -1,11 +1,16 @@
 import chalk from 'chalk';
+import { z } from 'zod';
 import logger from '../logger';
 import { getDefaultProviderSelectionInfo } from '../providers/defaults';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
-import type { DefaultProviderSelectionInfo } from '../types/index';
+import type { DefaultProviderSelectionInfo } from '../types/providers';
+
+const ProvidersCommandOptionsSchema = z.object({
+  envPath: z.string().optional(),
+});
 
 /**
  * CLI command to display information about default provider selection.
@@ -16,8 +21,14 @@ export function providersCommand(program: Command) {
     .command('providers')
     .description('Show information about default provider configuration')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (cmdObj: { envPath?: string }) => {
-      setupEnv(cmdObj.envPath);
+    .action(async (cmdObj: unknown) => {
+      const parsedOptions = ProvidersCommandOptionsSchema.safeParse(cmdObj);
+      if (!parsedOptions.success) {
+        logger.error(`Invalid providers options: ${z.prettifyError(parsedOptions.error)}`);
+        process.exitCode = 1;
+        return;
+      }
+      setupEnv(parsedOptions.data.envPath);
 
       telemetry.record('command_used', { name: 'providers' });
 

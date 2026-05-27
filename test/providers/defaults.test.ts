@@ -669,6 +669,22 @@ describe('getDefaultProviderSelectionInfo', () => {
     expect(result.providerSlots.grading?.id).toBe('azure:legacy-chat');
   });
 
+  it('should report eligible Azure defaults as skipped when OpenAI has priority', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'openai-key',
+      AZURE_OPENAI_API_KEY: 'azure-key',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('OpenAI');
+    expect(result.skippedProviders).toContainEqual({
+      name: 'Azure OpenAI',
+      reason: 'OpenAI has higher priority',
+    });
+  });
+
   it('should avoid instantiating Codex providers when only selection info is requested', async () => {
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
     const getCodexDefaultProvidersSpy = vi.spyOn(codexDefaults, 'getCodexDefaultProviders');

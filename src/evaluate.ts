@@ -3,10 +3,12 @@ import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
+import { hasExplicitDefaultGradingProvider } from './matchers/providers';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
+import { getDefaultProviderSelectionInfo } from './providers/defaults';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
@@ -24,7 +26,7 @@ import type {
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { ApiProvider } from './types/providers';
+import type { ApiProvider, DefaultProviderSelectionInfo } from './types/providers';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -329,9 +331,23 @@ export async function evaluateWithSource(
     constructedTestSuite.prompts,
   );
   const author = getAuthor(suiteAuthor);
+  let defaultProviderInfo: DefaultProviderSelectionInfo | undefined;
+  if (
+    (testSuiteConfig.writeLatestResults || Boolean(testSuiteConfig.outputPath)) &&
+    !hasExplicitDefaultGradingProvider(constructedTestSuite.defaultTest)
+  ) {
+    try {
+      defaultProviderInfo = await getDefaultProviderSelectionInfo(testSuiteConfig.env);
+    } catch (error) {
+      logger.debug('[evaluate] Failed to capture default provider info', { error });
+    }
+  }
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
-    : new Eval(unifiedConfig, { author });
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, {
+        author,
+        defaultProviderInfo,
+      })
+    : new Eval(unifiedConfig, { author, defaultProviderInfo });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
     doEvaluate(
