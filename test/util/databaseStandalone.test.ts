@@ -89,8 +89,6 @@ describe('getStandaloneEvals', () => {
 
     await updateResult(eval_.id, { redteam: {} as any });
 
-    // updateResult does not invalidate the LRU cache; tests clear it to observe the new value.
-    clearStandaloneEvalCache();
     expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
       true,
     );

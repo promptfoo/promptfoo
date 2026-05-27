@@ -208,6 +208,7 @@ export async function updateResult(
     }
 
     await existingEval.save();
+    clearStandaloneEvalCache();
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
@@ -517,7 +518,7 @@ const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
   max: 2000,
 });
 
-/** Clears the standalone eval LRU cache. Intended for tests that mutate evals. */
+/** Clears the standalone eval LRU cache after mutations or between tests. */
 export function clearStandaloneEvalCache(): void {
   standaloneEvalCache.clear();
 }
