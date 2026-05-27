@@ -52,7 +52,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                                                                | `false`                                        |
 | `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning                                                                                                                | None                                           |
 
-[1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
+[1]: /docs/code-scanning/cli#custom-guidance
 
 By default, the Action starts from the PR diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Set `diffs-only: true` when you want the generated action-input config constrained to the patch itself.
 

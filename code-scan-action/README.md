@@ -12,7 +12,20 @@ After scanning, the action posts findings with severity levels and suggested fix
 
 To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
 
-By default, the action scans the pull request diff with repository tracing enabled so the scanner can inspect surrounding code paths. Set `diffs-only: true` when you want to restrict analysis to the changed hunks only. To use a checked-in `.promptfoo-code-scan.yaml`, pass it explicitly with `config-path`; once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults. An explicit `api-host` input overrides `apiHost` from that file; otherwise the configured host, or the hosted API default when none is configured, is used. In `pull_request` workflows, point `config-path` only at trusted workflow-controlled content, not a policy file the PR itself can edit.
+### Scan scope
+
+By default, the action scans the PR diff and traces into surrounding code paths so the scanner can follow data flow into prompts. Set `diffs-only: true` to restrict analysis to the changed hunks only.
+
+### Config: action inputs vs `config-path`
+
+There are two ways to configure a scan, and they don't mix:
+
+- **Action inputs (default).** With `config-path` unset, the action builds a scan config from the inputs (`min-severity`, `diffs-only`, `guidance`, `guidance-file`). This is the path most workflows want.
+- **YAML config file.** Set `config-path: configs/code-scan.yaml` to hand the CLI a checked-in policy file. When `config-path` is set, the YAML supplies every scan setting — the input-driven knobs above are dropped and a warning is emitted if any of them are also set, so the divergence is visible in the action logs.
+
+`api-host` is the one input that's honored in both modes: an explicit `api-host` always overrides `apiHost` from `config-path`. Leave `api-host` unset to let the YAML choose an enterprise or self-hosted endpoint.
+
+> **Security note for `pull_request` workflows.** Anything `config-path` points at in the PR checkout is editable by the PR author. Point `config-path` only at trusted workflow-controlled content (a path from the base branch, a file written by an earlier workflow step, etc.) — never at a policy file the PR itself can edit.
 
 ## Quick Start
 

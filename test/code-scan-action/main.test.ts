@@ -528,6 +528,9 @@ describe('code-scan-action main', () => {
         if (name === 'config-path') {
           return 'configs/code-scan.yaml';
         }
+        if (name === 'diffs-only') {
+          return 'true';
+        }
         return '';
       });
       mocks.core.getBooleanInput.mockImplementation((name: string) => {
@@ -539,6 +542,56 @@ describe('code-scan-action main', () => {
       expectCliArg(args, '--config', 'configs/code-scan.yaml');
       expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
       expect(args).not.toContain('--diffs-only');
+      // The workflow set diffs-only AND config-path; warn so the divergence is visible.
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('ignored when config-path is set'),
+      );
+    });
+
+    it('should not warn about ignored inputs when config-path is set alone', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        return '';
+      });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(
+        expect.stringContaining('ignored when config-path is set'),
+      );
+    });
+
+    it('should not read guidance-file from disk when config-path is set', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        if (name === 'guidance-file') {
+          // Even a non-existent path must not break the run — config-path is
+          // authoritative, so the action should never reach the filesystem.
+          // If loadGuidance tried to read this path, the real fs would throw
+          // ENOENT and the scan command would never be issued.
+          return '/tmp/this-file-does-not-exist-12345.md';
+        }
+        return '';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', 'configs/code-scan.yaml');
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'guidance and guidance-file inputs are ignored when config-path is set',
+        ),
+      );
     });
 
     it('should keep using generated action-input config even when the workspace contains a repo config', async () => {
@@ -838,7 +891,7 @@ describe('code-scan-action main', () => {
       expect(createReview.mock.calls[0][0].body).not.toContain('Minimum severity threshold');
     });
 
-    it('keeps the severity footer when config-path is paired with an explicit override', async () => {
+    it('omits the severity footer even when config-path is paired with a min-severity input (input is ignored by the scan)', async () => {
       const { createReview } = mockOctokitForFallbackPost();
       mockPromptfooScanResponse({
         success: true,
@@ -864,9 +917,43 @@ describe('code-scan-action main', () => {
       await vi.waitFor(() => {
         expect(createReview).toHaveBeenCalled();
       });
+      // buildCliArgs only passes --config when config-path is set, so the YAML's
+      // severity drove the scan — not the action's min-severity input. The footer
+      // must omit a threshold rather than misreport the ignored input value.
+      expect(createReview.mock.calls[0][0].body).toBe('Fallback review from scan server');
+      expect(createReview.mock.calls[0][0].body).not.toContain('Minimum severity threshold');
+      // The workflow author should still be told the input is being ignored.
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('ignored when config-path is set'),
+      );
+    });
+
+    it('shows the severity footer with the input value when no config-path is set', async () => {
+      const { createReview } = mockOctokitForFallbackPost();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [],
+        commentsPosted: false,
+        review: 'Fallback review from scan server',
+      });
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity') {
+          return 'critical';
+        }
+        return '';
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(createReview).toHaveBeenCalled();
+      });
       expect(createReview.mock.calls[0][0].body).toContain('Fallback review from scan server');
       expect(createReview.mock.calls[0][0].body).toContain('Minimum severity threshold:');
-      expect(createReview.mock.calls[0][0].body).toContain('High');
+      expect(createReview.mock.calls[0][0].body).toContain('Critical');
     });
   });
 

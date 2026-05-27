@@ -31,6 +31,7 @@ interface ActionInputs {
   minimumSeverityInputProvided: boolean;
   configPath: string;
   diffsOnly: boolean;
+  diffsOnlyInputProvided: boolean;
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
@@ -108,6 +109,11 @@ function getActionInputs(): ActionInputs {
     minimumSeverityInputProvided: minimumSeverity.provided,
     configPath: core.getInput('config-path'),
     diffsOnly: core.getBooleanInput('diffs-only'),
+    // core.getBooleanInput coerces the missing input to `false`, so we cannot
+    // tell an explicit `diffs-only: false` from the default. The raw input
+    // string preserves "was this set by the workflow?" — needed to warn the
+    // user when `config-path` is also set and the input will be ignored.
+    diffsOnlyInputProvided: Boolean(core.getInput('diffs-only').trim()),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
@@ -153,7 +159,48 @@ function createScanEnv(oidcToken: string | undefined): Record<string, string> {
   return env;
 }
 
+/**
+ * Warn when the workflow supplies action inputs that `config-path` will
+ * silently ignore. The CLI only receives `--config <path>` (and optionally
+ * `--api-host`) when `config-path` is set, so any `diffs-only` /
+ * `min-severity` / `minimum-severity` input is dropped on the floor. Surface
+ * the divergence so a workflow author notices instead of misreading the
+ * scan as honoring those inputs.
+ */
+function warnIgnoredInputsWhenConfigPathSet(inputs: ActionInputs): void {
+  if (!inputs.configPath) {
+    return;
+  }
+  const ignored: string[] = [];
+  if (inputs.minimumSeverityInputProvided) {
+    ignored.push('min-severity / minimum-severity');
+  }
+  if (inputs.diffsOnlyInputProvided) {
+    ignored.push('diffs-only');
+  }
+  if (ignored.length === 0) {
+    return;
+  }
+  core.warning(
+    `The following action input(s) are ignored when config-path is set: ${ignored.join(', ')}. The YAML config supplies these settings.`,
+  );
+}
+
 function loadGuidance(inputs: ActionInputs): string | undefined {
+  // When `config-path` is set, action inputs (guidance, guidance-file,
+  // min-severity, diffs-only) are documented as ignored — the YAML config
+  // is authoritative. Skip reading the guidance file so a stale/missing
+  // path on disk does not fail the scan. Warn if the user supplied an
+  // input that will be ignored so the divergence is visible.
+  if (inputs.configPath) {
+    if (inputs.guidanceText || inputs.guidanceFile) {
+      core.warning(
+        'guidance and guidance-file inputs are ignored when config-path is set; the YAML config supplies guidance.',
+      );
+    }
+    return undefined;
+  }
+
   if (inputs.guidanceText && inputs.guidanceFile) {
     throw new Error('Cannot specify both guidance and guidance-file inputs');
   }
@@ -502,7 +549,11 @@ function getFallbackMinimumSeverity(
   inputs: ActionInputs,
   configPath: ResolvedConfigPath,
 ): string | undefined {
-  if (configPath.shouldCleanup || inputs.minimumSeverityInputProvided) {
+  // Only report the action-input severity when the generated action-input
+  // config actually carried it into the scan. When `config-path` is set the
+  // CLI receives only `--config`, so the effective threshold lives in the
+  // YAML and the input value is not what produced the findings.
+  if (configPath.shouldCleanup) {
     return inputs.minimumSeverity;
   }
 
@@ -720,6 +771,7 @@ async function runCodeScan(): Promise<void> {
     return;
   }
 
+  warnIgnoredInputsWhenConfigPathSet(inputs);
   const guidance = loadGuidance(inputs);
 
   core.info('🔍 Starting Promptfoo Code Scan...');
