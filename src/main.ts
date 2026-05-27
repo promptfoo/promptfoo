@@ -108,7 +108,7 @@ async function main() {
   logsCommand(program);
   modelScanCommand(program);
   optimizeCommand(program, defaultConfig, defaultConfigPath);
-  providersCommand(program);
+  providersCommand(program, defaultConfig);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   void showCommand(program);

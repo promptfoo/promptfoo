@@ -6,6 +6,7 @@ import telemetry from '../telemetry';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
+import type { UnifiedConfig } from '../types/index';
 import type { DefaultProviderSelectionInfo } from '../types/providers';
 
 const ProvidersCommandOptionsSchema = z.object({
@@ -16,7 +17,7 @@ const ProvidersCommandOptionsSchema = z.object({
  * CLI command to display information about default provider selection.
  * Shows which provider is selected, why, and how to override.
  */
-export function providersCommand(program: Command) {
+export function providersCommand(program: Command, defaultConfig: Partial<UnifiedConfig>) {
   program
     .command('providers')
     .description('Show information about default provider configuration')
@@ -34,7 +35,7 @@ export function providersCommand(program: Command) {
 
       let selectionInfo: DefaultProviderSelectionInfo;
       try {
-        selectionInfo = await getDefaultProviderSelectionInfo();
+        selectionInfo = await getDefaultProviderSelectionInfo(defaultConfig.env);
       } catch (error) {
         logger.error('Failed to determine default provider selection', { error });
         process.exitCode = 1;

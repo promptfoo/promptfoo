@@ -29,13 +29,14 @@ vi.mock('../../src/util/index', () => ({
 
 describe('providers command', () => {
   let program: Command;
+  const defaultConfig = { env: { ANTHROPIC_API_KEY: 'configured-key' } };
   const originalExitCode = process.exitCode;
 
   beforeEach(() => {
     vi.resetAllMocks();
     process.exitCode = undefined;
     program = new Command();
-    providersCommand(program);
+    providersCommand(program, defaultConfig);
   });
 
   afterEach(() => {
@@ -58,6 +59,7 @@ describe('providers command', () => {
     await program.parseAsync(['node', 'test', 'providers', '--env-file', '.env.local']);
 
     expect(setupEnv).toHaveBeenCalledWith('.env.local');
+    expect(getDefaultProviderSelectionInfo).toHaveBeenCalledWith(defaultConfig.env);
     expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'providers' });
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default Provider Selection'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('AZURE_API_KEY'));

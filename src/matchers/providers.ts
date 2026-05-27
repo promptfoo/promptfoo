@@ -109,16 +109,31 @@ export function isSimulatedUserProviderConfig(provider: GradingConfig['provider'
   );
 }
 
+function getTextGradingProvider(
+  provider: GradingConfig['provider'] | undefined,
+): GradingConfig['provider'] | undefined {
+  if (!provider || typeof provider === 'string' || Array.isArray(provider)) {
+    return provider;
+  }
+
+  if (
+    typeof (provider as ApiProvider).id === 'function' ||
+    typeof (provider as ProviderOptions).id === 'string'
+  ) {
+    return provider;
+  }
+
+  return (provider as ProviderTypeMap).text;
+}
+
 export function hasExplicitDefaultGradingProvider(defaultTest: TestCase | string | undefined) {
   if (!defaultTest || typeof defaultTest !== 'object') {
     return false;
   }
 
-  return [
-    defaultTest.provider,
-    defaultTest.options?.provider?.text,
-    defaultTest.options?.provider,
-  ].some((provider) => Boolean(provider) && !isSimulatedUserProviderConfig(provider));
+  return [defaultTest.provider, defaultTest.options?.provider]
+    .map(getTextGradingProvider)
+    .some((provider) => Boolean(provider) && !isSimulatedUserProviderConfig(provider));
 }
 
 export async function getGradingProvider(

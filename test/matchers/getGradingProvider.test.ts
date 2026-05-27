@@ -434,4 +434,25 @@ describe('hasExplicitDefaultGradingProvider', () => {
       } as any),
     ).toBe(false);
   });
+
+  it('does not treat non-text provider maps as grading overrides', () => {
+    expect(
+      hasExplicitDefaultGradingProvider({
+        provider: { moderation: 'openai:moderation' },
+      } as any),
+    ).toBe(false);
+    expect(
+      hasExplicitDefaultGradingProvider({
+        options: { provider: { embedding: 'openai:embedding' } },
+      } as any),
+    ).toBe(false);
+  });
+
+  it('recognizes text entries in provider maps as grading overrides', () => {
+    expect(
+      hasExplicitDefaultGradingProvider({
+        options: { provider: { text: 'openai:gpt-4' } },
+      } as any),
+    ).toBe(true);
+  });
 });
