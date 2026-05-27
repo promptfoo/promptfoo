@@ -854,7 +854,7 @@ For endpoints that don't match a built-in preset, provide a regex:
 streamFirstTokenPattern: '"delta"\s*:\s*\{[\s\S]*?"content"\s*:\s*"(?!")'
 ```
 
-The regex is matched against the accumulated raw stream text; `streamFirstTokenPattern` takes precedence over `streamFormat` when both are set.
+The regex is matched against the most recent 64 KiB of raw stream text so detector work remains bounded; design it to match a local event or short event sequence. `streamFirstTokenPattern` takes precedence over `streamFormat` when both are set.
 
 #### What the underlying streaming metrics measure
 

@@ -319,6 +319,19 @@ describe('ttft assertion', () => {
         /TTFT could not be measured: no matching content was detected in the stream/,
       );
     });
+
+    it.each([-1, NaN, Infinity])('should throw when timeToFirstToken is %s', (timeToFirstToken) => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'ttft', threshold: 1000 },
+        providerResponse: {
+          streamingMetrics: { timeToFirstToken },
+        },
+      };
+
+      expect(() => handleTtft(params as AssertionParams)).toThrow(
+        /timeToFirstToken must be a non-negative finite number/,
+      );
+    });
   });
 
   describe('result structure', () => {

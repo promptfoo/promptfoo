@@ -1740,10 +1740,10 @@ defaultTest:
 
 **Config options**
 
-| Option                    | Type                                                          | Default | Purpose                                                                                 |
-| ------------------------- | ------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------- |
-| `streamFormat`            | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol                             |
-| `streamFirstTokenPattern` | regex source string                                           | unset   | Custom detector for non-standard endpoints. Overrides `streamFormat` when both are set. |
+| Option                    | Type                                                          | Default | Purpose                                                                                                            |
+| ------------------------- | ------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `streamFormat`            | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol                                                        |
+| `streamFirstTokenPattern` | regex source string                                           | unset   | Custom detector matched against the most recent 64 KiB of stream text. Overrides `streamFormat` when both are set. |
 
 When `stream: true` is set, response caching is automatically disabled so every TTFT measurement reflects a live call.
 

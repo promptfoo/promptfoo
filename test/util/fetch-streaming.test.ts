@@ -306,6 +306,24 @@ describe('processStreamingResponse', () => {
       // latency against the threshold.
       expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
     });
+
+    it('flushes buffered UTF-8 at EOF without dropping trailing text', async () => {
+      const mockReader = {
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: new Uint8Array([0xe2]) })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: vi.fn(),
+      };
+
+      const result = await processStreamingResponse(
+        { body: { getReader: () => mockReader } } as unknown as Response,
+        Date.now(),
+      );
+
+      expect(result.text).toBe('\uFFFD');
+      expect(result.streamingMetrics.timeToFirstToken).toBeDefined();
+    });
   });
 
   describe('Error handling', () => {
@@ -497,6 +515,35 @@ describe('processStreamingResponse', () => {
       );
 
       expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
+    });
+
+    it('bounds custom detector context when a rolling window is configured', async () => {
+      const frames = ['ignored prefix', 'x'.repeat(64), 'TOKEN'];
+      const seenLengths: number[] = [];
+      let i = 0;
+      const response = {
+        body: {
+          getReader: () => ({
+            read: vi.fn(async () =>
+              i < frames.length
+                ? { done: false, value: new TextEncoder().encode(frames[i++]) }
+                : { done: true, value: undefined },
+            ),
+            releaseLock: vi.fn(),
+          }),
+        },
+      } as unknown as Response;
+
+      const result = await processStreamingResponse(response, Date.now(), {
+        firstTokenDetector: (text) => {
+          seenLengths.push(text.length);
+          return text.includes('TOKEN');
+        },
+        firstTokenDetectorWindowChars: 16,
+      });
+
+      expect(result.streamingMetrics.timeToFirstToken).toBeDefined();
+      expect(Math.max(...seenLengths)).toBeLessThanOrEqual(16);
     });
 
     it('exports firstNonWhitespaceByteDetector for explicit opt-in', () => {
@@ -715,7 +762,7 @@ describe('processStreamingResponse', () => {
       );
       const presetResult = await settlePendingTimers(
         processStreamingResponse(buildResponse(), t0, {
-          firstTokenDetector: detectorForStreamFormat('openai-chat'),
+          streamFormat: 'openai-chat',
         }),
       );
 
@@ -767,11 +814,39 @@ describe('processStreamingResponse', () => {
 
       const result = await settlePendingTimers(
         processStreamingResponse(response, Date.now(), {
-          firstTokenDetector: detectorForStreamFormat('openai-chat'),
+          streamFormat: 'openai-chat',
         }),
       );
 
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(35);
+    });
+
+    it('parses built-in streamFormat events once on tool-only streams', async () => {
+      const frames = Array.from(
+        { length: 100 },
+        (_, index) => `data: {"choices":[{"delta":{"tool_calls":[{"index":${index}}]}}]}\n\n`,
+      );
+      let i = 0;
+      const response = {
+        body: {
+          getReader: () => ({
+            read: vi.fn(async () =>
+              i < frames.length
+                ? { done: false, value: new TextEncoder().encode(frames[i++]) }
+                : { done: true, value: undefined },
+            ),
+            releaseLock: vi.fn(),
+          }),
+        },
+      } as unknown as Response;
+      const parseSpy = vi.spyOn(JSON, 'parse');
+
+      const result = await processStreamingResponse(response, Date.now(), {
+        firstTokenDetector: detectorForStreamFormat('openai-chat'),
+      });
+
+      expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
+      expect(parseSpy).toHaveBeenCalledTimes(frames.length);
     });
   });
 });

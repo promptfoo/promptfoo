@@ -14,7 +14,6 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import {
-  detectorForStreamFormat,
   estimateStreamingTokensPerSecond,
   type FirstTokenDetector,
   fetchWithRetries,
@@ -942,8 +941,9 @@ export const HttpProviderConfigSchema = z.object({
   streamFormat: z.enum(['openai-chat', 'openai-responses', 'anthropic-messages']).optional(),
   /**
    * Advanced override: a regex source string used to identify the first
-   * content token when `streamFormat` doesn't cover your endpoint. Takes
-   * precedence over `streamFormat`.
+   * content token when `streamFormat` doesn't cover your endpoint. Evaluated
+   * against the most recent 64 KiB of stream text to bound matching work.
+   * Takes precedence over `streamFormat`.
    */
   streamFirstTokenPattern: z.string().optional(),
   url: z.string().optional(),
@@ -1903,6 +1903,7 @@ async function createHttpsAgent(
 // Streaming responses are never cached, so the wrapper result's delete hook
 // is a no-op. Hoisted so we don't allocate a fresh closure per request.
 const NOOP_DELETE_FROM_CACHE = async () => {};
+const STREAM_FIRST_TOKEN_PATTERN_WINDOW_CHARS = 64 * 1024;
 
 function requestsStreamingTransport(body: unknown): boolean {
   return (
@@ -1910,16 +1911,25 @@ function requestsStreamingTransport(body: unknown): boolean {
   );
 }
 
-function buildFirstTokenDetector(
+function buildFirstTokenDetectionOptions(
   customPattern: string | undefined,
   format: StreamFormat | undefined,
-): FirstTokenDetector | undefined {
+):
+  | {
+      firstTokenDetector?: FirstTokenDetector;
+      firstTokenDetectorWindowChars?: number;
+      streamFormat?: StreamFormat;
+    }
+  | undefined {
   if (customPattern) {
     const regex = new RegExp(customPattern);
-    return (accumulatedText) => regex.test(accumulatedText);
+    return {
+      firstTokenDetector: (accumulatedText) => regex.test(accumulatedText),
+      firstTokenDetectorWindowChars: STREAM_FIRST_TOKEN_PATTERN_WINDOW_CHARS,
+    };
   }
   if (format) {
-    return detectorForStreamFormat(format);
+    return { streamFormat: format };
   }
   return undefined;
 }
@@ -1935,7 +1945,11 @@ export class HttpProvider implements ApiProvider {
     (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
   >;
   private validateStatus: Promise<(status: number) => boolean>;
-  private firstTokenDetector?: (accumulatedText: string) => boolean;
+  private firstTokenDetectionOptions?: {
+    firstTokenDetector?: FirstTokenDetector;
+    firstTokenDetectorWindowChars?: number;
+    streamFormat?: StreamFormat;
+  };
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
@@ -1971,9 +1985,9 @@ export class HttpProvider implements ApiProvider {
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
-    // Build the canonical-TTFT content detector once. A custom regex pattern
-    // always wins over a named preset so users can override ad hoc.
-    this.firstTokenDetector = buildFirstTokenDetector(
+    // Build TTFT detection options once. A custom regex pattern always wins
+    // over a named preset so users can override ad hoc.
+    this.firstTokenDetectionOptions = buildFirstTokenDetectionOptions(
       this.config.streamFirstTokenPattern,
       this.config.streamFormat,
     );
@@ -2027,7 +2041,7 @@ export class HttpProvider implements ApiProvider {
       const { text, streamingMetrics } = await processStreamingResponse(
         rawResponse,
         requestStartTime,
-        this.firstTokenDetector ? { firstTokenDetector: this.firstTokenDetector } : undefined,
+        this.firstTokenDetectionOptions,
       );
 
       const response: FetchWithCacheResult<string> = {

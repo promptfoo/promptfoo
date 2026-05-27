@@ -782,25 +782,15 @@ export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedTe
  * custom regex or omit it entirely to get the default wire-level proxy.
  */
 export type StreamFormat = 'openai-chat' | 'openai-responses' | 'anthropic-messages';
+const BUILT_IN_STREAM_FORMAT = Symbol('builtInStreamFormat');
+type BuiltInStreamFormatDetector = FirstTokenDetector & {
+  [BUILT_IN_STREAM_FORMAT]: StreamFormat;
+};
 
 function parseSseDataEvents(accumulatedText: string): unknown[] {
   return accumulatedText.split(/\r?\n/).flatMap((line) => {
-    if (!line.startsWith('data:')) {
-      return [];
-    }
-
-    const data = line.slice('data:'.length).trim();
-    if (!data || data === '[DONE]') {
-      return [];
-    }
-
-    try {
-      return [JSON.parse(data) as unknown];
-    } catch {
-      // A chunk may end partway through an SSE event. It will be parsed after
-      // the next read supplies the remaining bytes.
-      return [];
-    }
+    const event = parseSseDataLine(line);
+    return event === undefined ? [] : [event];
   });
 }
 
@@ -812,43 +802,106 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-const STREAM_FORMAT_DETECTORS: Record<StreamFormat, FirstTokenDetector> = {
-  'openai-chat': (accumulatedText) =>
-    parseSseDataEvents(accumulatedText).some((event) => {
-      if (!isRecord(event) || !Array.isArray(event.choices)) {
-        return false;
-      }
-      return event.choices.some(
-        (choice) =>
-          isRecord(choice) && isRecord(choice.delta) && isNonEmptyString(choice.delta.content),
-      );
-    }),
-  'openai-responses': (accumulatedText) =>
-    parseSseDataEvents(accumulatedText).some((event) => {
-      return (
-        isRecord(event) &&
-        event.type === 'response.output_text.delta' &&
-        isNonEmptyString(event.delta)
-      );
-    }),
-  'anthropic-messages': (accumulatedText) =>
-    parseSseDataEvents(accumulatedText).some((event) => {
-      return (
-        isRecord(event) &&
-        isRecord(event.delta) &&
-        event.delta.type === 'text_delta' &&
-        isNonEmptyString(event.delta.text)
-      );
-    }),
+function parseSseDataLine(line: string): unknown | undefined {
+  if (!line.startsWith('data:')) {
+    return undefined;
+  }
+
+  const data = line.slice('data:'.length).trim();
+  if (!data || data === '[DONE]') {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(data) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+const STREAM_FORMAT_EVENT_DETECTORS: Record<StreamFormat, (event: unknown) => boolean> = {
+  'openai-chat': (event) => {
+    if (!isRecord(event) || !Array.isArray(event.choices)) {
+      return false;
+    }
+    return event.choices.some(
+      (choice) =>
+        isRecord(choice) && isRecord(choice.delta) && isNonEmptyString(choice.delta.content),
+    );
+  },
+  'openai-responses': (event) =>
+    isRecord(event) && event.type === 'response.output_text.delta' && isNonEmptyString(event.delta),
+  'anthropic-messages': (event) =>
+    isRecord(event) &&
+    isRecord(event.delta) &&
+    event.delta.type === 'text_delta' &&
+    isNonEmptyString(event.delta.text),
 };
 
 /**
  * Build a first-token detector for a known streaming format.
- * Returns `undefined` for unknown formats so callers can fall back to the
- * wire-level default.
+ * When passed to `processStreamingResponse`, its format marker enables
+ * incremental SSE processing instead of repeatedly parsing accumulated text.
  */
 export function detectorForStreamFormat(format: StreamFormat): FirstTokenDetector {
-  return STREAM_FORMAT_DETECTORS[format];
+  const detector = ((accumulatedText) =>
+    parseSseDataEvents(accumulatedText).some(
+      STREAM_FORMAT_EVENT_DETECTORS[format],
+    )) as BuiltInStreamFormatDetector;
+  detector[BUILT_IN_STREAM_FORMAT] = format;
+  return detector;
+}
+
+function createIncrementalStreamFormatDetector(
+  format: StreamFormat,
+): (chunk: string, final: boolean) => boolean {
+  let pendingLine = '';
+  return (chunk, final) => {
+    const lines = `${pendingLine}${chunk}`.split(/\r?\n/);
+    pendingLine = final ? '' : (lines.pop() ?? '');
+    return lines.some((line) => {
+      const event = parseSseDataLine(line);
+      return event !== undefined && STREAM_FORMAT_EVENT_DETECTORS[format](event);
+    });
+  };
+}
+
+function getBuiltInStreamFormat(
+  detector: FirstTokenDetector | undefined,
+): StreamFormat | undefined {
+  return (detector as BuiltInStreamFormatDetector | undefined)?.[BUILT_IN_STREAM_FORMAT];
+}
+
+interface StreamingDetectionOptions {
+  firstTokenDetector?: FirstTokenDetector;
+  firstTokenDetectorWindowChars?: number;
+  streamFormat?: StreamFormat;
+}
+
+function createStreamingTokenDetector(
+  opts?: StreamingDetectionOptions,
+): (chunk: string, final: boolean) => boolean {
+  const builtInFormat = opts?.firstTokenDetector
+    ? getBuiltInStreamFormat(opts.firstTokenDetector)
+    : opts?.streamFormat;
+  if (builtInFormat !== undefined) {
+    return createIncrementalStreamFormatDetector(builtInFormat);
+  }
+
+  if (opts?.firstTokenDetector) {
+    const detector = opts.firstTokenDetector;
+    const windowChars = opts.firstTokenDetectorWindowChars;
+    let detectorText = '';
+    return (chunk) => {
+      detectorText += chunk;
+      if (windowChars !== undefined) {
+        detectorText = detectorText.slice(-windowChars);
+      }
+      return detector(detectorText);
+    };
+  }
+
+  return (chunk) => firstNonWhitespaceByteDetector(chunk);
 }
 
 /**
@@ -863,24 +916,27 @@ export function detectorForStreamFormat(format: StreamFormat): FirstTokenDetecto
  * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
  * @param opts.firstTokenDetector - Predicate that decides when TTFT fires. Defaults
  *   to `firstNonWhitespaceByteDetector` (first non-whitespace body byte).
+ * @param opts.streamFormat - Built-in SSE detector, processed once per completed event.
+ *   Ignored when an unrelated custom `firstTokenDetector` is provided.
+ * @param opts.firstTokenDetectorWindowChars - Optional rolling character window retained
+ *   for a custom detector. Use this for pattern detectors over untrusted streams.
  */
 export async function processStreamingResponse(
   response: Response,
   requestStartTime: number,
-  opts?: { firstTokenDetector?: FirstTokenDetector },
+  opts?: StreamingDetectionOptions,
 ): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error(`Response has no readable body (status ${response.status})`);
   }
 
-  const detector = opts?.firstTokenDetector ?? firstNonWhitespaceByteDetector;
+  const detectToken = createStreamingTokenDetector(opts);
   const decoder = new TextDecoder();
   const chunks: string[] = [];
   let firstTokenTime: number | undefined;
   let firstByteTime: number | undefined;
   let lastByteTime: number | undefined;
-  let accumulatedText = '';
   let chunkCount = 0;
 
   try {
@@ -900,14 +956,27 @@ export async function processStreamingResponse(
 
       const chunk = decoder.decode(value, { stream: true });
       chunks.push(chunk);
-      accumulatedText += chunk;
       chunkCount++;
 
       // Stamp TTFT on the first chunk whose arrival causes the detector to pass.
       // Measure from requestStartTime so network overhead (TCP/TLS/headers) is included.
-      if (firstTokenTime === undefined && detector(accumulatedText)) {
+      if (firstTokenTime === undefined && detectToken(chunk, false)) {
         firstTokenTime = now - requestStartTime;
       }
+    }
+
+    // Flush any buffered decoder state at EOF. This preserves the same
+    // replacement-character behavior as Response.text() for truncated UTF-8.
+    const trailingText = decoder.decode();
+    if (trailingText) {
+      chunks.push(trailingText);
+    }
+    if (
+      firstTokenTime === undefined &&
+      lastByteTime !== undefined &&
+      detectToken(trailingText, true)
+    ) {
+      firstTokenTime = lastByteTime - requestStartTime;
     }
   } finally {
     reader.releaseLock();

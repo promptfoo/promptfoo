@@ -29,6 +29,11 @@ export const handleTtft = ({
         'Otherwise confirm that the endpoint returns SSE/chunked output when stream: true is set.',
     );
   }
+  if (!Number.isFinite(ttft) || ttft < 0) {
+    throw new Error(
+      'TTFT could not be measured: timeToFirstToken must be a non-negative finite number in milliseconds',
+    );
+  }
 
   const withinThreshold = ttft <= threshold;
   const pass = withinThreshold !== inverse;
