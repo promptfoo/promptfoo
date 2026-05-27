@@ -79,6 +79,7 @@ vi.mock('../../../src/util/templates', () => ({
   })),
 }));
 
+import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleGenericProvider } from '../../../src/providers/google/base';
@@ -334,14 +335,25 @@ describe('GoogleGenericProvider', () => {
       const mockFn = vi.fn().mockReturnValue('result');
       vi.mocked(importModule).mockResolvedValue({ myFunction: mockFn });
 
-      const provider = new TestGoogleProvider('gemini-2.5-pro');
-      const fn = await provider['loadExternalFunction']('file://C:/path/to/test.js:myFunction');
+      // Use a base path that contains the target on Windows (where path.resolve
+      // recognises `C:/...` as absolute) so the loader's path-traversal guard
+      // does not reject it. On POSIX the drive letter is treated as a relative
+      // segment, which still keeps the resolved path inside the base.
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = 'C:/';
 
-      expect(importModule).toHaveBeenCalledWith(
-        path.resolve('/test/base/path', 'C:/path/to/test.js'),
-        'myFunction',
-      );
-      expect(fn).toBe(mockFn);
+      try {
+        const provider = new TestGoogleProvider('gemini-2.5-pro');
+        const fn = await provider['loadExternalFunction']('file://C:/path/to/test.js:myFunction');
+
+        expect(importModule).toHaveBeenCalledWith(
+          path.resolve('C:/', 'C:/path/to/test.js'),
+          'myFunction',
+        );
+        expect(fn).toBe(mockFn);
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
     });
 
     it('should throw error when function not found', async () => {
