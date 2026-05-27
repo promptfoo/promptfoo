@@ -925,6 +925,62 @@ describe('evaluate function', () => {
         );
       });
 
+      it('should resolve configured providers within grading provider type maps', async () => {
+        const mockLiteLLMProvider = createMockProvider({ id: 'litellm:judge' });
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
+
+        const testSuite = {
+          prompts: ['Test prompt'],
+          providers: ['litellm:judge'],
+          defaultTest: {
+            options: {
+              provider: { text: 'litellm:judge' },
+            },
+          },
+          tests: [
+            {
+              options: {
+                provider: { text: 'litellm:judge' },
+              },
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                  provider: { text: 'litellm:judge' },
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultTest: expect.objectContaining({
+              options: expect.objectContaining({
+                provider: { text: mockLiteLLMProvider },
+              }),
+            }),
+            tests: expect.arrayContaining([
+              expect.objectContaining({
+                options: expect.objectContaining({
+                  provider: { text: mockLiteLLMProvider },
+                }),
+                assert: expect.arrayContaining([
+                  expect.objectContaining({
+                    provider: { text: mockLiteLLMProvider },
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
         const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 

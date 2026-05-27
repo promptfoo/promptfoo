@@ -191,7 +191,7 @@ describeEvaluator('evaluator assertions', () => {
     expect(summary.stats.successes).toBe(1);
   });
 
-  it('reuses configured graders referenced from defaults and scenario assertion sets', async () => {
+  it('reuses configured graders in typed defaults and scenario assertion sets', async () => {
     const configuredGrader: ApiProvider = {
       id: vi.fn().mockReturnValue('litellm:judge'),
       label: 'Configured grader',
@@ -204,7 +204,7 @@ describeEvaluator('evaluator assertions', () => {
       providers: [mockApiProvider, configuredGrader],
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
-        options: { provider: 'Configured grader' },
+        options: { provider: { text: 'Configured grader' } },
       },
       scenarios: [
         {
@@ -220,7 +220,7 @@ describeEvaluator('evaluator assertions', () => {
                     {
                       type: 'llm-rubric',
                       value: 'Use the explicit configured grader ID',
-                      provider: 'litellm:judge',
+                      provider: { text: 'litellm:judge' },
                     },
                   ],
                 },

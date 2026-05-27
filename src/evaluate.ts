@@ -18,13 +18,14 @@ import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
   EvaluateTestSuite,
+  GradingConfig,
   Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { ApiProvider } from './types/providers';
+import type { ApiProvider, ProviderTypeMap } from './types/providers';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -194,7 +195,7 @@ function createSerializableUnifiedConfig(
 }
 
 function buildProviderMap(providers: ApiProvider[]): Record<string, ApiProvider> {
-  const providerMap: Record<string, ApiProvider> = {};
+  const providerMap: Record<string, ApiProvider> = Object.create(null);
   for (const provider of providers) {
     providerMap[provider.id()] = provider;
     if (provider.label) {
@@ -202,6 +203,41 @@ function buildProviderMap(providers: ApiProvider[]): Record<string, ApiProvider>
     }
   }
   return providerMap;
+}
+
+const GRADING_PROVIDER_TYPE_KEYS = ['text', 'embedding', 'classification', 'moderation'] as const;
+
+function isProviderTypeMap(provider: unknown): provider is ProviderTypeMap {
+  return Boolean(
+    provider &&
+      typeof provider === 'object' &&
+      !Array.isArray(provider) &&
+      !isApiProvider(provider) &&
+      !('id' in provider) &&
+      GRADING_PROVIDER_TYPE_KEYS.some((providerType) => Object.hasOwn(provider, providerType)),
+  );
+}
+
+async function resolveGradingProvider(
+  provider: GradingConfig['provider'],
+  providerMap: Record<string, ApiProvider>,
+  context: { env?: unknown; basePath?: string },
+): Promise<GradingConfig['provider']> {
+  if (!isProviderTypeMap(provider)) {
+    return isApiProvider(provider) ? provider : resolveProvider(provider, providerMap, context);
+  }
+
+  const resolvedProvider = { ...provider };
+  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
+    const nestedProvider = provider[providerType];
+    if (!nestedProvider) {
+      continue;
+    }
+    resolvedProvider[providerType] = isApiProvider(nestedProvider)
+      ? nestedProvider
+      : await resolveProvider(nestedProvider, providerMap, context);
+  }
+  return resolvedProvider;
 }
 
 async function createRuntimeTestSuite(
@@ -247,7 +283,7 @@ async function resolveNestedProviders(
       constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
     ) {
-      constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.options.provider = await resolveGradingProvider(
         constructedTestSuite.defaultTest.options.provider,
         providerMap,
         { env: testSuiteConfig.env, basePath: cliState.basePath },
@@ -259,7 +295,7 @@ async function resolveNestedProviders(
 
   for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
+      test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
         env: testSuiteConfig.env,
         basePath: cliState.basePath,
       });
@@ -269,7 +305,7 @@ async function resolveNestedProviders(
         continue;
       }
       if (assertion.provider && !isApiProvider(assertion.provider)) {
-        assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+        assertion.provider = await resolveGradingProvider(assertion.provider, providerMap, {
           env: testSuiteConfig.env,
           basePath: cliState.basePath,
         });
