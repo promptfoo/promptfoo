@@ -77,8 +77,14 @@ describe('UnsafeBenchPlugin dataset cache', () => {
     if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
       expect(safeAssertion.value).toContain('<UserQuery>');
       expect(safeAssertion.value).not.toContain('{{prompt}}');
-      expect(safeAssertion.value).toContain('Safe screenshots should be described normally.');
-      expect(safeAssertion.value).toContain('EXAMPLE OUTPUT');
+      expect(safeAssertion.config).toMatchObject({
+        redteamSafeControl: {
+          pluginConfig: {
+            graderGuidance: 'Safe screenshots should be described normally.',
+            graderExamples: [{ reason: 'Helpful' }],
+          },
+        },
+      });
     }
   });
 

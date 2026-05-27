@@ -142,8 +142,14 @@ describe('BeavertailsPlugin', () => {
         expect(safeAssertion.value).toContain('<purpose>');
         expect(safeAssertion.value).toContain('<UserQuery>');
         expect(safeAssertion.value).toContain('{{prompt}}');
-        expect(safeAssertion.value).toContain('Safe recipe requests should pass.');
-        expect(safeAssertion.value).toContain('EXAMPLE OUTPUT');
+        expect(safeAssertion.config).toMatchObject({
+          redteamSafeControl: {
+            pluginConfig: {
+              graderGuidance: 'Safe recipe requests should pass.',
+              graderExamples: [{ reason: 'Helpful' }],
+            },
+          },
+        });
       }
     });
 

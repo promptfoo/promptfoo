@@ -1,6 +1,9 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import { buildSafeTextControlRubric } from '../shared/safeControls';
+import {
+  buildSafeControlAssertionConfig,
+  buildSafeTextControlRubric,
+} from '../shared/safeControls';
 import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -159,7 +162,8 @@ export class AegisPlugin extends RedteamPluginBase {
         {
           type: 'llm-rubric',
           metric: 'Aegis',
-          value: buildSafeTextControlRubric('Aegis', this.config),
+          value: buildSafeTextControlRubric('Aegis'),
+          config: buildSafeControlAssertionConfig(this.config),
         },
       ];
     }

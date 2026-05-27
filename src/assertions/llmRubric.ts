@@ -1,7 +1,8 @@
 import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
+import { appendSafeControlGradingInstructions } from '../redteam/shared/safeControls';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { AssertionParams, GradingResult, PluginConfig } from '../types/index';
 
 export const handleLlmRubric = async ({
   assertion,
@@ -24,8 +25,21 @@ export const handleLlmRubric = async ({
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
+  const safeControlConfig = assertion.config?.redteamSafeControl as
+    | { pluginConfig?: PluginConfig }
+    | undefined;
+  let rubric = renderedValue || '';
+  if (safeControlConfig) {
+    invariant(typeof rubric === 'string', 'Safe control rubric must have a string value');
+    rubric = appendSafeControlGradingInstructions(
+      rubric,
+      safeControlConfig.pluginConfig,
+      test.options?.redteamGraderExamples as PluginConfig['graderExamples'] | undefined,
+    );
+  }
+
   const resp = await matchesLlmRubric(
-    renderedValue || '',
+    rubric,
     outputString,
     test.options,
     test.vars,

@@ -3,7 +3,10 @@ import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets'
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sampleArray } from '../../util/generation';
-import { buildSafeImageControlRubric } from '../shared/safeControls';
+import {
+  buildSafeControlAssertionConfig,
+  buildSafeImageControlRubric,
+} from '../shared/safeControls';
 import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -524,7 +527,8 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
         {
           type: 'llm-rubric',
           metric: 'UnsafeBench',
-          value: buildSafeImageControlRubric('UnsafeBench', category, this.pluginConfig),
+          value: buildSafeImageControlRubric('UnsafeBench', category),
+          config: buildSafeControlAssertionConfig(this.pluginConfig),
         },
       ];
     }

@@ -74,6 +74,74 @@ describe('handleLlmRubric', () => {
     );
   });
 
+  it('applies safe-control guidance and grader examples in documented precedence order', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'llm-rubric',
+        value: 'safe-control rubric',
+        config: {
+          redteamSafeControl: {
+            pluginConfig: {
+              graderGuidance: 'Treat safe account requests as allowed.',
+              graderExamples: [
+                { output: 'plugin output', pass: true, score: 1, reason: 'plugin example' },
+              ],
+            },
+          },
+        },
+      },
+      renderedValue: 'safe-control rubric',
+      test: {
+        vars: {},
+        options: {
+          redteamGraderExamples: [
+            { output: 'global output', pass: true, score: 1, reason: 'global example' },
+          ],
+        },
+      },
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'graded',
+    });
+
+    await handleLlmRubric(params);
+
+    const rubric = mockMatchesLlmRubric.mock.calls[0][0] as string;
+    expect(rubric).toContain('Treat safe account requests as allowed.');
+    expect(rubric).toContain('global example');
+    expect(rubric).toContain('plugin example');
+    expect(rubric.indexOf('global example')).toBeLessThan(rubric.indexOf('plugin example'));
+  });
+
+  it('does not apply redteam grader examples to ordinary llm-rubric assertions', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      renderedValue: 'ordinary rubric',
+      test: {
+        vars: {},
+        options: {
+          redteamGraderExamples: [
+            { output: 'global output', pass: true, score: 1, reason: 'global example' },
+          ],
+        },
+      },
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'graded',
+    });
+
+    await handleLlmRubric(params);
+
+    expect(mockMatchesLlmRubric.mock.calls[0][0]).toBe('ordinary rubric');
+  });
+
   it('should handle object rendered value', async () => {
     const params = {
       ...defaultParams,

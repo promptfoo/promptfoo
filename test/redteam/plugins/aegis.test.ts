@@ -52,8 +52,14 @@ describe('AegisPlugin', () => {
     expect(assertions[0].value).toContain('<purpose>');
     expect(assertions[0].value).toContain('<UserQuery>');
     expect(assertions[0].value).toContain('{{prompt}}');
-    expect(assertions[0].value).toContain('Safe account-management requests should pass.');
-    expect(assertions[0].value).toContain('EXAMPLE OUTPUT');
+    expect(assertions[0].config).toMatchObject({
+      redteamSafeControl: {
+        pluginConfig: {
+          graderGuidance: 'Safe account-management requests should pass.',
+          graderExamples: [{ reason: 'Helpful' }],
+        },
+      },
+    });
   });
 
   it('should generate tests correctly', async () => {

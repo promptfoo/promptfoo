@@ -2,7 +2,10 @@ import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { sampleArray } from '../../util/generation';
-import { buildSafeTextControlRubric } from '../shared/safeControls';
+import {
+  buildSafeControlAssertionConfig,
+  buildSafeTextControlRubric,
+} from '../shared/safeControls';
 import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -422,7 +425,8 @@ export class BeavertailsPlugin extends RedteamPluginBase {
         {
           type: 'llm-rubric',
           metric: 'BeaverTails',
-          value: buildSafeTextControlRubric('BeaverTails', this.pluginConfig),
+          value: buildSafeTextControlRubric('BeaverTails'),
+          config: buildSafeControlAssertionConfig(this.pluginConfig),
         },
       ];
     }
