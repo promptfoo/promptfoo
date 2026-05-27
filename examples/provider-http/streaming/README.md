@@ -39,7 +39,7 @@ OPENAI_API_KEY=your-openai-api-key
 2. Run the evaluation:
 
    ```bash
-   npx promptfoo@latest eval -c examples/provider-http/streaming/promptfooconfig.yaml
+   npx promptfoo@latest eval -c promptfooconfig.yaml
    ```
 
 3. View results (optional):
