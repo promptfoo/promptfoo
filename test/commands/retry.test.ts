@@ -184,7 +184,7 @@ describe('retry command', () => {
 
     it('should invalidate the cached total row count after deleting results', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
 
       await db.insert(evalResultsTable).values([
         {

@@ -181,9 +181,10 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       const eval3 = await EvalFactory.create();
-      getDb().update(evalsTable).set({ createdAt: 1 }).where(eq(evalsTable.id, eval1.id)).run();
-      getDb().update(evalsTable).set({ createdAt: 2 }).where(eq(evalsTable.id, eval2.id)).run();
-      getDb().update(evalsTable).set({ createdAt: 3 }).where(eq(evalsTable.id, eval3.id)).run();
+      const db = await getDb();
+      await db.update(evalsTable).set({ createdAt: 1 }).where(eq(evalsTable.id, eval1.id)).run();
+      await db.update(evalsTable).set({ createdAt: 2 }).where(eq(evalsTable.id, eval2.id)).run();
+      await db.update(evalsTable).set({ createdAt: 3 }).where(eq(evalsTable.id, eval3.id)).run();
 
       const evaluations = await getEvalSummaries();
 
@@ -198,8 +199,9 @@ describe('evaluator', () => {
       const eval2 = await Eval.create({}, []);
       const createdAt = Date.now();
 
-      getDb().update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval1.id)).run();
-      getDb().update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval2.id)).run();
+      const db = await getDb();
+      await db.update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval1.id)).run();
+      await db.update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval2.id)).run();
 
       const expectedIds = [eval1.id, eval2.id].sort().reverse();
       const allIds = (await getEvalSummaries()).map(({ evalId }) => evalId);
@@ -216,7 +218,8 @@ describe('evaluator', () => {
       await updateResult(redteamEvaluation.id, {});
       await updateResult(regularEvaluation.id, { redteam: {} as any });
 
-      const stored = getDb()
+      const db = await getDb();
+      const stored = await db
         .select({ id: evalsTable.id, isRedteam: evalsTable.isRedteam })
         .from(evalsTable)
         .all();
@@ -251,7 +254,8 @@ describe('evaluator', () => {
         { redteam: {} as any },
       );
 
-      const stored = getDb()
+      const db = await getDb();
+      const stored = await db
         .select({ isRedteam: evalsTable.isRedteam })
         .from(evalsTable)
         .where(eq(evalsTable.id, evalId))
@@ -266,7 +270,8 @@ describe('evaluator', () => {
       { label: 'no redteam key', config: {}, expected: false },
     ])('classifies $label as isRedteam=$expected on create', async ({ config, expected }) => {
       const eval_ = await Eval.create(config, []);
-      const stored = getDb()
+      const db = await getDb();
+      const stored = await db
         .select({ isRedteam: evalsTable.isRedteam })
         .from(evalsTable)
         .where(eq(evalsTable.id, eval_.id))
@@ -1255,7 +1260,7 @@ describe('evaluator', () => {
     it('returns each evaluations var keys sorted alphabetically for stable list output', async () => {
       const eval1 = await EvalFactory.create({ numResults: 1 });
       const eval2 = await EvalFactory.create({ numResults: 1 });
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET test_case = json('{"vars":{"zebra":"z","apple":"a","mango":"m"}}') WHERE eval_id = '${eval1.id}'`,
       );
@@ -1278,7 +1283,7 @@ describe('evaluator', () => {
     it('omits evals whose test_case has no $.vars from the result map', async () => {
       const evalWithVars = await EvalFactory.create({ numResults: 1 });
       const evalWithoutVars = await EvalFactory.create({ numResults: 1 });
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET test_case = json('{"vars":{"foo":"f"}}') WHERE eval_id = '${evalWithVars.id}'`,
       );
@@ -2177,7 +2182,7 @@ describe('evaluator', () => {
   describe('getTablePage sessionId header detection', () => {
     it('sorts legacy backfilled vars before appending metadata-only sessionId', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET
           metadata = json('{"sessionId":"session-123"}'),
