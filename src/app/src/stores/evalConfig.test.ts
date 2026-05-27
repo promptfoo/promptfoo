@@ -400,6 +400,44 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('context-token-secret');
     });
 
+    it('drops sources for rejected credential templates and redacted URL userinfo', () => {
+      useStore.getState().setConfig({
+        env: {
+          SERVICE_AUTH: 'top-level-short-value',
+          SAFE_SETTING: 'visible-root',
+        },
+        providers: [
+          {
+            id: 'http',
+            config: {
+              headers: {
+                Authorization: "Bearer {{ env.SERVICE_AUTH | default('') }}",
+              },
+            },
+            env: {
+              SERVICE_AUTH: 'provider-short-value',
+              SAFE_SETTING: 'visible-provider',
+            },
+          },
+          'https://svc:{{ basic_password }}@api.example.test/v1',
+        ],
+        tests: [{ vars: { basic_password: 'short-password-value', visible: 'kept' } }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.env).toEqual({ SAFE_SETTING: 'visible-root' });
+      expect(persisted.providers[0]).toEqual({
+        id: 'http',
+        config: { headers: {} },
+        env: { SAFE_SETTING: 'visible-provider' },
+      });
+      expect(persisted.providers[1]).toBe('https://[REDACTED]@api.example.test/v1');
+      expect(persisted.tests[0].vars).toEqual({ visible: 'kept' });
+      expect(JSON.stringify(persisted)).not.toContain('top-level-short-value');
+      expect(JSON.stringify(persisted)).not.toContain('provider-short-value');
+      expect(JSON.stringify(persisted)).not.toContain('short-password-value');
+    });
+
     it('redacts token-shaped path segments in provider URLs', () => {
       useStore.getState().setConfig({
         providers: [
@@ -419,6 +457,37 @@ describe('evalConfig store', () => {
         '/sk-zyxwvutsrqponmlkjihgfedcba0987654321',
       );
       expect(JSON.stringify(persisted)).not.toContain('sk-abcdefghijklmnopqrstuvwxyz1234567890');
+    });
+
+    it('redacts opaque tokens in known webhook URL paths and webhook assertions', () => {
+      useStore.getState().setConfig({
+        providers: [
+          'https://hooks.slack.com/services/T000/B000/slack-opaque-value',
+          'webhook:https://discord.com/api/webhooks/1234/discord-opaque-value',
+          'https://api.example.test/services/T000/B000/ordinary-path',
+        ],
+        defaultTest: {
+          assert: [
+            {
+              type: 'webhook',
+              value: 'https://hooks.slack.com/services/T111/B111/assertion-opaque-value',
+            },
+          ],
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers).toEqual([
+        'https://hooks.slack.com/services/T000/B000/[REDACTED]',
+        'webhook:https://discord.com/api/webhooks/1234/[REDACTED]',
+        'https://api.example.test/services/T000/B000/ordinary-path',
+      ]);
+      expect(persisted.defaultTest.assert[0].value).toBe(
+        'https://hooks.slack.com/services/T111/B111/[REDACTED]',
+      );
+      expect(JSON.stringify(persisted)).not.toContain('slack-opaque-value');
+      expect(JSON.stringify(persisted)).not.toContain('discord-opaque-value');
+      expect(JSON.stringify(persisted)).not.toContain('assertion-opaque-value');
     });
 
     it('redacts Azure SAS credentials from persisted test file references', () => {
@@ -1439,6 +1508,8 @@ describe('evalConfig store', () => {
                 pfxContent: 'signature-pfx-secret',
                 keystoreContent: 'signature-keystore-secret',
                 certificateContent: 'signature-certificate-secret',
+                certContent: 'signature-public-cert',
+                keyContent: 'signature-key-secret',
                 pfxPassword: 'signature-password-secret',
                 pfxPath: '/var/run/certs/signing.p12',
                 signatureAlgorithm: 'SHA256',
@@ -1463,6 +1534,7 @@ describe('evalConfig store', () => {
         },
         signatureAuth: {
           type: 'pfx',
+          certContent: 'signature-public-cert',
           pfxPath: '/var/run/certs/signing.p12',
           signatureAlgorithm: 'SHA256',
           signatureDataTemplate: '{{body}}',

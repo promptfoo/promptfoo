@@ -117,10 +117,11 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
 const looksLikeRequestCredentialParameter = (name: string): boolean =>
   BARE_CREDENTIAL_PARAMETER_NAMES.has(normalizeCredentialName(name)) || looksLikeCredential(name);
 
-const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
+const URL_USERINFO = /^((?:webhook:)?[a-z][a-z0-9+.-]*:\/\/)([^/?#@\r\n]+)@/i;
 const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
 const URL_PATH_SEGMENT = /\/([^/?#\s]+)/g;
-const URL_PROTOCOL = /^[a-z][a-z0-9+.-]*:\/\//i;
+const URL_PROTOCOL = /^(?:webhook:)?[a-z][a-z0-9+.-]*:\/\//i;
+const URL_HOST = /^(?:webhook:)?[a-z][a-z0-9+.-]*:\/\/(?:[^/?#@\r\n]+@)?([^/:?#\s]+)(?::\d+)?/i;
 const NUNJUCKS_REFERENCE = /\{\{[^{}]*\}\}/g;
 const NUNJUCKS_NAME_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*/;
 const NUNJUCKS_BRACKET_SEGMENT = /\[(?:"([^"\\\r\n]+)"|'([^'\\\r\n]+)')\]/y;
@@ -166,12 +167,20 @@ const parseSafeNunjucksPath = (path: string): string[] | undefined => {
   return segments;
 };
 
-const getSafeNunjucksPath = (reference: string): string[] | undefined => {
-  const [path, ...filters] = reference
+const getNunjucksReferencePath = (reference: string): string[] | undefined => {
+  const [path] = reference
     .slice(2, -2)
     .split('|')
     .map((part) => part.trim());
-  const safePath = parseSafeNunjucksPath(path);
+  return parseSafeNunjucksPath(path);
+};
+
+const getSafeNunjucksPath = (reference: string): string[] | undefined => {
+  const [, ...filters] = reference
+    .slice(2, -2)
+    .split('|')
+    .map((part) => part.trim());
+  const safePath = getNunjucksReferencePath(reference);
   const safeFilters = filters.every((filter) => SAFE_CREDENTIAL_TEMPLATE_FILTERS.has(filter));
   return safePath && safeFilters ? safePath : undefined;
 };
@@ -186,7 +195,7 @@ const recordCredentialTemplatePaths = (value: string, paths?: Set<string>): void
     return;
   }
   for (const match of value.matchAll(NUNJUCKS_REFERENCE)) {
-    const path = getSafeNunjucksPath(match[0]);
+    const path = getNunjucksReferencePath(match[0]);
     if (path) {
       paths.add(serializeCredentialTemplatePath(path));
     }
@@ -206,10 +215,12 @@ const isTemplatedCredentialReference = (value: unknown): boolean => {
 };
 
 const preserveCredentialTemplate = (value: unknown, paths?: Set<string>): boolean => {
+  if (typeof value === 'string') {
+    recordCredentialTemplatePaths(value, paths);
+  }
   if (!isTemplatedCredentialReference(value)) {
     return false;
   }
-  recordCredentialTemplatePaths(value as string, paths);
   return true;
 };
 
@@ -217,11 +228,9 @@ const isTemplatedUrlUserinfo = (value: string, paths?: Set<string>): boolean => 
   if (!value.includes('{{')) {
     return false;
   }
+  recordCredentialTemplatePaths(value, paths);
   const literal = stripSafeNunjucksReferences(value);
   const templated = literal !== value && /^:?$/.test(literal.trim());
-  if (templated) {
-    recordCredentialTemplatePaths(value, paths);
-  }
   return templated;
 };
 
@@ -254,6 +263,22 @@ const scrubCredentialPathSegments = (value: string): string =>
     looksLikeCredentialPathSegment(segment) ? '/[REDACTED]' : match,
   );
 
+const scrubKnownWebhookPathCredentials = (value: string): string => {
+  const hostname = value.match(URL_HOST)?.[1]?.toLowerCase();
+  if (hostname === 'hooks.slack.com') {
+    return value.replace(/(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
+  }
+  if (
+    hostname === 'discord.com' ||
+    hostname?.endsWith('.discord.com') ||
+    hostname === 'discordapp.com' ||
+    hostname?.endsWith('.discordapp.com')
+  ) {
+    return value.replace(/(\/api\/webhooks\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
+  }
+  return value;
+};
+
 // Operate on URL text so Nunjucks placeholders remain intact and safe query
 // settings retain their exact representation.
 const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string => {
@@ -267,7 +292,9 @@ const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
         ? `${separator}${name}=[REDACTED]`
         : match,
     );
-  return URL_PROTOCOL.test(scrubbed) ? scrubCredentialPathSegments(scrubbed) : scrubbed;
+  return URL_PROTOCOL.test(scrubbed)
+    ? scrubKnownWebhookPathCredentials(scrubCredentialPathSegments(scrubbed))
+    : scrubbed;
 };
 
 const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
@@ -698,8 +725,13 @@ const omitAssertionProviderCredentials = (
       return assertion;
     }
 
+    const assertionType = typeof assertion.type === 'string' ? assertion.type.toLowerCase() : '';
     return {
       ...assertion,
+      ...(typeof assertion.value === 'string' &&
+      (assertionType === 'webhook' || assertionType === 'not-webhook')
+        ? { value: scrubProviderUrl(redactAzureBlobSasTokens(assertion.value), templatePaths) }
+        : {}),
       ...(hasOwn(assertion, 'provider')
         ? { provider: omitProviderCredentials(assertion.provider, undefined, templatePaths) }
         : {}),
