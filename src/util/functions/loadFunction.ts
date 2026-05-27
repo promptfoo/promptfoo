@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 
 import cliState from '../../cliState';
@@ -170,12 +171,20 @@ export class CallbackPathTraversalError extends Error {
  * that base directory.
  *
  * **Security**: this is the path-traversal guard for callback file references.
- * The check is **lexical**, not filesystem-resolved — a symlink inside basePath
- * that points outside is NOT detected. Callers that load untrusted symlinks
- * should add `fs.realpathSync` themselves.
  *
- * Opt-out: setting `PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` disables the
- * guard for backward compatibility with configs that load callbacks from
+ * Performs two checks:
+ *   1. Lexical: rejects `..` traversal and Windows cross-drive paths.
+ *   2. Symlink-aware (best-effort): when the file exists, resolves both
+ *      basePath and the target with `fs.realpathSync.native` and re-checks
+ *      containment. This catches the case where the resolved path lexically
+ *      lives under basePath but is actually a symlink pointing outside.
+ *
+ * When the target file does not yet exist, the symlink check is skipped — the
+ * downstream `importModule` call will fail naturally with `ENOENT` and the
+ * lexical guard remains in force.
+ *
+ * Opt-out: setting `PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` disables both
+ * checks for backward compatibility with configs that load callbacks from
  * outside basePath. Disabling it weakens the protection against malicious
  * callback file paths supplied via config.
  *
@@ -194,6 +203,33 @@ export function resolveCallbackPath(filePath: string, basePath?: string): string
     return resolvedPath;
   }
 
+  // Check 1 — lexical: cheap, runs even for non-existent files.
+  assertWithinBase(filePath, resolvedPath, normalizedBase);
+
+  // Check 2 — symlink-aware: if the file (and base) exist on disk, resolve
+  // them to their real paths and re-run the containment check. Skip silently
+  // when realpath itself fails (ENOENT, EACCES, etc.) — the downstream
+  // import will surface the actual filesystem error, and the lexical check
+  // above is already protective.
+  let realBase: string | undefined;
+  let realTarget: string | undefined;
+  try {
+    realBase = fs.realpathSync.native(normalizedBase);
+    realTarget = fs.realpathSync.native(resolvedPath);
+  } catch {
+    // realpath couldn't resolve — fall through with the lexical result.
+  }
+  if (realBase !== undefined && realTarget !== undefined) {
+    // Re-run the containment check on the resolved real paths. A
+    // CallbackPathTraversalError thrown here MUST propagate.
+    assertWithinBase(filePath, realTarget, realBase);
+  }
+
+  return resolvedPath;
+}
+
+/** Lexical containment check shared between the direct and realpath passes. */
+function assertWithinBase(filePath: string, resolvedPath: string, normalizedBase: string): void {
   const relativePath = path.relative(normalizedBase, resolvedPath);
 
   // Reject paths that escape the base directory:
@@ -211,8 +247,6 @@ export function resolveCallbackPath(filePath: string, basePath?: string): string
   if (escapesViaDotDot || path.isAbsolute(relativePath)) {
     throw new CallbackPathTraversalError(filePath, normalizedBase);
   }
-
-  return resolvedPath;
 }
 
 /**

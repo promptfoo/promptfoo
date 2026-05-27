@@ -1,3 +1,5 @@
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -135,6 +137,50 @@ describe('resolveCallbackPath', () => {
       expect(resolved).toBe(path.resolve('/test/base/path', '../escape.js'));
     } finally {
       vi.unstubAllEnvs();
+    }
+  });
+
+  // Symlink containment: a file that lexically lives inside basePath but is
+  // actually a symlink pointing OUTSIDE should be rejected. The realpath
+  // pass added to resolveCallbackPath closes a gap flagged by Codex.
+  it('rejects symlinks inside basePath that point outside basePath', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-cbpath-'));
+    const baseDir = path.join(tmpRoot, 'base');
+    const outsideFile = path.join(tmpRoot, 'outside.js');
+    const symlinkInsideBase = path.join(baseDir, 'cb.js');
+
+    fs.mkdirSync(baseDir);
+    fs.writeFileSync(outsideFile, 'export default () => "evil";');
+    try {
+      fs.symlinkSync(outsideFile, symlinkInsideBase);
+    } catch {
+      // Symlinks unavailable (e.g. Windows without privileges) — skip.
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      expect(() => resolveCallbackPath('cb.js', baseDir)).toThrow(CallbackPathTraversalError);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Sanity: a real file inside basePath (not a symlink) must still be accepted
+  // after the realpath check is added. Regression test for the symlink pass.
+  it('accepts real files inside basePath (realpath check is a no-op for non-symlinks)', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-cbpath-'));
+    const baseDir = path.join(tmpRoot, 'base');
+    const insideFile = path.join(baseDir, 'cb.js');
+
+    fs.mkdirSync(baseDir);
+    fs.writeFileSync(insideFile, 'export default () => "ok";');
+
+    try {
+      const resolved = resolveCallbackPath('cb.js', baseDir);
+      expect(resolved).toBe(path.resolve(baseDir, 'cb.js'));
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
 });
