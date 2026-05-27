@@ -947,6 +947,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const result = await provider.callApi('Read the file and run the function');
 
       expect(result.error).toBe('MCP Tool Error (read_file): Path traversal not allowed');
+      expect(result.output).toEqual(mockResponse.data.choices[0].message.tool_calls);
     });
 
     it('surfaces a thrown MCP tool error with a clean message', async () => {

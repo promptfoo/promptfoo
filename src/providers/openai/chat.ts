@@ -681,6 +681,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         const results = [];
         const mcpErrors: string[] = [];
         let hasSuccessfulCallback = false;
+        let regularCallbackFailed = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
 
@@ -731,6 +732,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
               );
               hasSuccessfulCallback = false;
+              regularCallbackFailed = true;
               break;
             }
           }
@@ -741,7 +743,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         if ((hasSuccessfulCallback || mcpErrors.length > 0) && results.length > 0) {
           const mcpError = joinMcpErrors(mcpErrors);
           return {
-            output: results.join('\n'),
+            // Preserve the established raw-tool-call fallback when an
+            // ordinary callback fails, while still surfacing an earlier MCP
+            // error through ProviderResponse.error.
+            output: regularCallbackFailed ? output : results.join('\n'),
             ...(mcpError ? { error: mcpError } : {}),
             tokenUsage: getTokenUsage(data, cached),
             cached,

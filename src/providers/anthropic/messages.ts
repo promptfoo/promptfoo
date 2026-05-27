@@ -210,7 +210,8 @@ function getAnthropicCostFromMessage(
  * - `ok`: no tool errors; use `response` as normal.
  * - `tool-error`: a tool failed but the model recovered — keep `response`'s
  *   output and surface `error`.
- * - `exhausted`: max_tool_calls hit — fatal; drop output, return `error` only.
+ * - `exhausted`: additional MCP tool use would exceed max_tool_calls — fatal;
+ *   drop output, return `error` only.
  */
 type McpResolution =
   | { kind: 'ok'; response: Anthropic.Messages.Message }
@@ -740,7 +741,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
-    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
+    // An initialized MCP client remains active for this provider even if a
+    // per-prompt config shallowly overrides `mcp.enabled`. Never cache a
+    // response that may have executed MCP tools, or recovered tool errors
+    // could disappear on a cache hit.
+    const shouldUseResponseCache = isCacheEnabled() && this.mcpClient === null;
 
     if (shouldUseResponseCache) {
       // Try to get the cached response
