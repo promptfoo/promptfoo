@@ -3,6 +3,8 @@ import { isApiProvider } from '../types/providers';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderTypeMap } from '../types/providers';
 
+type ProviderTypeValue = NonNullable<ProviderTypeMap[keyof ProviderTypeMap]>;
+
 export const GRADING_PROVIDER_TYPE_KEYS = [
   'text',
   'embedding',
@@ -39,30 +41,6 @@ export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMa
   );
 }
 
-export function addSuiteEnvToDeferredTypedProviders(
-  provider: ProviderTypeMap,
-  env: EnvOverrides | undefined,
-): ProviderTypeMap {
-  if (!env) {
-    return provider;
-  }
-
-  let providerWithEnv: ProviderTypeMap | undefined;
-  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
-    const nestedProvider = provider[providerType];
-    if (!nestedProvider || isApiProvider(nestedProvider)) {
-      continue;
-    }
-
-    providerWithEnv ??= { ...provider };
-    providerWithEnv[providerType] =
-      typeof nestedProvider === 'string'
-        ? { id: nestedProvider, env }
-        : { ...nestedProvider, env: { ...env, ...nestedProvider.env } };
-  }
-  return providerWithEnv ?? provider;
-}
-
 // Build a lookup of configured providers by both id() and label, with a
 // null prototype so '__proto__'/'constructor' keys cannot pollute lookups.
 // IDs are added first; labels only fill keys an ID has not already claimed,
@@ -80,52 +58,61 @@ export function buildConfiguredProviderMap(providers: ApiProvider[]): Record<str
   return providerMap;
 }
 
-function resolveConfiguredTypedProviderReference(
-  provider: ProviderTypeMap[keyof ProviderTypeMap],
+function getConfiguredProvider(
+  id: string,
   providerMap: Record<string, ApiProvider>,
-): ProviderTypeMap[keyof ProviderTypeMap] {
-  // An id-only typed entry is a reference; entries with options stay inline.
-  if (
-    provider &&
-    typeof provider === 'object' &&
-    !isApiProvider(provider) &&
-    Object.keys(provider).length === 1 &&
-    typeof provider.id === 'string' &&
-    Object.hasOwn(providerMap, provider.id)
-  ) {
-    return providerMap[provider.id];
-  }
-
-  return resolveConfiguredProviderReference(provider, providerMap);
+): ApiProvider | undefined {
+  return Object.hasOwn(providerMap, id) ? providerMap[id] : undefined;
 }
 
+function resolveTypedProviderValue(
+  provider: ProviderTypeValue,
+  providerMap: Record<string, ApiProvider>,
+  env: EnvOverrides | undefined,
+): ProviderTypeValue {
+  if (typeof provider === 'string') {
+    return getConfiguredProvider(provider, providerMap) ?? (env ? { id: provider, env } : provider);
+  }
+  if (isApiProvider(provider)) {
+    return provider;
+  }
+
+  // An id-only typed entry is a reference; entries with options stay inline.
+  const configuredProvider =
+    Object.keys(provider).length === 1 && typeof provider.id === 'string'
+      ? getConfiguredProvider(provider.id, providerMap)
+      : undefined;
+  if (configuredProvider) {
+    return configuredProvider;
+  }
+
+  return env ? { ...provider, env: { ...env, ...provider.env } } : provider;
+}
+
+// Resolve configured grader references while carrying suite env into typed
+// provider values that must stay lazy until their assertion type is selected.
 export function resolveConfiguredProviderReference<T>(
   provider: T,
   providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
 ): T | ApiProvider {
   if (typeof provider === 'string') {
-    return Object.hasOwn(providerMap, provider) ? providerMap[provider] : provider;
+    return getConfiguredProvider(provider, providerMap) ?? provider;
   }
-  if (
-    !provider ||
-    typeof provider !== 'object' ||
-    Array.isArray(provider) ||
-    isApiProvider(provider) ||
-    Object.hasOwn(provider, 'id')
-  ) {
+  if (!isProviderTypeMap(provider)) {
     return provider;
   }
 
   let resolvedTypeMap: ProviderTypeMap | undefined;
   for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
-    const nestedProvider = (provider as ProviderTypeMap)[providerType];
+    const nestedProvider = provider[providerType];
     if (!nestedProvider) {
       continue;
     }
 
-    const resolvedProvider = resolveConfiguredTypedProviderReference(nestedProvider, providerMap);
+    const resolvedProvider = resolveTypedProviderValue(nestedProvider, providerMap, env);
     if (resolvedProvider !== nestedProvider) {
-      resolvedTypeMap ??= { ...(provider as ProviderTypeMap) };
+      resolvedTypeMap ??= { ...provider };
       resolvedTypeMap[providerType] = resolvedProvider;
     }
   }

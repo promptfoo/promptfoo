@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  addSuiteEnvToDeferredTypedProviders,
   buildConfiguredProviderMap,
   GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
@@ -61,25 +60,6 @@ describe('isProviderTypeMap', () => {
   });
 });
 
-describe('addSuiteEnvToDeferredTypedProviders', () => {
-  it('preserves a fully resolved provider map when no entry needs env injection', () => {
-    const provider = makeProvider('litellm:judge');
-    const typeMap = { text: provider };
-
-    expect(addSuiteEnvToDeferredTypedProviders(typeMap, { API_KEY: 'suite-key' })).toBe(typeMap);
-  });
-
-  it('adds env only when a deferred typed provider must still be loaded', () => {
-    const embeddingProvider = makeProvider('litellm:embedding:judge');
-    const typeMap = { text: 'litellm:judge', embedding: embeddingProvider };
-
-    expect(addSuiteEnvToDeferredTypedProviders(typeMap, { API_KEY: 'suite-key' })).toEqual({
-      text: { id: 'litellm:judge', env: { API_KEY: 'suite-key' } },
-      embedding: embeddingProvider,
-    });
-  });
-});
-
 describe('buildConfiguredProviderMap', () => {
   it('returns a null-prototype map', () => {
     const map = buildConfiguredProviderMap([makeProvider('a')]);
@@ -131,6 +111,31 @@ describe('buildConfiguredProviderMap', () => {
 });
 
 describe('resolveConfiguredProviderReference', () => {
+  it('preserves a fully resolved provider map when no entry needs env injection', () => {
+    const provider = makeProvider('litellm:judge');
+    const typeMap = { text: provider };
+
+    expect(
+      resolveConfiguredProviderReference(typeMap, buildConfiguredProviderMap([]), {
+        API_KEY: 'suite-key',
+      }),
+    ).toBe(typeMap);
+  });
+
+  it('adds env only when a deferred typed provider must still be loaded', () => {
+    const embeddingProvider = makeProvider('litellm:embedding:judge');
+    const typeMap = { text: 'litellm:judge', embedding: embeddingProvider };
+
+    expect(
+      resolveConfiguredProviderReference(typeMap, buildConfiguredProviderMap([]), {
+        API_KEY: 'suite-key',
+      }),
+    ).toEqual({
+      text: { id: 'litellm:judge', env: { API_KEY: 'suite-key' } },
+      embedding: embeddingProvider,
+    });
+  });
+
   it('resolves configured typed entries while leaving unconfigured alternatives lazy', () => {
     const textProvider = makeProvider('litellm:judge');
     const providerMap = buildConfiguredProviderMap([textProvider]);

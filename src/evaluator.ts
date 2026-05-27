@@ -72,9 +72,7 @@ import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
-  addSuiteEnvToDeferredTypedProviders,
   buildConfiguredProviderMap,
-  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
@@ -2012,10 +2010,7 @@ function resolveAssertionProviderReferences(
     return { ...assertion, assert: resolvedAssertions };
   }
 
-  const resolvedProvider = resolveConfiguredProviderReference(assertion.provider, providerMap);
-  const provider = isProviderTypeMap(resolvedProvider)
-    ? addSuiteEnvToDeferredTypedProviders(resolvedProvider, env)
-    : resolvedProvider;
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
   return provider === assertion.provider ? assertion : { ...assertion, provider };
 }
 
@@ -2025,13 +2020,11 @@ function resolveRuntimeGradingProviderReferences(
   env?: EnvOverrides,
 ): void {
   if (testCase.options?.provider) {
-    const resolvedProvider = resolveConfiguredProviderReference(
+    const provider = resolveConfiguredProviderReference(
       testCase.options.provider,
       providerMap,
+      env,
     );
-    const provider = isProviderTypeMap(resolvedProvider)
-      ? addSuiteEnvToDeferredTypedProviders(resolvedProvider, env)
-      : resolvedProvider;
     if (provider !== testCase.options.provider) {
       testCase.options = { ...testCase.options, provider };
     }

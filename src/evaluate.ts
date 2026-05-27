@@ -13,7 +13,6 @@ import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
-  addSuiteEnvToDeferredTypedProviders,
   buildConfiguredProviderMap,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
@@ -213,10 +212,7 @@ async function resolveGradingProvider(
   // A typed map can carry alternatives for assertion types that never run.
   // Reuse configured provider instances, but leave all other entries for
   // getGradingProvider() to instantiate only when its type is selected.
-  const resolvedProvider = resolveConfiguredProviderReference(provider, providerMap);
-  return isProviderTypeMap(resolvedProvider)
-    ? addSuiteEnvToDeferredTypedProviders(resolvedProvider, context.env)
-    : resolvedProvider;
+  return resolveConfiguredProviderReference(provider, providerMap, context.env);
 }
 
 async function createRuntimeTestSuite(
