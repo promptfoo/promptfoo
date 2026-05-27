@@ -25,10 +25,9 @@ redteam:
     - hallucination
 ```
 
-The plugin also accepts an **experimental** `generation` block for tuning the
-local generation pipeline. All keys are opt-in; defaults preserve existing
-behavior end-to-end (generation routing, grader rubric, no pass/fail delta
-on existing evals).
+Local hallucination generation now uses an experimental persona/seed-conditioned
+pipeline by default. The optional `generation` block tunes that pipeline;
+`mutation` and the calibrated `v2` grader remain explicit opt-ins.
 
 ```yaml
 redteam:
@@ -49,10 +48,10 @@ only consumed by the local pipeline (when
 generation is otherwise unavailable). When remote generation is enabled,
 the standard remote pipeline runs instead.
 
-`generation.graderVersion` applies regardless of routing — `v1` (default)
-keeps the long-standing 7-criterion rubric so existing evals don't see a
-pass/fail delta. `v2` opts in to a calibrated binary MET/UNMET rubric
-with anchored examples (G-Eval / LLM-as-judge survey alignment).
+`generation.graderVersion` applies regardless of routing. `v1` (default)
+keeps the long-standing 7-criterion rubric; `v2` opts in to a calibrated
+binary MET/UNMET rubric with anchored examples (G-Eval / LLM-as-judge
+survey alignment).
 
 ## How It Works
 

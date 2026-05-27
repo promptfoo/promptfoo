@@ -125,7 +125,21 @@ export async function scoreCandidates(
     return { scored: [], degraded: false };
   }
 
-  const { output, error } = await provider.callApi(buildPrompt(purpose, candidates));
+  let output: unknown;
+  let error: unknown;
+  try {
+    ({ output, error } = await provider.callApi(buildPrompt(purpose, candidates)));
+  } catch (err) {
+    logger.debug(
+      `[hallucination/critic] degraded: provider rejected: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return {
+      scored: candidates.map((prompt, index) => ({ prompt, index, score: null })),
+      degraded: true,
+    };
+  }
 
   if (error || typeof output !== 'string') {
     logger.debug(`[hallucination/critic] degraded: ${error ?? 'non-string output'}`);

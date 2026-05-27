@@ -83,7 +83,18 @@ export async function pickSeeds(
   count: number = DEFAULT_PICK_COUNT,
 ): Promise<SeedPickResult> {
   const target = Math.min(count, HALLUCINATION_SEEDS.length);
-  const { output, error } = await provider.callApi(buildPrompt(purpose, target));
+  let output: unknown;
+  let error: unknown;
+  try {
+    ({ output, error } = await provider.callApi(buildPrompt(purpose, target)));
+  } catch (err) {
+    logger.debug(
+      `[hallucination/seedPicker] degraded: provider rejected: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return { seeds: deterministicFallback(target), degraded: true, toppedUp: false };
+  }
 
   if (error || typeof output !== 'string') {
     logger.debug(`[hallucination/seedPicker] degraded: ${error ?? 'non-string output'}`);

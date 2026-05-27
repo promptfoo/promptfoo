@@ -173,12 +173,23 @@ export async function mutateCandidates<T extends { promptText: string }>(
     cursor += chunk.length;
 
     const promptStrings = chunk.map((c) => c.promptText);
-    const { output, error } = await provider.callApi(
-      buildPrompt(axis, promptStrings, {
-        language: options.language,
-        maxCharsPerMessage: options.maxCharsPerMessage,
-      }),
-    );
+    let output: unknown;
+    let error: unknown;
+    try {
+      ({ output, error } = await provider.callApi(
+        buildPrompt(axis, promptStrings, {
+          language: options.language,
+          maxCharsPerMessage: options.maxCharsPerMessage,
+        }),
+      ));
+    } catch (err) {
+      logger.debug(
+        `[hallucination/mutator] axis ${axis} degraded: provider rejected: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      continue;
+    }
 
     if (error || typeof output !== 'string') {
       logger.debug(

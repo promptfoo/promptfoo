@@ -84,7 +84,18 @@ export async function pickPersonas(
   count: number = DEFAULT_PICK_COUNT,
 ): Promise<PersonaPickResult> {
   const target = Math.min(count, HALLUCINATION_PERSONAS.length);
-  const { output, error } = await provider.callApi(buildPrompt(purpose, target));
+  let output: unknown;
+  let error: unknown;
+  try {
+    ({ output, error } = await provider.callApi(buildPrompt(purpose, target)));
+  } catch (err) {
+    logger.debug(
+      `[hallucination/personaPicker] degraded: provider rejected: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return { personas: deterministicFallback(target), degraded: true, toppedUp: false };
+  }
 
   if (error || typeof output !== 'string') {
     logger.debug(`[hallucination/personaPicker] degraded: ${error ?? 'non-string output'}`);

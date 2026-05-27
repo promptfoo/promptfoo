@@ -102,7 +102,18 @@ export async function dedupByCluster<T extends { promptText: string }>(
   }
 
   const prompts = candidates.map((c) => c.promptText);
-  const { output, error } = await provider.callApi(buildPrompt(prompts));
+  let output: unknown;
+  let error: unknown;
+  try {
+    ({ output, error } = await provider.callApi(buildPrompt(prompts)));
+  } catch (err) {
+    logger.debug(
+      `[hallucination/dedup] degraded: provider rejected: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return { kept: candidates.slice(), collapsed: 0, degraded: true };
+  }
 
   if (error || typeof output !== 'string') {
     logger.debug(`[hallucination/dedup] degraded: ${error ?? 'non-string output'}`);

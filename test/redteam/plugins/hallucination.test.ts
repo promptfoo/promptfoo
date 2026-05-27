@@ -1419,6 +1419,62 @@ describe('parseLlmJson — fence + whitespace tolerance', () => {
   });
 });
 
+describe('Hallucination helper stages — rejected provider calls fail open', () => {
+  function createRejectingProvider(): MockApiProvider {
+    return createMockProvider({
+      callApi: vi
+        .fn()
+        .mockRejectedValue(new Error('network unavailable')) as unknown as ApiProvider['callApi'],
+    });
+  }
+
+  it('falls back deterministically when the persona picker provider rejects', async () => {
+    const result = await pickPersonas(createRejectingProvider(), 'test purpose', 2);
+
+    expect(result.degraded).toBe(true);
+    expect(result.personas.map((persona) => persona.id)).toEqual(
+      HALLUCINATION_PERSONAS.slice(0, 2).map((persona) => persona.id),
+    );
+  });
+
+  it('falls back deterministically when the seed picker provider rejects', async () => {
+    const result = await pickSeeds(createRejectingProvider(), 'test purpose', 2);
+
+    expect(result.degraded).toBe(true);
+    expect(result.seeds.map((seed) => seed.id)).toEqual(
+      HALLUCINATION_SEEDS.slice(0, 2).map((seed) => seed.id),
+    );
+  });
+
+  it('keeps every candidate when the critic provider rejects', async () => {
+    const result = await scoreCandidates(createRejectingProvider(), 'test purpose', ['a', 'b']);
+
+    expect(result.degraded).toBe(true);
+    expect(result.scored.map((candidate) => candidate.prompt)).toEqual(['a', 'b']);
+    expect(result.scored.every((candidate) => candidate.score === null)).toBe(true);
+  });
+
+  it('keeps every candidate when the dedup provider rejects', async () => {
+    const candidates = [{ promptText: 'a' }, { promptText: 'b' }];
+    const result = await dedupByCluster(createRejectingProvider(), candidates);
+
+    expect(result).toEqual({ kept: candidates, collapsed: 0, degraded: true });
+  });
+
+  it('keeps originals and marks mutation degraded when the provider rejects', async () => {
+    const candidates = [{ promptText: 'a' }];
+    const result = await mutateCandidates(createRejectingProvider(), candidates, {
+      fraction: 1,
+      axes: ['deepen'],
+      rebuild: (original, text) => ({ ...original, promptText: text }),
+    });
+
+    expect(result.combined).toEqual(candidates);
+    expect(result.degraded).toBe(true);
+    expect(result.acceptedCount).toBe(0);
+  });
+});
+
 describe('Mutator — non-integer index protection', () => {
   it('drops mutations with fractional index instead of throwing in rebuild', async () => {
     // Pre-fix: chunk[0.5] === undefined → rebuild(undefined, ...) throws.
