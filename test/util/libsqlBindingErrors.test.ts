@@ -33,6 +33,18 @@ describe('libsql binding errors', () => {
     expect(getLibsqlBindingTarget(makeBindingError('linux-x64-musl'))).toBe('linux-x64-musl');
   });
 
+  it.each([
+    ['android-arm64'],
+    ['freebsd-x64'],
+    ['netbsd-x64'],
+    ['wasm32-wasi'],
+  ])('recognizes %s as a platform binding', (target) => {
+    // Forward-compat coverage: libsql does not currently ship these as
+    // optionalDependencies, but the regex was broadened to anticipate them.
+    // If the regex narrows again this test catches it before users hit it.
+    expect(getLibsqlBindingTarget(makeBindingError(target))).toBe(target);
+  });
+
   it('formats actionable repair instructions with the detected target and platform', () => {
     const message = formatLibsqlBindingErrorMessage(makeBindingError('linux-x64-gnu'));
 
