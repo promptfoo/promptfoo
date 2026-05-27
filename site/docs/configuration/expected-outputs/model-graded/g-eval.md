@@ -106,7 +106,7 @@ tests:
           id: litellm:gemini-pro
           config:
             apiBaseUrl: http://localhost:4000
-            apiKey: ${LITELLM_API_KEY}
+            apiKey: '{{ env.LITELLM_API_KEY }}'
             temperature: 0
 ```
 
@@ -117,7 +117,7 @@ providers:
   - id: litellm:gemini-pro
     config:
       apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY}
+      apiKey: '{{ env.LITELLM_API_KEY }}'
       temperature: 0
 
 tests:
