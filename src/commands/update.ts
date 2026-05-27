@@ -73,7 +73,7 @@ export function updateCommand(
 
         logger.info(`Running: ${updateCommand}`);
 
-        const { command, args } = parseUpdateCommandForSpawn(updateCommand);
+        const { command, args } = parseUpdateCommandForSpawn(updateCommand, sourceEnvironment);
         const spawnContext = getUpdateSpawnContext(sourceEnvironment);
 
         // Execute the update command and wait for it to complete

@@ -139,7 +139,10 @@ function getNpmInstallationInfo(
 
   try {
     const npmExecutable = getPackageManagerExecutable('npm');
-    const { command, args } = parseUpdateCommandForSpawn(`${npmExecutable} root --global`);
+    const { command, args } = parseUpdateCommandForSpawn(
+      `${npmExecutable} root --global`,
+      sourceEnvironment,
+    );
     const globalRoot = execFileSync(command, args, {
       ...getUpdateSpawnContext(sourceEnvironment),
       encoding: 'utf8',

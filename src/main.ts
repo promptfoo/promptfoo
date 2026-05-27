@@ -25,12 +25,14 @@ import { showCommand } from './commands/show';
 import { updateCommand } from './commands/update';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import { getEnvBool } from './envars';
+import { getEnvBool, getEnvBoolFromEnvironment } from './envars';
 import { EmailValidationError } from './globalConfig/accounts';
+import { getInitialProcessEnvironment } from './initialProcessEnvironment';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
   isMainModule,
+  isSuccessfulExitCode,
   isUpdateCommandRequested,
   setupEnvFilesFromArgv,
   shouldSkipDefaultConfigLoading,
@@ -45,7 +47,7 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { ServerError } from './server/errors';
-import { scheduleAutoUpdateOnExit, setUpdateHandler } from './updates/handleAutoUpdate';
+import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
 import { checkForUpdates } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
@@ -53,9 +55,18 @@ import { printErrorInformation } from './util/errors/index';
 import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
 import { VERSION } from './version';
 
-async function main() {
+import type { UpdateObject } from './updates/updateCheck';
+
+interface PendingAutoUpdate {
+  info: UpdateObject;
+  disableUpdateNag: boolean;
+  projectRoot: string;
+  sourceEnvironment: NodeJS.ProcessEnv;
+}
+
+async function main(): Promise<PendingAutoUpdate | undefined> {
   const argv = process.argv.slice(2);
-  const startupEnvironment = { ...process.env };
+  const startupEnvironment = getInitialProcessEnvironment();
   setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
@@ -69,14 +80,19 @@ async function main() {
     (info) => logger.debug(`Update notification: ${info.message}`),
     (info) => logger.info(info.message),
     (info) => logger.warn(info.message),
+    (info) => logger.warn(info.message),
   );
 
   // Check for updates and show notification (non-blocking)
   const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
   // Auto-update is opt-in: only enabled if explicitly set to true
-  const enableAutoUpdate = getEnvBool('PROMPTFOO_ENABLE_AUTO_UPDATE');
+  const enableAutoUpdate = getEnvBoolFromEnvironment(
+    'PROMPTFOO_ENABLE_AUTO_UPDATE',
+    startupEnvironment,
+  );
   const updateCommandRequested = isUpdateCommandRequested(argv);
 
+  let pendingAutoUpdate: UpdateObject | undefined;
   let updateCheckPromise: Promise<void> | undefined;
   if (!disableUpdateNag && !updateCommandRequested) {
     updateCheckPromise = checkForUpdates()
@@ -85,9 +101,9 @@ async function main() {
           logger.info(info.message);
           logger.info('Run "promptfoo update" to upgrade to the latest version.');
 
-          // Never replace the installed package while the current invocation is using it.
+          // Defer replacement until shutdown has released resources used by this invocation.
           if (enableAutoUpdate) {
-            scheduleAutoUpdateOnExit(info, disableUpdateNag, process.cwd(), startupEnvironment);
+            pendingAutoUpdate = info;
           }
         }
       })
@@ -184,6 +200,14 @@ async function main() {
 
   await program.parseAsync();
   await updateCheckPromise;
+  if (pendingAutoUpdate && isSuccessfulExitCode(process.exitCode)) {
+    return {
+      info: pendingAutoUpdate,
+      disableUpdateNag,
+      projectRoot: process.cwd(),
+      sourceEnvironment: startupEnvironment,
+    };
+  }
 }
 
 // ESM replacement for require.main === module check
@@ -199,8 +223,9 @@ try {
 if (isMain) {
   let mainError: unknown;
   let nativeAddonVersionMismatchMessage: string | undefined;
+  let pendingAutoUpdate: PendingAutoUpdate | undefined;
   try {
-    await main();
+    pendingAutoUpdate = await main();
   } catch (error) {
     mainError = error;
     if (error instanceof ConfigResolutionError) {
@@ -217,8 +242,21 @@ if (isMain) {
     // callers and CLI wrappers see the same outcome.
     process.exitCode = error instanceof EvalRunError ? error.exitCode : 1;
   } finally {
+    const autoUpdateToRun = pendingAutoUpdate;
     try {
-      await shutdownGracefully();
+      await shutdownGracefully(
+        autoUpdateToRun
+          ? () =>
+              handleAutoUpdate(
+                autoUpdateToRun.info,
+                autoUpdateToRun.disableUpdateNag,
+                false,
+                autoUpdateToRun.projectRoot,
+                undefined,
+                autoUpdateToRun.sourceEnvironment,
+              )
+          : undefined,
+      );
     } catch (shutdownError) {
       // Log shutdown error but preserve the original main error if it exists
       logger.error(

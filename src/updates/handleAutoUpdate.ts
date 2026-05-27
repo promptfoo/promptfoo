@@ -11,22 +11,9 @@ import { updateEventEmitter } from './updateEventEmitter';
 
 import type { UpdateObject } from './updateCheck';
 
-export function scheduleAutoUpdateOnExit(
-  info: UpdateObject,
-  disableUpdateNag: boolean,
-  projectRoot: string,
-  sourceEnvironment: NodeJS.ProcessEnv = process.env,
-  registerBeforeExit: (listener: () => void) => void = (listener) => {
-    process.once('beforeExit', listener);
-  },
-  spawnFn: typeof spawn = nodeSpawn,
-) {
-  registerBeforeExit(() => {
-    handleAutoUpdate(info, disableUpdateNag, false, projectRoot, spawnFn, sourceEnvironment);
-  });
-}
+export const AUTO_UPDATE_TIMEOUT_MS = 60_000;
 
-export function handleAutoUpdate(
+export async function handleAutoUpdate(
   info: UpdateObject | null,
   disableUpdateNag: boolean,
   disableAutoUpdate: boolean,
@@ -42,7 +29,10 @@ export function handleAutoUpdate(
     return;
   }
 
-  const installationInfo = getInstallationInfo(projectRoot, disableAutoUpdate, sourceEnvironment);
+  // Automatic replacement is supported only on the Unix platforms covered by this feature.
+  const supportsAutoUpdate = process.platform === 'darwin' || process.platform === 'linux';
+  const autoUpdateDisabled = disableAutoUpdate || !supportsAutoUpdate;
+  const installationInfo = getInstallationInfo(projectRoot, autoUpdateDisabled, sourceEnvironment);
 
   let combinedMessage = info.message;
   if (installationInfo.updateMessage) {
@@ -53,49 +43,62 @@ export function handleAutoUpdate(
     message: combinedMessage,
   });
 
-  if (!installationInfo.updateCommand || disableAutoUpdate) {
+  if (!installationInfo.updateCommand || autoUpdateDisabled) {
     return;
   }
 
   const updateCommand = withTargetVersion(installationInfo.updateCommand, info.update.latest);
-  const { command, args } = parseUpdateCommandForSpawn(updateCommand);
+  const { command, args } = parseUpdateCommandForSpawn(updateCommand, sourceEnvironment);
   const spawnContext = getUpdateSpawnContext(sourceEnvironment);
 
-  // Use 'ignore' to prevent deadlocks from pipe buffer filling
-  // Use 'detached' so the process can continue after parent exits (especially on Windows)
-  // The update runs in background, we don't need to capture output
   const updateProcess = spawnFn(command, args, {
     ...spawnContext,
     stdio: 'ignore',
     shell: false,
-    detached: true,
+    detached: false,
   });
 
-  // Unref the process so it doesn't keep the event loop alive
-  // This allows the CLI to exit normally even if update is still running
-  updateProcess.unref();
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      updateProcess.unref();
+      finish('background', null);
+    }, AUTO_UPDATE_TIMEOUT_MS);
+    const finish = (event: 'close' | 'error' | 'background', detail: number | Error | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
 
-  updateProcess.on('close', (code) => {
-    if (code === 0) {
-      updateEventEmitter.emit('update-success', {
-        message: 'Update successful! The new version will be used on your next run.',
-      });
-    } else {
-      // Sanitize error output by not including it (could contain secrets)
-      updateEventEmitter.emit('update-failed', {
-        message: `Automatic update failed with exit code ${code}. Please try updating manually: ${installationInfo.updateCommand}`,
-      });
-    }
-  });
+      if (event === 'close' && detail === 0) {
+        updateEventEmitter.emit('update-success', {
+          message: 'Update successful! The new version will be used on your next run.',
+        });
+      } else if (event === 'close') {
+        updateEventEmitter.emit('update-failed', {
+          message: `Automatic update failed with exit code ${detail}. Please try updating manually: ${installationInfo.updateCommand}`,
+        });
+      } else if (event === 'error') {
+        const errorName = detail instanceof Error ? detail.name : 'Error';
+        updateEventEmitter.emit('update-failed', {
+          message: `Automatic update failed (${errorName}). Please try updating manually: ${installationInfo.updateCommand}`,
+        });
+      } else if (event === 'background') {
+        updateEventEmitter.emit('update-background', {
+          message: `Automatic update is still running after ${AUTO_UPDATE_TIMEOUT_MS / 1000} seconds and will continue in the background. Wait before running promptfoo again; installation success is not yet known.`,
+        });
+      }
+      resolve();
+    };
 
-  updateProcess.on('error', (err) => {
-    // Only include error name, not full message which might contain paths/secrets
-    updateEventEmitter.emit('update-failed', {
-      message: `Automatic update failed (${err.name}). Please try updating manually: ${installationInfo.updateCommand}`,
+    updateProcess.on('close', (code) => {
+      finish('close', code);
+    });
+    updateProcess.on('error', (err) => {
+      finish('error', err);
     });
   });
-
-  return updateProcess;
 }
 
 export interface UpdateEventHandler {
@@ -106,6 +109,7 @@ export function setUpdateHandler(
   onUpdateReceived: UpdateEventHandler,
   onUpdateSuccess: UpdateEventHandler,
   onUpdateFailed: UpdateEventHandler,
+  onUpdateBackground: UpdateEventHandler = onUpdateFailed,
 ) {
   let successfullyInstalled = false;
   let reminderTimer: NodeJS.Timeout | undefined;
@@ -143,9 +147,20 @@ export function setUpdateHandler(
     onUpdateSuccess(info);
   };
 
+  const handleUpdateBackground = (info: { message: string }) => {
+    // Do not repeat the availability reminder after reporting that installation is in progress.
+    successfullyInstalled = true;
+    if (reminderTimer) {
+      clearTimeout(reminderTimer);
+      reminderTimer = undefined;
+    }
+    onUpdateBackground(info);
+  };
+
   updateEventEmitter.on('update-received', handleUpdateReceived);
   updateEventEmitter.on('update-failed', handleUpdateFailed);
   updateEventEmitter.on('update-success', handleUpdateSuccess);
+  updateEventEmitter.on('update-background', handleUpdateBackground);
 
   return () => {
     if (reminderTimer) {
@@ -155,5 +170,6 @@ export function setUpdateHandler(
     updateEventEmitter.off('update-received', handleUpdateReceived);
     updateEventEmitter.off('update-failed', handleUpdateFailed);
     updateEventEmitter.off('update-success', handleUpdateSuccess);
+    updateEventEmitter.off('update-background', handleUpdateBackground);
   };
 }

@@ -178,7 +178,6 @@ describe('getInstallationInfo', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
     process.argv = ['node', '/opt/homebrew/bin/promptfoo'];
     mockFs.realpathSync.mockReturnValue('/opt/homebrew/Cellar/promptfoo/0.121.5/bin/promptfoo');
-    mockChildProcess.execSync.mockReturnValue(Buffer.from(''));
 
     const result = getInstallationInfo('/project', false);
 
@@ -188,10 +187,7 @@ describe('getInstallationInfo', () => {
       updateMessage: 'Installed via Homebrew. Please update with "brew upgrade promptfoo".',
     });
 
-    expect(mockChildProcess.execSync).toHaveBeenCalledWith('brew list -1 | grep -q "^promptfoo$"', {
-      stdio: 'ignore',
-      timeout: 1000,
-    });
+    expect(mockChildProcess.execSync).not.toHaveBeenCalled();
   });
 
   it('should not detect Homebrew for non-Homebrew paths when promptfoo is installed with brew', () => {
@@ -206,15 +202,21 @@ describe('getInstallationInfo', () => {
     expect(result.packageManager).toBe(PackageManager.NPM);
   });
 
-  it('should skip Homebrew detection on non-macOS platforms', () => {
+  it('should detect Linuxbrew installations from their resolved Cellar path without executing brew', () => {
     Object.defineProperty(process, 'platform', { value: 'linux' });
-    process.argv = ['node', '/usr/local/bin/promptfoo'];
-    mockFs.realpathSync.mockReturnValue('/usr/local/bin/promptfoo');
+    process.argv = ['node', '/home/linuxbrew/.linuxbrew/bin/promptfoo'];
+    mockFs.realpathSync.mockReturnValue(
+      '/home/linuxbrew/.linuxbrew/Cellar/promptfoo/0.121.5/bin/promptfoo',
+    );
 
     const result = getInstallationInfo('/project', false);
 
     expect(mockChildProcess.execSync).not.toHaveBeenCalled();
-    expect(result.packageManager).toBe(PackageManager.NPM); // Falls back to npm
+    expect(result).toEqual({
+      packageManager: PackageManager.HOMEBREW,
+      isGlobal: true,
+      updateMessage: 'Installed via Homebrew. Please update with "brew upgrade promptfoo".',
+    });
   });
 
   it('should detect PNPM global installation', () => {
@@ -591,6 +593,7 @@ describe('getInstallationInfo', () => {
 
   it('should return Windows npm shim command for confirmed global npm installations', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
+    const sourceEnvironment = { ComSpec: 'C:\\Windows\\System32\\cmd.exe', PATH: 'C:\\safe' };
     process.argv = [
       'node',
       'C:\\Users\\Alice\\AppData\\Roaming\\npm\\node_modules\\promptfoo\\dist\\src\\main.js',
@@ -602,10 +605,10 @@ describe('getInstallationInfo', () => {
       'C:\\Users\\Alice\\AppData\\Roaming\\npm\\node_modules\n',
     );
 
-    const result = getInstallationInfo('C:\\Users\\Alice\\Project', false);
+    const result = getInstallationInfo('C:\\Users\\Alice\\Project', false, sourceEnvironment);
 
     expect(mockChildProcess.execFileSync).toHaveBeenCalledWith(
-      process.env.ComSpec || 'cmd.exe',
+      sourceEnvironment.ComSpec,
       ['/d', '/s', '/c', 'npm.cmd', 'root', '--global'],
       expect.any(Object),
     );

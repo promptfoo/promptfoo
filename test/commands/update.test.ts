@@ -149,6 +149,7 @@ describe('update command', () => {
 
   it('should invoke Windows package manager shims through cmd.exe', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
+    const sourceEnvironment = { ComSpec: 'C:\\Windows\\System32\\cmd.exe', PATH: 'C:\\safe' };
     mockCheckForUpdates.mockResolvedValue({
       message: 'Update available: 1.0.0 → 1.1.0',
       update: {
@@ -167,11 +168,11 @@ describe('update command', () => {
 
     mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
 
-    updateCommand(program);
+    updateCommand(program, sourceEnvironment);
     await program.parseAsync(['node', 'test', 'update']);
 
     expect(mockSpawn).toHaveBeenCalledWith(
-      process.env.ComSpec || 'cmd.exe',
+      sourceEnvironment.ComSpec,
       ['/d', '/s', '/c', 'npm.cmd', 'install', '-g', 'promptfoo@1.1.0'],
       expect.objectContaining({
         cwd: tmpdir(),

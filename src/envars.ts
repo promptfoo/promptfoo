@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { getEnvOverrides } from './envOverrides';
+import './initialProcessEnvironment';
 
 import type { EnvOverrides } from './types/env';
 
@@ -472,14 +473,25 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvString(key) || defaultValue;
+  return parseEnvBool(getEnvString(key) || defaultValue);
+}
+
+function parseEnvBool(value: string | boolean | undefined): boolean {
   if (typeof value === 'boolean') {
     return value;
   }
   if (typeof value === 'string') {
     return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   }
-  return Boolean(defaultValue);
+  return false;
+}
+
+export function getEnvBoolFromEnvironment(
+  key: EnvVarKey,
+  sourceEnvironment: NodeJS.ProcessEnv,
+  defaultValue?: boolean,
+): boolean {
+  return parseEnvBool(sourceEnvironment[key as string] || defaultValue);
 }
 
 /**

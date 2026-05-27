@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import cliState from '../src/cliState';
 import {
   getEnvBool,
+  getEnvBoolFromEnvironment,
   getEnvFloat,
   getEnvInt,
   getEnvString,
@@ -177,6 +178,21 @@ describe('envars', () => {
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
     });
 
+    it('should read a trusted source environment without config overrides', () => {
+      cliState.config = {
+        env: {
+          PROMPTFOO_ENABLE_AUTO_UPDATE: true as any,
+        },
+      };
+
+      expect(getEnvBoolFromEnvironment('PROMPTFOO_ENABLE_AUTO_UPDATE', {})).toBe(false);
+      expect(
+        getEnvBoolFromEnvironment('PROMPTFOO_ENABLE_AUTO_UPDATE', {
+          PROMPTFOO_ENABLE_AUTO_UPDATE: 'yes',
+        }),
+      ).toBe(true);
+    });
+
     it('should return false for falsy string values', () => {
       ['0', 'false', 'no', 'nope'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
@@ -242,6 +258,26 @@ describe('envars', () => {
         },
       };
       expect(getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY')).toBe(true);
+    });
+  });
+
+  describe('getInitialProcessEnvironment', () => {
+    it('captures process values before dotenv loads project values', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_AUTO_UPDATE: undefined });
+      vi.doMock('dotenv', () => ({
+        default: {
+          config: vi.fn(() => {
+            vi.stubEnv('PROMPTFOO_ENABLE_AUTO_UPDATE', '1');
+          }),
+        },
+      }));
+
+      await import('../src/envars');
+      const { getInitialProcessEnvironment } = await import('../src/initialProcessEnvironment');
+
+      expect(process.env.PROMPTFOO_ENABLE_AUTO_UPDATE).toBe('1');
+      expect(getInitialProcessEnvironment().PROMPTFOO_ENABLE_AUTO_UPDATE).toBeUndefined();
+      vi.doUnmock('dotenv');
     });
   });
 

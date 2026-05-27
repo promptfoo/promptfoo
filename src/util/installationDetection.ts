@@ -3,7 +3,6 @@
  * Combines path-based detection (for updates) and env-based detection (for command generation).
  */
 
-import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -171,19 +170,10 @@ export function detectPackageManagerFromPath(
       return PackageManager.NPM;
     }
 
-    // Check for Homebrew (only on macOS)
-    // Note: We use sync here because this is called during initialization
-    // The performance impact is minimal as it only runs on macOS during startup
-    if (process.platform === 'darwin' && isPotentialHomebrewPath(realPath)) {
-      try {
-        childProcess.execSync('brew list -1 | grep -q "^promptfoo$"', {
-          stdio: 'ignore',
-          timeout: 1000, // 1 second timeout to prevent hanging
-        });
-        return PackageManager.HOMEBREW;
-      } catch {
-        // Not installed via brew, continue checking
-      }
+    // A resolved Cellar path identifies Homebrew and Linuxbrew installations
+    // without executing a command inherited from the caller's environment.
+    if (isPotentialHomebrewPath(realPath)) {
+      return PackageManager.HOMEBREW;
     }
 
     // Check for pnpm global - support multiple path patterns

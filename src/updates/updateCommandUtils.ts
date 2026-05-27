@@ -61,7 +61,10 @@ export function withTargetVersion(updateCommand: string, targetVersion: string):
   return updateCommand.replace('@latest', `@${targetVersion}`);
 }
 
-export function parseUpdateCommandForSpawn(updateCommand: string): {
+export function parseUpdateCommandForSpawn(
+  updateCommand: string,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
+): {
   command: string;
   args: string[];
 } {
@@ -71,7 +74,7 @@ export function parseUpdateCommandForSpawn(updateCommand: string): {
 
   if (process.platform === 'win32' && executable.toLowerCase().endsWith('.cmd')) {
     return {
-      command: process.env.ComSpec || 'cmd.exe',
+      command: sourceEnvironment.ComSpec || sourceEnvironment.COMSPEC || 'cmd.exe',
       args: ['/d', '/s', '/c', executable, ...args],
     };
   }

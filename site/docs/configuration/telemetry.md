@@ -52,20 +52,22 @@ Note: This only disables the notification. You can still manually update using `
 
 :::caution Experimental Feature
 
-Automatic background updates are **disabled by default** and considered experimental. This is an opt-in feature. Use with caution in production environments.
+Automatic updates are **disabled by default** and considered experimental. This is an opt-in feature. Use with caution in production environments.
 
 :::
 
-When enabled, promptfoo schedules an automatic update when a new version is detected. It starts the update only after the current CLI invocation finishes, so a running eval or server does not use files while they are being replaced. The new version will be available on your next command.
+When enabled, promptfoo runs an automatic update after a successful CLI invocation detects a newer version. It releases resources used by the current invocation before starting the updater and waits for completion up to a bounded timeout, reporting either a completed result or that installation is still in progress before the process ends. After a successful update, the new version will be available on your next command.
 
 ### Enabling Auto-Updates
 
-Auto-updates are **opt-in**. To enable automatic background updates:
+Auto-updates are **opt-in**. To enable automatic updates, set the variable in the shell or parent process that launches promptfoo:
 
 ```sh
 # Enable auto-updates (opt-in, disabled by default)
 export PROMPTFOO_ENABLE_AUTO_UPDATE=1
 ```
+
+For safety, a project `.env` file, `--env-file`, or configuration-level environment override cannot enable automatic installation.
 
 ### Disabling Auto-Updates
 
@@ -80,16 +82,16 @@ export PROMPTFOO_ENABLE_AUTO_UPDATE=0
 
 ### How It Works
 
-- Auto-updates only work for globally installed instances (npm, yarn, pnpm, bun)
-- Updates begin after the current promptfoo command completes
-- The new version takes effect on the next promptfoo command
-- Updaters run outside the project directory with a restricted environment; project `.env` credentials and workspace package-manager settings are not forwarded
+- Auto-updates only work for globally installed instances (npm, yarn, pnpm, bun) on macOS and Linux
+- Updates begin after the current promptfoo command completes successfully; the CLI waits up to 60 seconds, then warns that an unfinished installation is continuing in the background with success not yet known
+- After a successful updater result, the new version takes effect on the next promptfoo command
+- Updaters run outside the project directory with a restricted environment captured before project `.env` files are loaded; project credentials and workspace package-manager settings are not forwarded
 - No updates occur for local project installations, Docker, or npx usage
 - npm auto-updates require confirmation that the active CLI is from npm's global install root
 - Updates are skipped if `PROMPTFOO_DISABLE_UPDATE=1` is set
 
 ### Supported Installation Methods
 
-Auto-updates work with global npm, yarn, pnpm, and bun installations.
+Auto-updates work with global npm, yarn, pnpm, and bun installations on macOS and Linux. On Windows, automatic installation is disabled; use `promptfoo update` to explicitly run a manual update.
 
 Auto-updates are **not available** for local project installations, Homebrew, Docker, npx/pnpx/bunx, or git clones.
