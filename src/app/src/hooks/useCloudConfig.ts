@@ -1,33 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import useApiConfig from '@app/stores/apiConfig';
+import { type CloudConfigResponse, CloudConfigResponseSchema } from '@promptfoo/types/api/user';
 import { callApi } from '../utils/api';
-import type { CloudConfigResponse } from '@promptfoo/types/api/user';
 
 const CLOUD_CONFIG_UPDATED_EVENT = 'promptfoo:cloud-config-updated';
 
 export function notifyCloudConfigUpdated(): void {
   window.dispatchEvent(new Event(CLOUD_CONFIG_UPDATED_EVENT));
-}
-
-function getBrowserSafeAppUrl(appUrl: unknown): string | null {
-  if (typeof appUrl !== 'string') {
-    return null;
-  }
-
-  try {
-    const parsedUrl = new URL(appUrl);
-    if (
-      !['http:', 'https:'].includes(parsedUrl.protocol) ||
-      parsedUrl.username ||
-      parsedUrl.password
-    ) {
-      return null;
-    }
-    return appUrl;
-  } catch {
-    return null;
-  }
 }
 
 export type CloudConfigData = CloudConfigResponse;
@@ -55,12 +35,16 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
-      const responseData: CloudConfigResponse = await response.json();
+      const responseResult = CloudConfigResponseSchema.safeParse(await response.json());
+      if (!responseResult.success) {
+        throw new Error('Invalid cloud config response');
+      }
+      const responseData = responseResult.data;
       setState({
         data: {
-          appUrl: getBrowserSafeAppUrl(responseData.appUrl),
-          isEnabled: responseData.isEnabled === true,
-          isEnterprise: responseData.isEnterprise === true,
+          appUrl: responseData.appUrl,
+          isEnabled: responseData.isEnabled,
+          isEnterprise: responseData.isEnterprise ?? false,
         },
         isLoading: false,
         error: null,

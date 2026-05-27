@@ -719,18 +719,18 @@ describe('API schema red-team coverage', () => {
       ).toBe(false);
       expect(
         UserSchemas.CloudConfig.Response.safeParse({
-          appUrl: 'https://app.promptfoo.app',
-          isEnabled: true,
-          isEnterprise: false,
-        }).success,
-      ).toBe(true);
-      expect(
-        UserSchemas.CloudConfig.Response.safeParse({
           appUrl: 'https://user:password@app.promptfoo.app',
           isEnabled: true,
           isEnterprise: false,
         }).success,
       ).toBe(false);
+      expect(
+        UserSchemas.CloudConfig.Response.safeParse({
+          appUrl: 'https://app.promptfoo.app',
+          isEnabled: true,
+          isEnterprise: false,
+        }).success,
+      ).toBe(true);
     });
 
     it('rejects empty config identifiers and preserves config payloads intentionally', () => {

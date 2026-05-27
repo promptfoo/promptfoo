@@ -107,7 +107,7 @@ describe('useCloudConfig', () => {
     'javascript:alert(1)',
     'data:text/html,<h1>Unsafe</h1>',
     'https://user:password@enterprise.company.com',
-  ])('should discard unsafe browser destinations from API responses: %s', async (appUrl) => {
+  ])('should reject unsafe browser destinations from API responses: %s', async (appUrl) => {
     mockCallApiResponse({
       isEnabled: true,
       appUrl,
@@ -120,7 +120,8 @@ describe('useCloudConfig', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.data?.appUrl).toBeNull();
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBe('Invalid cloud config response');
   });
 
   it('should default isEnterprise to false for older responses', async () => {

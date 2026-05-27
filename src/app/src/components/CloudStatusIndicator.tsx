@@ -75,33 +75,48 @@ export default function CloudStatusIndicator() {
   const serviceName = getServiceName(isEnterprise);
   const teamName = isEnterprise ? 'organization' : 'team';
   const hasUnavailableAppUrl = isConfigured && !appUrl;
-  const canOpenDashboard = isConfigured && Boolean(appUrl) && !error;
+  const status = (() => {
+    if (isLoading) {
+      return 'loading';
+    }
+    if (error) {
+      return 'error';
+    }
+    if (hasUnavailableAppUrl) {
+      return 'unavailable-url';
+    }
+    if (isConfigured) {
+      return 'configured';
+    }
+    return 'unconfigured';
+  })();
+  const canOpenDashboard = status === 'configured' && Boolean(appUrl);
   const connectDestination = getConnectDestination(isEnterprise, appUrl);
   const configurationIssueDescription = error
     ? 'Unable to check cloud configuration. Please check your connection and try again.'
     : `A safe ${serviceName} dashboard URL is unavailable. Sign in again or refresh after updating your configuration.`;
 
   const statusLabel = (() => {
-    if (isLoading) {
+    if (status === 'loading') {
       return 'Checking cloud configuration';
     }
-    if (error) {
+    if (status === 'error') {
       return 'Unable to check cloud configuration';
     }
-    if (hasUnavailableAppUrl) {
+    if (status === 'unavailable-url') {
       return `${serviceName} dashboard URL is unavailable.`;
     }
-    if (isConfigured) {
+    if (status === 'configured') {
       return `Configured for ${serviceName}. Open dashboard.`;
     }
     return `${serviceName} is not configured. Learn more.`;
   })();
 
   const StatusIcon = (() => {
-    if (isLoading) {
+    if (status === 'loading') {
       return Loader2;
     }
-    if (error || hasUnavailableAppUrl || !isConfigured) {
+    if (status !== 'configured') {
       return CloudOff;
     }
     return Cloud;
@@ -149,12 +164,13 @@ export default function CloudStatusIndicator() {
               'size-11 text-foreground/60 focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-9 [&_svg]:size-5',
               canOpenDashboard &&
                 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300',
-              (error || hasUnavailableAppUrl) && 'text-destructive hover:text-destructive',
+              (status === 'error' || status === 'unavailable-url') &&
+                'text-destructive hover:text-destructive',
             )}
             aria-label={statusLabel}
           >
             <StatusIcon
-              className={cn('size-5', isLoading && 'animate-spin')}
+              className={cn('size-5', status === 'loading' && 'animate-spin')}
               data-testid={canOpenDashboard ? 'CloudIcon' : 'CloudOffIcon'}
             />
           </Button>
