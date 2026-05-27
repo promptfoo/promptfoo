@@ -3318,6 +3318,13 @@ export class HttpProvider implements ApiProvider {
     streamingMetrics: StreamingMetrics,
     parsedOutput: unknown,
   ): void {
+    // Without an explicit transform, SSE/NDJSON framing is indistinguishable
+    // from a plain-text completion. Leave content-derived metrics unset
+    // rather than reporting protocol bytes as model output.
+    if (!this.config.transformResponse && !this.config.responseParser) {
+      return;
+    }
+
     const completionText = this.getDefiniteCompletionText(parsedOutput);
     if (completionText === undefined) {
       return;

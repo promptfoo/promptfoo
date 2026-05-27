@@ -1751,6 +1751,8 @@ When `stream: true` is set, response caching is automatically disabled so every 
 
 You will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
 
+Content-derived streaming metrics (`completionChars` and `tokensPerSecond`) are populated only when `transformResponse` (or the deprecated `responseParser`) explicitly returns the reconstructed completion. Without a transform, promptfoo cannot distinguish plain-text completion bytes from SSE or NDJSON framing, so it leaves those fields unset rather than reporting misleading throughput.
+
 **Example streaming response format:**
 
 A typical Server-Sent Events (SSE) streaming response from OpenAI or similar APIs looks like this:

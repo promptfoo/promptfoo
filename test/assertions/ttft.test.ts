@@ -104,6 +104,32 @@ describe('ttft assertion', () => {
     });
   });
 
+  describe('inverse mode', () => {
+    it('should fail not-ttft when TTFT is within the forbidden threshold', () => {
+      const result = handleTtft({
+        assertion: { type: 'not-ttft', threshold: 100 },
+        inverse: true,
+        providerResponse: { streamingMetrics: { timeToFirstToken: 50 } },
+      } as AssertionParams);
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Time to first token 50ms must exceed threshold 100ms');
+    });
+
+    it('should pass not-ttft when TTFT exceeds the forbidden threshold', () => {
+      const result = handleTtft({
+        assertion: { type: 'not-ttft', threshold: 100 },
+        inverse: true,
+        providerResponse: { streamingMetrics: { timeToFirstToken: 150 } },
+      } as AssertionParams);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toBe('TTFT assertion passed: 150ms > 100ms');
+    });
+  });
+
   describe('threshold validation', () => {
     it('should throw when threshold is missing', () => {
       const params: Partial<AssertionParams> = {

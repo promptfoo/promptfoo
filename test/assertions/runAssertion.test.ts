@@ -2242,6 +2242,42 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('ttft assertion', () => {
+    it('should route not-ttft through inverse semantics when the token is fast', async () => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { type: 'not-ttft', threshold: 100 },
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: 'response',
+          streamingMetrics: { timeToFirstToken: 50 },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Time to first token 50ms must exceed threshold 100ms',
+      });
+    });
+
+    it('should route not-ttft through inverse semantics when the token is slow', async () => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { type: 'not-ttft', threshold: 100 },
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: 'response',
+          streamingMetrics: { timeToFirstToken: 150 },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'TTFT assertion passed: 150ms > 100ms',
+      });
+    });
+  });
+
   describe('perplexity assertion', () => {
     it('should pass when the perplexity assertion passes', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing

@@ -255,10 +255,8 @@ describe('TTFT End-to-End Integration', () => {
   it('streamFormat: openai-chat pins TTFT to the content delta, not the role frame', async () => {
     // The mock server at `beforeAll` sends a role-only delta 100ms after
     // request start, then a content delta 150ms after (100ms server
-    // processing + 50ms inter-chunk delay). Default TTFT fires on the role
-    // frame; streamFormat: openai-chat fires on the content frame. The gap
-    // between the two measurements proves the preset works end-to-end
-    // through HttpProvider.fetchResponse → processStreamingResponse.
+    // processing + 50ms inter-chunk delay). A content-aware detector must
+    // therefore report a TTFT later than the role-frame arrival.
     const transform = `(json, text) => {
       let content = '';
       for (const line of String(text || '').split('\\n')) {
@@ -271,19 +269,6 @@ describe('TTFT End-to-End Integration', () => {
       }
       return content.trim();
     }`;
-
-    const defaultProvider = new HttpProvider(`${serverUrl}/v1/chat/completions`, {
-      config: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: '{{prompt}}' }],
-          stream: true,
-        },
-        transformResponse: transform,
-      },
-    });
 
     const presetProvider = new HttpProvider(`${serverUrl}/v1/chat/completions`, {
       config: {
@@ -299,28 +284,16 @@ describe('TTFT End-to-End Integration', () => {
       },
     });
 
-    // Run several samples of each so jitter averages out.
-    const N = 4;
-    const defaultTtfts: number[] = [];
-    const presetTtfts: number[] = [];
-    for (let i = 0; i < N; i++) {
-      const d = await defaultProvider.callApi('Test');
-      const p = await presetProvider.callApi('Test');
-      defaultTtfts.push(d.streamingMetrics!.timeToFirstToken!);
-      presetTtfts.push(p.streamingMetrics!.timeToFirstToken!);
-    }
+    const result = await presetProvider.callApi('Test');
+    const ttft = result.streamingMetrics!.timeToFirstToken!;
 
-    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-    const defaultMean = mean(defaultTtfts);
-    const presetMean = mean(presetTtfts);
-
-    // The mock server's role-frame-to-content-frame gap is 50ms by design.
-    // The preset should stamp TTFT strictly later on average.
-    expect(presetMean).toBeGreaterThan(defaultMean);
-    expect(presetMean - defaultMean).toBeGreaterThan(20); // Well above jitter.
-
-    expect(defaultTtfts.every((ttft) => Number.isFinite(ttft))).toBe(true);
-    expect(presetTtfts.every((ttft) => Number.isFinite(ttft))).toBe(true);
+    expect(result.output).toBe('Code is poetry in motion');
+    expect(Number.isFinite(ttft)).toBe(true);
+    // The role frame arrives after 100ms; the first content frame cannot
+    // arrive until its subsequent 50ms timer has fired. This lower bound
+    // proves the preset did not stamp TTFT on the role-only frame without
+    // comparing two separately scheduled requests.
+    expect(ttft).toBeGreaterThanOrEqual(130);
   });
 
   it('populates completionChars with parsed output length (not raw SSE length)', async () => {

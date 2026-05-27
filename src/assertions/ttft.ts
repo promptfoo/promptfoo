@@ -1,6 +1,10 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleTtft = ({ assertion, providerResponse }: AssertionParams): GradingResult => {
+export const handleTtft = ({
+  assertion,
+  inverse = false,
+  providerResponse,
+}: AssertionParams): GradingResult => {
   const { threshold } = assertion;
   if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0) {
     throw new Error('TTFT assertion must specify a non-negative number threshold in milliseconds');
@@ -26,14 +30,19 @@ export const handleTtft = ({ assertion, providerResponse }: AssertionParams): Gr
     );
   }
 
-  const pass = ttft <= threshold;
+  const withinThreshold = ttft <= threshold;
+  const pass = withinThreshold !== inverse;
 
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
-      ? `TTFT assertion passed: ${ttft}ms <= ${threshold}ms`
-      : `Time to first token ${ttft}ms exceeds threshold ${threshold}ms`,
+      ? inverse
+        ? `TTFT assertion passed: ${ttft}ms > ${threshold}ms`
+        : `TTFT assertion passed: ${ttft}ms <= ${threshold}ms`
+      : inverse
+        ? `Time to first token ${ttft}ms must exceed threshold ${threshold}ms`
+        : `Time to first token ${ttft}ms exceeds threshold ${threshold}ms`,
     assertion,
     namedScores: { ttft_ms: ttft },
   };

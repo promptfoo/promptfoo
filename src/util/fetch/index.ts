@@ -687,10 +687,10 @@ export async function fetchWithRetries(
  *
  *   firstTokenDetector: (buf) => /"delta":\s*\{[^}]*"content":"[^"]/.test(buf)
  *
- * `totalStreamTime` is from the first read of the response body to stream
- * close. It excludes connection/server time before the first body bytes,
- * but can include protocol metadata received before a content-token detector
- * fires.
+ * `totalStreamTime` is from the arrival of the first response-body chunk to
+ * the arrival of the last response-body chunk. It excludes connection/server
+ * time before the first body bytes and excludes any idle tail while an
+ * already-delivered stream remains open.
  *
  * `multiChunkDelivery` is true when the transport delivered more than
  * one network chunk (`ReadableStream.getReader().read()` call). It does
@@ -714,8 +714,9 @@ export interface StreamingMetrics {
    */
   timeToFirstToken?: number;
   /**
-   * Milliseconds from the first body chunk arrival to stream close.
-   * Excludes the TTFT window. Populated by `processStreamingResponse`.
+   * Milliseconds from first response-body chunk arrival to last chunk arrival.
+   * Excludes the TTFT window and any idle tail before close.
+   * Populated by `processStreamingResponse`.
    */
   totalStreamTime?: number;
   /**
