@@ -122,8 +122,8 @@ interface BundleResult {
 }
 
 interface BundleOptions {
-  format: 'esm' | 'cjs';
-  outputFile: string;
+  format?: 'esm' | 'cjs';
+  outputFile?: string;
   forSea?: boolean;
 }
 
@@ -864,7 +864,7 @@ async function main(): Promise<void> {
 
   // Create ESM bundle (default)
   console.log('\n[bundle] Creating ESM bundle...');
-  const result = await createBundle();
+  const result = await createBundle({ forSea: buildSea });
 
   if (!result.success) {
     console.error('\n[bundle] Bundle failed with errors:');

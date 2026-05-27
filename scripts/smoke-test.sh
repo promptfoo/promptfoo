@@ -1262,7 +1262,7 @@ EOF
 }
 
 test_install_script_rejects_unsafe_archive_paths() {
-  log_test "install.sh rejects archive path traversal"
+  log_test "install.sh rejects archive path traversal with dot prefixes"
 
   local fake_root fake_bin install_dir payload archive output
   fake_root=$(mktemp -d "$TEST_ROOT/unsafe-archive.XXXXXXXX")
@@ -1277,7 +1277,7 @@ test_install_script_rejects_unsafe_archive_paths() {
 echo compromised
 EOF
   chmod +x "$payload/promptfoo"
-  tar -czf "$archive" --transform='s#^promptfoo$#../escaped#' -C "$payload" promptfoo
+  tar -czf "$archive" --transform='s#^promptfoo$#./../escaped#' -C "$payload" promptfoo
   create_fake_supported_linux_binary_bin "$fake_bin"
 
   if output=$(
@@ -1292,7 +1292,7 @@ EOF
   fi
 
   if [[ "$output" == *"unsafe path"* ]] && [[ ! -e "$install_dir/escaped" ]]; then
-    log_pass "install.sh rejects traversal entries before extraction"
+    log_pass "install.sh rejects dot-prefixed traversal entries before extraction"
     return 0
   fi
 
