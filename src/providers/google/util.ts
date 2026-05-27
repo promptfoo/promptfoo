@@ -594,7 +594,7 @@ export async function getGoogleAccessToken(credentials?: string): Promise<string
   }
 }
 
-export function getCandidate(data: GeminiResponseData) {
+export function getCandidate(data: GeminiResponseData): Candidate {
   if (!data || !data.candidates || data.candidates.length < 1) {
     // Check if the prompt was blocked
     let errorDetails = 'No candidates returned in API response.';
@@ -628,7 +628,108 @@ export function getCandidate(data: GeminiResponseData) {
     );
   }
   const candidate = data.candidates[0];
+  if (!candidate) {
+    throw new Error(
+      `No candidates returned in API response.\n\nGot response: ${JSON.stringify(data)}`,
+    );
+  }
   return candidate;
+}
+
+export function isNonCandidateStreamChunk(datum: GeminiResponseData): boolean {
+  return (
+    !datum.candidates?.length &&
+    ((Boolean(datum.usageMetadata) && !datum.promptFeedback) ||
+      (Boolean(datum.promptFeedback?.safetyRatings) && !datum.promptFeedback?.blockReason))
+  );
+}
+
+export function getLastPromptSafetyRatings(
+  data: GeminiResponseData[],
+): NonNullable<GeminiResponseData['promptFeedback']>['safetyRatings'] | undefined {
+  let safetyRatings: NonNullable<GeminiResponseData['promptFeedback']>['safetyRatings'] | undefined;
+
+  for (const datum of data) {
+    if (datum.promptFeedback?.safetyRatings) {
+      safetyRatings = datum.promptFeedback.safetyRatings;
+    }
+  }
+
+  return safetyRatings;
+}
+
+export interface CollectedGroundingMetadata {
+  groundingMetadata?: Record<string, any>;
+  groundingChunks?: Record<string, any>[];
+  groundingSupports?: Record<string, any>[];
+  webSearchQueries?: string[];
+}
+
+// Aggregate grounding signals across every candidate-bearing chunk. Gemini's
+// streaming contract distributes grounding state across chunks: groundingChunks
+// only carries new references not in previous responses, groundingSupports
+// indices span the whole stream, and webSearchQueries can arrive on a chunk
+// distinct from the one that carries searchEntryPoint. Concatenating preserves
+// the full citation graph; for the nested groundingMetadata object we keep
+// last-wins for scalar/object fields (e.g. searchEntryPoint, retrievalMetadata)
+// since those are typically refined as the stream progresses.
+// https://ai.google.dev/api/generate-content#v1beta.Candidate
+export function collectGroundingMetadata(data: GeminiResponseData[]): CollectedGroundingMetadata {
+  const candidates = data.filter((d) => d.candidates?.length).map((d) => getCandidate(d));
+
+  const flatChunks = candidates.flatMap((c) => c.groundingChunks ?? []);
+  const flatSupports = candidates.flatMap((c) => c.groundingSupports ?? []);
+  const flatQueries = candidates.flatMap((c) => c.webSearchQueries ?? []);
+
+  const metas = candidates
+    .map((c) => c.groundingMetadata)
+    .filter((m): m is Record<string, any> => Boolean(m));
+
+  let groundingMetadata: Record<string, any> | undefined;
+  if (metas.length === 1) {
+    groundingMetadata = metas[0];
+  } else if (metas.length > 1) {
+    const merged: Record<string, any> = {};
+    // Last-wins for scalar/object fields like searchEntryPoint, retrievalMetadata.
+    for (const m of metas) {
+      for (const [key, value] of Object.entries(m)) {
+        if (
+          key === 'groundingChunks' ||
+          key === 'groundingSupports' ||
+          key === 'webSearchQueries'
+        ) {
+          continue;
+        }
+        if (value !== undefined) {
+          merged[key] = value;
+        }
+      }
+    }
+    const innerChunks = metas.flatMap(
+      (m) => (m.groundingChunks as Record<string, any>[] | undefined) ?? [],
+    );
+    const innerSupports = metas.flatMap(
+      (m) => (m.groundingSupports as Record<string, any>[] | undefined) ?? [],
+    );
+    const innerQueries = metas.flatMap((m) => (m.webSearchQueries as string[] | undefined) ?? []);
+    if (innerChunks.length) {
+      merged.groundingChunks = innerChunks;
+    }
+    if (innerSupports.length) {
+      merged.groundingSupports = innerSupports;
+    }
+    if (innerQueries.length) {
+      merged.webSearchQueries = innerQueries;
+    }
+    groundingMetadata = merged;
+  }
+
+  return {
+    ...(groundingMetadata && { groundingMetadata }),
+    ...(flatChunks.length > 0 && { groundingChunks: flatChunks }),
+    ...(flatSupports.length > 0 && { groundingSupports: flatSupports }),
+    ...(flatQueries.length > 0 && { webSearchQueries: flatQueries }),
+  };
 }
 
 export function formatCandidateContents(candidate: Candidate) {
@@ -686,7 +787,8 @@ export function formatCandidateContents(candidate: Candidate) {
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
   if (parts1 === undefined) {
-    return parts2;
+    // Detach the accumulator from the raw multipart response before appending later chunks.
+    return typeof parts2 === 'string' ? parts2 : [...parts2];
   }
 
   if (typeof parts1 === 'string' && typeof parts2 === 'string') {

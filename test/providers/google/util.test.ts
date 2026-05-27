@@ -17,10 +17,12 @@ import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
   clearCachedAuth,
+  collectGroundingMetadata,
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
@@ -2969,6 +2971,25 @@ describe('util', () => {
     });
   });
 
+  describe('mergeParts', () => {
+    it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
+      const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
+      const secondChunk = [{ text: 'done' }];
+
+      const accumulator = mergeParts(undefined, firstChunk);
+      if (!Array.isArray(accumulator)) {
+        throw new Error('Expected multipart output');
+      }
+
+      expect(accumulator).not.toBe(firstChunk);
+      expect(mergeParts(accumulator, secondChunk)).toBe(accumulator);
+      expect(accumulator).toEqual([...firstChunk, ...secondChunk]);
+      expect(firstChunk).toEqual([
+        { functionCall: { name: 'look_up', args: { query: 'weather' } } },
+      ]);
+    });
+  });
+
   describe('mergeGoogleCompletionOptions', () => {
     it('treats prompt-level undefined as "not set" and preserves base policy', () => {
       const merged = mergeGoogleCompletionOptions(
@@ -2992,6 +3013,95 @@ describe('util', () => {
       expect(merged.tool_choice).toBe('none');
       expect(merged.toolConfig).toBeUndefined();
       expect(merged.tool_config).toBeUndefined();
+    });
+  });
+
+  describe('collectGroundingMetadata', () => {
+    it('returns empty object when no candidates carry grounding signals', () => {
+      const result = collectGroundingMetadata([
+        { candidates: [{ content: { parts: [{ text: 'plain' }] } }] } as any,
+      ]);
+      expect(result).toEqual({});
+    });
+
+    it('returns the single candidate metadata as-is', () => {
+      const groundingMetadata = {
+        webSearchQueries: ['q'],
+        groundingChunks: [{ web: { uri: 'https://x' } }],
+      };
+      const result = collectGroundingMetadata([
+        {
+          candidates: [{ content: { parts: [{ text: 't' }] }, groundingMetadata }],
+        } as any,
+      ]);
+      expect(result.groundingMetadata).toEqual(groundingMetadata);
+    });
+
+    it('concatenates array fields across nested groundingMetadata chunks and keeps the last refinement', () => {
+      const result = collectGroundingMetadata([
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'a' }] },
+              groundingMetadata: {
+                webSearchQueries: ['q1'],
+                groundingChunks: [{ web: { uri: 'https://1' } }],
+                searchEntryPoint: { renderedContent: 'old' },
+              },
+            },
+          ],
+        } as any,
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'b' }] },
+              groundingMetadata: {
+                webSearchQueries: ['q2'],
+                groundingChunks: [{ web: { uri: 'https://2' } }],
+                groundingSupports: [{ segment: { startIndex: 0, endIndex: 1 } }],
+                searchEntryPoint: { renderedContent: 'new' },
+                retrievalMetadata: { dynamicRetrievalScore: 0.9 },
+              },
+            },
+          ],
+        } as any,
+      ]);
+      const merged = result.groundingMetadata as Record<string, any>;
+      expect(merged.webSearchQueries).toEqual(['q1', 'q2']);
+      expect(merged.groundingChunks).toEqual([
+        { web: { uri: 'https://1' } },
+        { web: { uri: 'https://2' } },
+      ]);
+      expect(merged.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 1 } }]);
+      expect(merged.searchEntryPoint).toEqual({ renderedContent: 'new' });
+      expect(merged.retrievalMetadata).toEqual({ dynamicRetrievalScore: 0.9 });
+    });
+
+    it('concatenates flat grounding fields when candidates carry them directly', () => {
+      const result = collectGroundingMetadata([
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'a' }] },
+              webSearchQueries: ['x'],
+              groundingChunks: [{ web: { uri: 'https://x' } }],
+            },
+          ],
+        } as any,
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'b' }] },
+              webSearchQueries: ['y'],
+              groundingSupports: [{ segment: { startIndex: 0, endIndex: 1 } }],
+            },
+          ],
+        } as any,
+      ]);
+      expect(result.webSearchQueries).toEqual(['x', 'y']);
+      expect(result.groundingChunks).toEqual([{ web: { uri: 'https://x' } }]);
+      expect(result.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 1 } }]);
+      expect(result.groundingMetadata).toBeUndefined();
     });
   });
 });
