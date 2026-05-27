@@ -73,6 +73,19 @@ describe('recon target preparation', () => {
     expect(target.skippedEntries).toBeGreaterThanOrEqual(5);
   });
 
+  it('resolves absolute custom exclusions relative to the scanned root', () => {
+    const secretsDir = path.join(sourceDir, 'secrets');
+    fs.mkdirSync(secretsDir, { recursive: true });
+    fs.writeFileSync(path.join(secretsDir, 'credential.txt'), 'SECRET_SENTINEL');
+    fs.writeFileSync(path.join(sourceDir, 'README.md'), 'allowed docs');
+
+    const target = prepareReconTarget(sourceDir, scratchpadDir, [secretsDir]);
+
+    expect(target.excludedPatterns).toContain('secrets');
+    expect(fs.existsSync(path.join(target.directory, 'secrets', 'credential.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(target.directory, 'README.md'), 'utf8')).toBe('allowed docs');
+  });
+
   it('skips the scratchpad when scanning a parent directory of the scratchpad', () => {
     fs.writeFileSync(path.join(sourceDir, 'README.md'), 'allowed docs');
     const nestedScratchpadDir = path.join(sourceDir, 'promptfoo-recon-scratchpad');

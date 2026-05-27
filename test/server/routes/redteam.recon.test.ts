@@ -33,6 +33,44 @@ describe('Redteam Recon Routes', () => {
     }
   });
 
+  describe('HEAD /api/redteam/recon/pending', () => {
+    it('confirms a valid handoff without consuming it', async () => {
+      fs.writeFileSync(
+        pendingReconPath,
+        JSON.stringify({
+          handoffToken,
+          config: {},
+          metadata: { source: 'recon-cli', timestamp: Date.now() },
+        }),
+      );
+
+      const response = await request(app)
+        .head('/api/redteam/recon/pending')
+        .query({ token: handoffToken });
+
+      expect(response.status).toBe(204);
+      expect(fs.existsSync(pendingReconPath)).toBe(true);
+    });
+
+    it('does not reveal another pending handoff to the ownership probe', async () => {
+      fs.writeFileSync(
+        pendingReconPath,
+        JSON.stringify({
+          handoffToken,
+          config: {},
+          metadata: { source: 'recon-cli', timestamp: Date.now() },
+        }),
+      );
+
+      const response = await request(app)
+        .head('/api/redteam/recon/pending')
+        .query({ token: 'b'.repeat(43) });
+
+      expect(response.status).toBe(404);
+      expect(fs.existsSync(pendingReconPath)).toBe(true);
+    });
+  });
+
   describe('GET /api/redteam/recon/pending', () => {
     it('should return 404 when no pending recon file exists', async () => {
       // Ensure file doesn't exist

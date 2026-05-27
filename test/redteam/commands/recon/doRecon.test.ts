@@ -11,6 +11,7 @@ import { displayResults } from '../../../../src/redteam/commands/recon/output';
 import {
   buildPendingConfig,
   createReconHandoffToken,
+  deletePendingReconConfig,
   writePendingReconConfig,
 } from '../../../../src/redteam/commands/recon/pending';
 import { buildReconPrompt } from '../../../../src/redteam/commands/recon/prompt';
@@ -23,6 +24,7 @@ import { createScratchpad } from '../../../../src/redteam/commands/recon/scratch
 import { prepareReconTarget } from '../../../../src/redteam/commands/recon/target';
 import { startServer } from '../../../../src/server/server';
 import { writePromptfooConfig } from '../../../../src/util/config/writer';
+import { fetchWithProxy } from '../../../../src/util/fetch/index';
 import { checkServerRunning } from '../../../../src/util/server';
 
 vi.mock('fs', () => ({
@@ -86,6 +88,7 @@ vi.mock('../../../../src/redteam/commands/recon/output', () => ({
 vi.mock('../../../../src/redteam/commands/recon/pending', () => ({
   buildPendingConfig: vi.fn(() => ({ metadata: { source: 'recon-cli' } })),
   createReconHandoffToken: vi.fn(() => 'test-handoff-token'),
+  deletePendingReconConfig: vi.fn(),
   writePendingReconConfig: vi.fn(),
 }));
 
@@ -125,6 +128,10 @@ vi.mock('../../../../src/util/server', () => ({
   checkServerRunning: vi.fn(),
 }));
 
+vi.mock('../../../../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
+}));
+
 vi.mock('../../../../src/server/server', () => ({
   startServer: vi.fn(),
 }));
@@ -136,6 +143,7 @@ describe('doRecon', () => {
   const mockedCreateScratchpad = vi.mocked(createScratchpad);
   const mockedCheckServerRunning = vi.mocked(checkServerRunning);
   const mockedStartServer = vi.mocked(startServer);
+  const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -150,6 +158,7 @@ describe('doRecon', () => {
     mockedOpener.mockResolvedValue({} as ChildProcess);
     mockedSelectProvider.mockReturnValue({ type: 'openai', model: 'gpt-test' });
     mockedCheckServerRunning.mockResolvedValue(true);
+    mockedFetchWithProxy.mockResolvedValue(new Response(null, { status: 204 }));
     mockedStartServer.mockResolvedValue(undefined);
   });
 
@@ -196,7 +205,7 @@ describe('doRecon', () => {
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       { description: 'generated config' },
       'promptfooconfig.yaml',
-      expect.any(Array),
+      expect.arrayContaining(['  promptfoo redteam run']),
     );
     expect(spinner.text).toBe('Reading files');
     expect(createReconHandoffToken).not.toHaveBeenCalled();
@@ -204,6 +213,24 @@ describe('doRecon', () => {
     expect(writePendingReconConfig).not.toHaveBeenCalled();
     expect(opener).not.toHaveBeenCalled();
     expect(mockedCreateScratchpad.mock.results[0]?.value.cleanup).toHaveBeenCalled();
+  });
+
+  it('points no-open instructions at a custom generated config', async () => {
+    await doRecon({
+      dir: '/repo',
+      output: 'reports/recon config.yaml',
+      yes: true,
+      open: false,
+    });
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      { description: 'generated config' },
+      'reports/recon config.yaml',
+      expect.arrayContaining(['  promptfoo redteam run -c "reports/recon config.yaml"']),
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('promptfoo redteam run -c "reports/recon config.yaml"'),
+    );
   });
 
   it('opens the browser, uses anthropic, and falls back to a manual URL when open fails', async () => {
@@ -247,6 +274,25 @@ describe('doRecon', () => {
       .join('\n');
     expect(infoMessages).toContain('http://localhost:15500/redteam/setup?source=recon');
     expect(infoMessages).not.toContain('token=test-handoff-token');
+  });
+
+  it('does not open an existing server that cannot read this pending handoff', async () => {
+    mockedFetchWithProxy.mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    await expect(doRecon({ dir: '/repo', yes: true })).rejects.toThrow(
+      'An existing promptfoo server cannot access this recon handoff',
+    );
+
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'http://localhost:15500/api/redteam/recon/pending?token=test-handoff-token',
+      {
+        method: 'HEAD',
+        headers: { 'x-promptfoo-silent': 'true' },
+      },
+    );
+    expect(deletePendingReconConfig).toHaveBeenCalled();
+    expect(opener).not.toHaveBeenCalled();
+    expect(spinner.fail).not.toHaveBeenCalled();
   });
 
   it('starts the local server before opening recon handoff when none is running', async () => {

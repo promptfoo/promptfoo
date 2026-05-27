@@ -671,6 +671,12 @@ const smokeCases: SmokeCase[] = [
     expectedStatus: 200,
   },
   {
+    method: 'head',
+    openApiPath: '/api/redteam/recon/pending',
+    path: '/api/redteam/recon/pending',
+    expectedStatus: 404,
+  },
+  {
     method: 'get',
     openApiPath: '/api/redteam/recon/pending',
     path: '/api/redteam/recon/pending',

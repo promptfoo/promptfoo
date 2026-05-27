@@ -453,6 +453,34 @@ redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void>
  * This local handoff endpoint is intentionally not rate-limited. It is not a hosted API route,
  * and its sensitive behavior is gated by a random capability generated per recon invocation.
  */
+redteamRouter.head('/recon/pending', async (req: Request, res: Response): Promise<void> => {
+  if (!isLocalhostRequest(req)) {
+    res.status(403).json({
+      error: 'Access denied: recon endpoints are only accessible from localhost',
+    });
+    return;
+  }
+
+  try {
+    const data = readPendingReconConfig({ deleteOnError: false });
+    if (!data || !isValidReconHandoffToken(data.handoffToken, getReconHandoffToken(req))) {
+      res.status(404).json({ error: 'No matching pending recon configuration' });
+      return;
+    }
+
+    // Confirm ownership without consuming the single-use browser handoff.
+    res.sendStatus(204);
+  } catch (error) {
+    if (error instanceof InvalidPendingReconError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    logger.error('Failed to verify pending recon file', { error });
+    res.status(500).json({ error: 'Failed to verify pending recon configuration' });
+  }
+});
+
 redteamRouter.get('/recon/pending', async (req: Request, res: Response): Promise<void> => {
   // Security gate: only allow localhost access to sensitive recon data
   if (!isLocalhostRequest(req)) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callSameOriginApi } from '@app/utils/api';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SETUP_TAB_INDICES } from '../constants';
@@ -148,7 +148,7 @@ export function usePendingRecon(
         const pendingReconUrl = `/redteam/recon/pending?token=${encodeURIComponent(handoffToken)}`;
 
         // Fetch pending recon config
-        const response = await callApi(pendingReconUrl);
+        const response = await callSameOriginApi(pendingReconUrl);
 
         if (response.status === 404) {
           // No pending config, clean up URL and notify user

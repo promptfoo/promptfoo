@@ -14,7 +14,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callSameOriginApi: vi.fn(),
 }));
 
 vi.mock('./useRedTeamConfig', () => ({
@@ -29,9 +29,9 @@ vi.mock('./useRedTeamConfig', () => ({
   },
 }));
 
-import { callApi } from '@app/utils/api';
+import { callSameOriginApi } from '@app/utils/api';
 
-const mockCallApi = vi.mocked(callApi);
+const mockCallSameOriginApi = vi.mocked(callSameOriginApi);
 
 describe('usePendingRecon', () => {
   beforeEach(() => {
@@ -48,7 +48,7 @@ describe('usePendingRecon', () => {
     it('should not fetch pending config', () => {
       renderHook(() => usePendingRecon());
 
-      expect(mockCallApi).not.toHaveBeenCalled();
+      expect(mockCallSameOriginApi).not.toHaveBeenCalled();
     });
 
     it('should return initial state', () => {
@@ -68,7 +68,7 @@ describe('usePendingRecon', () => {
     });
 
     it('should fetch pending recon config', async () => {
-      mockCallApi.mockResolvedValueOnce({
+      mockCallSameOriginApi.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () =>
@@ -93,7 +93,7 @@ describe('usePendingRecon', () => {
       renderHook(() => usePendingRecon());
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith(
+        expect(mockCallSameOriginApi).toHaveBeenCalledWith(
           '/redteam/recon/pending?token=browser-handoff-token',
         );
       });
@@ -123,7 +123,7 @@ describe('usePendingRecon', () => {
         },
       };
 
-      mockCallApi.mockResolvedValueOnce({
+      mockCallSameOriginApi.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () => Promise.resolve(mockData),
@@ -159,7 +159,7 @@ describe('usePendingRecon', () => {
     });
 
     it('should handle 404 (no pending config)', async () => {
-      mockCallApi.mockResolvedValueOnce({
+      mockCallSameOriginApi.mockResolvedValueOnce({
         ok: false,
         status: 404,
         json: () => Promise.resolve({ error: 'No pending recon configuration' }),
@@ -186,12 +186,12 @@ describe('usePendingRecon', () => {
         expect(result.current.error).toContain('Missing recon handoff token');
       });
 
-      expect(mockCallApi).not.toHaveBeenCalled();
+      expect(mockCallSameOriginApi).not.toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/redteam/setup', { replace: true });
     });
 
     it('should handle fetch errors gracefully', async () => {
-      mockCallApi.mockRejectedValueOnce(new Error('Network error'));
+      mockCallSameOriginApi.mockRejectedValueOnce(new Error('Network error'));
 
       const { result } = renderHook(() => usePendingRecon());
 
@@ -220,7 +220,7 @@ describe('usePendingRecon', () => {
         },
       };
 
-      mockCallApi.mockResolvedValueOnce({
+      mockCallSameOriginApi.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () => Promise.resolve(mockData),
@@ -237,7 +237,7 @@ describe('usePendingRecon', () => {
     });
 
     it('should clear the stateful default when recon identifies a stateless app', async () => {
-      mockCallApi.mockResolvedValueOnce({
+      mockCallSameOriginApi.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () =>
@@ -264,7 +264,7 @@ describe('usePendingRecon', () => {
     });
 
     it('should default unknown recon statefulness to stateless for browser handoff', async () => {
-      mockCallApi.mockResolvedValueOnce({
+      mockCallSameOriginApi.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () =>
@@ -288,7 +288,7 @@ describe('usePendingRecon', () => {
     });
 
     it('should only attempt to load once per mount', async () => {
-      mockCallApi.mockResolvedValue({
+      mockCallSameOriginApi.mockResolvedValue({
         ok: true,
         status: 200,
         json: () =>
@@ -306,7 +306,7 @@ describe('usePendingRecon', () => {
       rerender();
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledTimes(1);
+        expect(mockCallSameOriginApi).toHaveBeenCalledTimes(1);
       });
     });
   });

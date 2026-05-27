@@ -21,8 +21,17 @@ function toPosixPath(value: string): string {
   return value.replace(/\\/g, '/');
 }
 
-function normalizePattern(pattern: string): string {
-  return toPosixPath(pattern)
+function normalizePattern(pattern: string, targetDirectory?: string): string {
+  let normalizedPattern = pattern;
+  if (targetDirectory && path.isAbsolute(normalizedPattern)) {
+    const relativePattern = path.relative(path.resolve(targetDirectory), normalizedPattern);
+    if (relativePattern.startsWith('..') || path.isAbsolute(relativePattern)) {
+      return '';
+    }
+    normalizedPattern = relativePattern || '**';
+  }
+
+  return toPosixPath(normalizedPattern)
     .replace(/^\.?\//, '')
     .replace(/\/+$/, '');
 }
@@ -60,9 +69,12 @@ function isInsideDirectory(candidatePath: string, directoryPath: string): boolea
   );
 }
 
-export function buildReconExclusions(additionalExclusions?: string[]): string[] {
+export function buildReconExclusions(
+  additionalExclusions?: string[],
+  targetDirectory?: string,
+): string[] {
   return [...DEFAULT_EXCLUSIONS, ...(additionalExclusions || [])]
-    .map((pattern) => normalizePattern(pattern.trim()))
+    .map((pattern) => normalizePattern(pattern.trim(), targetDirectory))
     .filter((pattern) => pattern.length > 0);
 }
 
@@ -99,7 +111,7 @@ export function prepareReconTarget(
   scratchpadDirectory: string,
   additionalExclusions?: string[],
 ): PreparedReconTarget {
-  const exclusions = buildReconExclusions(additionalExclusions);
+  const exclusions = buildReconExclusions(additionalExclusions, targetDirectory);
   const resolvedScratchpadDirectory = path.resolve(scratchpadDirectory);
   const snapshotRoot = path.join(scratchpadDirectory, 'target');
   const snapshotDirectory = path.join(snapshotRoot, path.basename(targetDirectory) || 'codebase');

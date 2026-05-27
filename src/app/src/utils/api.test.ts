@@ -1,6 +1,13 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { callApi, fetchUserEmail, fetchUserId, getApiBaseUrl, updateEvalAuthor } from './api';
+import {
+  callApi,
+  callSameOriginApi,
+  fetchUserEmail,
+  fetchUserId,
+  getApiBaseUrl,
+  updateEvalAuthor,
+} from './api';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -114,6 +121,21 @@ describe('callApi', () => {
     vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
     await callApi('users/123');
     expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/apiusers/123', {});
+  });
+});
+
+describe('callSameOriginApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+  });
+
+  it('ignores a configured remote API URL for local capabilities', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://remote.example.com'));
+
+    await callSameOriginApi('/redteam/recon/pending?token=one-time-token');
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/redteam/recon/pending?token=one-time-token', {});
   });
 });
 

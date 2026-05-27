@@ -15,6 +15,18 @@ export async function callApi(path: string, options: RequestInit = {}): Promise<
   return fetch(`${getApiBaseUrl()}/api${path}`, options);
 }
 
+/**
+ * Calls the server that served the current UI, ignoring any configured remote API base URL.
+ * Use for browser-held local capabilities that must never be forwarded to another server.
+ */
+export async function callSameOriginApi(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+  return fetch(`${basePath}/api${path}`, options);
+}
+
 export async function fetchUserEmail(): Promise<string | null> {
   try {
     const response = await callApi('/user/email', {
