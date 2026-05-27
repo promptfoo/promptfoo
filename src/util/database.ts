@@ -196,6 +196,7 @@ export async function updateResult(
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
     logger.error(`Failed to update eval with ID ${id}:\n${err}`);
+    throw err;
   }
 }
 
