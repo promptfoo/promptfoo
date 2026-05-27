@@ -23,9 +23,10 @@ import type { ChildProcess } from 'node:child_process';
 
 import { Command } from 'commander';
 import { updateCommand } from '../../src/commands/update';
+import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
 import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
-import { checkForUpdates } from '../../src/updates/updateCheck';
+import { checkForUpdates, UPDATE_INSTRUCTIONS } from '../../src/updates/updateCheck';
 
 const mockCheckForUpdates = checkForUpdates as MockedFunction<typeof checkForUpdates>;
 const mockGetInstallationInfo = getInstallationInfo as MockedFunction<typeof getInstallationInfo>;
@@ -73,6 +74,7 @@ describe('update command', () => {
 
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
+    vi.unstubAllEnvs();
   });
 
   it('should leave command telemetry to the shared CLI hook', async () => {
@@ -110,6 +112,19 @@ describe('update command', () => {
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
     expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+    expect(logger.info).toHaveBeenCalledWith(UPDATE_INSTRUCTIONS);
+  });
+
+  it('should report a skipped check when update checks are disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update', '--check']);
+
+    expect(mockCheckForUpdates).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      'Update check skipped because PROMPTFOO_DISABLE_UPDATE is enabled.',
+    );
   });
 
   it('should handle installation info and run update command', async () => {
@@ -279,6 +294,7 @@ describe('update command', () => {
     updateCommand(program, {
       PATH: '/safe/bin',
       HOME: '/home/user',
+      NPM_CONFIG_PREFIX: '/safe/npm-global',
       OPENAI_API_KEY: 'not-for-installer',
       NPM_TOKEN: 'not-for-installer',
     });
@@ -286,7 +302,7 @@ describe('update command', () => {
 
     expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
       cwd: tmpdir(),
-      env: { PATH: '/safe/bin', HOME: '/home/user' },
+      env: { PATH: '/safe/bin', HOME: '/home/user', NPM_CONFIG_PREFIX: '/safe/npm-global' },
       stdio: 'inherit',
       shell: false,
     });

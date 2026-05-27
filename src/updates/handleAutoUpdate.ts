@@ -111,11 +111,11 @@ export function setUpdateHandler(
   onUpdateFailed: UpdateEventHandler,
   onUpdateBackground: UpdateEventHandler = onUpdateFailed,
 ) {
-  let successfullyInstalled = false;
+  let shouldRepeatReminder = false;
   let reminderTimer: NodeJS.Timeout | undefined;
 
   const handleUpdateReceived = (info: { message: string }) => {
-    successfullyInstalled = false;
+    shouldRepeatReminder = true;
     onUpdateReceived(info);
     const savedMessage = info.message;
     if (reminderTimer) {
@@ -123,14 +123,14 @@ export function setUpdateHandler(
     }
     // Use unref() so timer doesn't keep event loop alive and block CLI exit
     reminderTimer = setTimeout(() => {
-      if (!successfullyInstalled) {
+      if (shouldRepeatReminder) {
         onUpdateReceived({ message: savedMessage });
       }
     }, 60000).unref();
   };
 
   const handleUpdateFailed = (info: { message: string }) => {
-    successfullyInstalled = true; // Don't show reminders if update failed
+    shouldRepeatReminder = false;
     if (reminderTimer) {
       clearTimeout(reminderTimer);
       reminderTimer = undefined;
@@ -139,7 +139,7 @@ export function setUpdateHandler(
   };
 
   const handleUpdateSuccess = (info: { message: string }) => {
-    successfullyInstalled = true;
+    shouldRepeatReminder = false;
     if (reminderTimer) {
       clearTimeout(reminderTimer);
       reminderTimer = undefined;
@@ -149,7 +149,7 @@ export function setUpdateHandler(
 
   const handleUpdateBackground = (info: { message: string }) => {
     // Do not repeat the availability reminder after reporting that installation is in progress.
-    successfullyInstalled = true;
+    shouldRepeatReminder = false;
     if (reminderTimer) {
       clearTimeout(reminderTimer);
       reminderTimer = undefined;

@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getLatestVersion } from '../updates';
 import { VERSION } from '../version';
@@ -19,11 +20,17 @@ export interface CheckForUpdatesOptions {
 }
 
 const PACKAGE_NAME = 'promptfoo';
+export const UPDATE_INSTRUCTIONS =
+  'For global installations, run "promptfoo update". For npx, pnpx, or bunx, invoke the latest package directly (for example, "npx promptfoo@latest").';
 
 export async function checkForUpdates(
   options: CheckForUpdatesOptions = {},
 ): Promise<UpdateObject | null> {
   try {
+    if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
+      return null;
+    }
+
     // Skip update check when running from source (development mode)
     if (process.env.NODE_ENV === 'development') {
       return null;

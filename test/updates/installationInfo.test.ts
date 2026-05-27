@@ -577,13 +577,22 @@ describe('getInstallationInfo', () => {
     const result = getInstallationInfo('/untrusted/project', false, {
       PATH: '/safe/bin',
       HOME: '/home/user',
+      NPM_CONFIG_PREFIX: '/safe/npm-global',
+      npm_config_userconfig: '/home/user/.npmrc',
+      NPM_CONFIG_GLOBALCONFIG: '/etc/npmrc',
       OPENAI_API_KEY: 'not-for-npm',
       NPM_TOKEN: 'not-for-npm',
     });
 
     expect(mockChildProcess.execFileSync).toHaveBeenCalledWith('npm', ['root', '--global'], {
       cwd: tmpdir(),
-      env: { PATH: '/safe/bin', HOME: '/home/user' },
+      env: {
+        PATH: '/safe/bin',
+        HOME: '/home/user',
+        NPM_CONFIG_PREFIX: '/safe/npm-global',
+        npm_config_userconfig: '/home/user/.npmrc',
+        NPM_CONFIG_GLOBALCONFIG: '/etc/npmrc',
+      },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 1000,

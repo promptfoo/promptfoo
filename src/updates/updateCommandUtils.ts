@@ -32,6 +32,12 @@ const UPDATE_ENV_KEYS = [
   'PNPM_HOME',
   'YARN_GLOBAL_FOLDER',
   'BUN_INSTALL',
+  'NPM_CONFIG_PREFIX',
+  'npm_config_prefix',
+  'NPM_CONFIG_USERCONFIG',
+  'npm_config_userconfig',
+  'NPM_CONFIG_GLOBALCONFIG',
+  'npm_config_globalconfig',
 ] as const;
 
 export function getPackageManagerExecutable(executable: PackageManagerExecutable): string {

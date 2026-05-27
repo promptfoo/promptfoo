@@ -48,7 +48,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { ServerError } from './server/errors';
 import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
-import { checkForUpdates } from './updates/updateCheck';
+import { checkForUpdates, UPDATE_INSTRUCTIONS } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
@@ -99,7 +99,7 @@ async function main(): Promise<PendingAutoUpdate | undefined> {
       .then((info) => {
         if (info) {
           logger.info(info.message);
-          logger.info('Run "promptfoo update" to upgrade to the latest version.');
+          logger.info(UPDATE_INSTRUCTIONS);
 
           // Defer replacement until shutdown has released resources used by this invocation.
           if (enableAutoUpdate) {

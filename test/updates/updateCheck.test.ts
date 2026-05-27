@@ -34,6 +34,14 @@ describe('checkForUpdates', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
+  it('should return null without a request when update checks are disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
+
+    await expect(checkForUpdates({ throwOnError: true })).resolves.toBeNull();
+
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   it('should return update info when update is available', async () => {
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
