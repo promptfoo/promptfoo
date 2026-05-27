@@ -42,6 +42,7 @@ describe('isProviderTypeMap', () => {
     ],
     ['ProviderOptionsMap (unknown key)', { 'litellm:judge': { config: {} } }, false],
     ['ProviderOptionsMap (type-named key)', { text: { config: {} } }, false],
+    ['type key with empty string value', { text: '' }, false],
     ['type key with undefined value', { text: undefined }, false],
   ])('returns false for %s', (_label, value, expected) => {
     expect(isProviderTypeMap(value)).toBe(expected);

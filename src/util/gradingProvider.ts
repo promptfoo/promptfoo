@@ -1,5 +1,6 @@
 import { isApiProvider } from '../types/providers';
 
+import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderTypeMap } from '../types/providers';
 
 export const GRADING_PROVIDER_TYPE_KEYS = [
@@ -10,7 +11,10 @@ export const GRADING_PROVIDER_TYPE_KEYS = [
 ] as const;
 
 function isTypedProviderValue(value: unknown): boolean {
-  if (typeof value === 'string' || isApiProvider(value)) {
+  if (typeof value === 'string') {
+    return value.length > 0;
+  }
+  if (isApiProvider(value)) {
     return true;
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -33,6 +37,29 @@ export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMa
           isTypedProviderValue((provider as Record<string, unknown>)[providerType]),
       ),
   );
+}
+
+export function addSuiteEnvToDeferredTypedProviders(
+  provider: ProviderTypeMap,
+  env: EnvOverrides | undefined,
+): ProviderTypeMap {
+  if (!env) {
+    return provider;
+  }
+
+  const providerWithEnv = { ...provider };
+  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
+    const nestedProvider = provider[providerType];
+    if (!nestedProvider || isApiProvider(nestedProvider)) {
+      continue;
+    }
+
+    providerWithEnv[providerType] =
+      typeof nestedProvider === 'string'
+        ? { id: nestedProvider, env }
+        : { ...nestedProvider, env: { ...env, ...nestedProvider.env } };
+  }
+  return providerWithEnv;
 }
 
 // Build a lookup of configured providers by both id() and label, with a

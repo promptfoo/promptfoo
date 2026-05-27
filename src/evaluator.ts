@@ -54,6 +54,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -71,7 +72,9 @@ import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
+  addSuiteEnvToDeferredTypedProviders,
   buildConfiguredProviderMap,
+  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
@@ -1997,10 +2000,11 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
 function resolveAssertionProviderReferences(
   assertion: AssertionOrSet,
   providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
 ): AssertionOrSet {
   if (assertion.type === 'assert-set') {
     const resolvedAssertions = assertion.assert.map(
-      (child) => resolveAssertionProviderReferences(child, providerMap) as Assertion,
+      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
     );
     if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
       return assertion;
@@ -2008,16 +2012,26 @@ function resolveAssertionProviderReferences(
     return { ...assertion, assert: resolvedAssertions };
   }
 
-  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap);
+  const resolvedProvider = resolveConfiguredProviderReference(assertion.provider, providerMap);
+  const provider = isProviderTypeMap(resolvedProvider)
+    ? addSuiteEnvToDeferredTypedProviders(resolvedProvider, env)
+    : resolvedProvider;
   return provider === assertion.provider ? assertion : { ...assertion, provider };
 }
 
 function resolveRuntimeGradingProviderReferences(
   testCase: AtomicTestCase,
   providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
 ): void {
   if (testCase.options?.provider) {
-    const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
+    const resolvedProvider = resolveConfiguredProviderReference(
+      testCase.options.provider,
+      providerMap,
+    );
+    const provider = isProviderTypeMap(resolvedProvider)
+      ? addSuiteEnvToDeferredTypedProviders(resolvedProvider, env)
+      : resolvedProvider;
     if (provider !== testCase.options.provider) {
       testCase.options = { ...testCase.options, provider };
     }
@@ -2025,7 +2039,7 @@ function resolveRuntimeGradingProviderReferences(
 
   if (testCase.assert) {
     const assertions = testCase.assert.map((assertion) =>
-      resolveAssertionProviderReferences(assertion, providerMap),
+      resolveAssertionProviderReferences(assertion, providerMap, env),
     );
     if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
       testCase.assert = assertions;
@@ -2188,7 +2202,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
-    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,

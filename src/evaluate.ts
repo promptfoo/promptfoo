@@ -13,8 +13,8 @@ import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
+  addSuiteEnvToDeferredTypedProviders,
   buildConfiguredProviderMap,
-  GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
@@ -32,7 +32,7 @@ import type {
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { ApiProvider, ProviderTypeMap } from './types/providers';
+import type { ApiProvider } from './types/providers';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -199,29 +199,6 @@ function createSerializableUnifiedConfig(
   }
 
   return config;
-}
-
-function addSuiteEnvToDeferredTypedProviders(
-  provider: ProviderTypeMap,
-  env: EnvOverrides | undefined,
-): ProviderTypeMap {
-  if (!env) {
-    return provider;
-  }
-
-  const providerWithEnv = { ...provider };
-  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
-    const nestedProvider = provider[providerType];
-    if (!nestedProvider || isApiProvider(nestedProvider)) {
-      continue;
-    }
-
-    providerWithEnv[providerType] =
-      typeof nestedProvider === 'string'
-        ? { id: nestedProvider, env }
-        : { ...nestedProvider, env: { ...env, ...nestedProvider.env } };
-  }
-  return providerWithEnv;
 }
 
 async function resolveGradingProvider(

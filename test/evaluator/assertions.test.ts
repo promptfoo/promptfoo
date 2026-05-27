@@ -276,6 +276,36 @@ describeEvaluator('evaluator assertions', () => {
     expect(summary.stats.successes).toBe(1);
   });
 
+  it('preserves suite env for typed graders inherited from defaultTest assertions', async () => {
+    const testSuite: TestSuite = {
+      env: { LITELLM_API_BASE: 'echo' },
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ providers: ['test-provider'] }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Grade the test output',
+            rubricPrompt: '{"pass":true,"score":1,"reason":"Resolved suite env"}',
+            provider: {
+              text: {
+                id: '{{ env.LITELLM_API_BASE }}',
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.results[0].success).toBe(true);
+  });
+
   it('evaluate with grading expected value does not pass', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
