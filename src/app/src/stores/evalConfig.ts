@@ -686,6 +686,30 @@ const omitTestOptionsCredentials = (options: unknown, templatePaths?: Set<string
   return omitProviderCredentials(options, undefined, templatePaths);
 };
 
+// Redteam execution reads plugin and strategy configuration from test metadata.
+// Keep ordinary metadata intact, but scrub those provider-like configuration surfaces.
+const omitTestMetadataCredentials = (metadata: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(metadata)) {
+    return metadata;
+  }
+
+  return {
+    ...metadata,
+    ...(hasOwn(metadata, 'pluginConfig')
+      ? { pluginConfig: omitProviderCredentials(metadata.pluginConfig, undefined, templatePaths) }
+      : {}),
+    ...(hasOwn(metadata, 'strategyConfig')
+      ? {
+          strategyConfig: omitProviderCredentials(
+            metadata.strategyConfig,
+            undefined,
+            templatePaths,
+          ),
+        }
+      : {}),
+  };
+};
+
 const omitTestCaseProviderCredentials = (
   testCase: unknown,
   templatePaths?: Set<string>,
@@ -704,6 +728,9 @@ const omitTestCaseProviderCredentials = (
       : {}),
     ...(hasOwn(testCase, 'assert')
       ? { assert: omitAssertionProviderCredentials(testCase.assert, templatePaths) }
+      : {}),
+    ...(hasOwn(testCase, 'metadata')
+      ? { metadata: omitTestMetadataCredentials(testCase.metadata, templatePaths) }
       : {}),
   };
 };
@@ -854,6 +881,22 @@ const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): 
   };
 };
 
+const omitSharingCredentials = (sharing: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(sharing)) {
+    return sharing;
+  }
+
+  return {
+    ...sharing,
+    ...(typeof sharing.apiBaseUrl === 'string'
+      ? { apiBaseUrl: scrubProviderUrl(sharing.apiBaseUrl, templatePaths) }
+      : {}),
+    ...(typeof sharing.appBaseUrl === 'string'
+      ? { appBaseUrl: scrubProviderUrl(sharing.appBaseUrl, templatePaths) }
+      : {}),
+  };
+};
+
 const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedConfig>['env'] => {
   if (!env || typeof env !== 'object') {
     return env;
@@ -995,6 +1038,14 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
             configWithoutAzureSas.tracing,
             templatePaths,
           ) as Partial<UnifiedConfig>['tracing'],
+        }
+      : {}),
+    ...(hasOwn(configWithoutAzureSas, 'sharing')
+      ? {
+          sharing: omitSharingCredentials(
+            configWithoutAzureSas.sharing,
+            templatePaths,
+          ) as Partial<UnifiedConfig>['sharing'],
         }
       : {}),
   };

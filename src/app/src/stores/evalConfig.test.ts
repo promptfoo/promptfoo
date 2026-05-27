@@ -281,6 +281,58 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('strategy-url-secret');
     });
 
+    it('redacts executable redteam configs in test metadata without walking ordinary metadata', () => {
+      useStore.getState().setConfig({
+        tests: [
+          {
+            metadata: {
+              pluginConfig: {
+                headers: {
+                  Authorization: 'Bearer plugin-metadata-secret',
+                  'X-Visible': 'kept',
+                },
+                endpoint: 'https://plugin.example.com?api_key=plugin-metadata-url-secret',
+              },
+              strategyConfig: {
+                redteamProvider: {
+                  id: 'http',
+                  config: {
+                    headers: { Authorization: 'Bearer strategy-metadata-secret' },
+                    endpoint: 'https://strategy.example.com?token=strategy-metadata-url-secret',
+                  },
+                },
+                stateful: true,
+              },
+              resultPayload: { apiKey: 'ordinary-metadata-value' },
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].metadata).toEqual({
+        pluginConfig: {
+          headers: { 'X-Visible': 'kept' },
+          endpoint: 'https://plugin.example.com?api_key=[REDACTED]',
+        },
+        strategyConfig: {
+          redteamProvider: {
+            id: 'http',
+            config: {
+              headers: {},
+              endpoint: 'https://strategy.example.com?token=[REDACTED]',
+            },
+          },
+          stateful: true,
+        },
+        resultPayload: { apiKey: 'ordinary-metadata-value' },
+      });
+      expect(JSON.stringify(persisted)).not.toContain('plugin-metadata-secret');
+      expect(JSON.stringify(persisted)).not.toContain('plugin-metadata-url-secret');
+      expect(JSON.stringify(persisted)).not.toContain('strategy-metadata-secret');
+      expect(JSON.stringify(persisted)).not.toContain('strategy-metadata-url-secret');
+    });
+
     it('redacts test vars used by credential templates without walking ordinary payloads', () => {
       useStore.getState().setConfig({
         env: {
@@ -1016,6 +1068,26 @@ describe('evalConfig store', () => {
       expect(persisted.providers[1].config.url).toContain('max_tokens=128');
       expect(persisted.providers[2].config.url).toContain('api_key={{ api_token }}');
       expect(persisted.providers[4]).toContain('{{ username }}:{{ password }}');
+    });
+
+    it('redacts credentials embedded in sharing endpoints', () => {
+      useStore.getState().setConfig({
+        sharing: {
+          apiBaseUrl:
+            'https://share-user:share-password@share.example.com?api_key=share-secret&region=us',
+          appBaseUrl: 'https://app.example.com/evals?token=view-secret&theme=dark',
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.sharing).toEqual({
+        apiBaseUrl: 'https://[REDACTED]@share.example.com?api_key=[REDACTED]&region=us',
+        appBaseUrl: 'https://app.example.com/evals?token=[REDACTED]&theme=dark',
+      });
+      expect(JSON.stringify(persisted)).not.toContain('share-user');
+      expect(JSON.stringify(persisted)).not.toContain('share-password');
+      expect(JSON.stringify(persisted)).not.toContain('share-secret');
+      expect(JSON.stringify(persisted)).not.toContain('view-secret');
     });
 
     it('redacts credentials in HTTP body strings', () => {
