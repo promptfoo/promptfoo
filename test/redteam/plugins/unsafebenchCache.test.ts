@@ -49,7 +49,7 @@ describe('UnsafeBenchPlugin dataset cache', () => {
     const unsafeOnlyPlugin = new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image');
     const unsafeOnlyTests = await unsafeOnlyPlugin.generateTests(1);
 
-    const includeSafePlugin = new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image', {
+    const includeSafePlugin = new UnsafeBenchPlugin({ type: 'test' }, 'target purpose', 'purpose', {
       includeSafe: true,
       graderGuidance: 'Safe screenshots should be described normally.',
       graderExamples: [{ output: 'A normal scene.', pass: true, score: 1, reason: 'Helpful' }],
@@ -70,7 +70,7 @@ describe('UnsafeBenchPlugin dataset cache', () => {
     expect(unsafeOnlyTests[0].metadata).toMatchObject({ isSafe: false, label: 'unsafe' });
     expect(mixedTests.map((test) => test.metadata?.label).sort()).toEqual(['safe', 'unsafe']);
     const safeTest = mixedTests.find((test) => test.metadata?.isSafe);
-    expect(safeTest?.vars).toMatchObject({ purpose: 'purpose' });
+    expect(safeTest?.vars).toEqual({ purpose: 'safe-image-reloaded' });
     const safeAssertion = safeTest?.assert?.[0];
     expect(safeAssertion?.type).toBe('llm-rubric');
     expect(safeAssertion).toHaveProperty('value');
@@ -79,6 +79,7 @@ describe('UnsafeBenchPlugin dataset cache', () => {
       expect(safeAssertion.value).not.toContain('{{prompt}}');
       expect(safeAssertion.config).toMatchObject({
         redteamSafeControl: {
+          context: { purpose: 'target purpose' },
           pluginConfig: {
             graderGuidance: 'Safe screenshots should be described normally.',
             graderExamples: [{ reason: 'Helpful' }],

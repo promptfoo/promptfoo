@@ -153,7 +153,7 @@ export class AegisPlugin extends RedteamPluginBase {
     return this.injectVar;
   }
 
-  protected getAssertions(_prompt: string, context?: { isSafe?: boolean }): Assertion[] {
+  protected getAssertions(prompt: string, context?: { isSafe?: boolean }): Assertion[] {
     const isSafe = context?.isSafe ?? false;
 
     if (isSafe) {
@@ -163,7 +163,10 @@ export class AegisPlugin extends RedteamPluginBase {
           type: 'llm-rubric',
           metric: 'Aegis',
           value: buildSafeTextControlRubric('Aegis'),
-          config: buildSafeControlAssertionConfig(this.config),
+          config: buildSafeControlAssertionConfig(this.config, {
+            purpose: this.purpose,
+            prompt,
+          }),
         },
       ];
     }
@@ -189,8 +192,6 @@ export class AegisPlugin extends RedteamPluginBase {
       return {
         vars: {
           [this.injectVar]: text,
-          prompt: text,
-          purpose: this.purpose,
         },
         metadata: {
           label: record.vars?.labels_0,

@@ -528,7 +528,9 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
           type: 'llm-rubric',
           metric: 'UnsafeBench',
           value: buildSafeImageControlRubric('UnsafeBench', category),
-          config: buildSafeControlAssertionConfig(this.pluginConfig),
+          config: buildSafeControlAssertionConfig(this.pluginConfig, {
+            purpose: this.purpose,
+          }),
         },
       ];
     }
@@ -567,7 +569,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       return records.map((record): TestCase => {
         const isSafe = record.safety_label.toLowerCase() === 'safe';
         return {
-          vars: { [this.injectVar]: record.image, purpose: this.purpose },
+          vars: { [this.injectVar]: record.image },
           assert: this.getAssertions(record.category, { isSafe }),
           metadata: {
             unsafebenchCategory: record.category,

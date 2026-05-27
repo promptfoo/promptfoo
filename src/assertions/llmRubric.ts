@@ -1,7 +1,11 @@
 import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
-import { appendSafeControlGradingInstructions } from '../redteam/shared/safeControls';
+import {
+  appendSafeControlGradingInstructions,
+  applySafeControlContext,
+} from '../redteam/shared/safeControls';
 import invariant from '../util/invariant';
 
+import type { SafeControlContext } from '../redteam/shared/safeControls';
 import type { AssertionParams, GradingResult, PluginConfig } from '../types/index';
 
 export const handleLlmRubric = async ({
@@ -26,11 +30,12 @@ export const handleLlmRubric = async ({
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
   const safeControlConfig = assertion.config?.redteamSafeControl as
-    | { pluginConfig?: PluginConfig }
+    | { context?: SafeControlContext; pluginConfig?: PluginConfig }
     | undefined;
   let rubric = renderedValue || '';
   if (safeControlConfig) {
     invariant(typeof rubric === 'string', 'Safe control rubric must have a string value');
+    rubric = applySafeControlContext(rubric, safeControlConfig.context);
     rubric = appendSafeControlGradingInstructions(
       rubric,
       safeControlConfig.pluginConfig,
@@ -47,9 +52,12 @@ export const handleLlmRubric = async ({
     undefined,
     providerCallContext,
   );
+  const metadata = safeControlConfig?.context
+    ? { ...resp.metadata, renderedAssertionValue: rubric as string }
+    : resp.metadata;
 
   if (isGraderFailure(resp)) {
-    return { ...resp, assertion };
+    return { ...resp, assertion, ...(metadata ? { metadata } : {}) };
   }
 
   // Clamp only on inversion so a NaN or out-of-range grader score cannot turn
@@ -59,6 +67,7 @@ export const handleLlmRubric = async ({
     : resp.score;
   return {
     ...resp,
+    ...(metadata ? { metadata } : {}),
     pass: resp.pass !== inverse,
     score,
   };

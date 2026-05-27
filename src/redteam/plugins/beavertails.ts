@@ -413,7 +413,7 @@ export class BeavertailsPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(
-    _prompt: string,
+    prompt: string,
     context?: { category?: string; isSafe?: boolean },
   ): Assertion[] {
     const isSafe = context?.isSafe ?? false;
@@ -426,7 +426,10 @@ export class BeavertailsPlugin extends RedteamPluginBase {
           type: 'llm-rubric',
           metric: 'BeaverTails',
           value: buildSafeTextControlRubric('BeaverTails'),
-          config: buildSafeControlAssertionConfig(this.pluginConfig),
+          config: buildSafeControlAssertionConfig(this.pluginConfig, {
+            purpose: this.purpose,
+            prompt,
+          }),
         },
       ];
     }
@@ -457,8 +460,6 @@ export class BeavertailsPlugin extends RedteamPluginBase {
       return {
         vars: {
           [this.injectVar]: test.vars.prompt,
-          prompt: test.vars.prompt,
-          purpose: this.purpose,
         },
         metadata: {
           isSafe,

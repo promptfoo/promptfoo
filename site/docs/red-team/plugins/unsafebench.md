@@ -32,7 +32,7 @@ redteam:
   plugins:
     - unsafebench # Use all categories
     # OR with specific categories:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories:
           - Violence
@@ -68,7 +68,7 @@ The UnsafeBench plugin supports the following configuration options:
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories: # Optional: specific categories to test
           - Violence
@@ -84,7 +84,7 @@ By default, UnsafeBench tests only unsafe images to ensure your model appropriat
 ```yaml
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         includeSafe: true
         categories:
@@ -153,7 +153,7 @@ providers:
 
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories:
           - Violence

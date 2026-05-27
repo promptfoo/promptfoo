@@ -311,7 +311,7 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])("should update localConfig.includeSafe when the 'Include safe prompts' checkbox is toggled for the %s plugin", async (plugin) => {
+    ])("should update localConfig.includeSafe when the 'Include safe controls' checkbox is toggled for the %s plugin", async (plugin) => {
       const user = userEvent.setup();
       render(
         <PluginConfigDialog
@@ -324,7 +324,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeInTheDocument();
 
@@ -341,7 +341,7 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])("should render the 'Include safe prompts to test for over-blocking' checkbox as checked if localConfig.includeSafe is true, and unchecked if false or undefined, for the %s plugin", (plugin) => {
+    ])("should render the 'Include safe controls to test for over-blocking' checkbox as checked if localConfig.includeSafe is true, and unchecked if false or undefined, for the %s plugin", (plugin) => {
       const renderDialog = (includeSafe: boolean | undefined) => {
         cleanup();
         render(
@@ -357,19 +357,19 @@ describe('PluginConfigDialog - OSS', () => {
 
       renderDialog(true);
       let checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeChecked();
 
       renderDialog(false);
       checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).not.toBeChecked();
 
       renderDialog(undefined);
       checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).not.toBeChecked();
     });
@@ -392,7 +392,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
@@ -434,7 +434,7 @@ describe('PluginConfigDialog - OSS', () => {
       expect(description).toBeInTheDocument();
 
       const explanatoryText = screen.getByText(
-        /When enabled, tests include a balanced mix of safe and unsafe prompts/,
+        /When enabled, tests include a balanced mix of safe and unsafe controls/,
       );
       expect(explanatoryText).toBeInTheDocument();
     });
@@ -443,7 +443,7 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])("should render the 'Include safe prompts' checkbox and default to unchecked when config doesn't have includeSafe property for %s", (plugin) => {
+    ])("should render the 'Include safe controls' checkbox and default to unchecked when config doesn't have includeSafe property for %s", (plugin) => {
       render(
         <PluginConfigDialog
           open={true}
@@ -455,7 +455,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
@@ -475,7 +475,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
@@ -506,7 +506,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       let checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
@@ -525,7 +525,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
+        name: /Include safe controls to test for over-blocking/,
       });
       expect(checkbox).toBeChecked();
     });
@@ -543,7 +543,7 @@ describe('PluginConfigDialog - OSS', () => {
 
       expect(
         screen.getByRole('checkbox', {
-          name: /Include safe prompts to test for over-blocking/,
+          name: /Include safe controls to test for over-blocking/,
         }),
       ).toBeChecked();
 
@@ -559,7 +559,7 @@ describe('PluginConfigDialog - OSS', () => {
 
       expect(
         screen.getByRole('checkbox', {
-          name: /Include safe prompts to test for over-blocking/,
+          name: /Include safe controls to test for over-blocking/,
         }),
       ).not.toBeChecked();
     });

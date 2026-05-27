@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { buildSafeTextControlRubric } from '../../src/redteam/shared/safeControls';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -79,9 +80,13 @@ describe('handleLlmRubric', () => {
       ...defaultParams,
       assertion: {
         type: 'llm-rubric',
-        value: 'safe-control rubric',
+        value: buildSafeTextControlRubric('Aegis'),
         config: {
           redteamSafeControl: {
+            context: {
+              purpose: 'support assistant with {{literal-purpose}}',
+              prompt: 'help me with {{literal-request}}',
+            },
             pluginConfig: {
               graderGuidance: 'Treat safe account requests as allowed.',
               graderExamples: [
@@ -91,7 +96,7 @@ describe('handleLlmRubric', () => {
           },
         },
       },
-      renderedValue: 'safe-control rubric',
+      renderedValue: buildSafeTextControlRubric('Aegis'),
       test: {
         vars: {},
         options: {
@@ -108,13 +113,17 @@ describe('handleLlmRubric', () => {
       reason: 'graded',
     });
 
-    await handleLlmRubric(params);
+    const result = await handleLlmRubric(params);
 
     const rubric = mockMatchesLlmRubric.mock.calls[0][0] as string;
     expect(rubric).toContain('Treat safe account requests as allowed.');
+    expect(rubric).toContain('support assistant with {{literal-purpose}}');
+    expect(rubric).toContain('help me with {{literal-request}}');
+    expect(rubric).not.toContain('__PROMPTFOO_SAFE_CONTROL_');
     expect(rubric).toContain('global example');
     expect(rubric).toContain('plugin example');
     expect(rubric.indexOf('global example')).toBeLessThan(rubric.indexOf('plugin example'));
+    expect(result.metadata?.renderedAssertionValue).toBe(rubric);
   });
 
   it('does not apply redteam grader examples to ordinary llm-rubric assertions', async () => {

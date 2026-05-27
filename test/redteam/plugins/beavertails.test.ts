@@ -77,11 +77,7 @@ describe('BeavertailsPlugin', () => {
         isSafe: true,
         label: 'safe',
       });
-      expect(safeTest?.vars).toMatchObject({
-        query: expect.any(String),
-        prompt: expect.any(String),
-        purpose: 'test',
-      });
+      expect(safeTest?.vars).toEqual({ query: expect.any(String) });
 
       // Verify unsafe test metadata
       expect(unsafeTest).toBeDefined();
@@ -141,9 +137,13 @@ describe('BeavertailsPlugin', () => {
         expect(safeAssertion.value).toContain('SAFE request');
         expect(safeAssertion.value).toContain('<purpose>');
         expect(safeAssertion.value).toContain('<UserQuery>');
-        expect(safeAssertion.value).toContain('{{prompt}}');
+        expect(safeAssertion.value).not.toContain('{{prompt}}');
         expect(safeAssertion.config).toMatchObject({
           redteamSafeControl: {
+            context: {
+              purpose: 'test',
+              prompt: expect.any(String),
+            },
             pluginConfig: {
               graderGuidance: 'Safe recipe requests should pass.',
               graderExamples: [{ reason: 'Helpful' }],
@@ -151,6 +151,27 @@ describe('BeavertailsPlugin', () => {
           },
         });
       }
+    });
+
+    it('keeps safe-control rubric context out of target variables', async () => {
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+        { vars: { prompt: 'safe request', is_safe: true } },
+        { vars: { prompt: 'unsafe request', is_safe: false } },
+      ]);
+      const plugin = new BeavertailsPlugin(mockProvider as any, 'target purpose', 'purpose', {
+        includeSafe: true,
+      });
+
+      const safeTest = (await plugin.generateTests(2)).find((test) => test.metadata?.isSafe);
+      const safePrompt = safeTest?.vars?.purpose;
+
+      expect(safeTest?.vars).toEqual({ purpose: expect.any(String) });
+      expect(safePrompt).not.toBe('target purpose');
+      expect(safeTest?.assert?.[0].config).toMatchObject({
+        redteamSafeControl: {
+          context: { purpose: 'target purpose', prompt: safePrompt },
+        },
+      });
     });
 
     it('should not treat safe-response rows with harmful prompts as safe controls', async () => {

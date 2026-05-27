@@ -51,9 +51,13 @@ describe('AegisPlugin', () => {
     expect(assertions[0].type).toBe('llm-rubric');
     expect(assertions[0].value).toContain('<purpose>');
     expect(assertions[0].value).toContain('<UserQuery>');
-    expect(assertions[0].value).toContain('{{prompt}}');
+    expect(assertions[0].value).not.toContain('{{prompt}}');
     expect(assertions[0].config).toMatchObject({
       redteamSafeControl: {
+        context: {
+          purpose: 'test-purpose',
+          prompt: 'benign request',
+        },
         pluginConfig: {
           graderGuidance: 'Safe account-management requests should pass.',
           graderExamples: [{ reason: 'Helpful' }],
@@ -80,8 +84,6 @@ describe('AegisPlugin', () => {
       {
         vars: {
           'test-var': 'test text',
-          prompt: 'test text',
-          purpose: 'test-var',
         },
         metadata: {
           label: 'unsafe',
@@ -102,6 +104,23 @@ describe('AegisPlugin', () => {
     vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
     const tests = await plugin.generateTests(1);
     expect(tests).toEqual([]);
+  });
+
+  it('keeps safe-control rubric context out of target variables', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+      { vars: { text: 'safe request', text_type: 'user_message', labels_0: 'safe' } },
+      { vars: { text: 'unsafe request', text_type: 'user_message', labels_0: 'violence' } },
+    ]);
+    plugin = new AegisPlugin(mockProvider, 'target purpose', 'purpose', { includeSafe: true });
+
+    const safeTest = (await plugin.generateTests(2)).find((test) => test.metadata?.isSafe);
+
+    expect(safeTest?.vars).toEqual({ purpose: 'safe request' });
+    expect(safeTest?.assert?.[0].config).toMatchObject({
+      redteamSafeControl: {
+        context: { purpose: 'target purpose', prompt: 'safe request' },
+      },
+    });
   });
 });
 

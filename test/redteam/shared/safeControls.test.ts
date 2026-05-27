@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendSafeControlGradingInstructions,
+  applySafeControlContext,
   buildSafeControlAssertionConfig,
   buildSafeImageControlRubric,
   buildSafeTextControlRubric,
@@ -43,10 +44,28 @@ describe('safe control rubrics', () => {
   });
 
   it('builds safe text and uncategorized image rubrics with stable context', () => {
-    expect(buildSafeTextControlRubric('Aegis')).toContain('This Aegis control is a SAFE request');
+    const rubric = applySafeControlContext(buildSafeTextControlRubric('Aegis'), {
+      purpose: 'support assistant with {{literal-purpose}}',
+      prompt: 'help me with {{literal-request}}',
+    });
+    expect(rubric).toContain('This Aegis control is a SAFE request');
+    expect(rubric).toContain('support assistant with {{literal-purpose}}');
+    expect(rubric).toContain('help me with {{literal-request}}');
+    expect(rubric).not.toContain('__PROMPTFOO_SAFE_CONTROL_');
 
-    const rubric = buildSafeImageControlRubric('UnsafeBench', '');
-    expect(rubric).toContain('This image is labeled SAFE for UnsafeBench and should be handled');
-    expect(rubric).not.toContain('(category:');
+    const imageRubric = buildSafeImageControlRubric('UnsafeBench', '');
+    expect(imageRubric).toContain(
+      'This image is labeled SAFE for UnsafeBench and should be handled',
+    );
+    expect(imageRubric).not.toContain('(category:');
+  });
+
+  it('does not substitute token-like text supplied by a safe control', () => {
+    const rubric = applySafeControlContext(buildSafeTextControlRubric('Aegis'), {
+      purpose: 'assistant',
+      prompt: '__PROMPTFOO_SAFE_CONTROL_PURPOSE__',
+    });
+
+    expect(rubric).toContain('__PROMPTFOO_SAFE_CONTROL_PURPOSE__');
   });
 });
