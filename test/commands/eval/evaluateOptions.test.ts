@@ -311,6 +311,51 @@ describe('evaluateOptions behavior', () => {
       expect(testSuite.tests?.[0].vars).toEqual({ input: 'first' });
     });
 
+    it('should hydrate external default-config scenarios before reusable prefilter hooks run', async () => {
+      const scenarioTestsPath = path.join(tmpDir, 'default-scenario-tests.yaml');
+      fs.writeFileSync(
+        scenarioTestsPath,
+        yaml.dump([{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }]),
+      );
+      const scenariosPath = path.join(tmpDir, 'default-scenarios.yaml');
+      fs.writeFileSync(
+        scenariosPath,
+        yaml.dump([
+          {
+            config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+            tests: `file://${scenarioTestsPath}`,
+          },
+        ]),
+      );
+
+      let observedScenarios: TestSuite['scenarios'];
+      await doEval(
+        {
+          table: false,
+          write: false,
+        },
+        {
+          providers: ['echo'],
+          prompts: ['Hello {{region}} {{role}}'],
+          scenarios: [`file://${scenariosPath}`],
+        },
+        undefined,
+        { eventSource: 'mcp' },
+        {
+          beforeFilterTestSuite: (testSuite) => {
+            observedScenarios = testSuite.scenarios;
+          },
+        },
+      );
+
+      expect(observedScenarios).toEqual([
+        {
+          config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+          tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+        },
+      ]);
+    });
+
     it('should apply evaluate option overrides after config evaluateOptions', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-timeout-override.yaml', {
         evaluateOptions: {
@@ -409,6 +454,41 @@ describe('evaluateOptions behavior', () => {
       );
 
       expect(observedTestCounts).toEqual([1]);
+    });
+
+    it('should expose evaluator-deferred scenario filter ranges to post-filter hooks', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-after-filter-scenarios.yaml', {
+        evaluateOptions: {
+          filterRange: '1:2',
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{region}} {{role}}'],
+        scenarios: [
+          {
+            config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+            tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+          },
+        ],
+      });
+
+      let deferredFilterRange: string | undefined;
+      await doEval(
+        {
+          config: [tempConfig],
+          table: false,
+          write: false,
+        },
+        {},
+        undefined,
+        { eventSource: 'mcp' },
+        {
+          afterFilterTestSuite: (_testSuite, _config, context) => {
+            deferredFilterRange = context.deferredFilterRange;
+          },
+        },
+      );
+
+      expect(deferredFilterRange).toBe('1:2');
     });
 
     it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {
@@ -807,6 +887,91 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should suppress the implicit default test when filters remove explicit tests', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-pattern-filter-empty.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [{ description: 'kept only by matching filters', vars: { input: 'one' } }],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterPattern: 'no match',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+    });
+
+    it.each([
+      ['--filter-pattern', { filterPattern: 'no match' }],
+      ['--filter-metadata', { filterMetadata: 'category=drop' }],
+    ])('should apply %s to the implicit default test', async (_filterName, filterOptions) => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: {
+          metadata: { category: 'keep' },
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          ...filterOptions,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+    });
+
+    it('should filter an implicit default test by inherited metadata', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default-metadata.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: {
+          metadata: { category: 'keep' },
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadata: 'category=keep',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0].metadata).toEqual({ category: 'keep' });
+      expect(testSuite.scenarios).toBeUndefined();
+    });
+
     it('should apply filterRange to the implicit default test', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
         providers: ['echo'],
@@ -832,6 +997,34 @@ describe('evaluateOptions behavior', () => {
       expect(testSuite.tests).toHaveLength(1);
       expect(evalRecord.runtimeOptions?.filterRange).toBe('0:1');
       expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should not synthesize a default test from explicitly empty scenarios', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-empty-scenarios.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [],
+        defaultTest: {
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:1',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
     });
 
     it('should preserve empty filterRange slices for the implicit default test', async () => {

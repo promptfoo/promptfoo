@@ -63,27 +63,36 @@ function createMockTestSuite() {
   };
 }
 
+async function defaultDoEvalImplementation(
+  _cmdObj: unknown,
+  _defaultConfig: unknown,
+  _defaultConfigPath: unknown,
+  _evaluateOptions: unknown,
+  customization: any,
+) {
+  const testSuite = createMockTestSuite();
+  const config = { providers: testSuite.providers };
+  await customization?.beforeFilterTestSuite?.(testSuite, config);
+  await customization?.afterFilterTestSuite?.(testSuite, config, {});
+  return createMockEvalResult();
+}
+
 vi.mock('../../../../src/commands/eval', () => ({
-  doEval: vi
-    .fn()
-    .mockImplementation(
-      async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
-        const testSuite = createMockTestSuite();
-        const config = { providers: testSuite.providers };
-        await customization?.beforeFilterTestSuite?.(testSuite, config);
-        await customization?.afterFilterTestSuite?.(testSuite, config);
-        return createMockEvalResult();
-      },
-    ),
+  doEval: vi.fn().mockImplementation(defaultDoEvalImplementation),
 }));
 
 describe('runEvaluation tool', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { doEval } = await import('../../../../src/commands/eval');
+    vi.mocked(doEval)
+      .mockReset()
+      .mockImplementation(defaultDoEvalImplementation as any);
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
+  afterEach(async () => {
+    const { doEval } = await import('../../../../src/commands/eval');
+    vi.mocked(doEval).mockReset();
   });
 
   describe('shared execution path', () => {
@@ -189,7 +198,7 @@ describe('runEvaluation tool', () => {
           const testSuite = createMockTestSuite();
           const config = { providers: testSuite.providers };
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return {
             ...createMockEvalResult(),
             runtimeOptions: {
@@ -237,7 +246,7 @@ describe('runEvaluation tool', () => {
           const testSuite = createMockTestSuite();
           const config = { providers: testSuite.providers };
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return {
             ...createMockEvalResult(),
             runtimeOptions: {
@@ -289,7 +298,7 @@ describe('runEvaluation tool', () => {
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           observedConfigProviders = config.providers;
           observedExecutableProviders = testSuite.providers;
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
       );
@@ -340,7 +349,7 @@ describe('runEvaluation tool', () => {
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           observedConfigProviders = config.providers;
           observedExecutableProviders = testSuite.providers;
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
       );
@@ -418,7 +427,7 @@ describe('runEvaluation tool', () => {
           const config = { providers: testSuite.providers };
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           testSuite.tests = testSuite.tests.slice(1, 2);
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
       );
@@ -463,7 +472,7 @@ describe('runEvaluation tool', () => {
 
           const config = { providers: testSuite.providers };
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
       );
@@ -491,6 +500,53 @@ describe('runEvaluation tool', () => {
       });
     });
 
+    it('should apply deferred scenario filter ranges to the final suite summary', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+              },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {
+            deferredFilterRange: '1:2',
+          });
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 1,
+        filters: {},
+      });
+    });
+
     it('should count scenarios with explicit empty test arrays as zero generated test cases', async () => {
       const { doEval } = await import('../../../../src/commands/eval');
       vi.mocked(doEval).mockImplementationOnce(
@@ -508,7 +564,7 @@ describe('runEvaluation tool', () => {
 
           const config = { providers: testSuite.providers };
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
       );
@@ -547,7 +603,7 @@ describe('runEvaluation tool', () => {
 
           const config = { providers: testSuite.providers };
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
       );

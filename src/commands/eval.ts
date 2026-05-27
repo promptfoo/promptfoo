@@ -79,9 +79,14 @@ export type TestSuiteTransform = (
   testSuite: TestSuite,
   config: Partial<UnifiedConfig>,
 ) => void | Promise<void>;
+export type PostFilterTestSuiteTransform = (
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  context: { deferredFilterRange?: string },
+) => void | Promise<void>;
 export interface EvalRunCustomization {
   beforeFilterTestSuite?: TestSuiteTransform;
-  afterFilterTestSuite?: TestSuiteTransform;
+  afterFilterTestSuite?: PostFilterTestSuiteTransform;
   evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
   allowConfigFilterRange?: boolean;
   disablePromptSuggestions?: boolean;
@@ -440,7 +445,21 @@ export async function doEval(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    const hydrateExternalScenarios = async (suite: TestSuite) => {
+      if (suite.scenarios) {
+        suite.scenarios = (await maybeLoadFromExternalFile(suite.scenarios)) as Scenario[];
+        suite.scenarios = suite.scenarios.flat();
+      }
+      for (const scenario of suite.scenarios || []) {
+        if (scenario.tests) {
+          scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+        }
+      }
+    };
+
     if (!resumeEval && customization.beforeFilterTestSuite) {
+      // Hooks that filter or summarize the executable suite need hydrated scenarios too.
+      await hydrateExternalScenarios(testSuite);
       await customization.beforeFilterTestSuite(testSuite, config);
     }
 
@@ -548,6 +567,7 @@ export async function doEval(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
@@ -568,13 +588,24 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? configuredFilterRange);
-    const shouldApplyRangeToImplicitDefaultTest =
-      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+    const hasActiveTestFilter =
+      filterRange !== undefined ||
+      cmdObj.filterFailing !== undefined ||
+      cmdObj.filterFailingOnly !== undefined ||
+      cmdObj.filterErrorsOnly !== undefined ||
+      cmdObj.filterFirstN !== undefined ||
+      cmdObj.filterMetadata !== undefined ||
+      cmdObj.filterPattern !== undefined ||
+      cmdObj.filterSample !== undefined;
+    const shouldApplyFiltersToImplicitDefaultTest =
+      hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
-      if (shouldApplyRangeToImplicitDefaultTest) {
-        testSuite.tests = [{}];
+      if (shouldApplyFiltersToImplicitDefaultTest) {
+        const defaultMetadata =
+          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
+        testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
@@ -587,12 +618,10 @@ export async function doEval(
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
-      if (
-        filterRange !== undefined &&
-        !hasScenarios &&
-        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
-        testSuite.tests.length === 0
-      ) {
+      const shouldSuppressImplicitDefaultTest =
+        testSuite.tests.length === 0 &&
+        ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
+      if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
       }
     }
@@ -622,16 +651,16 @@ export async function doEval(
     }
 
     // Check for missing API keys after provider filtering
-    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
 
     if (missingApiKeys.size > 0) {
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
-        .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
+        .map(([envVar, providerDescriptions]) => `${envVar} (${providerDescriptions.join(', ')})`)
         .join('; ')}`;
       return failEvalRun(missingKeysMessage, isCliInvocation, {
         logForCli: () => {
-          for (const [envVar, providerIds] of missingApiKeys) {
-            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+          for (const [envVar, providerDescriptions] of missingApiKeys) {
+            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerDescriptions.join(', ')})`));
           }
           logger.error('');
           logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
@@ -701,20 +730,13 @@ export async function doEval(
     } else if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-    }
+    // Load scenarios added by a transform, or load them for ordinary eval runs.
+    await hydrateExternalScenarios(testSuite);
 
     if (!resumeEval && customization.afterFilterTestSuite) {
-      await customization.afterFilterTestSuite(testSuite, config);
+      await customization.afterFilterTestSuite(testSuite, config, {
+        deferredFilterRange: hasScenarios ? filterRange : undefined,
+      });
     }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);

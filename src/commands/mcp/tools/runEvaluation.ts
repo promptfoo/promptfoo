@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../../logger';
 import { loadDefaultConfig } from '../../../util/config/default';
+import { parseFilterRange } from '../../../util/filterRange';
 import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
 import { filterPrompts } from '../../eval/filterPrompts';
@@ -166,6 +167,17 @@ function countRunnableTestCases(testSuite: TestSuite): number {
   return explicitTestCount + scenarioTestCount;
 }
 
+function applyDeferredFilterRange(testCaseCount: number, filterRange?: string): number {
+  if (filterRange === undefined) {
+    return testCaseCount;
+  }
+
+  const { start, end } = parseFilterRange(filterRange);
+  const boundedStart = Math.min(start, testCaseCount);
+  const boundedEnd = Math.min(end ?? testCaseCount, testCaseCount);
+  return Math.max(0, boundedEnd - boundedStart);
+}
+
 function summarizeFilteredSuite(
   testSuite: TestSuite,
   totals: {
@@ -173,11 +185,12 @@ function summarizeFilteredSuite(
     prompts: number;
     providers: number;
   },
+  deferredFilterRange?: string,
 ): EvaluationFilterSummary {
   return {
     testCases: {
       total: totals.testCases,
-      filtered: countRunnableTestCases(testSuite),
+      filtered: applyDeferredFilterRange(countRunnableTestCases(testSuite), deferredFilterRange),
     },
     prompts: {
       total: totals.prompts,
@@ -482,15 +495,19 @@ export function registerRunEvaluationTool(server: McpServer) {
               );
             }
           },
-          afterFilterTestSuite: (testSuite) => {
+          afterFilterTestSuite: (testSuite, _config, { deferredFilterRange }) => {
             if (!suiteSummary) {
-              throw new Error('Failed to summarize evaluation suite before finalization');
+              return;
             }
-            suiteSummary = summarizeFilteredSuite(testSuite, {
-              testCases: suiteSummary.testCases.total,
-              prompts: suiteSummary.prompts.total,
-              providers: suiteSummary.providers.total,
-            });
+            suiteSummary = summarizeFilteredSuite(
+              testSuite,
+              {
+                testCases: suiteSummary.testCases.total,
+                prompts: suiteSummary.prompts.total,
+                providers: suiteSummary.providers.total,
+              },
+              deferredFilterRange,
+            );
           },
           evaluateOptionOverrides,
           allowConfigFilterRange: testCaseIndices === undefined,
@@ -499,7 +516,12 @@ export function registerRunEvaluationTool(server: McpServer) {
         });
         const endTime = Date.now();
         if (!suiteSummary) {
-          throw new Error('Failed to summarize evaluation suite');
+          return createToolResponse(
+            'run_evaluation',
+            false,
+            undefined,
+            'Failed to summarize evaluation suite',
+          );
         }
 
         const summary = await evalResult.toEvaluateSummary();

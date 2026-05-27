@@ -143,7 +143,9 @@ describe('evalCommand', () => {
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.isEnabled).mockReset().mockReturnValue(false);
     vi.mocked(getEvalConfigFromCloud).mockReset();
+    vi.mocked(checkCloudPermissions).mockReset().mockResolvedValue(undefined);
     vi.mocked(generateTable).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
@@ -156,6 +158,13 @@ describe('evalCommand', () => {
     vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
+  });
+
+  afterEach(() => {
+    vi.mocked(resolveConfigs).mockReset();
+    vi.mocked(evaluate).mockReset();
+    vi.mocked(checkCloudPermissions).mockReset();
+    vi.mocked(cloudConfig.isEnabled).mockReset();
   });
 
   it('should create eval command with correct options', () => {
@@ -772,6 +781,9 @@ describe('evalCommand', () => {
 
       expect(result.persisted).toBe(false);
       expect(process.exitCode).toBe(1);
+      expect(checkProviderApiKeys).toHaveBeenCalledWith(expect.any(Array), {
+        useDescriptions: true,
+      });
       // Ensures the per-key list, the empty-line spacers, and the --env-file
       // hint all reach the user. A regression that strips any of these would
       // have been silent before this test.
