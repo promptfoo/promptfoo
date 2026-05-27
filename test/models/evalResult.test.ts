@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -108,11 +109,13 @@ describe('EvalResult', () => {
     });
 
     it('should omit provider configs that throw during sanitization', () => {
+      const errorSecret = 'sk-provider-error-should-never-log';
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
       const config = { apiKey: 'sk-should-never-persist' } as Record<string, unknown>;
       Object.defineProperty(config, 'client', {
         enumerable: true,
         get() {
-          throw new Error('SDK client unavailable');
+          throw new Error(`SDK client unavailable: ${errorSecret}`);
         },
       });
 
@@ -123,6 +126,8 @@ describe('EvalResult', () => {
 
       expect(result.config).toEqual({});
       expect(JSON.stringify(result)).not.toContain('sk-should-never-persist');
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
+      debugSpy.mockRestore();
     });
 
     it('should handle generic objects with id function', () => {
@@ -738,6 +743,8 @@ describe('EvalResult', () => {
       });
 
       it('omits an unsafely inspectable provider-bearing field instead of persisting secrets', async () => {
+        const errorSecret = 'sk-field-error-should-never-log';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
         const providerConfig = { apiKey: 'sk-ant-api03-THROWING-GETTER' } as Record<
           string,
           unknown
@@ -745,7 +752,7 @@ describe('EvalResult', () => {
         Object.defineProperty(providerConfig, 'client', {
           enumerable: true,
           get() {
-            throw new Error('SDK getter failed');
+            throw new Error(`SDK getter failed: ${errorSecret}`);
           },
         });
 
@@ -765,6 +772,8 @@ describe('EvalResult', () => {
 
         expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
         expect(result.testCase).toEqual({});
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
+        debugSpy.mockRestore();
       });
     });
 

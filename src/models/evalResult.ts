@@ -37,10 +37,8 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
       maxDepth: Number.POSITIVE_INFINITY,
       throwOnError: true,
     }) as ProviderConfig;
-  } catch (error) {
-    logger.debug('Unable to sanitize provider config safely; omitting config fields', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  } catch {
+    logger.debug('Unable to sanitize provider config safely; omitting config fields');
     return {};
   }
 }
@@ -194,10 +192,8 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
       maxDepth: Number.POSITIVE_INFINITY,
       throwOnError: true,
     }) as T;
-  } catch (error) {
-    logger.debug('Unable to sanitize eval result field safely; omitting field contents', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  } catch {
+    logger.debug('Unable to sanitize eval result field safely; omitting field contents');
     return (Array.isArray(obj) ? [] : typeof obj === 'object' ? {} : null) as T;
   }
 }
