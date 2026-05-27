@@ -103,7 +103,7 @@ Supported parameters include:
 | `functions`              | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                            |
 | `functionToolCallbacks`  | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                                         |
 | `headers`                | Additional headers to include in the request.                                                                                                                                                                                                                                                                |
-| `cost`                   | Legacy per-token override applied to both input and output pricing in promptfoo cost estimates.                                                                                                                                                                                                              |
+| `cost`                   | Per-token pricing override. Set a number for both text directions, or an object with separate `input`/`output` and optional `audioInput`/`audioOutput` rates.                                                                                                                                                |
 | `inputCost`              | Override input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                    |
 | `outputCost`             | Override output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                   |
 | `audioCost`              | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                                  |
@@ -130,9 +130,10 @@ Supported parameters include:
 | `user`                   | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                           |
 | `max_completion_tokens`  | Maximum number of tokens for reasoning-capable Chat Completions models (o-series and GPT-5 family). For Responses API, use `max_output_tokens` instead.                                                                                                                                                      |
 
-Use `inputCost` and `outputCost` when a model has different prompt and completion rates.
-The legacy `cost` option remains a shared fallback. For audio-capable models,
-`audioInputCost` and `audioOutputCost` take precedence over `audioCost`.
+Use `inputCost` and `outputCost` when a model has different prompt and completion rates,
+or set `cost: { input, output }` as a single structured override. For audio-capable
+models, the structured object may also set `audioInput` and `audioOutput`;
+`audioInputCost` and `audioOutputCost` take precedence over `audioCost` and object rates.
 
 Here are the type declarations of `config` parameters:
 
@@ -176,7 +177,14 @@ interface OpenAiConfig {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
-  cost?: number;
+  cost?:
+    | number
+    | {
+        input: number;
+        output: number;
+        audioInput?: number;
+        audioOutput?: number;
+      };
   inputCost?: number;
   outputCost?: number;
   audioCost?: number;

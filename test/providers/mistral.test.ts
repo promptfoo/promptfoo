@@ -129,6 +129,26 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(0.0003, 6);
     });
 
+    it('should accept separate input and output rates in a cost override', async () => {
+      const customCostProvider = new MistralChatCompletionProvider('mistral-tiny', {
+        config: { cost: { input: 0.01, output: 0.02 } },
+      });
+      vi.spyOn(customCostProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await customCostProvider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(0.15);
+    });
+
     it('should call Mistral API and return output with correct structure', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Test output' } }],

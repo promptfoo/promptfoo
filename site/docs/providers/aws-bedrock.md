@@ -1126,7 +1126,7 @@ Promptfoo automatically tracks token usage and calculates costs for AWS Bedrock 
 
 For the InvokeModel provider (`bedrock:<model-id>`), Promptfoo automatically fetches current pricing from the AWS Pricing API and caches it. This ensures accurate costs for your region and automatically reflects AWS price changes.
 
-The Converse provider (`bedrock:converse:<model-id>`) currently uses Promptfoo's built-in Converse pricing table plus any explicit `cost`, `inputCost`, or `outputCost` overrides. Configure an override when you need deterministic Converse costs for a model or region that is not represented in the built-in table.
+The Converse provider (`bedrock:converse:<model-id>`) currently uses Promptfoo's built-in Converse pricing table plus any explicit `cost`, `inputCost`, or `outputCost` overrides. For a model not represented in the built-in table, configure a complete `cost` object or provide both `inputCost` and `outputCost`; a one-sided override cannot price the unknown token direction.
 
 **How it works:**
 

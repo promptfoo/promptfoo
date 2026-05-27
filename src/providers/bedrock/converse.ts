@@ -240,9 +240,14 @@ function calculateBedrockConverseCost(
     }
   }
 
-  const hasExplicitCostOverride =
-    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
-  if (hasExplicitCostOverride) {
+  const hasCompleteExplicitCostOverride =
+    typeof config.cost === 'number' ||
+    (typeof config.cost === 'object' &&
+      config.cost !== null &&
+      config.cost.input !== undefined &&
+      config.cost.output !== undefined) ||
+    (config.inputCost !== undefined && config.outputCost !== undefined);
+  if (hasCompleteExplicitCostOverride) {
     const { inputCost, outputCost } = getTokenCostRates(config, { input: 0, output: 0 });
     return inputCost * promptTokens + outputCost * completionTokens;
   }

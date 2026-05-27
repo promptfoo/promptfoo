@@ -5,7 +5,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
-import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { calculateCost, getRequestTimeoutMs, type ModelCost, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -244,7 +244,7 @@ interface MistralChatCompletionOptions {
   prediction?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
   guardrails?: Array<Record<string, unknown>> | null;
-  cost?: number;
+  cost?: number | ModelCost;
   inputCost?: number;
   outputCost?: number;
 }

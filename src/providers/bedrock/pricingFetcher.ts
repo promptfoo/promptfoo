@@ -112,10 +112,10 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'meta.llama4-maverick-17b-instruct-v1': 'Llama 4 Maverick 17B',
 
     // Mistral models (mapping keys without revision suffixes since we strip them above)
-    'mistral.mistral-7b-instruct-v0': 'Mistral 7B Instruct',
+    'mistral.mistral-7b-instruct-v0': 'Mistral 7B',
     'mistral.mixtral-8x7b-instruct-v0': 'Mixtral 8x7B Instruct',
     'mistral.mistral-large-2402-v1': 'Mistral Large',
-    'mistral.mistral-large-2407-v1': 'Mistral Large 2407',
+    'mistral.mistral-large-2407-v1': 'Mistral Large',
     'mistral.mistral-small-2402-v1': 'Mistral Small',
     'mistral.devstral-2-123b': 'Devstral',
     'mistral.magistral-small-2509': 'Magistral',
@@ -389,7 +389,12 @@ function getFoundationModelName(serviceName: string): string | undefined {
 }
 
 function isStandardTextTokenDescriptor(value: string): boolean {
-  return value.includes('token') && !/(cache|batch|flex|priority)/.test(value);
+  return (
+    value.includes('token') &&
+    !/(cache|batch|flex|priority|global|geo|reserved|latency[-_ ]?optimized|custom(?:ization|[-_ ]?model)|cross[-_ ]?region)/.test(
+      value,
+    )
+  );
 }
 
 function getStandardTextTokenRateType(

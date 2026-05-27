@@ -128,10 +128,9 @@ describe('pricingFetcher', () => {
       expect(mapBedrockModelIdToApiName('unknown.model-v1:0')).toBe('unknown.model-v1');
     });
 
-    it('should map Mistral models correctly', () => {
-      expect(mapBedrockModelIdToApiName('mistral.mistral-large-2407-v1:0')).toBe(
-        'Mistral Large 2407',
-      );
+    it('should map legacy Mistral model IDs to current AWS pricing catalog names', () => {
+      expect(mapBedrockModelIdToApiName('mistral.mistral-7b-instruct-v0:0')).toBe('Mistral 7B');
+      expect(mapBedrockModelIdToApiName('mistral.mistral-large-2407-v1:0')).toBe('Mistral Large');
     });
 
     it('should map current Mistral models to AWS pricing catalog names', () => {
@@ -564,6 +563,27 @@ describe('pricingFetcher', () => {
             product: {
               attributes: {
                 model: 'Nova Micro',
+                usagetype: 'USE1-NovaMicro-input-tokens-custom-model',
+                inferenceType: 'Input tokens',
+                feature: 'Model Customization',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.35' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
                 inferenceType: 'Cache read input tokens',
                 feature: 'On-demand Inference',
               },
@@ -727,7 +747,7 @@ describe('pricingFetcher', () => {
             product: {
               attributes: {
                 servicename: 'Claude Sonnet 4.6 (Amazon Bedrock Edition)',
-                usagetype: 'USE1-MP:USE1_OutputTokenCount-Units',
+                usagetype: 'USE1-MP:USE1_Usage-Units',
               },
             },
             terms: {
@@ -735,6 +755,7 @@ describe('pricingFetcher', () => {
                 term1: {
                   priceDimensions: {
                     dim1: {
+                      description: 'Million Response Tokens',
                       pricePerUnit: { USD: '15.0000000000' },
                     },
                   },
@@ -761,7 +782,7 @@ describe('pricingFetcher', () => {
       );
     });
 
-    it('should parse response-token output rows from the foundation-model pricing service', async () => {
+    it('should not replace standard foundation-model pricing with a global response-token row', async () => {
       const testRegion = 'us-east-1';
       mockIsCacheEnabled.mockReturnValue(false);
 
@@ -790,6 +811,25 @@ describe('pricingFetcher', () => {
             product: {
               attributes: {
                 servicename: 'Claude Sonnet 4.6 (Amazon Bedrock Edition)',
+                usagetype: 'USE1-MP:USE1_OutputTokenCount-Units',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '15.0000000000' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                servicename: 'Claude Sonnet 4.6 (Amazon Bedrock Edition)',
                 usagetype: 'USE1-MP:USE1_Usage-Units',
               },
             },
@@ -799,7 +839,7 @@ describe('pricingFetcher', () => {
                   priceDimensions: {
                     dim1: {
                       description: 'Million Response Tokens Global',
-                      pricePerUnit: { USD: '15.0000000000' },
+                      pricePerUnit: { USD: '150.0000000000' },
                     },
                   },
                 },

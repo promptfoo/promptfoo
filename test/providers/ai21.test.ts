@@ -221,6 +221,26 @@ describe('AI21ChatCompletionProvider', () => {
     expect(result.cost).toBeDefined();
   });
 
+  it('should accept separate input and output rates in a cost override', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key', cost: { input: 0.01, output: 0.02 } },
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cost).toBeCloseTo(0.15);
+  });
+
   it('should preserve an explicit max_tokens value of 0', async () => {
     const mockResponse = {
       data: {

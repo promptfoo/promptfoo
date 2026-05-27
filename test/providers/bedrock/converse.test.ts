@@ -1967,6 +1967,38 @@ Third line`;
 
       expect(result.cost).toBeUndefined();
     });
+
+    it('should not treat a missing directional price as free for unknown models', async () => {
+      const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
+        config: { inputCost: 0.01, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should calculate cost for unknown models with both directional overrides', async () => {
+      const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
+        config: { inputCost: 0.01, outputCost: 0.02, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBe(20);
+    });
   });
 
   describe('caching', () => {
