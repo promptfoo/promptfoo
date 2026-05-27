@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { type CloudConfigResponse, CloudConfigResponseSchema } from '@promptfoo/types/api/user';
 import { callApi } from '../utils/api';
-import type { CloudConfigResponse } from '@promptfoo/types/api/user';
 
 export type CloudConfigData = CloudConfigResponse;
 
@@ -28,7 +28,11 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
-      const responseData: CloudConfigResponse = await response.json();
+      const responseResult = CloudConfigResponseSchema.safeParse(await response.json());
+      if (!responseResult.success) {
+        throw new Error('Invalid cloud config response');
+      }
+      const responseData = responseResult.data;
       setState({
         data: {
           appUrl: responseData.appUrl,

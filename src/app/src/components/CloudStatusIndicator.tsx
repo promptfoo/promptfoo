@@ -75,30 +75,45 @@ export default function CloudStatusIndicator() {
   const serviceName = getServiceName(isEnterprise);
   const teamName = isEnterprise ? 'organization' : 'team';
   const hasInvalidAppUrl = isConfigured && !appUrl;
-  const canOpenDashboard = isConfigured && Boolean(appUrl) && !error;
+  const status = (() => {
+    if (isLoading) {
+      return 'loading';
+    }
+    if (error) {
+      return 'error';
+    }
+    if (hasInvalidAppUrl) {
+      return 'invalid-url';
+    }
+    if (isConfigured) {
+      return 'configured';
+    }
+    return 'unconfigured';
+  })();
+  const canOpenDashboard = status === 'configured' && Boolean(appUrl);
   const connectDestination = getConnectDestination(isEnterprise, appUrl);
 
   const statusLabel = (() => {
-    if (isLoading) {
+    if (status === 'loading') {
       return 'Checking cloud configuration';
     }
-    if (error) {
+    if (status === 'error') {
       return 'Unable to check cloud configuration';
     }
-    if (hasInvalidAppUrl) {
+    if (status === 'invalid-url') {
       return `${serviceName} configuration has an invalid application URL.`;
     }
-    if (isConfigured) {
+    if (status === 'configured') {
       return `Configured for ${serviceName}. Open dashboard.`;
     }
     return `${serviceName} is not configured. Learn more.`;
   })();
 
   const StatusIcon = (() => {
-    if (isLoading) {
+    if (status === 'loading') {
       return Loader2;
     }
-    if (error || hasInvalidAppUrl || !isConfigured) {
+    if (status !== 'configured') {
       return CloudOff;
     }
     return Cloud;
@@ -145,12 +160,13 @@ export default function CloudStatusIndicator() {
             className={cn(
               'size-11 text-foreground/60 focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-9 [&_svg]:size-5',
               canOpenDashboard && 'text-emerald-600 hover:text-emerald-700',
-              (error || hasInvalidAppUrl) && 'text-destructive hover:text-destructive',
+              (status === 'error' || status === 'invalid-url') &&
+                'text-destructive hover:text-destructive',
             )}
             aria-label={statusLabel}
           >
             <StatusIcon
-              className={cn('size-5', isLoading && 'animate-spin')}
+              className={cn('size-5', status === 'loading' && 'animate-spin')}
               data-testid={canOpenDashboard ? 'CloudIcon' : 'CloudOffIcon'}
             />
           </Button>

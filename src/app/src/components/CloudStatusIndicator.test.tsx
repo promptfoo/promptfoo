@@ -468,11 +468,11 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
-  it('disables refresh status button while loading', async () => {
+  it('does not open a cached dashboard while refreshing and disables refresh', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
-        isEnabled: false,
+        isEnabled: true,
         appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
@@ -485,6 +485,7 @@ describe('CloudStatusIndicator', () => {
 
     await user.click(screen.getByRole('button', { name: /checking cloud configuration/i }));
 
+    expect(mockWindowOpen).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Checking...' })).toBeDisabled();
   });
 });

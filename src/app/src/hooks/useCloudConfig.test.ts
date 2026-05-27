@@ -111,6 +111,23 @@ describe('useCloudConfig', () => {
     expect(result.current.data?.isEnterprise).toBe(false);
   });
 
+  it('should reject unsafe cloud URLs returned by an alternate API server', async () => {
+    mockCallApiResponse({
+      isEnabled: true,
+      appUrl: 'javascript:alert(document.domain)',
+      isEnterprise: false,
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBe('Invalid cloud config response');
+  });
+
   it('should set error and isLoading=false when API returns ok=false', async () => {
     mockCallApiResponse({}, { ok: false });
 
