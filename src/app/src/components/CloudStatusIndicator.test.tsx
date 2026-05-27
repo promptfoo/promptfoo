@@ -51,9 +51,10 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    expect(
-      screen.getByRole('button', { name: /checking cloud configuration/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /checking cloud configuration/i })).toHaveClass(
+      'size-11',
+      'sm:size-9',
+    );
   });
 
   it('shows configured cloud state', () => {
@@ -154,8 +155,59 @@ describe('CloudStatusIndicator', () => {
     );
 
     expect(mockWindowOpen).not.toHaveBeenCalled();
-    expect(screen.getByText(/unable to check cloud configuration/i)).toBeInTheDocument();
+    expect(screen.getByText(/configured cloud application url is invalid/i)).toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
+  });
+
+  it('does not open unsafe URLs returned by an older or alternate API server', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: 'javascript:alert(document.domain)',
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderCloudStatusIndicator();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: /promptfoo cloud configuration has an invalid application url/i,
+      }),
+    );
+
+    expect(mockWindowOpen).not.toHaveBeenCalled();
+    expect(screen.getByText(/configured cloud application url is invalid/i)).toBeInTheDocument();
+  });
+
+  it('does not expose credentialed enterprise URLs in the connection dialog', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: 'https://user:password@enterprise.company.com',
+        isEnterprise: true,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderCloudStatusIndicator();
+
+    await user.click(
+      screen.getByRole('button', { name: /promptfoo enterprise is not configured/i }),
+    );
+
+    expect(screen.queryByRole('link', { name: 'enterprise.company.com' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'promptfoo.app' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.app/welcome',
+    );
   });
 
   it('opens cloud dashboard securely when configured and tracks telemetry', async () => {
@@ -229,6 +281,12 @@ describe('CloudStatusIndicator', () => {
     await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
 
     expect(screen.getByText('Configure Promptfoo Cloud')).toBeInTheDocument();
+    expect(
+      screen.getByText('Configure Promptfoo Cloud to unlock team workflows.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+      'Configure Promptfoo Cloud to unlock team workflows.',
+    );
     expect(screen.getByText(/share evaluation results with your team/i)).toBeInTheDocument();
     expect(screen.getByText(/open centralized dashboards and reports/i)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {

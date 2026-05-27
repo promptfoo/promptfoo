@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { callApi } from '../utils/api';
+import type { CloudConfigResponse } from '@promptfoo/types/api/user';
 
-export type CloudConfigData = {
-  appUrl: string | null;
-  /** Whether Promptfoo Cloud credentials are configured locally. */
-  isEnabled: boolean;
-  /** Whether this is an enterprise/self-hosted deployment. */
-  isEnterprise?: boolean;
-};
+export type CloudConfigData = CloudConfigResponse;
 
 export interface CloudConfigState {
   data: CloudConfigData | null;
@@ -33,7 +28,7 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
-      const responseData = await response.json();
+      const responseData: CloudConfigResponse = await response.json();
       setState({
         data: {
           appUrl: responseData.appUrl,

@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,16 +30,32 @@ function getServiceName(isEnterprise: boolean) {
   return isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
 }
 
-function getConnectDestination(isEnterprise: boolean, appUrl: string | null) {
-  if (isEnterprise && appUrl) {
-    try {
-      return {
-        href: appUrl,
-        label: new URL(appUrl).hostname,
-      };
-    } catch {
-      // Fall back to the public signup page when older API responses contain an invalid URL.
+function getBrowserSafeAppUrl(appUrl: string | null) {
+  if (!appUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(appUrl);
+    if (
+      !['http:', 'https:'].includes(parsedUrl.protocol) ||
+      parsedUrl.username ||
+      parsedUrl.password
+    ) {
+      return null;
     }
+    return appUrl;
+  } catch {
+    return null;
+  }
+}
+
+function getConnectDestination(isEnterprise: boolean, safeAppUrl: string | null) {
+  if (isEnterprise && safeAppUrl) {
+    return {
+      href: safeAppUrl,
+      label: new URL(safeAppUrl).hostname,
+    };
   }
 
   return {
@@ -53,7 +70,7 @@ export default function CloudStatusIndicator() {
   const { recordEvent } = useTelemetry();
 
   const isConfigured = data?.isEnabled ?? false;
-  const appUrl = data?.appUrl ?? null;
+  const appUrl = getBrowserSafeAppUrl(data?.appUrl ?? null);
   const isEnterprise = data?.isEnterprise ?? false;
   const serviceName = getServiceName(isEnterprise);
   const teamName = isEnterprise ? 'organization' : 'team';
@@ -126,7 +143,7 @@ export default function CloudStatusIndicator() {
             size="icon"
             onClick={handleIconClick}
             className={cn(
-              'text-foreground/60 focus-visible:ring-2 focus-visible:ring-offset-2 [&_svg]:size-5',
+              'size-11 text-foreground/60 focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-9 [&_svg]:size-5',
               canOpenDashboard && 'text-emerald-600 hover:text-emerald-700',
               (error || hasInvalidAppUrl) && 'text-destructive hover:text-destructive',
             )}
@@ -142,19 +159,18 @@ export default function CloudStatusIndicator() {
       </Tooltip>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CloudCog className="size-5 text-primary" />
               Configure {serviceName}
             </DialogTitle>
+            <DialogDescription>
+              Configure {serviceName} to unlock {isEnterprise ? 'enterprise' : 'team'} workflows.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Configure {serviceName} to unlock {isEnterprise ? 'enterprise' : 'team'} workflows.
-            </p>
-
             <div className="space-y-3 rounded-md border border-border p-3">
               <div className="flex items-center gap-2 text-sm">
                 <Share2 className="size-4 text-primary" />
@@ -191,7 +207,9 @@ export default function CloudStatusIndicator() {
                 <AlertCircle className="size-4" />
                 <AlertContent>
                   <AlertDescription>
-                    Unable to check cloud configuration. Please check your connection and try again.
+                    {hasInvalidAppUrl
+                      ? 'The configured Cloud application URL is invalid. Re-authenticate or update your Cloud configuration before opening the dashboard.'
+                      : 'Unable to check cloud configuration. Please check your connection and try again.'}
                   </AlertDescription>
                 </AlertContent>
               </Alert>
