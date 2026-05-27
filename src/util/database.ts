@@ -208,6 +208,7 @@ export async function updateResult(
     }
 
     await existingEval.save();
+    clearStandaloneEvalCache();
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {

@@ -81,7 +81,7 @@ describe('getStandaloneEvals', () => {
     expect(byId.get(regularEval.id)).toBe(true);
   });
 
-  it('reflects flag transitions after updateResult rewrites config', async () => {
+  it('reflects flag transitions after updateResult rewrites config without stale cached history', async () => {
     const eval_ = await createEvalWithPrompts({});
     expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
       false,
@@ -89,8 +89,6 @@ describe('getStandaloneEvals', () => {
 
     await updateResult(eval_.id, { redteam: {} as any });
 
-    // updateResult does not invalidate the LRU cache; tests clear it to observe the new value.
-    clearStandaloneEvalCache();
     expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
       true,
     );
