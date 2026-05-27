@@ -6,6 +6,7 @@ import {
   handleTrajectoryToolUsed,
 } from '../../src/assertions/trajectory';
 import {
+  createTraceTrajectory,
   extractTrajectorySteps,
   summarizeTrajectoryForJudge,
 } from '../../src/assertions/trajectoryUtils';
@@ -90,6 +91,7 @@ const mockTraceData: TraceData = {
     },
   ],
 };
+const mockTrajectory = createTraceTrajectory(mockTraceData);
 
 const defaultParams = {
   assertionValueContext: {
@@ -100,6 +102,7 @@ const defaultParams = {
     provider: mockProvider,
     providerResponse: { output: 'test output' },
     trace: mockTraceData,
+    trajectory: mockTrajectory,
   },
   output: 'test output',
   outputString: 'test output',
@@ -129,6 +132,34 @@ describe('trajectory utilities', () => {
       tone: 'friendly',
       citations: ['doc_1', 'doc_2'],
     });
+  });
+
+  it('uses spanId as a final tie-breaker for otherwise equal spans', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'span-b',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'lookup_order',
+          },
+        },
+        {
+          spanId: 'span-a',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'lookup_order',
+          },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => step.spanId)).toEqual(['span-a', 'span-b']);
   });
 
   it('only treats a generic query attribute as search when the span looks search-like', () => {
@@ -428,7 +459,7 @@ describe('trajectory utilities', () => {
       ],
     } satisfies TraceData;
 
-    const summary = JSON.parse(summarizeTrajectoryForJudge(trace)) as {
+    const summary = JSON.parse(summarizeTrajectoryForJudge(createTraceTrajectory(trace))) as {
       compactedStepCount: number;
       stepCount: number;
       steps: Array<
@@ -470,6 +501,7 @@ describe('trajectory assertions', () => {
         assertionValueContext: {
           ...defaultParams.assertionValueContext,
           trace: undefined,
+          trajectory: undefined,
         },
         baseType: 'trajectory:tool-used',
         assertion: {
@@ -784,6 +816,25 @@ describe('trajectory assertions', () => {
               },
             ],
           },
+          trajectory: createTraceTrajectory({
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'tool-1',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: { 'tool.name': 'search_orders' },
+              },
+              {
+                spanId: 'tool-2',
+                name: 'tool.call',
+                startTime: 1200,
+                endTime: 1300,
+                attributes: { 'tool.name': 'compose_reply' },
+              },
+            ],
+          }),
         },
         baseType: 'trajectory:tool-sequence',
         assertion: {
@@ -1042,7 +1093,11 @@ describe('trajectory assertions', () => {
       };
       const params: AssertionParams = {
         ...defaultParams,
-        assertionValueContext: { ...defaultParams.assertionValueContext, trace: vercelTrace },
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: vercelTrace,
+          trajectory: createTraceTrajectory(vercelTrace),
+        },
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
@@ -1143,6 +1198,20 @@ describe('trajectory assertions', () => {
               },
             ],
           },
+          trajectory: createTraceTrajectory({
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'tool-without-args',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: {
+                  'tool.name': 'search_orders',
+                },
+              },
+            ],
+          }),
         },
         baseType: 'trajectory:tool-args-match',
         assertion: {
