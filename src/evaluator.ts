@@ -64,13 +64,16 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { type ApiProvider, isApiProvider, type ProviderTypeMap } from './types/providers';
+import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
-import { buildConfiguredProviderMap, GRADING_PROVIDER_TYPE_KEYS } from './util/gradingProvider';
+import {
+  buildConfiguredProviderMap,
+  resolveConfiguredProviderReference,
+} from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
@@ -1989,40 +1992,6 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
     promptIndexMap.set(`${prompts[i].provider}:${prompts[i].id}`, i);
   }
   return promptIndexMap;
-}
-
-function resolveConfiguredProviderReference<T>(
-  provider: T,
-  providerMap: Record<string, ApiProvider>,
-): T | ApiProvider {
-  if (typeof provider === 'string') {
-    return Object.hasOwn(providerMap, provider) ? providerMap[provider] : provider;
-  }
-  if (
-    !provider ||
-    typeof provider !== 'object' ||
-    Array.isArray(provider) ||
-    isApiProvider(provider) ||
-    Object.hasOwn(provider, 'id')
-  ) {
-    return provider;
-  }
-
-  let resolvedTypeMap: ProviderTypeMap | undefined;
-  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
-    const nestedProvider = (provider as ProviderTypeMap)[providerType];
-    if (!nestedProvider) {
-      continue;
-    }
-
-    const resolvedProvider = resolveConfiguredProviderReference(nestedProvider, providerMap);
-    if (resolvedProvider !== nestedProvider) {
-      resolvedTypeMap ??= { ...(provider as ProviderTypeMap) };
-      resolvedTypeMap[providerType] = resolvedProvider;
-    }
-  }
-
-  return (resolvedTypeMap ?? provider) as T | ApiProvider;
 }
 
 function resolveAssertionProviderReferences(

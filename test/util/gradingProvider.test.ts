@@ -3,6 +3,7 @@ import {
   buildConfiguredProviderMap,
   GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
+  resolveConfiguredProviderReference,
 } from '../../src/util/gradingProvider';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -102,5 +103,22 @@ describe('buildConfiguredProviderMap', () => {
     const map = buildConfiguredProviderMap([]);
     expect(Object.getPrototypeOf(map)).toBeNull();
     expect(Object.keys(map)).toEqual([]);
+  });
+});
+
+describe('resolveConfiguredProviderReference', () => {
+  it('resolves configured typed entries while leaving unconfigured alternatives lazy', () => {
+    const textProvider = makeProvider('litellm:judge');
+    const providerMap = buildConfiguredProviderMap([textProvider]);
+
+    expect(
+      resolveConfiguredProviderReference(
+        { text: 'litellm:judge', embedding: 'unsupported-provider:unused-embedding' },
+        providerMap,
+      ),
+    ).toEqual({
+      text: textProvider,
+      embedding: 'unsupported-provider:unused-embedding',
+    });
   });
 });

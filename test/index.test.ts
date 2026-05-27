@@ -1024,6 +1024,52 @@ describe('evaluate function', () => {
         );
       });
 
+      it('does not eagerly load unused provider types from grading provider maps', async () => {
+        const mockLiteLLMProvider = createMockProvider({ id: 'litellm:judge' });
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
+
+        const testSuite = {
+          prompts: ['Test prompt'],
+          providers: ['litellm:judge'],
+          defaultTest: {
+            options: {
+              provider: {
+                text: 'litellm:judge',
+                embedding: 'unsupported-provider:unused-embedding',
+              },
+            },
+          },
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultTest: expect.objectContaining({
+              options: expect.objectContaining({
+                provider: {
+                  text: mockLiteLLMProvider,
+                  embedding: 'unsupported-provider:unused-embedding',
+                },
+              }),
+            }),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
         const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 

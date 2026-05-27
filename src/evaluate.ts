@@ -14,8 +14,8 @@ import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
-  GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
+  resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
@@ -208,17 +208,10 @@ async function resolveGradingProvider(
     return isApiProvider(provider) ? provider : resolveProvider(provider, providerMap, context);
   }
 
-  const resolvedProvider = { ...provider };
-  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
-    const nestedProvider = provider[providerType];
-    if (!nestedProvider) {
-      continue;
-    }
-    resolvedProvider[providerType] = isApiProvider(nestedProvider)
-      ? nestedProvider
-      : await resolveProvider(nestedProvider, providerMap, context);
-  }
-  return resolvedProvider;
+  // A typed map can carry alternatives for assertion types that never run.
+  // Reuse configured provider instances, but leave all other entries for
+  // getGradingProvider() to instantiate only when its type is selected.
+  return resolveConfiguredProviderReference(provider, providerMap);
 }
 
 async function createRuntimeTestSuite(

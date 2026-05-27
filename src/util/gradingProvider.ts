@@ -36,3 +36,37 @@ export function buildConfiguredProviderMap(providers: ApiProvider[]): Record<str
   }
   return providerMap;
 }
+
+export function resolveConfiguredProviderReference<T>(
+  provider: T,
+  providerMap: Record<string, ApiProvider>,
+): T | ApiProvider {
+  if (typeof provider === 'string') {
+    return Object.hasOwn(providerMap, provider) ? providerMap[provider] : provider;
+  }
+  if (
+    !provider ||
+    typeof provider !== 'object' ||
+    Array.isArray(provider) ||
+    isApiProvider(provider) ||
+    Object.hasOwn(provider, 'id')
+  ) {
+    return provider;
+  }
+
+  let resolvedTypeMap: ProviderTypeMap | undefined;
+  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
+    const nestedProvider = (provider as ProviderTypeMap)[providerType];
+    if (!nestedProvider) {
+      continue;
+    }
+
+    const resolvedProvider = resolveConfiguredProviderReference(nestedProvider, providerMap);
+    if (resolvedProvider !== nestedProvider) {
+      resolvedTypeMap ??= { ...(provider as ProviderTypeMap) };
+      resolvedTypeMap[providerType] = resolvedProvider;
+    }
+  }
+
+  return (resolvedTypeMap ?? provider) as T | ApiProvider;
+}
