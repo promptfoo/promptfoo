@@ -1595,10 +1595,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Only a main-agent assistant error can explain the selected main
           // result. Background subagent messages are interleaved in the same
           // stream and remain available in metadata for callers that need them.
-          const lastMainAssistantError = assistantErrors
-            .slice()
-            .reverse()
-            .find(({ parentToolUseId }) => parentToolUseId === null)?.error;
+          let lastMainAssistantError: SDKAssistantMessageError | undefined;
+          for (let i = assistantErrors.length - 1; i >= 0; i--) {
+            if (assistantErrors[i].parentToolUseId === null) {
+              lastMainAssistantError = assistantErrors[i].error;
+              break;
+            }
+          }
           const errorMessage = lastMainAssistantError
             ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastMainAssistantError})`
             : `Claude Agent SDK call failed: ${finalMsg.subtype}`;

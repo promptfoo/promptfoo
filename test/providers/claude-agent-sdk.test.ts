@@ -1300,6 +1300,59 @@ describe('ClaudeCodeSDKProvider', () => {
           },
         ]);
       });
+
+      it('annotates with the last main-agent error even when a subagent error is more recent', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            buildAssistantMessage('rate_limit', {
+              uuid: '55555555-5555-5555-5555-555555555555',
+            }),
+            buildAssistantMessage('model_not_found', {
+              uuid: '66666666-6666-6666-6666-666666666666',
+              parent_tool_use_id: 'task-tool-1',
+              subagent_type: 'Explore',
+            }),
+            {
+              type: 'result',
+              subtype: 'error_during_execution',
+              session_id: 'main-error-session',
+              uuid: '77777777-7777-7777-7777-777777777777' as `${string}-${string}-${string}-${string}-${string}`,
+              usage: createMockUsage(10, 0),
+              total_cost_usd: 0,
+              duration_ms: 500,
+              duration_api_ms: 400,
+              is_error: true,
+              num_turns: 2,
+              permission_denials: [],
+              modelUsage: {},
+              errors: [],
+              origin: { kind: 'human' },
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe(
+          'Claude Agent SDK call failed: error_during_execution (rate_limit)',
+        );
+        expect(result.metadata?.assistantErrors).toEqual([
+          {
+            error: 'rate_limit',
+            uuid: '55555555-5555-5555-5555-555555555555',
+            parentToolUseId: null,
+          },
+          {
+            error: 'model_not_found',
+            uuid: '66666666-6666-6666-6666-666666666666',
+            parentToolUseId: 'task-tool-1',
+            subagent_type: 'Explore',
+          },
+        ]);
+      });
     });
 
     describe('checkProviderApiKeys pre-check', () => {
