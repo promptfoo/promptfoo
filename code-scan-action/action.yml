@@ -20,9 +20,13 @@ inputs:
     description: 'Path to YAML configuration file. When set, the file supplies scan settings instead of action inputs (diffs-only, min-severity, guidance, guidance-file); api-host still overrides when explicitly provided.'
     required: false
   diffs-only:
-    description: 'Scan only PR diffs instead of tracing into surrounding repository context. Applied to the generated action-input config; ignored when config-path is set.'
+    # No default so the action code can tell an explicit `diffs-only: false`
+    # from "input not supplied" (the runner injects a default value into
+    # core.getInput, which would otherwise make every run look user-supplied
+    # and trip warnIgnoredInputsWhenConfigPathSet). The action defaults to
+    # tracing-enabled when the input is absent.
+    description: 'Scan only PR diffs instead of tracing into surrounding repository context. Applied to the generated action-input config; ignored when config-path is set. Defaults to false when the input is not supplied.'
     required: false
-    default: 'false'
   guidance:
     description: 'Custom guidance for the security scan. Applied to the generated action-input config; ignored when config-path is set.'
     required: false

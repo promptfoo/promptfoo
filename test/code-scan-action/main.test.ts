@@ -438,6 +438,27 @@ describe('code-scan-action main', () => {
       expect(actionDefinition.inputs['api-host']).not.toHaveProperty('default');
     });
 
+    it('should not declare metadata defaults that mask "was this input supplied?"', () => {
+      // Regression for codex P3 on 3d435a5b5d: when an input carries
+      // `default:` in action.yml, the runner injects that value into
+      // `INPUT_<NAME>` even when the workflow does not set it. That makes
+      // `core.getInput()` return a non-empty string on every run, which in
+      // turn makes any "was this input supplied by the workflow?" detection
+      // (used by warnIgnoredInputsWhenConfigPathSet + resolveMinimumSeverityInput)
+      // light up unconditionally. Keep these inputs metadata-default-free so
+      // the action code can carry the canonical default while still detecting
+      // "supplied vs unset".
+      const actionDefinition = yaml.load(
+        readFileSync(path.resolve('code-scan-action/action.yml'), 'utf8'),
+      ) as {
+        inputs: Record<string, { default?: string }>;
+      };
+
+      for (const input of ['min-severity', 'minimum-severity', 'diffs-only']) {
+        expect(actionDefinition.inputs[input]).not.toHaveProperty('default');
+      }
+    });
+
     it('should pass --base with GITHUB_BASE_REF when set', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'feat/my-feature-branch' });
 
@@ -510,6 +531,15 @@ describe('code-scan-action main', () => {
     });
 
     it('should thread diffs-only through to the generated action-input config', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'diffs-only') {
+          return 'true';
+        }
+        return '';
+      });
       mocks.core.getBooleanInput.mockImplementation((name: string) => {
         return name === 'diffs-only';
       });

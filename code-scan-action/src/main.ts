@@ -102,18 +102,20 @@ function resolveMinimumSeverityInput(): MinimumSeverityInput {
 
 function getActionInputs(): ActionInputs {
   const minimumSeverity = resolveMinimumSeverityInput();
+  // `diffs-only` carries no default in action.yml so we can distinguish
+  // "workflow set it" from "workflow omitted it" (a default would surface
+  // as a non-empty `core.getInput` value and trip warnIgnoredInputsWhenConfigPathSet).
+  // Treat absent as `false` ourselves so getBooleanInput's strict parser
+  // is only invoked on an explicit value.
+  const diffsOnlyRaw = core.getInput('diffs-only').trim();
 
   return {
     apiHost: core.getInput('api-host'),
     minimumSeverity: minimumSeverity.value,
     minimumSeverityInputProvided: minimumSeverity.provided,
     configPath: core.getInput('config-path'),
-    diffsOnly: core.getBooleanInput('diffs-only'),
-    // core.getBooleanInput coerces the missing input to `false`, so we cannot
-    // tell an explicit `diffs-only: false` from the default. The raw input
-    // string preserves "was this set by the workflow?" — needed to warn the
-    // user when `config-path` is also set and the input will be ignored.
-    diffsOnlyInputProvided: Boolean(core.getInput('diffs-only').trim()),
+    diffsOnly: diffsOnlyRaw ? core.getBooleanInput('diffs-only') : false,
+    diffsOnlyInputProvided: Boolean(diffsOnlyRaw),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
