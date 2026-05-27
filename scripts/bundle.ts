@@ -677,7 +677,9 @@ import(pathToFileURL(entrypoint).href).catch((error) => {
     output: seaBlob,
     disableExperimentalSEAWarning: true,
     useSnapshot: false, // Snapshots don't work well with complex apps
-    useCodeCache: true, // Improves startup time
+    // The loader uses dynamic import() to start the ESM CLI, which is not
+    // compatible with SEA code cache across supported Node releases.
+    useCodeCache: false,
   };
   fs.writeFileSync(seaConfig, JSON.stringify(seaConfigContent, null, 2));
 

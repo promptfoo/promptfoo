@@ -22,8 +22,8 @@ set -euo pipefail
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 readonly GITHUB_REPO="promptfoo/promptfoo"
-readonly GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}"
 readonly GITHUB_RELEASES="https://github.com/${GITHUB_REPO}/releases"
+readonly NPM_LATEST_URL="https://registry.npmjs.org/promptfoo/latest"
 
 INSTALL_DIR="${PROMPTFOO_INSTALL_DIR:-$HOME/.promptfoo}"
 BIN_DIR="$INSTALL_DIR/bin"
@@ -149,7 +149,7 @@ parse_args() {
 # ─── Platform Detection ──────────────────────────────────────────────────────
 
 detect_platform() {
-  local os arch macos_version major minor
+  local os arch macos_version libc_version major minor
 
   os="$(uname -s)"
   arch="$(uname -m)"
@@ -176,6 +176,24 @@ detect_platform() {
     # Check for musl (Alpine, etc.)
     if ldd --version 2>&1 | grep -q musl; then
       os="linux-musl"
+    else
+      if command -v getconf &>/dev/null; then
+        libc_version=$(getconf GNU_LIBC_VERSION 2>/dev/null || true)
+      else
+        libc_version=$(ldd --version 2>&1 | head -n 1 || true)
+      fi
+
+      if [[ "$libc_version" =~ ([0-9]+)\.([0-9]+) ]]; then
+        major="${BASH_REMATCH[1]}"
+        minor="${BASH_REMATCH[2]}"
+        if ((major < 2 || (major == 2 && minor < 28))); then
+          warn "Linux glibc ${major}.${minor} cannot run the standalone binary, which requires glibc 2.28+."
+          os="linux-unsupported"
+        fi
+      else
+        warn "Unable to determine Linux glibc version; using npm installation instead of a standalone binary."
+        os="linux-unsupported"
+      fi
     fi
     ;;
   MINGW* | MSYS* | CYGWIN*)
@@ -221,15 +239,16 @@ resolve_version() {
     # This function is used in command substitution; keep progress off stdout.
     info "Fetching latest version..." >&2
 
-    # Try to get latest release from GitHub API
+    # The repository also publishes component releases; use the stable npm
+    # package metadata to select the CLI version, not GitHub's global latest.
     if command -v curl &>/dev/null; then
-      version=$(curl -fsSL "${GITHUB_API}/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4 || true)
+      version=$(curl -fsSL "$NPM_LATEST_URL" 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 || true)
     elif command -v wget &>/dev/null; then
-      version=$(wget -qO- "${GITHUB_API}/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4 || true)
+      version=$(wget -qO- "$NPM_LATEST_URL" 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 || true)
     fi
 
     if [[ -z "$version" ]]; then
-      error "Failed to fetch latest version from GitHub.\nPlease specify a version manually."
+      error "Failed to fetch the latest promptfoo version.\nPlease specify a version manually."
     fi
   fi
 
@@ -272,6 +291,9 @@ install_npm() {
   if ! command -v node &>/dev/null; then
     error "Node.js is required but not installed.\nPlease install Node.js 20+ from https://nodejs.org"
   fi
+  if ! command -v npm &>/dev/null; then
+    error "npm is required for fallback installation but was not found on PATH.\nPlease install npm or use a supported standalone binary platform."
+  fi
 
   local node_version
   node_version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
@@ -311,7 +333,7 @@ install_binary() {
   esac
 
   archive_name="promptfoo-${version}-${platform}.tar.gz"
-  download_url="${GITHUB_RELEASES}/download/v${version}/${archive_name}"
+  download_url="${GITHUB_RELEASES}/download/${version}/${archive_name}"
   temp_file=$(mktemp "${TMPDIR:-/tmp}/promptfoo-download.XXXXXXXX")
 
   info "Installing promptfoo v$version for $platform..."

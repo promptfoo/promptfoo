@@ -5,6 +5,13 @@ set -euo pipefail
 
 readonly BUNDLE_DIR="${1:-bundle}"
 
+for required_command in readelf find grep sort; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    echo "error: required command not found: $required_command" >&2
+    exit 1
+  fi
+done
+
 if [[ ! -d "$BUNDLE_DIR" ]]; then
   echo "error: bundle directory not found: $BUNDLE_DIR" >&2
   exit 1

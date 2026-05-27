@@ -22,8 +22,8 @@ $ProgressPreference = 'SilentlyContinue'
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 $script:GitHubRepo = "promptfoo/promptfoo"
-$script:GitHubApi = "https://api.github.com/repos/$script:GitHubRepo"
 $script:GitHubReleases = "https://github.com/$script:GitHubRepo/releases"
+$script:NpmLatestUrl = "https://registry.npmjs.org/promptfoo/latest"
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -37,13 +37,6 @@ function Write-Warn {
     param([string]$Message)
     Write-Host "warn  " -ForegroundColor Yellow -NoNewline
     Write-Host $Message
-}
-
-function Write-Error {
-    param([string]$Message)
-    Write-Host "error " -ForegroundColor Red -NoNewline
-    Write-Host $Message
-    throw $Message
 }
 
 function Write-Success {
@@ -75,13 +68,13 @@ function Get-LatestVersion {
     Write-Info "Fetching latest version..."
 
     try {
-        $response = Invoke-RestMethod -Uri "$script:GitHubApi/releases/latest" -Headers @{
-            'Accept' = 'application/vnd.github.v3+json'
+        $response = Invoke-RestMethod -Uri $script:NpmLatestUrl -Headers @{
+            'Accept' = 'application/json'
             'User-Agent' = 'promptfoo-installer'
         }
-        return $response.tag_name -replace '^v', ''
+        return $response.version
     } catch {
-        throw "Failed to fetch latest version from GitHub: $_"
+        throw "Failed to fetch the latest promptfoo version: $_"
     }
 }
 
@@ -115,6 +108,9 @@ function Install-PromptfooNpm {
     $node = Get-Command node -ErrorAction SilentlyContinue
     if (-not $node) {
         throw "Node.js is required but not installed.`nPlease install Node.js 20+ from https://nodejs.org"
+    }
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw "npm is required for fallback installation but was not found on PATH.`nPlease install npm or use a supported standalone binary platform."
     }
 
     $nodeVersion = (node --version) -replace '^v', '' -split '\.' | Select-Object -First 1
@@ -165,7 +161,7 @@ function Install-PromptfooBinary {
     }
 
     $archiveName = "promptfoo-$Version-$Platform.zip"
-    $downloadUrl = "$script:GitHubReleases/download/v$Version/$archiveName"
+    $downloadUrl = "$script:GitHubReleases/download/$Version/$archiveName"
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("promptfoo-" + [Guid]::NewGuid().ToString("N"))
     $tempFile = Join-Path $tempDir $archiveName
     $binDir = Join-Path $InstallDir "bin"

@@ -41,11 +41,17 @@ def find_binary() -> Path:
             "  pip uninstall promptfoo && pip install promptfoo"
         )
 
-    # Ensure the binary is executable (needed on Unix systems)
+    # Ensure the binary is executable (needed on Unix systems).
     if sys.platform != "win32":
-        current_mode = binary_path.stat().st_mode
-        if not (current_mode & stat.S_IXUSR):
-            binary_path.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        try:
+            current_mode = binary_path.stat().st_mode
+            if not (current_mode & stat.S_IXUSR):
+                binary_path.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        except OSError as exc:
+            raise RuntimeError(
+                f"promptfoo binary permissions could not be updated at {binary_path}: {exc}\n"
+                "Try reinstalling promptfoo into a writable Python environment."
+            ) from exc
 
     return binary_path
 
@@ -61,7 +67,7 @@ def main() -> int:
     """
     try:
         binary_path = find_binary()
-    except FileNotFoundError as e:
+    except (FileNotFoundError, RuntimeError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 

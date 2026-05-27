@@ -682,8 +682,12 @@ EOF
   cat >"$fake_bin/curl" <<'EOF'
 #!/bin/sh
 case "$*" in
+*"registry.npmjs.org/promptfoo/latest"*)
+  echo '{"version":"0.0.0"}'
+  exit 0
+  ;;
 *"/releases/latest"*)
-  echo '{"tag_name":"v0.0.0"}'
+  echo '{"tag_name":"code-scan-action-9.9.9"}'
   exit 0
   ;;
 *)
@@ -756,6 +760,91 @@ EOF
 echo 0
 EOF
   chmod +x "$fake_bin/sysctl"
+}
+
+create_fake_unsupported_linux_bin() {
+  local fake_bin="$1"
+
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  cat >"$fake_bin/uname" <<'EOF'
+#!/bin/sh
+case "$1" in
+-s) echo Linux ;;
+-m) echo x86_64 ;;
+*) exit 1 ;;
+esac
+EOF
+  chmod +x "$fake_bin/uname"
+
+  cat >"$fake_bin/ldd" <<'EOF'
+#!/bin/sh
+echo "ldd (GNU libc) 2.27"
+EOF
+  chmod +x "$fake_bin/ldd"
+
+  cat >"$fake_bin/getconf" <<'EOF'
+#!/bin/sh
+echo "glibc 2.27"
+EOF
+  chmod +x "$fake_bin/getconf"
+}
+
+create_fake_supported_linux_binary_bin() {
+  local fake_bin="$1"
+
+  cat >"$fake_bin/uname" <<'EOF'
+#!/bin/sh
+case "$1" in
+-s) echo Linux ;;
+-m) echo x86_64 ;;
+*) exit 1 ;;
+esac
+EOF
+  chmod +x "$fake_bin/uname"
+
+  cat >"$fake_bin/ldd" <<'EOF'
+#!/bin/sh
+echo "ldd (GNU libc) 2.28"
+EOF
+  chmod +x "$fake_bin/ldd"
+
+  cat >"$fake_bin/getconf" <<'EOF'
+#!/bin/sh
+echo "glibc 2.28"
+EOF
+  chmod +x "$fake_bin/getconf"
+
+  cat >"$fake_bin/curl" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+output=""
+url=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --output)
+    output="$2"
+    shift 2
+    ;;
+  http*)
+    url="$1"
+    shift
+    ;;
+  *)
+    shift
+    ;;
+  esac
+done
+
+if [[ "$url" == *"/download/0.0.0/promptfoo-0.0.0-linux-x64.tar.gz" ]]; then
+  cp "$PROMPTFOO_TEST_ARCHIVE" "$output"
+  exit 0
+fi
+
+exit 22
+EOF
+  chmod +x "$fake_bin/curl"
 }
 
 test_install_script_syntax() {
@@ -888,6 +977,107 @@ test_install_script_unsupported_macos_uses_npm() {
   return 1
 }
 
+test_install_script_unsupported_linux_uses_npm() {
+  log_test "install.sh uses npm when Linux is below the glibc floor"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsupported-linux.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_linux_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] &&
+      [[ "$output" == *"requires glibc 2.28+"* ]] &&
+      [[ "$output" == *"linux-unsupported-x64"* ]]; then
+      log_pass "install.sh sends unsupported Linux versions through npm fallback"
+      return 0
+    fi
+    log_fail "install.sh did not describe or complete old-glibc fallback: $output"
+    return 1
+  fi
+
+  log_fail "install.sh old-glibc fallback failed: $output"
+  return 1
+}
+
+test_install_script_npm_fallback_requires_npm() {
+  log_test "install.sh explains when npm fallback is unavailable"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/missing-npm.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_macos_bin "$fake_bin"
+  rm -f "$fake_bin/npm"
+  ln -s "$(command -v bash)" "$fake_bin/bash"
+  ln -s "$(command -v tar)" "$fake_bin/tar"
+
+  if output=$(
+    PATH="$fake_bin" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh succeeded despite npm being unavailable for fallback"
+    return 1
+  fi
+
+  if [[ "$output" == *"npm is required for fallback installation but was not found on PATH"* ]]; then
+    log_pass "install.sh reports a missing npm fallback dependency"
+    return 0
+  fi
+
+  log_fail "install.sh produced an unclear missing-npm failure: $output"
+  return 1
+}
+
+test_install_script_downloads_unprefixed_release_tag() {
+  log_test "install.sh downloads assets from the published unprefixed release tag"
+
+  local fake_root fake_bin install_dir payload archive output
+  fake_root=$(mktemp -d "$TEST_ROOT/unprefixed-release.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  payload="$fake_root/payload"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$payload"
+
+  cat >"$payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo 0.0.0
+EOF
+  chmod +x "$payload/promptfoo"
+  tar -czf "$archive" -C "$payload" promptfoo
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] &&
+      [[ "$output" == *"/download/0.0.0/promptfoo-0.0.0-linux-x64.tar.gz"* ]]; then
+      log_pass "install.sh uses the release-please unprefixed tag for binary assets"
+      return 0
+    fi
+    log_fail "install.sh did not install from the unprefixed tag: $output"
+    return 1
+  fi
+
+  log_fail "install.sh unprefixed-tag download failed: $output"
+  return 1
+}
+
 test_install_ps1_uses_package_entrypoint() {
   log_test "install.ps1 npm fallback uses package entrypoint"
 
@@ -896,12 +1086,15 @@ test_install_ps1_uses_package_entrypoint() {
     return 1
   fi
 
-  if grep -q "entrypoint\\.js" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
-    log_pass "install.ps1 npm fallback uses entrypoint.js"
+  if grep -q "entrypoint\\.js" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q "Get-Command npm" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q 'download/v\$Version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
+    log_pass "install.ps1 uses the package entrypoint and safe fallback/download guards"
     return 0
   fi
 
-  log_fail "install.ps1 does not reference entrypoint.js"
+  log_fail "install.ps1 does not retain safe fallback/download behavior"
   return 1
 }
 
@@ -1027,6 +1220,9 @@ main() {
   test_install_script_npm_fallback_preserves_shims
   test_install_script_dir_without_version_uses_latest
   test_install_script_unsupported_macos_uses_npm
+  test_install_script_unsupported_linux_uses_npm
+  test_install_script_npm_fallback_requires_npm
+  test_install_script_downloads_unprefixed_release_tag
   test_install_ps1_uses_package_entrypoint
   test_install_ps1_syntax
   test_site_installer_mirrors
