@@ -513,6 +513,58 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('should remove stale generation metadata when regenerated output has no current values', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({
+      metadata: {
+        generationTokenUsage: {
+          cached: 0,
+          completion: 7,
+          numRequests: 2,
+          prompt: 13,
+          total: 20,
+        },
+        semanticFrontierDiagnostics: [
+          {
+            completeFrontierCount: 0,
+            frontierCount: 1,
+            pluginId: 'pii:social',
+            structurallyDegraded: true,
+            unreachableFeatureIds: ['requestsRefillDates'],
+          },
+        ],
+      },
+      prompts: [{ raw: 'Test prompt' }],
+      providers: [],
+      tests: [],
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Current generated prompt' },
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    const generatedConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+    expect(generatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
+    expect(generatedConfig?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
+  });
+
   it('should write to config file when write option is true', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',
@@ -561,6 +613,41 @@ describe('doGenerateRedteam', () => {
       'config.yaml',
       expect.any(Array),
     );
+  });
+
+  it('should remove stale generation metadata when updating a config has no current values', async () => {
+    const options: RedteamCliGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({
+      metadata: {
+        generationTokenUsage: { numRequests: 2, total: 20 },
+        semanticFrontierDiagnostics: [{ pluginId: 'stale-plugin' }],
+      },
+      tests: [],
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Current generated prompt' },
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    const updatedConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+    expect(updatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
+    expect(updatedConfig?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
   });
 
   it('should write description to output file when description option is provided', async () => {

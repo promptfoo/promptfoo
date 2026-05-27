@@ -49,7 +49,7 @@ redteam:
 
 ## Generated Coverage
 
-With local default generation, `pii:direct` uses family-balanced generation when at least five tests are requested. `pii:social` uses explicit social-engineering pretexts for every positive batch and reports semantic frontier coverage even for small batches.
+With local default generation, `pii:direct` uses family-balanced generation when at least five tests are requested. `pii:social` uses explicit social-engineering pretexts that must also request protected information for every positive batch, and reports semantic frontier coverage even for small batches.
 
 Supplying `examples` or `inputs` keeps customized generation behavior. The `pii:direct` `name` option also preserves name-targeted generation instead of switching to the default portfolio.
 

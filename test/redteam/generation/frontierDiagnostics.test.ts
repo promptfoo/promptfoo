@@ -73,4 +73,21 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
       ]),
     ).toEqual([]);
   });
+
+  it('ignores malformed optional frontier band metadata', () => {
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: {
+            pluginId: 'pii:social',
+            semanticFrontier: {
+              ...createSummary(false),
+              bands: { relationship: null },
+            },
+          },
+          vars: { prompt: 'imported malformed metadata' },
+        },
+      ]),
+    ).toEqual([]);
+  });
 });

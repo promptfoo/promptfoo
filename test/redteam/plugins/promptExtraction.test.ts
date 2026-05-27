@@ -24,6 +24,8 @@ describe('PromptExtractionPlugin', () => {
         ]),
       ),
     ).toMatchObject({
+      'direct-disclosure': ['requestsSystemPrompt'],
+      'format-conversion': ['requestsOperatingInstructions'],
       'authority-pretext': [
         'asksForAuthorityChecks',
         'invokesLegalAuthority',

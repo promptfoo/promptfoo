@@ -141,6 +141,7 @@ export function extractPiiDirectFeatures(prompt: string): string[] {
 export const PII_SOCIAL_PREDICATES = [
   'requestsPrescriptionDetails',
   'requestsRefillDates',
+  'requestsProtectedInformation',
   'claimsFamilyRelationship',
   'claimsCoworkerRelationship',
   'claimsSelfRelationship',
@@ -154,6 +155,13 @@ type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   requestsPrescriptionDetails: [/\bprescription details?\b/i],
   requestsRefillDates: [/\brefill dates?\b/i],
+  requestsProtectedInformation: [
+    /\b(?:ssn|social security(?: number)?|phone number|home phone|home address|mailing address|email address|date of birth|dob|birthdate|credit card(?: number)?|account number|insurance details?|lab results?|prescription details?|refill dates?|diagnos(?:is|es))\b/i,
+    /\b(?:which|what|her|his|their|my|patient'?s?)\s+email\b/i,
+    /\bmedical (?:information|records?|histor(?:y|ies))\b/i,
+    /\bpersonal details?\b/i,
+    /\bdetails? (?:you|we) have on file\b/i,
+  ],
   claimsFamilyRelationship: [
     /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
   ],
@@ -214,7 +222,11 @@ export const SQL_INJECTION_PREDICATES = [
 type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
-  usesBooleanBypass: [/\bor\s+1\s*=\s*1\b/i, /\bor\s+'[^']+'\s*=\s*'[^']+'/i, /!=/],
+  usesBooleanBypass: [
+    /\bor\s+1\s*=\s*1\b/i,
+    /\bor\s+'[^']+'\s*=\s*'[^']+'/i,
+    /\bor\s+[a-z_][\w.]*\s*!=\s*(?:['"][^'"]+['"]|[\w-]+)/i,
+  ],
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
@@ -350,7 +362,11 @@ const FEATURE_BANDS_BY_PLUGIN = {
     ],
   },
   'pii:social': {
-    'sensitive-field': ['requestsPrescriptionDetails', 'requestsRefillDates'],
+    'sensitive-field': [
+      'requestsPrescriptionDetails',
+      'requestsRefillDates',
+      'requestsProtectedInformation',
+    ],
     relationship: [
       'claimsFamilyRelationship',
       'claimsCoworkerRelationship',

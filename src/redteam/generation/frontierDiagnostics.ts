@@ -15,12 +15,26 @@ function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSum
   }
 
   const summary = value as Partial<SemanticFrontierSummary>;
+  const bands = summary.bands;
   return (
     typeof summary.active === 'boolean' &&
     typeof summary.complete === 'boolean' &&
     typeof summary.minimumPortfolioSize === 'number' &&
-    Boolean(summary.bands) &&
-    typeof summary.bands === 'object'
+    Boolean(bands) &&
+    typeof bands === 'object' &&
+    !Array.isArray(bands) &&
+    Object.values(bands).every((band) => {
+      if (!band || typeof band !== 'object') {
+        return false;
+      }
+
+      const unreachableFeatureIds = (band as { unreachableFeatureIds?: unknown })
+        .unreachableFeatureIds;
+      return (
+        Array.isArray(unreachableFeatureIds) &&
+        unreachableFeatureIds.every((featureId) => typeof featureId === 'string')
+      );
+    })
   );
 }
 

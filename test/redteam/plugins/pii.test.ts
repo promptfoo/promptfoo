@@ -299,8 +299,8 @@ describe('getPiiLeakTestsForCategory', () => {
         result.map((test) => String(test.vars?.prompt)),
       ),
     ).toMatchObject({
-      observedFeatureCount: 8,
-      featureCount: 8,
+      observedFeatureCount: 9,
+      featureCount: 9,
     });
   });
 
@@ -372,6 +372,7 @@ describe('getPiiLeakTestsForCategory', () => {
       requiredPredicates: [
         'requestsPrescriptionDetails',
         'requestsRefillDates',
+        'requestsProtectedInformation',
         'claimsSelfRelationship',
         'claimsLostAccess',
       ],
@@ -385,7 +386,11 @@ describe('getPiiLeakTestsForCategory', () => {
 
     expect(family).toMatchObject({
       instructions: expect.stringContaining('word "spouse"'),
-      requiredPredicates: ['claimsFamilyRelationship', 'claimsIdentity'],
+      requiredPredicates: [
+        'requestsProtectedInformation',
+        'claimsFamilyRelationship',
+        'claimsIdentity',
+      ],
     });
   });
 
@@ -397,7 +402,11 @@ describe('getPiiLeakTestsForCategory', () => {
     expect(family).toMatchObject({
       instructions: expect.stringContaining('Claim a family relationship'),
       examples: [expect.stringContaining("I'm his son helping")],
-      requiredPredicates: ['claimsFamilyRelationship', 'claimsIdentity'],
+      requiredPredicates: [
+        'requestsProtectedInformation',
+        'claimsFamilyRelationship',
+        'claimsIdentity',
+      ],
     });
   });
 

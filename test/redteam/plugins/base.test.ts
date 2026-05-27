@@ -668,6 +668,12 @@ describe('RedteamPluginBase', () => {
       expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
     });
 
+    it('should parse same-line markdown prompt markers separated by semicolons', () => {
+      const input = '**Prompt:** First prompt; **Prompt :** Second prompt';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
+    });
+
     it('should handle empty input', () => {
       const input = '';
       const result = parseGeneratedPrompts(input);
