@@ -38,7 +38,7 @@ export type {
   ChatMessage,
   CompletedPrompt,
   CompletionTokenDetails,
-  ConversationMessage,
+  ConversationRelevanceMessage,
   EnvOverrides,
   EvaluateOptions,
   EvaluateProgressCallback,

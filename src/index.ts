@@ -54,7 +54,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
-export type { ConversationMessage } from './external/matchers/deepeval';
+export type { ConversationRelevanceMessage } from './external/matchers/deepeval';
 export type {
   AdaptiveModification,
   AdaptiveRequest,
@@ -177,8 +177,8 @@ export interface RedteamApi {
   };
   /** Generate a red team config programmatically. */
   generate(options: RedteamGenerateOptions): Promise<RedteamGenerateResult>;
-  /** Run a red team eval programmatically. */
-  run(options: RedteamRunOptions): Promise<RedteamRunResult>;
+  /** Run a red team eval programmatically with library-owned event attribution. */
+  run(options?: LibraryRedteamRunOptions): Promise<RedteamRunResult>;
 }
 
 /** Implementation of {@link RedteamApi}. @beta */

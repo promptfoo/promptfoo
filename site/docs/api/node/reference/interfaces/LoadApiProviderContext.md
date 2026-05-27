@@ -9,7 +9,7 @@ description: 'Optional context accepted by loadApiProvider().'
 import type { LoadApiProviderContext } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:2074](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2074)
+Defined in: [types/index.ts:2076](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2076)
 
 Optional context accepted by `loadApiProvider()`.
 
@@ -31,7 +31,7 @@ const context: LoadApiProviderContext = {
 
 > `optional` **basePath?**: `string`
 
-Defined in: [types/index.ts:2082](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2082)
+Defined in: [types/index.ts:2084](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2084)
 
 Base path used to resolve relative config-file references.
 
@@ -41,7 +41,7 @@ Base path used to resolve relative config-file references.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/index.ts:2086](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2086)
+Defined in: [types/index.ts:2088](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2088)
 
 Environment overrides available while loading the provider.
 
@@ -51,6 +51,6 @@ Environment overrides available while loading the provider.
 
 > `optional` **options?**: [`ProviderOptions`](ProviderOptions.md)
 
-Defined in: [types/index.ts:2078](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2078)
+Defined in: [types/index.ts:2080](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2080)
 
 Provider-specific options to merge into the resolved provider.

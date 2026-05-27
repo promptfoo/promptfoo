@@ -9,7 +9,7 @@ description: 'Shared options for loading one or more providers.'
 import type { LoadApiProvidersOptions } from 'promptfoo';
 ```
 
-Defined in: [providers/index.ts:381](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L381)
+Defined in: [providers/index.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L383)
 
 Shared options for loading one or more providers.
 
@@ -31,7 +31,7 @@ const options: LoadApiProvidersOptions = {
 
 > `optional` **basePath?**: `string`
 
-Defined in: [providers/index.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L383)
+Defined in: [providers/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L385)
 
 Base path used to resolve relative `file://` provider config references.
 
@@ -41,6 +41,6 @@ Base path used to resolve relative `file://` provider config references.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [providers/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L385)
+Defined in: [providers/index.ts:387](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L387)
 
 Environment overrides available while providers are loaded.

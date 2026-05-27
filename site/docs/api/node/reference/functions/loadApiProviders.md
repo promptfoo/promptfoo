@@ -11,7 +11,7 @@ import { loadApiProviders } from 'promptfoo';
 
 > **loadApiProviders**(`providerPaths`, `options?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)[]\>
 
-Defined in: [providers/index.ts:431](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L431)
+Defined in: [providers/index.ts:433](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L433)
 
 Load one or more providers from provider config input.
 

@@ -681,7 +681,7 @@ Score whether assistant responses stay relevant across a conversation.
 
 ##### messages
 
-[`ConversationMessage`](../interfaces/ConversationMessage.md)[]
+[`ConversationRelevanceMessage`](../interfaces/ConversationRelevanceMessage.md)[]
 
 Ordered user / assistant turns to judge together.
 

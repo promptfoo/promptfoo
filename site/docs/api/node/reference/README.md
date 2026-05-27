@@ -44,7 +44,7 @@ not every internal compatibility type that exists in the runtime build.
 - [ChatMessage](interfaces/ChatMessage.md)
 - [CompletedPrompt](interfaces/CompletedPrompt.md)
 - [CompletionTokenDetails](interfaces/CompletionTokenDetails.md)
-- [ConversationMessage](interfaces/ConversationMessage.md)
+- [ConversationRelevanceMessage](interfaces/ConversationRelevanceMessage.md)
 - [EvaluateOptions](interfaces/EvaluateOptions.md)
 - [EvaluateTable](interfaces/EvaluateTable.md)
 - [EvaluateTableHead](interfaces/EvaluateTableHead.md)

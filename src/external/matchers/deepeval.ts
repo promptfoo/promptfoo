@@ -27,7 +27,7 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
  *
  * @example
  * ```ts
- * const message: ConversationMessage = {
+ * const message: ConversationRelevanceMessage = {
  *   input: 'What is promptfoo?',
  *   output: 'An eval framework for LLM applications.',
  * };
@@ -35,12 +35,15 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
  *
  * @public
  */
-export interface ConversationMessage {
+export interface ConversationRelevanceMessage {
   /** User input for this turn. */
   input: string;
   /** Assistant output for this turn. Structured outputs are stringified before grading. */
   output: string | object;
 }
+
+/** @deprecated Use `ConversationRelevanceMessage` for new matcher integrations. */
+export type ConversationMessage = ConversationRelevanceMessage;
 
 interface VerdictResult {
   verdict: 'yes' | 'no';
@@ -58,7 +61,7 @@ interface VerdictResult {
  * @returns Conversation-relevance grading result without the surrounding assertion payload.
  */
 export async function matchesConversationRelevance(
-  messages: ConversationMessage[],
+  messages: ConversationRelevanceMessage[],
   threshold: number,
   vars?: Record<string, VarValue>,
   grading?: GradingConfig,

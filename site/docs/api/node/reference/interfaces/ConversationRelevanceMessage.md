@@ -1,12 +1,12 @@
 ---
-title: 'Interface: ConversationMessage'
+title: 'Interface: ConversationRelevanceMessage'
 description: 'One user / assistant exchange used by conversation-relevance grading.'
 ---
 
 ## Import
 
 ```ts
-import type { ConversationMessage } from 'promptfoo';
+import type { ConversationRelevanceMessage } from 'promptfoo';
 ```
 
 Defined in: [external/matchers/deepeval.ts:38](https://github.com/promptfoo/promptfoo/blob/main/src/external/matchers/deepeval.ts#L38)
@@ -19,7 +19,7 @@ assistant stays on topic across the full conversation, not just one turn.
 ## Example
 
 ```ts
-const message: ConversationMessage = {
+const message: ConversationRelevanceMessage = {
   input: 'What is promptfoo?',
   output: 'An eval framework for LLM applications.',
 };
