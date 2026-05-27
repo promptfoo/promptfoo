@@ -688,6 +688,9 @@ const PROVIDER_OPTION_KEYS = new Set([
   'inputs',
 ]);
 
+const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
+  scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
+
 const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
   isRecord(value) &&
   Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
@@ -704,7 +707,7 @@ const omitConfiguredProvidersCredentials = (
     isProviderOptionsMap(provider)
       ? Object.fromEntries(
           Object.entries(provider).map(([id, options]) => [
-            id,
+            scrubProviderIdentifier(id, templatePaths),
             omitProviderCredentials(options, undefined, templatePaths),
           ]),
         )
@@ -791,6 +794,15 @@ const omitTestCaseProviderCredentials = (
     ...testCase,
     ...(hasOwn(testCase, 'provider')
       ? { provider: omitProviderCredentials(testCase.provider, undefined, templatePaths) }
+      : {}),
+    ...(Array.isArray(testCase.providers)
+      ? {
+          providers: testCase.providers.map((provider) =>
+            typeof provider === 'string'
+              ? scrubProviderIdentifier(provider, templatePaths)
+              : provider,
+          ),
+        }
       : {}),
     ...(hasOwn(testCase, 'options')
       ? { options: omitTestOptionsCredentials(testCase.options, templatePaths) }
@@ -965,9 +977,6 @@ const omitSharingCredentials = (sharing: unknown, templatePaths?: Set<string>): 
       : {}),
   };
 };
-
-const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
-  scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
 
 const omitProviderPromptMapCredentials = (
   providerPromptMap: unknown,

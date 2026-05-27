@@ -412,6 +412,7 @@ describe('evalConfig store', () => {
             config: {
               headers: {
                 Authorization: "Bearer {{ env.SERVICE_AUTH | default('') }}",
+                'X-Bare-Authorization': "Bearer {{ bare_password | default('') }}",
               },
             },
             env: {
@@ -421,7 +422,15 @@ describe('evalConfig store', () => {
           },
           'https://svc:{{ basic_password }}@api.example.test/v1',
         ],
-        tests: [{ vars: { basic_password: 'short-password-value', visible: 'kept' } }],
+        tests: [
+          {
+            vars: {
+              basic_password: 'short-password-value',
+              bare_password: 'bare-short-password-value',
+              visible: 'kept',
+            },
+          },
+        ],
       } as any);
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
@@ -436,6 +445,7 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('top-level-short-value');
       expect(JSON.stringify(persisted)).not.toContain('provider-short-value');
       expect(JSON.stringify(persisted)).not.toContain('short-password-value');
+      expect(JSON.stringify(persisted)).not.toContain('bare-short-password-value');
     });
 
     it('redacts token-shaped path segments in provider URLs', () => {
@@ -1192,6 +1202,27 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('view-secret');
     });
 
+    it('redacts provider identifiers in option maps and test filters', () => {
+      const provider =
+        'https://map-user:map-password@api.example.com/v1?token=map-secret&region=us';
+      const scrubbedProvider = 'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us';
+      useStore.getState().setConfig({
+        providers: [{ [provider]: { config: { region: 'us' } } }],
+        defaultTest: { providers: [provider] },
+        tests: [{ providers: [provider] }],
+        scenarios: [{ tests: [{ providers: [provider] }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers).toEqual([{ [scrubbedProvider]: { config: { region: 'us' } } }]);
+      expect(persisted.defaultTest.providers).toEqual([scrubbedProvider]);
+      expect(persisted.tests[0].providers).toEqual([scrubbedProvider]);
+      expect(persisted.scenarios[0].tests[0].providers).toEqual([scrubbedProvider]);
+      expect(JSON.stringify(persisted)).not.toContain('map-user');
+      expect(JSON.stringify(persisted)).not.toContain('map-password');
+      expect(JSON.stringify(persisted)).not.toContain('map-secret');
+    });
+
     it('redacts provider identifiers in raw editor providerPromptMap fields', () => {
       const provider =
         'https://router-user:router-password@api.example.com/v1?token=routing-secret&region=us';
@@ -1219,6 +1250,7 @@ describe('evalConfig store', () => {
             'https://target-user:target-password@target.example.com/v1?token=target-secret&region=us',
             'openai:gpt-4o-mini',
           ],
+          vars: 'az://account/container/tests.csv?sp=r&sig=command-line-sas-secret',
         },
       } as any);
 
@@ -1229,11 +1261,13 @@ describe('evalConfig store', () => {
           'https://[REDACTED]@target.example.com/v1?token=[REDACTED]&region=us',
           'openai:gpt-4o-mini',
         ],
+        vars: 'az://account/container/tests.csv?sp=r&sig=%5BREDACTED%5D',
       });
       expect(JSON.stringify(persisted)).not.toContain('grader-password');
       expect(JSON.stringify(persisted)).not.toContain('grader-secret');
       expect(JSON.stringify(persisted)).not.toContain('target-password');
       expect(JSON.stringify(persisted)).not.toContain('target-secret');
+      expect(JSON.stringify(persisted)).not.toContain('command-line-sas-secret');
     });
 
     it('redacts credentials in HTTP body strings', () => {
