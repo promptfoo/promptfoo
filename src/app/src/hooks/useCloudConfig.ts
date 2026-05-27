@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import useApiConfig from '@app/stores/apiConfig';
+import { useUserStore } from '@app/stores/userStore';
 import { type CloudConfigResponse, CloudConfigResponseSchema } from '@promptfoo/types/api/user';
 import { callApi } from '../utils/api';
 
@@ -15,6 +17,8 @@ export interface CloudConfigState {
  * Loads the local Promptfoo Cloud configuration for links and status UI.
  */
 export default function useCloudConfig(): CloudConfigState & { refetch: () => void } {
+  const apiBaseUrl = useApiConfig((state) => state.apiBaseUrl);
+  const email = useUserStore((state) => state.email);
   const [state, setState] = useState<CloudConfigState>({
     data: null,
     isLoading: true,
@@ -52,9 +56,10 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh when auth or API target changes
   useEffect(() => {
     fetchCloudConfig();
-  }, [fetchCloudConfig]);
+  }, [apiBaseUrl, email, fetchCloudConfig]);
 
   return {
     ...state,

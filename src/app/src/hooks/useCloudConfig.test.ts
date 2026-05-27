@@ -12,11 +12,28 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useCloudConfig from './useCloudConfig';
 
+const mockConnectionState = vi.hoisted(() => ({
+  apiBaseUrl: '',
+  email: null as string | null,
+}));
+
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+vi.mock('@app/stores/apiConfig', () => ({
+  default: vi.fn((selector: (state: { apiBaseUrl: string }) => unknown) =>
+    selector({ apiBaseUrl: mockConnectionState.apiBaseUrl }),
+  ),
+}));
+
+vi.mock('@app/stores/userStore', () => ({
+  useUserStore: vi.fn((selector: (state: { email: string | null }) => unknown) =>
+    selector({ email: mockConnectionState.email }),
+  ),
 }));
 
 const mockCloudConfig = {
@@ -28,6 +45,8 @@ const mockCloudConfig = {
 describe('useCloudConfig', () => {
   beforeEach(() => {
     resetCallApiMock();
+    mockConnectionState.apiBaseUrl = '';
+    mockConnectionState.email = null;
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
@@ -318,5 +337,41 @@ describe('useCloudConfig', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should refetch cloud config when the logged-in identity changes', async () => {
+    mockCallApiResponseOnce(mockCloudConfig);
+
+    const { rerender } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(1);
+    });
+
+    mockCallApiResponseOnce(mockCloudConfig);
+    mockConnectionState.email = 'user@example.com';
+    rerender();
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('should refetch cloud config when the API target changes', async () => {
+    mockCallApiResponseOnce(mockCloudConfig);
+
+    const { rerender } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(1);
+    });
+
+    mockCallApiResponseOnce(mockCloudConfig);
+    mockConnectionState.apiBaseUrl = 'https://api.example.com';
+    rerender();
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(2);
+    });
   });
 });
