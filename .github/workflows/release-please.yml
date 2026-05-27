@@ -88,9 +88,12 @@ jobs:
         always() &&
         !cancelled() &&
         needs.release-please.outputs.release_created == 'true' &&
-        needs.build.result == 'success'
+        needs.build.result == 'success' &&
+        needs.build-bundles.result == 'success'
       }}
-    needs: [build, release-please]
+    # Installers resolve "latest" through npm, so do not advance npm until
+    # standalone archives for the same version have been uploaded successfully.
+    needs: [build, build-bundles, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

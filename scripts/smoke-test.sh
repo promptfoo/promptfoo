@@ -363,6 +363,56 @@ EOF
   fi
 }
 
+test_html_output() {
+  log_test "HTML output format uses bundled template"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "HTML output test"
+providers:
+  - id: echo
+tests:
+  - vars: {}
+EOF
+
+  if pf eval --no-cache -o results.html >/dev/null 2>&1; then
+    if [[ -f "results.html" ]] && grep -qi '<html' results.html; then
+      log_pass "HTML output uses the bundled template"
+      return 0
+    fi
+    log_fail "HTML eval completed but results.html is missing or invalid"
+    return 1
+  fi
+
+  log_fail "HTML output generation failed"
+  return 1
+}
+
+test_structured_code_scan_output_reserves_stdout() {
+  log_test "structured code-scan startup reserves stdout"
+
+  setup_test_dir
+
+  local stdout_file="$TEST_DIR/code-scan.stdout"
+  local stderr_file="$TEST_DIR/code-scan.stderr"
+  if pf code-scans run --json --config "$TEST_DIR/missing-code-scan-config.yaml" \
+    >"$stdout_file" 2>"$stderr_file"; then
+    log_fail "code-scans unexpectedly accepted a missing configuration file"
+    return 1
+  fi
+
+  if [[ ! -s "$stdout_file" ]] &&
+    grep -q "Configuration file not found" "$stderr_file"; then
+    log_pass "structured code-scan startup keeps failures off stdout"
+    return 0
+  fi
+
+  log_fail "structured code-scan startup polluted stdout or omitted its error"
+  return 1
+}
+
 test_yaml_config() {
   log_test "YAML config parsing"
 
@@ -762,6 +812,18 @@ EOF
   chmod +x "$fake_bin/sysctl"
 }
 
+create_fake_unsupported_node_npm_bin() {
+  local fake_bin="$1"
+
+  create_fake_unsupported_macos_bin "$fake_bin"
+
+  cat >"$fake_bin/node" <<'EOF'
+#!/bin/sh
+echo v22.21.0
+EOF
+  chmod +x "$fake_bin/node"
+}
+
 create_fake_unsupported_linux_bin() {
   local fake_bin="$1"
 
@@ -1039,6 +1101,36 @@ test_install_script_npm_fallback_requires_npm() {
   return 1
 }
 
+test_install_script_npm_fallback_requires_supported_node() {
+  log_test "install.sh rejects Node versions outside the package engine range"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsupported-node.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_node_npm_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh accepted unsupported Node v22.21.0 for npm fallback"
+    return 1
+  fi
+
+  if [[ "$output" == *"requires Node.js ^20.20.0 or >=22.22.0"* ]] &&
+    [[ "$output" == *"v22.21.0"* ]]; then
+    log_pass "install.sh rejects unsupported npm fallback runtimes"
+    return 0
+  fi
+
+  log_fail "install.sh produced an unclear unsupported-Node failure: $output"
+  return 1
+}
+
 test_install_script_downloads_unprefixed_release_tag() {
   log_test "install.sh downloads assets from the published unprefixed release tag"
 
@@ -1119,6 +1211,8 @@ test_install_ps1_uses_package_entrypoint() {
 
   if grep -q "entrypoint\\.js" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q "Get-Command npm" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q "PROMPTFOO_NO_AUTO_INSTALL" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '\$nodeMajor -eq 20' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q 'download/v\$Version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q 'cmd /c \$promptfooCmd' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
@@ -1163,6 +1257,7 @@ test_packaged_assets() {
   if [[ -d "$ROOT_DIR/bundle/assets/drizzle" ]] &&
     [[ -d "$ROOT_DIR/bundle/tracing/proto" ]] &&
     [[ -f "$ROOT_DIR/bundle/app/index.html" ]] &&
+    [[ -f "$ROOT_DIR/bundle/tableOutput.html" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/@huggingface/transformers" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/onnxruntime-node" ]]; then
     log_pass "bundle contains runtime assets and omits npm-only Transformers dependencies"
@@ -1230,6 +1325,8 @@ main() {
   test_database_access
   test_cache_functionality
   test_json_output
+  test_html_output
+  test_structured_code_scan_output_reserves_stdout
   test_yaml_config
   test_typescript_config
   test_multiple_providers
@@ -1255,6 +1352,7 @@ main() {
   test_install_script_unsupported_macos_uses_npm
   test_install_script_unsupported_linux_uses_npm
   test_install_script_npm_fallback_requires_npm
+  test_install_script_npm_fallback_requires_supported_node
   test_install_script_downloads_unprefixed_release_tag
   test_install_script_fish_path_handles_spaces
   test_install_ps1_uses_package_entrypoint

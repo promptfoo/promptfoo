@@ -150,17 +150,23 @@ async function main() {
  * BUILD_FORMAT is a compile-time constant injected by tsdown/esbuild.
  * CJS bundles are used for SEA binaries, where import.meta.url is not
  * available and the bundle itself is the CLI entry point.
+ * __PROMPTFOO_BUNDLED_ENTRYPOINT__ is injected for the standalone ESM bundle,
+ * whose entrypoint runs preflight checks before importing this bundled module.
  */
 declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
+declare const __PROMPTFOO_BUNDLED_ENTRYPOINT__: boolean | undefined;
+
+const isBundledEntrypoint =
+  typeof __PROMPTFOO_BUNDLED_ENTRYPOINT__ !== 'undefined' && __PROMPTFOO_BUNDLED_ENTRYPOINT__;
 
 let isMain = false;
 try {
   isMain =
     typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs'
       ? true
-      : isMainModule(import.meta.url, process.argv[1]);
+      : isBundledEntrypoint || isMainModule(import.meta.url, process.argv[1]);
 } catch {
-  isMain = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs';
+  isMain = isBundledEntrypoint || (typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs');
 }
 
 if (isMain) {

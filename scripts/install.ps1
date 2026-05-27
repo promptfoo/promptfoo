@@ -2,18 +2,19 @@
 #
 # Usage:
 #   irm https://promptfoo.dev/install.ps1 | iex
-#   irm https://promptfoo.dev/install.ps1 | iex; Install-Promptfoo -Version 0.120.0
-#   irm https://promptfoo.dev/install.ps1 | iex; Install-Promptfoo -Help
+#   $env:PROMPTFOO_VERSION='0.120.0'; irm https://promptfoo.dev/install.ps1 | iex
+#   $env:PROMPTFOO_NO_AUTO_INSTALL='1'; irm https://promptfoo.dev/install.ps1 | iex; Remove-Item Env:PROMPTFOO_NO_AUTO_INSTALL; Install-Promptfoo -Help
 #
 # Environment variables:
 #   PROMPTFOO_INSTALL_DIR  - Installation directory (default: %LOCALAPPDATA%\promptfoo)
 #   PROMPTFOO_VERSION      - Version to install (default: latest)
 #   PROMPTFOO_NO_MODIFY_PATH - Skip PATH modification if set
 #   PROMPTFOO_DISABLE_TELEMETRY - Skip anonymous installation telemetry if set
+#   PROMPTFOO_NO_AUTO_INSTALL - Load functions without installing if set
 #
 # Requirements:
 #   - PowerShell 5.1+ or PowerShell Core 7+
-#   - Node.js 20+ only when falling back to npm installation
+#   - Node.js ^20.20.0 or >=22.22.0 only when falling back to npm installation
 
 #Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
@@ -107,15 +108,22 @@ function Install-PromptfooNpm {
     # Check for Node.js
     $node = Get-Command node -ErrorAction SilentlyContinue
     if (-not $node) {
-        throw "Node.js is required but not installed.`nPlease install Node.js 20+ from https://nodejs.org"
+        throw "Node.js is required but not installed.`nPlease install Node.js ^20.20.0 or >=22.22.0 from https://nodejs.org"
     }
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
         throw "npm is required for fallback installation but was not found on PATH.`nPlease install npm or use a supported standalone binary platform."
     }
 
-    $nodeVersion = (node --version) -replace '^v', '' -split '\.' | Select-Object -First 1
-    if ([int]$nodeVersion -lt 20) {
-        throw "Node.js 20+ is required but found version $(node --version).`nPlease upgrade Node.js."
+    $nodeVersion = (& node --version).Trim()
+    if ($nodeVersion -notmatch '^v?(\d+)\.(\d+)\.\d+(?:\+[0-9A-Za-z.-]+)?$') {
+        throw "Unable to parse Node.js version '$nodeVersion'.`nThe npm fallback requires Node.js ^20.20.0 or >=22.22.0."
+    }
+    $nodeMajor = [int]$Matches[1]
+    $nodeMinor = [int]$Matches[2]
+    $isSupportedNode = ($nodeMajor -eq 20 -and $nodeMinor -ge 20) -or
+        ($nodeMajor -ge 22 -and ($nodeMajor -gt 22 -or $nodeMinor -ge 22))
+    if (-not $isSupportedNode) {
+        throw "The npm fallback requires Node.js ^20.20.0 or >=22.22.0, but found $nodeVersion.`nPlease upgrade Node.js."
     }
 
     # Create installation directory
@@ -331,7 +339,7 @@ Promptfoo Installer for Windows
 
 USAGE
     irm https://promptfoo.dev/install.ps1 | iex
-    irm https://promptfoo.dev/install.ps1 | iex; Install-Promptfoo [OPTIONS] [VERSION]
+    `$env:PROMPTFOO_NO_AUTO_INSTALL='1'; irm https://promptfoo.dev/install.ps1 | iex; Remove-Item Env:PROMPTFOO_NO_AUTO_INSTALL; Install-Promptfoo [OPTIONS] [VERSION]
 
 OPTIONS
     -Version VERSION    Version to install (default: latest)
@@ -344,15 +352,17 @@ ENVIRONMENT VARIABLES
     PROMPTFOO_VERSION         Version to install
     PROMPTFOO_NO_MODIFY_PATH  Skip PATH modification if set
     PROMPTFOO_DISABLE_TELEMETRY  Skip anonymous installation telemetry if set
+    PROMPTFOO_NO_AUTO_INSTALL  Load installer functions without auto-installing
 
 EXAMPLES
     # Install latest version
     irm https://promptfoo.dev/install.ps1 | iex
 
     # Install specific version
-    Install-Promptfoo -Version 0.120.0
+    `$env:PROMPTFOO_VERSION='0.120.0'; irm https://promptfoo.dev/install.ps1 | iex
 
     # Install to custom directory
+    `$env:PROMPTFOO_NO_AUTO_INSTALL='1'; irm https://promptfoo.dev/install.ps1 | iex; Remove-Item Env:PROMPTFOO_NO_AUTO_INSTALL
     Install-Promptfoo -InstallDir C:\tools\promptfoo
 
 MORE INFO
@@ -439,7 +449,9 @@ MORE INFO
     Send-InstallTelemetry -Platform $platform -Version $Version
 }
 
-# Auto-run if invoked directly via iex
-if ($MyInvocation.InvocationName -eq '&' -or $MyInvocation.Line -match 'iex') {
+# Auto-run for the one-line installer; callers setting PROMPTFOO_NO_AUTO_INSTALL
+# can load the function first and invoke it once with explicit arguments.
+if (($MyInvocation.InvocationName -eq '&' -or $MyInvocation.Line -match 'iex') -and
+    -not $env:PROMPTFOO_NO_AUTO_INSTALL) {
     Install-Promptfoo @args
 }

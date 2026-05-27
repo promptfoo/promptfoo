@@ -73,6 +73,16 @@ browser automation, or some cloud-provider SDKs, require the npm or npx installa
 instead of the standalone installer or Python package.
 :::
 
+To pass explicit options to the PowerShell installer without first installing the
+default latest version, load its function with auto-install disabled and invoke it once:
+
+```powershell
+$env:PROMPTFOO_NO_AUTO_INSTALL = '1'
+irm https://promptfoo.dev/install.ps1 | iex
+Remove-Item Env:PROMPTFOO_NO_AUTO_INSTALL
+Install-Promptfoo -Version 0.120.0
+```
+
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
 ## Verify Installation

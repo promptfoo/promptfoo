@@ -15,7 +15,7 @@
 # Requirements:
 #   - curl or wget
 #   - tar (for extracting archives)
-#   - Node.js 20+ only when falling back to npm installation
+#   - Node.js ^20.20.0 or >=22.22.0 only when falling back to npm installation
 
 set -euo pipefail
 
@@ -289,16 +289,21 @@ install_npm() {
 
   # npm fallback requires Node.js to be installed.
   if ! command -v node &>/dev/null; then
-    error "Node.js is required but not installed.\nPlease install Node.js 20+ from https://nodejs.org"
+    error "Node.js is required but not installed.\nPlease install Node.js ^20.20.0 or >=22.22.0 from https://nodejs.org"
   fi
   if ! command -v npm &>/dev/null; then
     error "npm is required for fallback installation but was not found on PATH.\nPlease install npm or use a supported standalone binary platform."
   fi
 
-  local node_version
-  node_version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-  if [[ "$node_version" -lt 20 ]]; then
-    error "Node.js 20+ is required but found version $(node --version).\nPlease upgrade Node.js."
+  local node_version node_major node_minor
+  node_version=$(node --version 2>/dev/null || true)
+  if [[ ! "$node_version" =~ ^v?([0-9]+)\.([0-9]+)\.[0-9]+(\+[0-9A-Za-z.-]+)?$ ]]; then
+    error "Unable to parse Node.js version '$node_version'.\nThe npm fallback requires Node.js ^20.20.0 or >=22.22.0."
+  fi
+  node_major="${BASH_REMATCH[1]}"
+  node_minor="${BASH_REMATCH[2]}"
+  if ! ((node_major == 20 && node_minor >= 20 || node_major >= 22 && (node_major > 22 || node_minor >= 22))); then
+    error "The npm fallback requires Node.js ^20.20.0 or >=22.22.0, but found $node_version.\nPlease upgrade Node.js."
   fi
 
   # Install promptfoo globally in the install directory

@@ -19,6 +19,7 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,11 +28,30 @@ import * as esbuild from 'esbuild';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const semver = require('semver') as typeof import('semver');
 const ROOT = path.join(__dirname, '..');
 const BUNDLE_DIR = path.join(ROOT, 'bundle');
 
 // Read package.json for version constants
 const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const enginesNode: string = packageJson.engines?.node ?? '>=20.0.0';
+let nodeEngineComparatorSets: Array<
+  Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
+>;
+try {
+  nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((comparatorSet) =>
+    comparatorSet.map((comparator) => ({
+      operator: comparator.operator,
+      version: comparator.semver.version,
+    })),
+  );
+} catch {
+  console.warn(
+    `[bundle] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=20.0.0.`,
+  );
+  nodeEngineComparatorSets = [[{ operator: '>=', version: '20.0.0' }]];
+}
 
 /**
  * Native modules that cannot be bundled and must be shipped separately.
@@ -153,6 +173,11 @@ function copyAssets(): void {
     {
       src: path.join(ROOT, 'dist', 'src', 'app'),
       dest: path.join(BUNDLE_DIR, 'app'),
+    },
+    // HTML export template resolved by writeOutput() relative to the CLI module directory.
+    {
+      src: path.join(ROOT, 'src', 'tableOutput.html'),
+      dest: path.join(BUNDLE_DIR, 'tableOutput.html'),
     },
   ];
 
@@ -523,7 +548,8 @@ if (isSEA) {
 
   try {
     const result = await esbuild.build({
-      entryPoints: [path.join(ROOT, 'src', 'main.ts')],
+      // Preserve CLI preflight checks (Node range and structured code-scan output routing).
+      entryPoints: [path.join(ROOT, 'src', 'entrypoint.ts')],
       bundle: true,
       platform: 'node',
       target: 'node20',
@@ -547,6 +573,9 @@ if (isSEA) {
         __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
         __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
         __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
+        __PROMPTFOO_NODE_ENGINE_RANGE__: JSON.stringify(enginesNode),
+        __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: JSON.stringify(nodeEngineComparatorSets),
+        __PROMPTFOO_BUNDLED_ENTRYPOINT__: 'true',
         BUILD_FORMAT: JSON.stringify(format),
         'process.env.BUILD_FORMAT': JSON.stringify(format),
       },
