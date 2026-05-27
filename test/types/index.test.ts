@@ -983,6 +983,36 @@ describe('TestSuiteConfigSchema', () => {
       });
     });
 
+    it('should accept reusable assertion-file includes in inline tests and defaultTest', () => {
+      const config = {
+        providers: ['echo'],
+        prompts: ['{{input}}'],
+        tests: [{ assert: [{ value: 'file://assertions/test.yaml' }] }],
+        defaultTest: {
+          assert: [{ value: 'file://assertions/common.json' }],
+        },
+      };
+
+      expect(TestSuiteConfigSchema.safeParse(config).success).toBe(true);
+    });
+
+    it('should reject invalid or non-bare assertion-file includes', () => {
+      const config = {
+        providers: ['echo'],
+        prompts: ['{{input}}'],
+        tests: [
+          {
+            assert: [{ value: 'file://assertions/test.yaml', threshold: 0.5 }],
+          },
+        ],
+        defaultTest: {
+          assert: [{ value: 'file://assertions/common.txt' }],
+        },
+      };
+
+      expect(TestSuiteConfigSchema.safeParse(config).success).toBe(false);
+    });
+
     it('should accept defaultTest with description field (it will be stripped)', () => {
       const configWithDescription = {
         providers: ['openai:gpt-4'],

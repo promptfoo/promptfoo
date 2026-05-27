@@ -1,3 +1,6 @@
+import * as path from 'path';
+
+import { expandAssertionFileRefs } from './assertions/expandAssertionFileRefs';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -208,11 +211,30 @@ async function createRuntimeTestSuite(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   loadedProviders: ApiProvider[],
 ): Promise<TestSuite> {
-  const defaultTest =
+  let defaultTest = testSuiteConfig.defaultTest;
+  let defaultTestBaseDir: string | undefined;
+
+  if (
     typeof testSuiteConfig.defaultTest === 'string' &&
     testSuiteConfig.defaultTest.startsWith('file://')
-      ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
-      : testSuiteConfig.defaultTest;
+  ) {
+    const defaultTestPath = path.resolve(
+      cliState.basePath || '',
+      testSuiteConfig.defaultTest.slice('file://'.length),
+    );
+    defaultTestBaseDir = path.dirname(defaultTestPath);
+    defaultTest = await maybeLoadFromExternalFile(testSuiteConfig.defaultTest);
+  }
+
+  if (defaultTest && typeof defaultTest === 'object' && (defaultTest as Partial<TestCase>).assert) {
+    const defaultTestObject = defaultTest as Partial<TestCase>;
+    const expandedDefaultAssertions = await expandAssertionFileRefs(defaultTestObject.assert, {
+      baseDir: defaultTestBaseDir,
+    });
+    if (expandedDefaultAssertions) {
+      defaultTestObject.assert = expandedDefaultAssertions;
+    }
+  }
 
   return {
     ...testSuiteConfig,

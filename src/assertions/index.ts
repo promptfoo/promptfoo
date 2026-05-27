@@ -36,6 +36,7 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -473,17 +474,8 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const { filePath: referencedPath, functionName } = parseFileUrl(renderedValue);
+      const filePath = path.resolve(basePath, referencedPath);
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);

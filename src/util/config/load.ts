@@ -8,6 +8,7 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { z } from 'zod';
+import { expandAssertionFileRefs } from '../../assertions/expandAssertionFileRefs';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -21,6 +22,7 @@ import { readPrompts, readProviderPromptMap } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
+  type AssertionOrSet,
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
@@ -438,6 +440,48 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
+async function expandInlineAssertionIncludes<T>(value: T, baseDir: string): Promise<T> {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const assertions = (value as { assert?: unknown }).assert;
+  if (!Array.isArray(assertions)) {
+    return value;
+  }
+  const assert = await expandAssertionFileRefs(assertions as AssertionOrSet[], { baseDir });
+  return (assert ? { ...value, assert } : value) as T;
+}
+
+async function expandConfigInlineAssertionIncludes(
+  config: UnifiedConfig,
+  baseDir: string,
+): Promise<UnifiedConfig> {
+  const tests = Array.isArray(config.tests)
+    ? await Promise.all(config.tests.map((test) => expandInlineAssertionIncludes(test, baseDir)))
+    : config.tests;
+  const defaultTest =
+    config.defaultTest && typeof config.defaultTest === 'object'
+      ? await expandInlineAssertionIncludes(config.defaultTest, baseDir)
+      : config.defaultTest;
+  const scenarios = Array.isArray(config.scenarios)
+    ? await Promise.all(
+        config.scenarios.map(async (scenario) => {
+          if (typeof scenario === 'string' || !Array.isArray(scenario.tests)) {
+            return scenario;
+          }
+          return {
+            ...scenario,
+            tests: await Promise.all(
+              scenario.tests.map((test) => expandInlineAssertionIncludes(test, baseDir)),
+            ),
+          };
+        }),
+      )
+    : config.scenarios;
+
+  return { ...config, tests, defaultTest, scenarios };
+}
+
 /**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
@@ -460,7 +504,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
-      configs.push(config);
+      configs.push(await expandConfigInlineAssertionIncludes(config, path.dirname(globPath)));
     }
   }
 
@@ -746,6 +790,10 @@ export async function resolveConfigs(
 
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
+  // When `defaultTest` is loaded from a file, remember its directory so
+  // nested file:// refs inside it (assertion includes, var files) are
+  // resolved relative to it rather than the config root.
+  let defaultTestBasePath: string = basePath;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
     // Set basePath in cliState temporarily for file resolution
     const originalBasePath = cliState.basePath;
@@ -753,8 +801,23 @@ export async function resolveConfigs(
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     cliState.basePath = originalBasePath;
     processedDefaultTest = loaded as Partial<TestCase>;
+    const defaultTestFilePath = path.resolve(basePath, defaultTestRaw.slice('file://'.length));
+    defaultTestBasePath = path.dirname(defaultTestFilePath);
   } else if (defaultTestRaw) {
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+  }
+
+  // Expand `file://*.yaml|json` assertion include entries in defaultTest.assert
+  // so the spread at line 887 below surfaces a schema-valid list instead of
+  // bare `{ value: file://...yaml }` entries. `readTest()` also expands, but
+  // its result is stored separately from `processedDefaultTest`.
+  if (processedDefaultTest?.assert) {
+    const expandedDefault = await expandAssertionFileRefs(processedDefaultTest.assert, {
+      baseDir: defaultTestBasePath,
+    });
+    if (expandedDefault) {
+      processedDefaultTest.assert = expandedDefault;
+    }
   }
 
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
@@ -769,7 +832,7 @@ export async function resolveConfigs(
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
     defaultTest: processedDefaultTest
-      ? await readTest(processedDefaultTest, basePath, true)
+      ? await readTest(processedDefaultTest, defaultTestBasePath, true)
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,

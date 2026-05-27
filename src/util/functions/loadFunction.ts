@@ -7,6 +7,12 @@ import { runPython } from '../../python/pythonUtils';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
+const CALLABLE_FILE_EXTENSION_PATTERN = new RegExp(
+  `(?:${[...JAVASCRIPT_EXTENSIONS, '.py', '.rb']
+    .map((extension) => extension.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')}):`,
+  'i',
+);
 
 interface LoadFunctionOptions {
   filePath: string;
@@ -97,12 +103,13 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  const functionSeparator = CALLABLE_FILE_EXTENSION_PATTERN.exec(urlWithoutProtocol);
 
-  if (lastColonIndex > 1) {
+  if (functionSeparator?.index !== undefined) {
+    const separatorIndex = functionSeparator.index + functionSeparator[0].length - 1;
     return {
-      filePath: urlWithoutProtocol.slice(0, lastColonIndex),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
+      filePath: urlWithoutProtocol.slice(0, separatorIndex),
+      functionName: urlWithoutProtocol.slice(separatorIndex + 1),
     };
   }
 

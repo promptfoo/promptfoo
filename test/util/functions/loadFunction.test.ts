@@ -315,4 +315,12 @@ describe('parseFileUrl', () => {
       functionName: 'functionName',
     });
   });
+
+  it('should retain namespace separators in Ruby method names', () => {
+    const result = parseFileUrl('file://some_ruby_file.rb:MyModule::Nested.method');
+    expect(result).toEqual({
+      filePath: 'some_ruby_file.rb',
+      functionName: 'MyModule::Nested.method',
+    });
+  });
 });

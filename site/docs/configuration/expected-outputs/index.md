@@ -41,6 +41,34 @@ tests:
         value: 'Hello, World!'
 ```
 
+### Reusing Assertions From Files
+
+You can keep reusable assertion lists in YAML or JSON files and include them from a test case or `defaultTest` using a bare `value` entry:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  assert:
+    - value: file://assertions/common.yaml
+```
+
+```yaml title="assertions/common.yaml"
+- type: contains
+  value: success
+- type: is-json
+```
+
+Included files may include additional assertion files. Relative `file://` references inside an included file are resolved from that file's directory:
+
+```yaml title="assertions/common.yaml"
+- value: file://format/json.yaml
+- type: contains
+  value: success
+```
+
+Cyclic include chains and include nesting deeper than 16 levels are rejected with an error.
+
+Use a normal typed assertion, such as `{ type: is-json, value: file://schemas/result.json }`, when the referenced file is an assertion value rather than a reusable assertion list.
+
 ## Assertion properties
 
 | Property         | Type               | Required | Description                                                                                                                                                                                                                                                                                                                                        |
