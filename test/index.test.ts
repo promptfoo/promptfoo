@@ -1070,6 +1070,63 @@ describe('evaluate function', () => {
         );
       });
 
+      it('preserves suite env for deferred grading provider map entries', async () => {
+        const mockTargetProvider = createMockProvider({ id: 'echo' });
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
+
+        const testSuite = {
+          env: { GRADER_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          defaultTest: {
+            options: {
+              provider: {
+                text: {
+                  id: 'litellm:inline-judge',
+                  config: { apiKey: '{{ env.GRADER_API_KEY }}' },
+                },
+                embedding: 'unsupported-provider:unused-embedding',
+              },
+            },
+          },
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultTest: expect.objectContaining({
+              options: expect.objectContaining({
+                provider: {
+                  text: {
+                    id: 'litellm:inline-judge',
+                    config: { apiKey: '{{ env.GRADER_API_KEY }}' },
+                    env: { GRADER_API_KEY: 'suite-key' },
+                  },
+                  embedding: {
+                    id: 'unsupported-provider:unused-embedding',
+                    env: { GRADER_API_KEY: 'suite-key' },
+                  },
+                },
+              }),
+            }),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
         const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 

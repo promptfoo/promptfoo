@@ -14,6 +14,7 @@ import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
+  GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
@@ -22,6 +23,7 @@ import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
+  EnvOverrides,
   EvaluateTestSuite,
   GradingConfig,
   Scenario,
@@ -30,7 +32,7 @@ import type {
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { ApiProvider } from './types/providers';
+import type { ApiProvider, ProviderTypeMap } from './types/providers';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -199,10 +201,33 @@ function createSerializableUnifiedConfig(
   return config;
 }
 
+function addSuiteEnvToDeferredTypedProviders(
+  provider: ProviderTypeMap,
+  env: EnvOverrides | undefined,
+): ProviderTypeMap {
+  if (!env) {
+    return provider;
+  }
+
+  const providerWithEnv = { ...provider };
+  for (const providerType of GRADING_PROVIDER_TYPE_KEYS) {
+    const nestedProvider = provider[providerType];
+    if (!nestedProvider || isApiProvider(nestedProvider)) {
+      continue;
+    }
+
+    providerWithEnv[providerType] =
+      typeof nestedProvider === 'string'
+        ? { id: nestedProvider, env }
+        : { ...nestedProvider, env: { ...env, ...nestedProvider.env } };
+  }
+  return providerWithEnv;
+}
+
 async function resolveGradingProvider(
   provider: GradingConfig['provider'],
   providerMap: Record<string, ApiProvider>,
-  context: { env?: unknown; basePath?: string },
+  context: { env?: EnvOverrides; basePath?: string },
 ): Promise<GradingConfig['provider']> {
   if (!isProviderTypeMap(provider)) {
     return isApiProvider(provider) ? provider : resolveProvider(provider, providerMap, context);
@@ -211,7 +236,10 @@ async function resolveGradingProvider(
   // A typed map can carry alternatives for assertion types that never run.
   // Reuse configured provider instances, but leave all other entries for
   // getGradingProvider() to instantiate only when its type is selected.
-  return resolveConfiguredProviderReference(provider, providerMap);
+  const resolvedProvider = resolveConfiguredProviderReference(provider, providerMap);
+  return isProviderTypeMap(resolvedProvider)
+    ? addSuiteEnvToDeferredTypedProviders(resolvedProvider, context.env)
+    : resolvedProvider;
 }
 
 async function createRuntimeTestSuite(
