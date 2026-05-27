@@ -143,6 +143,14 @@ const HOSTED_CLOUD_APP_HOSTNAMES = new Set([
   'app.promptfoo.com',
 ]);
 const HOSTED_CLOUD_API_HOSTNAMES = new Set(['api.promptfoo.app']);
+// Any hostname that is a known hosted Promptfoo domain — app or api. The CLI
+// writes apiHost to the same value as appUrl after `promptfoo auth login`
+// (e.g. both become https://www.promptfoo.app), so an apiHost pointing at a
+// hosted-app hostname must NOT be classified as enterprise.
+const HOSTED_CLOUD_HOSTNAMES = new Set([
+  ...HOSTED_CLOUD_APP_HOSTNAMES,
+  ...HOSTED_CLOUD_API_HOSTNAMES,
+]);
 
 /**
  * Determines if a URL represents an enterprise deployment by checking
@@ -155,7 +163,7 @@ function isEnterpriseUrl(url: string | null): boolean {
 
   const hostname = new URL(url).hostname.toLowerCase();
 
-  return !HOSTED_CLOUD_APP_HOSTNAMES.has(hostname);
+  return !HOSTED_CLOUD_HOSTNAMES.has(hostname);
 }
 
 function isEnterpriseApiHost(url: string | null): boolean {
@@ -163,7 +171,7 @@ function isEnterpriseApiHost(url: string | null): boolean {
     return false;
   }
 
-  return !HOSTED_CLOUD_API_HOSTNAMES.has(new URL(url).hostname.toLowerCase());
+  return !HOSTED_CLOUD_HOSTNAMES.has(new URL(url).hostname.toLowerCase());
 }
 
 // New API key authentication endpoint that mirrors CLI behavior

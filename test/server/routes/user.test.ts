@@ -255,6 +255,37 @@ describe('User Routes', () => {
       }
     });
 
+    it('should treat a hosted-app apiHost as hosted cloud (regression: CLI writes apiHost = appUrl)', async () => {
+      // The CLI's `promptfoo auth login` flow ends with apiHost and appUrl
+      // set to the same hosted-cloud value, e.g. both `https://www.promptfoo.app`.
+      // Previously HOSTED_CLOUD_API_HOSTNAMES only listed `api.promptfoo.app`,
+      // so the hosted-app apiHost looked like an enterprise API to the route,
+      // tripping the "mismatched app vs api" branch that nulls out appUrl.
+      // Result: a happy-path logged-in user saw `appUrl: null, isEnterprise: true`,
+      // and the navbar indicator rendered the "dashboard URL unavailable" state.
+      const hostedApiHosts = [
+        'https://promptfoo.app',
+        'https://www.promptfoo.app',
+        'https://app.promptfoo.app',
+        'https://app.promptfoo.com',
+      ];
+
+      for (const apiHost of hostedApiHosts) {
+        mockedCloudConfig.isEnabled.mockReturnValue(true);
+        mockedCloudConfig.getApiHost.mockReturnValue(apiHost);
+        mockedCloudConfig.getAppUrl.mockReturnValue('https://www.promptfoo.app');
+
+        const response = await api.get('/api/user/cloud-config');
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+          appUrl: 'https://www.promptfoo.app',
+          isEnabled: true,
+          isEnterprise: false,
+        });
+      }
+    });
+
     it('should classify suspicious lookalike promptfoo domains as enterprise', async () => {
       const testCases = [
         'https://evil.promptfoo.app.attacker.com',
