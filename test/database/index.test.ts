@@ -164,6 +164,27 @@ describe('database', () => {
       ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
     });
 
+    it('does not deadlock when a transaction callback calls root db.* helpers', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY, val TEXT)');
+
+      await expect(
+        Promise.race([
+          db.transaction(async (tx) => {
+            await tx.run("INSERT INTO root_call_inside_tx_test (id, val) VALUES (1, 'in-tx')");
+            const rows = await db.all<{ value: number }>('SELECT 1 AS value');
+            expect(rows[0]?.value).toBe(1);
+          }),
+          new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error('root db call inside transaction deadlocked')),
+              1_000,
+            );
+          }),
+        ]),
+      ).resolves.toBeUndefined();
+    });
+
     it('should enforce foreign keys inside top-level transactions', async () => {
       const db = await getDb();
       await db.run('CREATE TABLE transaction_fk_parent (id TEXT PRIMARY KEY)');

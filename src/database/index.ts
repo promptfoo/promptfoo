@@ -92,7 +92,15 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   const serializeClientMethod = <TArgs extends unknown[], TResult>(
     method: (...args: TArgs) => Promise<TResult>,
   ) => {
-    return (...args: TArgs) => runSerialized(() => method(...args));
+    return (...args: TArgs) => {
+      // The outer transaction already owns the serialized queue. If a helper
+      // called from that transaction uses the root db handle for a read, queueing
+      // it behind the outer transaction would deadlock.
+      if (activeTransaction.getStore()) {
+        return method(...args);
+      }
+      return runSerialized(() => method(...args));
+    };
   };
 
   // better-sqlite3 executed statements synchronously on one connection. libsql opens a
