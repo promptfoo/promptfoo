@@ -129,9 +129,13 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
   setUserEmail: mocks.setUserEmail,
 }));
 
-vi.mock('../../../src/globalConfig/cloud', () => ({
-  cloudConfig: mocks.cloudConfig,
-}));
+vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/globalConfig/cloud')>();
+  return {
+    ...actual,
+    cloudConfig: mocks.cloudConfig,
+  };
+});
 
 vi.mock('../../../src/node', () => ({
   evaluate: mocks.promptfooEvaluate,
