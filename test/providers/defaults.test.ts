@@ -217,7 +217,6 @@ describe('Provider override tests', () => {
     mockProcessEnv({
       AZURE_OPENAI_API_KEY: 'test-key',
       AZURE_DEPLOYMENT_NAME: 'azure-chat',
-      AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat',
     });
 
     const providers = await getDefaultProviders();
@@ -227,6 +226,31 @@ describe('Provider override tests', () => {
     expect(providers.redteamJsonProvider?.config?.response_format).toEqual({
       type: 'json_object',
     });
+  });
+
+  it('should retain support for AZURE_OPENAI_DEPLOYMENT_NAME as an Azure default alias', async () => {
+    mockProcessEnv({
+      AZURE_OPENAI_API_KEY: 'test-key',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'legacy-azure-chat',
+    });
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider?.id()).toContain('legacy-azure-chat');
+    expect(providers.redteamJsonProvider?.id()).toContain('legacy-azure-chat');
+  });
+
+  it('should preserve AZURE_OPENAI_DEPLOYMENT_NAME precedence when both Azure names are set', async () => {
+    mockProcessEnv({
+      AZURE_OPENAI_API_KEY: 'test-key',
+      AZURE_DEPLOYMENT_NAME: 'documented-default',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'existing-specific-default',
+    });
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider?.id()).toContain('existing-specific-default');
+    expect(providers.redteamJsonProvider?.id()).toContain('existing-specific-default');
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
@@ -376,7 +400,6 @@ describe('Provider override tests', () => {
   it('should not probe Google default credentials when Azure is preferred', async () => {
     mockProcessEnv({ AZURE_OPENAI_API_KEY: 'azure-key' });
     mockProcessEnv({ AZURE_DEPLOYMENT_NAME: 'azure-chat' });
-    mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat' });
 
     await getDefaultProviders();
 

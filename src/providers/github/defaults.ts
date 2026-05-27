@@ -27,6 +27,7 @@ export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider
 
 function createGitHubRedteamProvider(env?: EnvOverrides) {
   return new OpenAiChatCompletionProvider('openai/gpt-5', {
+    env,
     config: {
       ...githubConfig,
       temperature: getDefaultRedteamTemperature(env),
@@ -36,6 +37,7 @@ function createGitHubRedteamProvider(env?: EnvOverrides) {
 
 function createGitHubRedteamJsonProvider(env?: EnvOverrides) {
   return new OpenAiChatCompletionProvider('openai/gpt-5', {
+    env,
     config: {
       ...githubConfig,
       temperature: getDefaultRedteamTemperature(env),

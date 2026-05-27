@@ -67,6 +67,15 @@ interface DefaultProviderPreferences {
   useXAIDefaults: boolean;
 }
 
+function getAzureDeploymentName(env?: EnvOverrides): string | undefined {
+  return (
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') ||
+    env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
+    getEnvString('AZURE_DEPLOYMENT_NAME') ||
+    env?.AZURE_DEPLOYMENT_NAME
+  );
+}
+
 async function getDefaultProviderPreferences(
   env?: EnvOverrides,
 ): Promise<DefaultProviderPreferences> {
@@ -96,10 +105,7 @@ async function getDefaultProviderPreferences(
   const hasXAICredentials = Boolean(getEnvString('XAI_API_KEY') || env?.XAI_API_KEY);
 
   const preferAzure = Boolean(
-    !hasOpenAiCredentials &&
-      (hasAzureApiKey || hasAzureClientCreds) &&
-      (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
-      (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME),
+    !hasOpenAiCredentials && (hasAzureApiKey || hasAzureClientCreds) && getAzureDeploymentName(env),
   );
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
   const shouldUseFallbackDefaults =
@@ -174,10 +180,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
   if (preferAzure) {
     logger.debug('Using Azure OpenAI default providers');
-    const deploymentName =
-      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+    const deploymentName = getAzureDeploymentName(env);
     if (!deploymentName) {
-      throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
+      throw new Error('AZURE_DEPLOYMENT_NAME must be set when using Azure OpenAI');
     }
 
     const embeddingDeploymentName =

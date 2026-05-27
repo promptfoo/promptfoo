@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../../src/envars';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { hasCodexDefaultCredentials } from '../../../src/providers/openai/codexDefaults';
 
 vi.mock('../../../src/envars');
@@ -110,6 +111,14 @@ describe('GitHub Models Default Providers', () => {
     // Should use GitHub Models
     expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
     expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
+    expect(providers.redteamProvider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(providers.redteamJsonProvider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect((providers.redteamProvider as OpenAiChatCompletionProvider).getApiKey()).toBe(
+      'override-github-token',
+    );
+    expect((providers.redteamJsonProvider as OpenAiChatCompletionProvider).getApiKey()).toBe(
+      'override-github-token',
+    );
   });
 
   it('should use GitHub redteam temperature from env overrides', async () => {
