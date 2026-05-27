@@ -1061,11 +1061,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return;
       case 'turn.completed':
         state.usage = event.usage;
+        if (!state.activeTurnSpan) {
+          // Some Codex SDK streams emit `turn.completed` without a prior
+          // `turn.started`. Lazily synthesize a turn span so the
+          // `gen_ai.turn *` count still reflects this LLM round.
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
         this.endTurnSpan(state, eventTime, event.usage);
         logger.debug('Codex turn completed', { usage: state.usage });
         return;
       case 'turn.failed': {
         const errorMsg = event.error?.message || 'Turn failed';
+        if (!state.activeTurnSpan) {
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
         this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex turn failed', { error: errorMsg });
         throw new Error(`Codex turn failed: ${errorMsg}`);
@@ -1098,6 +1107,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       logger.warn('Codex item.started event missing item', { event });
       return;
     }
+    if (!state.activeTurnSpan) {
+      // Stream omitted `turn.started`; open a turn span lazily so the first
+      // item lands inside a real turn and gets a `gen_ai.turn.index` tag.
+      this.startTurnSpan(state, tracer, eventTime);
+    }
     if (!item.id) {
       logger.debug('Codex item.started without id, will create span at completion', {
         type: item.type,
@@ -1129,6 +1143,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (!item) {
       logger.warn('Codex item.completed event missing item', { event });
       return;
+    }
+    if (!state.activeTurnSpan) {
+      // Same lazy-open as `handleStreamingItemStarted`: covers streams that
+      // emit only `item.completed` events without prior `turn.started` /
+      // `item.started` events.
+      this.startTurnSpan(state, tracer, state.lastEventTime);
     }
 
     const itemId = item.id ? String(item.id) : crypto.randomUUID();

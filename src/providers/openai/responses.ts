@@ -425,15 +425,30 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.requiresApiKey() && !this.getApiKey()) {
+      throw new Error(this.getMissingApiKeyErrorMessage());
+    }
+
+    // Resolve the effective request config first so spanContext reflects what
+    // we actually send (merged config from getOpenAiBody, not raw this.config).
+    // The Responses API uses `max_output_tokens` rather than `max_tokens`.
+    const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const effectiveConfig = resolved.config;
+    const effectiveBody = resolved.body as Record<string, any>;
+    const effectiveMaxOutputTokens =
+      typeof effectiveBody.max_output_tokens === 'number'
+        ? effectiveBody.max_output_tokens
+        : undefined;
+
     const spanContext: GenAISpanContext = {
       system: 'openai',
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
+      maxTokens: effectiveMaxOutputTokens,
+      temperature: effectiveConfig.temperature,
+      topP: effectiveConfig.top_p,
+      stopSequences: effectiveConfig.stop,
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
@@ -466,21 +481,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      () => this.callApiInternal(prompt, context, callApiOptions, resolved),
       resultExtractor,
     );
   }
 
   private async callApiInternal(
     prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    context: CallApiContextParams | undefined,
+    callApiOptions: CallApiOptionsParams | undefined,
+    prepared?: { body: any; config: any },
   ): Promise<ProviderResponse> {
-    if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(this.getMissingApiKeyErrorMessage());
-    }
-
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } =
+      prepared ?? (await this.getOpenAiBody(prompt, context, callApiOptions));
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');

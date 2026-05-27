@@ -5267,6 +5267,48 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(turnSpan!.attrs['gen_ai.turn.parent_tool_use_id']).toBe('task-tool-1');
           expect(turnSpan!.attrs['gen_ai.turn.subagent_type']).toBe('researcher');
         });
+
+        it('marks errored assistant turns with ERROR status and surfaces the error code', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                error: 'model_not_found',
+                uuid: '12345678-1234-1234-1234-1234567890ab',
+                message: createMockBetaMessage([{ type: 'text', text: '' }]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
+          expect(turnSpan).toBeDefined();
+          expect(turnSpan!.attrs['gen_ai.turn.error']).toBe('model_not_found');
+          // SpanStatusCode.ERROR === 2
+          expect(turnSpan!.status?.code).toBe(2);
+        });
       });
     });
   });

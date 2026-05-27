@@ -1420,11 +1420,21 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   attributes['gen_ai.usage.output_tokens'] = usage.output_tokens;
                 }
               }
+              if (msg.error) {
+                // The SDK exposes discriminated codes like `model_not_found` /
+                // `rate_limit` on failed assistant messages. Surface them so
+                // trace assertions can spot failed rounds instead of silently
+                // reporting them as OK.
+                attributes['gen_ai.turn.error'] = msg.error;
+              }
               const now = Date.now();
               const span = turnSpanTracer.startSpan(`gen_ai.turn ${index}`, {
                 startTime: now,
                 attributes,
               });
+              if (msg.error) {
+                span.setStatus({ code: SpanStatusCode.ERROR, message: msg.error });
+              }
               span.end(now);
             } catch (err) {
               logger.warn(`[ClaudeAgentSDK] Failed to emit turn span: ${err}`);

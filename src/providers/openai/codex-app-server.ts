@@ -2243,9 +2243,18 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         this.startTurnSpan(state, eventTime);
         break;
       case 'item/started':
+        if (!state.activeTurnSpan) {
+          // App-server flows that ack `turn/start` as a request response (vs.
+          // sending `turn/started` as a notification) reach the items first.
+          // Lazily open a turn span so they still get a `gen_ai.turn.index`.
+          this.startTurnSpan(state, eventTime);
+        }
         this.handleItemStarted(state, params.item, eventTime);
         break;
       case 'item/completed':
+        if (!state.activeTurnSpan) {
+          this.startTurnSpan(state, eventTime);
+        }
         this.handleItemCompleted(state, params.item, eventTime);
         break;
       case 'item/agentMessage/delta':
@@ -2262,6 +2271,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         state.turn = params.turn;
         if (params.turn?.status === 'failed') {
           state.error = params.turn?.error?.message ?? 'Codex app-server turn failed';
+        }
+        if (!state.activeTurnSpan) {
+          // Stream lacked any `turn/started`/`item.*` events with a usable
+          // event time; synthesize a turn span from `lastEventTime`.
+          this.startTurnSpan(state, state.lastEventTime);
         }
         this.endTurnSpan(state, eventTime, state.error);
         state.completed.resolve();
@@ -3178,15 +3192,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return;
     }
     try {
-      if (state.rawTokenUsage) {
-        const usage = state.rawTokenUsage as Record<string, unknown>;
-        const inputTokens = usage.input_tokens ?? usage.inputTokens;
-        const outputTokens = usage.output_tokens ?? usage.outputTokens;
-        if (typeof inputTokens === 'number') {
-          span.setAttribute('gen_ai.usage.input_tokens', inputTokens);
+      // Codex app-server typically delivers usage under `last`/`total`; reuse
+      // the shared resolver so we honor both nested and flat shapes.
+      const usage = this.resolveRawUsage(state.rawTokenUsage);
+      if (usage) {
+        span.setAttribute('gen_ai.usage.input_tokens', usage.input);
+        span.setAttribute('gen_ai.usage.output_tokens', usage.output);
+        if (usage.cached) {
+          span.setAttribute('gen_ai.usage.cached_tokens', usage.cached);
         }
-        if (typeof outputTokens === 'number') {
-          span.setAttribute('gen_ai.usage.output_tokens', outputTokens);
+        if (usage.reasoning) {
+          span.setAttribute('gen_ai.usage.reasoning_tokens', usage.reasoning);
         }
       }
       if (errorMessage) {
