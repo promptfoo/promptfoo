@@ -20,6 +20,7 @@
 
 /docs/           @alandelong-oai @mldangelo-oai        # Internal agent docs
 /examples/       @mldangelo-oai @ianw-oai              # Example configurations
+/helm/           @mldangelo-oai                        # Kubernetes Helm charts
 
 # ============================================================================
 # SOURCE - SHARED OWNERSHIP (multiple contributors >15%)
@@ -87,10 +88,20 @@
 /site/docs/contributing.md  @mldangelo-oai                # Contributing docs
 
 # ============================================================================
-# DEVELOPER PRODUCTIVITY (VP Eng: Justin)
+# DEVELOPER PRODUCTIVITY
 # ============================================================================
 
+/.github/                      @mldangelo-oai           # CI/CD workflows
+/scripts/                      @mldangelo-oai           # Build & dev scripts
+/biome.json                    @mldangelo-oai           # Linting config
+/tsconfig.json                 @mldangelo-oai           # TypeScript config
+/tsdown.config.ts              @mldangelo-oai           # Build config
+/vitest.config.ts              @mldangelo-oai           # Test config
+/vitest.integration.config.ts  @mldangelo-oai           # Integration test config
 /knip.json                     @faizan-oai                # Dead code detection
+/renovate.json                 @mldangelo-oai           # Dependency updates
+/package.json                  @mldangelo-oai           # Dependencies & scripts
+/release-please-config.json    @mldangelo-oai           # Release automation
 
 # ============================================================================
 # DATABASE
