@@ -1078,6 +1078,37 @@ EOF
   return 1
 }
 
+test_install_script_fish_path_handles_spaces() {
+  log_test "install.sh quotes spaced PATH entries for fish"
+
+  local fake_root fake_bin fake_home install_dir output expected_path_line
+  fake_root=$(mktemp -d "$TEST_ROOT/fish-path.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  fake_home="$fake_root/home"
+  install_dir="$fake_root/install dir"
+  mkdir -p "$fake_bin" "$fake_home"
+  create_fake_unsupported_macos_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      HOME="$fake_home" \
+      SHELL="/usr/bin/fish" \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    expected_path_line="set -gx PATH '$install_dir/bin' \$PATH"
+    if grep -Fqx "$expected_path_line" "$fake_home/.config/fish/config.fish"; then
+      log_pass "install.sh preserves spaced fish PATH entries"
+      return 0
+    fi
+    log_fail "install.sh wrote an unsafe fish PATH entry: $output"
+    return 1
+  fi
+
+  log_fail "install.sh fish PATH install failed: $output"
+  return 1
+}
+
 test_install_ps1_uses_package_entrypoint() {
   log_test "install.ps1 npm fallback uses package entrypoint"
 
@@ -1089,7 +1120,9 @@ test_install_ps1_uses_package_entrypoint() {
   if grep -q "entrypoint\\.js" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     grep -q "Get-Command npm" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
     ! grep -q 'download/v\$Version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
-    ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
+    ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q 'cmd /c \$promptfooCmd' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '& \$promptfooCmd --version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
     log_pass "install.ps1 uses the package entrypoint and safe fallback/download guards"
     return 0
   fi
@@ -1223,6 +1256,7 @@ main() {
   test_install_script_unsupported_linux_uses_npm
   test_install_script_npm_fallback_requires_npm
   test_install_script_downloads_unprefixed_release_tag
+  test_install_script_fish_path_handles_spaces
   test_install_ps1_uses_package_entrypoint
   test_install_ps1_syntax
   test_site_installer_mirrors

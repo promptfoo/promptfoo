@@ -396,7 +396,7 @@ setup_path() {
     return 0
   fi
 
-  local shell_name rc_file export_line
+  local shell_name rc_file export_line fish_bin_dir
   local path_already_set=false
 
   shell_name=$(basename "${SHELL:-/bin/bash}")
@@ -418,7 +418,9 @@ setup_path() {
     ;;
   fish)
     rc_file="$HOME/.config/fish/config.fish"
-    export_line="set -gx PATH $BIN_DIR \$PATH"
+    fish_bin_dir=${BIN_DIR//\\/\\\\}
+    fish_bin_dir=${fish_bin_dir//\'/\\\'}
+    export_line="set -gx PATH '$fish_bin_dir' \$PATH"
     ;;
   *)
     rc_file=""

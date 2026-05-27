@@ -234,7 +234,7 @@ function Test-Installation {
         if (Test-Path $promptfooExe) {
             $output = & $promptfooExe --version 2>&1
         } else {
-            $output = & cmd /c $promptfooCmd --version 2>&1
+            $output = & $promptfooCmd --version 2>&1
         }
         return $LASTEXITCODE -eq 0
     } catch {
