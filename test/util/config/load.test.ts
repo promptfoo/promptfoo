@@ -440,6 +440,23 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('preserves whether scenarios were omitted', async () => {
+    const baseConfig = {
+      prompts: ['prompt'],
+      providers: ['provider'],
+    };
+
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(baseConfig))
+      .mockReturnValueOnce(JSON.stringify({ ...baseConfig, scenarios: [] }));
+
+    const configWithoutScenarios = await combineConfigs(['without-scenarios.json']);
+    const configWithEmptyScenarios = await combineConfigs(['with-empty-scenarios.json']);
+
+    expect(configWithoutScenarios.scenarios).toBeUndefined();
+    expect(configWithEmptyScenarios.scenarios).toEqual([]);
+  });
+
   it('combines configs with provider-specific prompts', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
@@ -1247,6 +1264,20 @@ describe('combineConfigs', () => {
     expect(result.providers).toHaveLength(2);
   });
 
+  it('dedupes the same provider object with function fields when repeated', async () => {
+    const provider = { id: 'openai:gpt-4', transform: (output: string) => `${output}-a` };
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [provider, provider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([provider]);
+  });
+
   it('does not dedupe ApiProvider instances with prototype methods', async () => {
     class TestProvider {
       constructor(private readonly label: string) {}
@@ -1272,6 +1303,30 @@ describe('combineConfigs', () => {
     const result = await combineConfigs(['promptfooconfig.ts']);
 
     expect(result.providers).toEqual([providerA, providerB]);
+  });
+
+  it('dedupes the same ApiProvider instance when repeated', async () => {
+    class TestProvider {
+      id() {
+        return 'test-provider';
+      }
+
+      async callApi(prompt: string) {
+        return { output: prompt };
+      }
+    }
+
+    const provider = new TestProvider();
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [provider, provider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([provider]);
   });
 
   it('dedupes the same CallApiFunction instance when it appears multiple times', async () => {
