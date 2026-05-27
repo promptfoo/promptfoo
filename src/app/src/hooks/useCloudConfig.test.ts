@@ -1,4 +1,5 @@
 import useApiConfig from '@app/stores/apiConfig';
+import { useUserStore } from '@app/stores/userStore';
 import {
   createMockResponse,
   getCallApiMock,
@@ -26,15 +27,18 @@ const mockCloudConfig = {
   isEnterprise: false,
 };
 const initialApiBaseUrl = useApiConfig.getState().apiBaseUrl;
+const initialUserEmail = useUserStore.getState().email;
 
 describe('useCloudConfig', () => {
   beforeEach(() => {
     resetCallApiMock();
     useApiConfig.setState({ apiBaseUrl: initialApiBaseUrl });
+    useUserStore.setState({ email: initialUserEmail });
   });
 
   afterEach(() => {
     useApiConfig.setState({ apiBaseUrl: initialApiBaseUrl });
+    useUserStore.setState({ email: initialUserEmail });
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
@@ -376,5 +380,28 @@ describe('useCloudConfig', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should refetch cloud config when the logged-in identity changes', async () => {
+    mockCallApiResponseOnce(mockCloudConfig);
+    mockCallApiResponseOnce({
+      ...mockCloudConfig,
+      isEnabled: false,
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.data?.isEnabled).toBe(true);
+    });
+
+    act(() => {
+      useUserStore.setState({ email: 'user@example.com' });
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.isEnabled).toBe(false);
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
   });
 });

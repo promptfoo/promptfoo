@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import useApiConfig from '@app/stores/apiConfig';
+import { useUserStore } from '@app/stores/userStore';
 import { type CloudConfigResponse, CloudConfigResponseSchema } from '@promptfoo/types/api/user';
 import { callApi } from '../utils/api';
 
@@ -69,9 +70,15 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
         fetchCloudConfig();
       }
     });
+    const unsubscribeFromUserStore = useUserStore.subscribe((current, previous) => {
+      if (current.email !== previous.email) {
+        fetchCloudConfig();
+      }
+    });
     window.addEventListener(CLOUD_CONFIG_UPDATED_EVENT, handleCloudConfigUpdated);
     return () => {
       unsubscribeFromApiConfig();
+      unsubscribeFromUserStore();
       window.removeEventListener(CLOUD_CONFIG_UPDATED_EVENT, handleCloudConfigUpdated);
     };
   }, [fetchCloudConfig]);
