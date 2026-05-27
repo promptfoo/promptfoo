@@ -731,6 +731,43 @@ describe('TlsHttpsConfigTab', () => {
       );
     });
 
+    it('should clear incomplete PEM credentials when switching to JKS', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            certificateType: 'pem',
+            cert: 'orphaned-client-cert',
+            certPath: '/tmp/client-cert.pem',
+            key: 'orphaned-private-key',
+            keyPath: '/tmp/client-key.pem',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(screen.getByRole('option', { name: 'JKS (Java KeyStore)' }));
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+        'tls',
+        expect.objectContaining({
+          certificateType: 'jks',
+          cert: undefined,
+          certPath: undefined,
+          key: undefined,
+          keyPath: undefined,
+        }),
+      );
+    });
+
     it('should show PEM configuration fields when PEM certificate type is selected', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',

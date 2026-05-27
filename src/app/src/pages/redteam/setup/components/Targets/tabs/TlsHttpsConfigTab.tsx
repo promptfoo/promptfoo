@@ -53,20 +53,20 @@ function setCertificateType(tls: TlsConfig | undefined, value: string): TlsConfi
   // `none` is a UI-only sentinel; clear credentials when their type is deselected.
   const certificateType =
     value === 'none' ? undefined : (value as NonNullable<TlsConfig['certificateType']>);
-  const isPemOrJks = certificateType === 'pem' || certificateType === 'jks';
+  const isPem = certificateType === 'pem';
   const isJks = certificateType === 'jks';
   const isPfx = certificateType === 'pfx';
 
   return {
     ...tls,
     certificateType,
-    cert: isPemOrJks ? tls?.cert : undefined,
-    certPath: isPemOrJks ? tls?.certPath : undefined,
-    key: isPemOrJks ? tls?.key : undefined,
-    keyPath: isPemOrJks ? tls?.keyPath : undefined,
+    cert: isPem ? tls?.cert : undefined,
+    certPath: isPem ? tls?.certPath : undefined,
+    key: isPem ? tls?.key : undefined,
+    keyPath: isPem ? tls?.keyPath : undefined,
     pfx: isPfx ? tls?.pfx : undefined,
     pfxPath: isPfx ? tls?.pfxPath : undefined,
-    passphrase: isPemOrJks || isPfx ? tls?.passphrase : undefined,
+    passphrase: isPem || isJks || isPfx ? tls?.passphrase : undefined,
     jksPath: isJks ? tls?.jksPath : undefined,
     jksContent: isJks ? tls?.jksContent : undefined,
     jksFileName: isJks ? tls?.jksFileName : undefined,
