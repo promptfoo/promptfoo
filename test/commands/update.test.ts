@@ -18,6 +18,7 @@ vi.mock('../../src/telemetry', () => ({
 }));
 
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import type { ChildProcess } from 'node:child_process';
 
 import { Command } from 'commander';
@@ -74,14 +75,14 @@ describe('update command', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  it('should show already up to date message when no update available', async () => {
+  it('should leave command telemetry to the shared CLI hook', async () => {
     mockCheckForUpdates.mockResolvedValue(null);
 
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update']);
 
     expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'update' });
+    expect(telemetry.record).not.toHaveBeenCalled();
   });
 
   it('should show latest message in check mode when no update is available', async () => {
@@ -133,11 +134,17 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update']);
 
-    expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), true);
-    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
-      stdio: 'inherit',
-      shell: false,
-    });
+    expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), true, process.env);
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'promptfoo@1.1.0'],
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
+        stdio: 'inherit',
+        shell: false,
+      }),
+    );
   });
 
   it('should invoke Windows package manager shims through cmd.exe', async () => {
@@ -166,10 +173,12 @@ describe('update command', () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       process.env.ComSpec || 'cmd.exe',
       ['/d', '/s', '/c', 'npm.cmd', 'install', '-g', 'promptfoo@1.1.0'],
-      {
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
         stdio: 'inherit',
         shell: false,
-      },
+      }),
     );
   });
 
@@ -211,7 +220,72 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--force']);
 
-    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@latest'], {
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'promptfoo@latest'],
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
+        stdio: 'inherit',
+        shell: false,
+      }),
+    );
+  });
+
+  it('should force update with the latest package tag when version checking fails', async () => {
+    mockCheckForUpdates.mockRejectedValue(new Error('network unavailable'));
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update', '--force']);
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'promptfoo@latest'],
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
+        stdio: 'inherit',
+        shell: false,
+      }),
+    );
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('should run manual updates without forwarding evaluation credentials', async () => {
+    mockCheckForUpdates.mockResolvedValue({
+      message: 'Update available: 1.0.0 → 1.1.0',
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
+    });
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
+
+    updateCommand(program, {
+      PATH: '/safe/bin',
+      HOME: '/home/user',
+      OPENAI_API_KEY: 'not-for-installer',
+      NPM_TOKEN: 'not-for-installer',
+    });
+    await program.parseAsync(['node', 'test', 'update']);
+
+    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
+      cwd: tmpdir(),
+      env: { PATH: '/safe/bin', HOME: '/home/user' },
       stdio: 'inherit',
       shell: false,
     });

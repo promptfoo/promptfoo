@@ -55,6 +55,7 @@ import { VERSION } from './version';
 
 async function main() {
   const argv = process.argv.slice(2);
+  const startupEnvironment = { ...process.env };
   setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
@@ -86,7 +87,7 @@ async function main() {
 
           // Never replace the installed package while the current invocation is using it.
           if (enableAutoUpdate) {
-            scheduleAutoUpdateOnExit(info, disableUpdateNag, process.cwd());
+            scheduleAutoUpdateOnExit(info, disableUpdateNag, process.cwd(), startupEnvironment);
           }
         }
       })
@@ -145,7 +146,7 @@ async function main() {
   modelScanCommand(program);
   optimizeCommand(program, defaultConfig, defaultConfigPath);
   setupRetryCommand(program);
-  updateCommand(program);
+  updateCommand(program, startupEnvironment);
   validateCommand(program, defaultConfig, defaultConfigPath);
   void showCommand(program);
 

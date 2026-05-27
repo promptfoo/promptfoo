@@ -14,6 +14,7 @@ vi.mock('../../src/updates/installationInfo');
 vi.mock('../../src/updates/updateEventEmitter');
 
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import type { ChildProcess } from 'node:child_process';
 
 import {
@@ -149,11 +150,17 @@ describe('handleAutoUpdate', () => {
 
     handleAutoUpdate(info, false, false, '/project', mockSpawn);
 
-    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
-      stdio: 'ignore',
-      shell: false,
-      detached: true,
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'promptfoo@1.1.0'],
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
+        stdio: 'ignore',
+        shell: false,
+        detached: true,
+      }),
+    );
   });
 
   it('should invoke Windows package manager shims through cmd.exe', () => {
@@ -174,12 +181,42 @@ describe('handleAutoUpdate', () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       process.env.ComSpec || 'cmd.exe',
       ['/d', '/s', '/c', 'npm.cmd', 'install', '-g', 'promptfoo@1.1.0'],
-      {
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
         stdio: 'ignore',
         shell: false,
         detached: true,
-      },
+      }),
     );
+  });
+
+  it('should run automatic updates without forwarding evaluation credentials', () => {
+    const info: UpdateObject = {
+      message: 'Update available',
+      update: { current: '1.0.0', latest: '1.1.0', name: 'promptfoo' },
+    };
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+    });
+
+    handleAutoUpdate(info, false, false, '/untrusted/project', mockSpawn, {
+      PATH: '/safe/bin',
+      HOME: '/home/user',
+      OPENAI_API_KEY: 'not-for-installer',
+      NPM_TOKEN: 'not-for-installer',
+    });
+
+    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
+      cwd: tmpdir(),
+      env: { PATH: '/safe/bin', HOME: '/home/user' },
+      stdio: 'ignore',
+      shell: false,
+      detached: true,
+    });
   });
 
   it('should emit update-success on successful update', () => {
@@ -285,6 +322,7 @@ describe('handleAutoUpdate', () => {
       info,
       false,
       '/project',
+      process.env,
       (listener) => {
         beforeExit = listener;
       },
@@ -293,11 +331,17 @@ describe('handleAutoUpdate', () => {
 
     expect(mockSpawn).not.toHaveBeenCalled();
     beforeExit?.();
-    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
-      stdio: 'ignore',
-      shell: false,
-      detached: true,
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'promptfoo@1.1.0'],
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
+        stdio: 'ignore',
+        shell: false,
+        detached: true,
+      }),
+    );
   });
 });
 

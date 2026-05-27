@@ -124,7 +124,11 @@ export function detectPackageManagerFromEnv(): PackageManager {
  * Detects package manager from file paths (comprehensive, for update logic).
  * This examines the actual CLI path to determine installation method.
  */
-export function detectPackageManagerFromPath(cliPath: string, projectRoot: string): PackageManager {
+export function detectPackageManagerFromPath(
+  cliPath: string,
+  projectRoot: string,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
+): PackageManager {
   try {
     // Normalize path separators to forward slashes for consistent matching
     const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
@@ -132,7 +136,7 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     const isGit = isGitRepository(process.cwd());
 
     // Check for Docker environment
-    if (process.env.DOCKER === 'true' || fs.existsSync('/.dockerenv')) {
+    if (sourceEnvironment.DOCKER === 'true' || fs.existsSync('/.dockerenv')) {
       return PackageManager.DOCKER;
     }
 
@@ -154,6 +158,19 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
       return PackageManager.PNPX;
     }
 
+    // Local dependencies take precedence over global-looking parent folder names.
+    const localInstallationRoot = findLocalInstallationRoot(realPath, projectRoot);
+    if (localInstallationRoot) {
+      if (fs.existsSync(path.join(localInstallationRoot, 'yarn.lock'))) {
+        return PackageManager.YARN;
+      } else if (fs.existsSync(path.join(localInstallationRoot, 'pnpm-lock.yaml'))) {
+        return PackageManager.PNPM;
+      } else if (fs.existsSync(path.join(localInstallationRoot, 'bun.lockb'))) {
+        return PackageManager.BUN;
+      }
+      return PackageManager.NPM;
+    }
+
     // Check for Homebrew (only on macOS)
     // Note: We use sync here because this is called during initialization
     // The performance impact is minimal as it only runs on macOS during startup
@@ -173,7 +190,7 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     if (
       pathContains(realPath, '/.pnpm/global') ||
       pathContains(realPath, '/pnpm/global') ||
-      (process.env.PNPM_HOME && pathContains(realPath, process.env.PNPM_HOME))
+      (sourceEnvironment.PNPM_HOME && pathContains(realPath, sourceEnvironment.PNPM_HOME))
     ) {
       return PackageManager.PNPM;
     }
@@ -187,7 +204,8 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
       pathContains(realPath, '/.config/yarn/global') ||
       pathContains(realPath, '/yarn/global') ||
       lowerPath.includes('/yarn/data/global') || // Windows: case-insensitive for Yarn/Data
-      (process.env.YARN_GLOBAL_FOLDER && pathContains(realPath, process.env.YARN_GLOBAL_FOLDER))
+      (sourceEnvironment.YARN_GLOBAL_FOLDER &&
+        pathContains(realPath, sourceEnvironment.YARN_GLOBAL_FOLDER))
     ) {
       return PackageManager.YARN;
     }
@@ -196,22 +214,8 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     if (pathContains(realPath, '/.bun/install/cache')) {
       return PackageManager.BUNX;
     }
-    if (pathContains(realPath, '/.bun/bin')) {
+    if (pathContains(realPath, '/.bun/bin') || pathContains(realPath, '/.bun/install/global/')) {
       return PackageManager.BUN;
-    }
-
-    // Check for local install
-    const localInstallationRoot = findLocalInstallationRoot(realPath, projectRoot);
-    if (localInstallationRoot) {
-      // Detect which package manager based on lock files
-      if (fs.existsSync(path.join(localInstallationRoot, 'yarn.lock'))) {
-        return PackageManager.YARN;
-      } else if (fs.existsSync(path.join(localInstallationRoot, 'pnpm-lock.yaml'))) {
-        return PackageManager.PNPM;
-      } else if (fs.existsSync(path.join(localInstallationRoot, 'bun.lockb'))) {
-        return PackageManager.BUN;
-      }
-      return PackageManager.NPM;
     }
 
     // Default to npm

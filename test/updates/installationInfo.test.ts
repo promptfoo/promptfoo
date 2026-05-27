@@ -6,6 +6,7 @@ vi.mock('../../src/logger');
 
 import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
+import { tmpdir } from 'node:os';
 
 import logger from '../../src/logger';
 import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
@@ -393,6 +394,22 @@ describe('getInstallationInfo', () => {
     });
   });
 
+  it('should detect a Bun global linked binary after resolving its installation path', () => {
+    process.argv = ['node', '/home/user/.bun/bin/promptfoo'];
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.bun/install/global/node_modules/promptfoo/dist/src/main.js',
+    );
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.BUN,
+      isGlobal: true,
+      updateCommand: 'bun add -g promptfoo@latest',
+      updateMessage: 'Installed with bun. Attempting to automatically update now...',
+    });
+  });
+
   it('should detect local npm installation', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
@@ -475,6 +492,42 @@ describe('getInstallationInfo', () => {
     });
   });
 
+  it('should keep local pnpm installs local inside a global-looking directory', () => {
+    const projectRoot = '/workspace/pnpm/global-app';
+    process.argv = ['node', `${projectRoot}/node_modules/promptfoo/dist/src/main.js`];
+    mockFs.realpathSync.mockReturnValue(`${projectRoot}/node_modules/promptfoo/dist/src/main.js`);
+    mockFs.existsSync.mockImplementation((path) => {
+      const normalizedPath = path.toString().replace(/\\/g, '/');
+      return normalizedPath === `${projectRoot}/pnpm-lock.yaml`;
+    });
+
+    const result = getInstallationInfo(projectRoot, false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.PNPM,
+      isGlobal: false,
+      updateMessage: "Locally installed. Please update via your project's package.json.",
+    });
+  });
+
+  it('should keep local Yarn installs local inside a global-looking directory', () => {
+    const projectRoot = '/workspace/yarn/global-app';
+    process.argv = ['node', `${projectRoot}/node_modules/promptfoo/dist/src/main.js`];
+    mockFs.realpathSync.mockReturnValue(`${projectRoot}/node_modules/promptfoo/dist/src/main.js`);
+    mockFs.existsSync.mockImplementation((path) => {
+      const normalizedPath = path.toString().replace(/\\/g, '/');
+      return normalizedPath === `${projectRoot}/yarn.lock`;
+    });
+
+    const result = getInstallationInfo(projectRoot, false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.YARN,
+      isGlobal: false,
+      updateMessage: "Locally installed. Please update via your project's package.json.",
+    });
+  });
+
   it('should detect local bun installation from bun.lockb', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
@@ -512,6 +565,28 @@ describe('getInstallationInfo', () => {
       updateCommand: 'npm install -g promptfoo@latest',
       updateMessage: 'Installed with npm. Attempting to automatically update now...',
     });
+  });
+
+  it('should check npm global roots outside the project without application credentials', () => {
+    process.argv = ['node', '/usr/local/lib/node_modules/promptfoo/dist/src/main.js'];
+    mockFs.realpathSync.mockReturnValue('/usr/local/lib/node_modules/promptfoo/dist/src/main.js');
+    mockChildProcess.execFileSync.mockReturnValue('/usr/local/lib/node_modules\n');
+
+    const result = getInstallationInfo('/untrusted/project', false, {
+      PATH: '/safe/bin',
+      HOME: '/home/user',
+      OPENAI_API_KEY: 'not-for-npm',
+      NPM_TOKEN: 'not-for-npm',
+    });
+
+    expect(mockChildProcess.execFileSync).toHaveBeenCalledWith('npm', ['root', '--global'], {
+      cwd: tmpdir(),
+      env: { PATH: '/safe/bin', HOME: '/home/user' },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1000,
+    });
+    expect(result.isGlobal).toBe(true);
   });
 
   it('should return Windows npm shim command for confirmed global npm installations', () => {

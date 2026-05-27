@@ -2,12 +2,18 @@ import { spawn } from 'node:child_process';
 
 import { Command } from 'commander';
 import logger from '../logger';
-import telemetry from '../telemetry';
 import { getInstallationInfo } from '../updates/installationInfo';
 import { checkForUpdates } from '../updates/updateCheck';
-import { parseUpdateCommandForSpawn, withTargetVersion } from '../updates/updateCommandUtils';
+import {
+  getUpdateSpawnContext,
+  parseUpdateCommandForSpawn,
+  withTargetVersion,
+} from '../updates/updateCommandUtils';
 
-export function updateCommand(program: Command) {
+export function updateCommand(
+  program: Command,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
+) {
   const updateCmd = program
     .command('update')
     .description('Update promptfoo to the latest version')
@@ -15,10 +21,21 @@ export function updateCommand(program: Command) {
     .option('--force', 'Force update even if already on latest version')
     .action(async (options) => {
       try {
-        telemetry.record('command_used', { name: 'update' });
         logger.info('Checking for updates...');
 
-        const updateInfo = await checkForUpdates({ throwOnError: true });
+        let updateInfo: Awaited<ReturnType<typeof checkForUpdates>>;
+        try {
+          updateInfo = await checkForUpdates({ throwOnError: true });
+        } catch (error) {
+          if (!options.force || options.check) {
+            throw error;
+          }
+
+          logger.warn(
+            'Unable to check the current published version; continuing with a forced update to the latest package tag.',
+          );
+          updateInfo = null;
+        }
 
         if (options.check) {
           if (updateInfo) {
@@ -36,7 +53,7 @@ export function updateCommand(program: Command) {
         }
 
         // Pass true for manual update command to get proper error messages (not auto-update wording)
-        const installationInfo = getInstallationInfo(process.cwd(), true);
+        const installationInfo = getInstallationInfo(process.cwd(), true, sourceEnvironment);
 
         // Show what we detected
         logger.info(
@@ -57,10 +74,12 @@ export function updateCommand(program: Command) {
         logger.info(`Running: ${updateCommand}`);
 
         const { command, args } = parseUpdateCommandForSpawn(updateCommand);
+        const spawnContext = getUpdateSpawnContext(sourceEnvironment);
 
         // Execute the update command and wait for it to complete
         await new Promise<void>((resolve, reject) => {
           const updateProcess = spawn(command, args, {
+            ...spawnContext,
             stdio: 'inherit',
             shell: false, // Safer: no shell injection
           });

@@ -10,7 +10,11 @@ import {
   pathContains,
   pathStartsWith,
 } from '../util/installationDetection';
-import { getPackageManagerExecutable, parseUpdateCommandForSpawn } from './updateCommandUtils';
+import {
+  getPackageManagerExecutable,
+  getUpdateSpawnContext,
+  parseUpdateCommandForSpawn,
+} from './updateCommandUtils';
 
 // Re-export for backward compatibility
 export { PackageManager };
@@ -52,9 +56,15 @@ function globalInstallationInfo(
 
 function getPnpmInstallationInfo(
   realPath: string,
+  projectRoot: string,
   isAutoUpdateDisabled: boolean,
+  sourceEnvironment: NodeJS.ProcessEnv,
 ): InstallationInfo {
-  const pnpmHome = process.env.PNPM_HOME;
+  if (findLocalInstallationRoot(realPath, projectRoot)) {
+    return localInstallationInfo(PackageManager.PNPM);
+  }
+
+  const pnpmHome = sourceEnvironment.PNPM_HOME;
   const isGlobal =
     pathContains(realPath, '/.pnpm/global') ||
     pathContains(realPath, '/pnpm/global') ||
@@ -72,9 +82,15 @@ function getPnpmInstallationInfo(
 
 function getYarnInstallationInfo(
   realPath: string,
+  projectRoot: string,
   isAutoUpdateDisabled: boolean,
+  sourceEnvironment: NodeJS.ProcessEnv,
 ): InstallationInfo {
-  const yarnGlobalFolder = process.env.YARN_GLOBAL_FOLDER;
+  if (findLocalInstallationRoot(realPath, projectRoot)) {
+    return localInstallationInfo(PackageManager.YARN);
+  }
+
+  const yarnGlobalFolder = sourceEnvironment.YARN_GLOBAL_FOLDER;
   const isGlobal =
     pathContains(realPath, '/.yarn/global') ||
     pathContains(realPath, '/.config/yarn/global') ||
@@ -92,8 +108,16 @@ function getYarnInstallationInfo(
     : localInstallationInfo(PackageManager.YARN);
 }
 
-function getBunInstallationInfo(realPath: string, isAutoUpdateDisabled: boolean): InstallationInfo {
-  return pathContains(realPath, '/.bun/bin')
+function getBunInstallationInfo(
+  realPath: string,
+  projectRoot: string,
+  isAutoUpdateDisabled: boolean,
+): InstallationInfo {
+  if (findLocalInstallationRoot(realPath, projectRoot)) {
+    return localInstallationInfo(PackageManager.BUN);
+  }
+
+  return pathContains(realPath, '/.bun/bin') || pathContains(realPath, '/.bun/install/global/')
     ? globalInstallationInfo(
         PackageManager.BUN,
         'bun',
@@ -107,6 +131,7 @@ function getNpmInstallationInfo(
   realPath: string,
   projectRoot: string,
   isAutoUpdateDisabled: boolean,
+  sourceEnvironment: NodeJS.ProcessEnv,
 ): InstallationInfo {
   if (findLocalInstallationRoot(realPath, projectRoot)) {
     return localInstallationInfo(PackageManager.NPM);
@@ -116,6 +141,7 @@ function getNpmInstallationInfo(
     const npmExecutable = getPackageManagerExecutable('npm');
     const { command, args } = parseUpdateCommandForSpawn(`${npmExecutable} root --global`);
     const globalRoot = execFileSync(command, args, {
+      ...getUpdateSpawnContext(sourceEnvironment),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 1000,
@@ -145,6 +171,7 @@ function getNpmInstallationInfo(
 export function getInstallationInfo(
   projectRoot: string,
   isAutoUpdateDisabled: boolean,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
 ): InstallationInfo {
   const cliPath = process.argv[1];
   if (!cliPath) {
@@ -152,7 +179,7 @@ export function getInstallationInfo(
   }
 
   try {
-    const packageManager = detectPackageManagerFromPath(cliPath, projectRoot);
+    const packageManager = detectPackageManagerFromPath(cliPath, projectRoot, sourceEnvironment);
     const isGit = isGitRepository(process.cwd());
     const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
     const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
@@ -207,19 +234,34 @@ export function getInstallationInfo(
         };
 
       case PackageManager.PNPM: {
-        return getPnpmInstallationInfo(realPath, isAutoUpdateDisabled);
+        return getPnpmInstallationInfo(
+          realPath,
+          projectRoot,
+          isAutoUpdateDisabled,
+          sourceEnvironment,
+        );
       }
 
       case PackageManager.YARN: {
-        return getYarnInstallationInfo(realPath, isAutoUpdateDisabled);
+        return getYarnInstallationInfo(
+          realPath,
+          projectRoot,
+          isAutoUpdateDisabled,
+          sourceEnvironment,
+        );
       }
 
       case PackageManager.BUN: {
-        return getBunInstallationInfo(realPath, isAutoUpdateDisabled);
+        return getBunInstallationInfo(realPath, projectRoot, isAutoUpdateDisabled);
       }
 
       case PackageManager.NPM: {
-        return getNpmInstallationInfo(realPath, projectRoot, isAutoUpdateDisabled);
+        return getNpmInstallationInfo(
+          realPath,
+          projectRoot,
+          isAutoUpdateDisabled,
+          sourceEnvironment,
+        );
       }
 
       default:

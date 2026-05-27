@@ -83,6 +83,7 @@ export PROMPTFOO_ENABLE_AUTO_UPDATE=0
 - Auto-updates only work for globally installed instances (npm, yarn, pnpm, bun)
 - Updates begin after the current promptfoo command completes
 - The new version takes effect on the next promptfoo command
+- Updaters run outside the project directory with a restricted environment; project `.env` credentials and workspace package-manager settings are not forwarded
 - No updates occur for local project installations, Docker, or npx usage
 - npm auto-updates require confirmation that the active CLI is from npm's global install root
 - Updates are skipped if `PROMPTFOO_DISABLE_UPDATE=1` is set

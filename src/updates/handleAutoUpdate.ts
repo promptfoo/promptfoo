@@ -2,7 +2,11 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import type { spawn } from 'node:child_process';
 
 import { getInstallationInfo } from './installationInfo';
-import { parseUpdateCommandForSpawn, withTargetVersion } from './updateCommandUtils';
+import {
+  getUpdateSpawnContext,
+  parseUpdateCommandForSpawn,
+  withTargetVersion,
+} from './updateCommandUtils';
 import { updateEventEmitter } from './updateEventEmitter';
 
 import type { UpdateObject } from './updateCheck';
@@ -11,13 +15,14 @@ export function scheduleAutoUpdateOnExit(
   info: UpdateObject,
   disableUpdateNag: boolean,
   projectRoot: string,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
   registerBeforeExit: (listener: () => void) => void = (listener) => {
     process.once('beforeExit', listener);
   },
   spawnFn: typeof spawn = nodeSpawn,
 ) {
   registerBeforeExit(() => {
-    handleAutoUpdate(info, disableUpdateNag, false, projectRoot, spawnFn);
+    handleAutoUpdate(info, disableUpdateNag, false, projectRoot, spawnFn, sourceEnvironment);
   });
 }
 
@@ -27,6 +32,7 @@ export function handleAutoUpdate(
   disableAutoUpdate: boolean,
   projectRoot: string,
   spawnFn: typeof spawn = nodeSpawn,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
 ) {
   if (!info) {
     return;
@@ -36,7 +42,7 @@ export function handleAutoUpdate(
     return;
   }
 
-  const installationInfo = getInstallationInfo(projectRoot, disableAutoUpdate);
+  const installationInfo = getInstallationInfo(projectRoot, disableAutoUpdate, sourceEnvironment);
 
   let combinedMessage = info.message;
   if (installationInfo.updateMessage) {
@@ -53,11 +59,13 @@ export function handleAutoUpdate(
 
   const updateCommand = withTargetVersion(installationInfo.updateCommand, info.update.latest);
   const { command, args } = parseUpdateCommandForSpawn(updateCommand);
+  const spawnContext = getUpdateSpawnContext(sourceEnvironment);
 
   // Use 'ignore' to prevent deadlocks from pipe buffer filling
   // Use 'detached' so the process can continue after parent exits (especially on Windows)
   // The update runs in background, we don't need to capture output
   const updateProcess = spawnFn(command, args, {
+    ...spawnContext,
     stdio: 'ignore',
     shell: false,
     detached: true,
