@@ -92,7 +92,18 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   const serializeClientMethod = <TArgs extends unknown[], TResult>(
     method: (...args: TArgs) => Promise<TResult>,
   ) => {
-    return (...args: TArgs) => runSerialized(() => method(...args));
+    return (...args: TArgs) => {
+      // When called inside an active transaction's async chain, bypass the
+      // queue: the outer transaction is already holding it and waiting for
+      // this operation to resolve, so queueing would deadlock. WAL mode lets
+      // SELECTs from a fresh connection proceed; write attempts will surface
+      // as SQLITE_BUSY, which is the correct loud failure for code that
+      // should be using the `tx` handle instead of the root client.
+      if (activeTransaction.getStore()) {
+        return method(...args);
+      }
+      return runSerialized(() => method(...args));
+    };
   };
 
   // better-sqlite3 executed statements synchronously on one connection. libsql opens a
