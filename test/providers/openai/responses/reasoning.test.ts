@@ -123,6 +123,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
     { model: 'codex-mini-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
     { model: 'chat-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
+    { model: 'openai/chat-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
   ] as const)('should configure $model model correctly with reasoning parameters', async ({
     model,
     reasoningEffort,
@@ -172,6 +173,20 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect(body.reasoning).toEqual({ effort: reasoningEffort });
     expect(body.max_output_tokens).toBe(maxOutputTokens);
     expect(body.temperature).toBeUndefined();
+  });
+
+  it('should not apply chat-latest reasoning defaults to custom model suffixes', async () => {
+    const provider = new OpenAiResponsesProvider('vendor/chat-latest', {
+      config: {
+        apiKey: 'test-key',
+        temperature: 0.7,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.temperature).toBe(0.7);
+    expect(body.reasoning).toBeUndefined();
   });
 
   describe('deep research model validation', () => {

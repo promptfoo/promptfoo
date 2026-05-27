@@ -1689,6 +1689,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Non-GPT-5 models
       const gpt4Provider = new OpenAiChatCompletionProvider('gpt-4');
       const gpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
+      const customChatLatestProvider = new OpenAiChatCompletionProvider('vendor/chat-latest');
 
       expect(gpt5Provider['isGPT5Model']()).toBe(true);
       expect(gpt55Provider['isGPT5Model']()).toBe(true);
@@ -1706,6 +1707,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedGpt5NanoProvider['isGPT5Model']()).toBe(true);
       expect(gpt4Provider['isGPT5Model']()).toBe(false);
       expect(gpt4oProvider['isGPT5Model']()).toBe(false);
+      expect(customChatLatestProvider['isGPT5Model']()).toBe(false);
+      expect(customChatLatestProvider['supportsTemperature']()).toBe(true);
     });
 
     it('should identify reasoning models with prefixed names (GitHub Models)', async () => {

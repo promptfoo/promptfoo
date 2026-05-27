@@ -130,6 +130,25 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 10);
   });
 
+  it('prices chat-latest image input tokens at its published input rates', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          input_tokens: 200,
+          output_tokens: 10,
+          input_tokens_details: {
+            text_tokens: 100,
+            image_tokens: 100,
+            cached_tokens: 40,
+            cached_tokens_details: { image_tokens: 40 },
+          },
+        },
+      ),
+    ).toBeCloseTo((100 * 5 + 60 * 5 + 40 * 0.5 + 10 * 30) / 1e6, 10);
+  });
+
   it('keeps documented standard rates for chat-latest long prompts', () => {
     expect(
       calculateOpenAIUsageCost(
@@ -160,7 +179,7 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
   });
 
-  it('does not invent unlisted processing tier rates for chat-latest', () => {
+  it('uses published batch rates without inventing flex or priority rates for chat-latest', () => {
     const usage = {
       input_tokens: 1_000,
       output_tokens: 100,
@@ -169,7 +188,7 @@ describe('OpenAI billing helpers', () => {
 
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'batch' }),
-    ).toBeUndefined();
+    ).toBeCloseTo((600 * 5 + 400 * 0.5 + 100 * 30) / 1e6, 10);
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' }),
     ).toBeUndefined();
@@ -485,6 +504,10 @@ describe('OpenAI billing helpers', () => {
     expect(calculateObservableOpenAIToolCost(output, 'chat-latest', config)).toBeCloseTo(0.01, 10);
     expect(calculateObservableOpenAIToolCost(output, 'openai/chat-latest', config)).toBeCloseTo(
       0.01,
+      10,
+    );
+    expect(calculateObservableOpenAIToolCost(output, 'vendor/chat-latest', config)).toBeCloseTo(
+      0.025,
       10,
     );
   });

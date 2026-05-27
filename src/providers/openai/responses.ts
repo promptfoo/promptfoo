@@ -150,7 +150,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // (openai/gpt-5-mini), and the floating Instant alias.
     return (
       this.modelName === 'chat-latest' ||
-      this.modelName.endsWith('/chat-latest') ||
+      this.modelName === 'openai/chat-latest' ||
       this.modelName.startsWith('gpt-5') ||
       this.modelName.includes('/gpt-5')
     );
