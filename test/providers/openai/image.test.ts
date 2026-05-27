@@ -5,7 +5,11 @@ import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { storeBlob } from '../../../src/blobs/index';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
-import { fetchWithProxy, getFetchTlsOptions } from '../../../src/util/fetch/index';
+import {
+  fetchWithProxy,
+  getFetchTlsOptions,
+  getProxyUrlForTarget,
+} from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
@@ -28,6 +32,7 @@ vi.mock('../../../src/blobs/index', async (importOriginal) => ({
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
   getFetchTlsOptions: vi.fn(),
+  getProxyUrlForTarget: vi.fn(),
 }));
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -66,6 +71,7 @@ describe('OpenAiImageProvider', () => {
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
     vi.mocked(getFetchTlsOptions).mockResolvedValue({});
+    vi.mocked(getProxyUrlForTarget).mockReturnValue('');
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
       status: 200,
@@ -378,11 +384,11 @@ describe('OpenAiImageProvider', () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
         },
         cached: false,
         status: 200,
         statusText: 'OK',
+        deleteFromCache: mockDeleteFn,
       });
 
       await provider.callApi('test prompt');

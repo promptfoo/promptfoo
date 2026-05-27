@@ -18,7 +18,11 @@ import {
   processApiResponse,
   validateSizeForModel,
 } from '../../../src/providers/openai/image';
-import { fetchWithProxy, getFetchTlsOptions } from '../../../src/util/fetch/index';
+import {
+  fetchWithProxy,
+  getFetchTlsOptions,
+  getProxyUrlForTarget,
+} from '../../../src/util/fetch/index';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
@@ -39,6 +43,7 @@ vi.mock('../../../src/blobs/index', async (importOriginal) => ({
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
   getFetchTlsOptions: vi.fn(),
+  getProxyUrlForTarget: vi.fn(),
 }));
 
 const lookupMock = lookup as unknown as Mock;
@@ -51,6 +56,7 @@ describe('OpenAI Image Provider Functions', () => {
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(getFetchTlsOptions).mockResolvedValue({});
+    vi.mocked(getProxyUrlForTarget).mockReturnValue('');
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
       status: 200,
@@ -481,6 +487,35 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result.cost).toBe(0);
     });
 
+    it('should evict a cached URL response when its image can no longer be internalized', async () => {
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        headers: new Headers(),
+      } as Response);
+
+      const result = await processApiResponse(
+        { data: [{ url: 'https://example.com/expired.png' }] },
+        'test prompt',
+        'url',
+        true,
+        'dall-e-2',
+        '512x512',
+        undefined,
+        undefined,
+        1,
+        undefined,
+        undefined,
+        {},
+        deleteFromCache,
+      );
+
+      expect(result.error).toContain('cached response was evicted');
+      expect(deleteFromCache).toHaveBeenCalledWith();
+    });
+
     it('should map image API usage to token usage and metadata', async () => {
       const data = {
         data: [{ b64_json: 'base64data' }],
@@ -605,6 +640,50 @@ describe('OpenAI Image Provider Functions', () => {
         }),
       );
       expect(getFetchTlsOptions).toHaveBeenCalledWith();
+      expect(storeBlob).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', undefined);
+    });
+
+    it('should route proxied downloads to a validated address while retaining the original host', async () => {
+      vi.mocked(getProxyUrlForTarget).mockReturnValue('http://proxy.example');
+
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://example.com/image.jpg?size=large' }],
+      });
+
+      expect(result).toBeDefined();
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://93.184.216.34/image.jpg?size=large',
+        expect.objectContaining({
+          headers: { Host: 'example.com' },
+          dispatcher: expect.anything(),
+        }),
+      );
+    });
+
+    it('should store a blob reference only when full row context is available', async () => {
+      await buildSafeStructuredImageOutputs(
+        { data: [{ url: 'https://example.com/image.png' }] },
+        undefined,
+        { evaluationId: 'eval-1', testIdx: 0, promptIdx: 1 },
+      );
+
+      expect(storeBlob).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', {
+        evalId: 'eval-1',
+        testIdx: 0,
+        promptIdx: 1,
+        location: 'response.images[0]',
+        kind: 'image',
+      });
+    });
+
+    it('should defer blob references when evaluation row coordinates are unavailable', async () => {
+      await buildSafeStructuredImageOutputs(
+        { data: [{ url: 'https://example.com/image.png' }] },
+        undefined,
+        { evaluationId: 'eval-1' },
+      );
+
+      expect(storeBlob).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', undefined);
     });
 
     it('should skip external URLs when blob storage is disabled', async () => {

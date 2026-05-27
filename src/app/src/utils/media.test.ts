@@ -661,9 +661,10 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri('/some/path')).toBeUndefined();
   });
 
-  it('should pass through /api/ paths', () => {
+  it('should pass through blob and media API paths only', () => {
     expect(resolveBlobUri('/api/blobs/abc123')).toBe('/api/blobs/abc123');
     expect(resolveBlobUri('/api/media/test.png')).toBe('/api/media/test.png');
+    expect(resolveBlobUri('/api/users/me/avatar')).toBeUndefined();
   });
 
   it('should pass through paths on the configured API origin only', () => {
@@ -672,6 +673,7 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri('https://api.example.com/api/blobs/abc123')).toBe(
       'https://api.example.com/api/blobs/abc123',
     );
+    expect(resolveBlobUri('https://api.example.com/api/users/me/avatar')).toBeUndefined();
     expect(resolveBlobUri('https://api.example.com.evil/api/blobs/abc123')).toBeUndefined();
   });
 

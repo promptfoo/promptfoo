@@ -97,7 +97,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   // External URLs (http://, https://, //) are NOT allowed to prevent untrusted
   // eval content from causing browser requests.
   // See SECURITY.md - test data and model outputs are untrusted inputs
-  if (uri.startsWith('/api/') || uri.startsWith('data:')) {
+  if (uri.startsWith('/api/blobs/') || uri.startsWith('/api/media/') || uri.startsWith('data:')) {
     return uri;
   }
 
@@ -106,7 +106,10 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   }
 
   const apiBase = getApiBaseUrl();
-  if (apiBase && uri.startsWith(`${apiBase}/api/`)) {
+  if (
+    apiBase &&
+    (uri.startsWith(`${apiBase}/api/blobs/`) || uri.startsWith(`${apiBase}/api/media/`))
+  ) {
     return uri;
   }
 

@@ -5,7 +5,11 @@ import { isBlobStorageEnabled } from '../../src/blobs/extractor';
 import { storeBlob } from '../../src/blobs/index';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { callOpenAiImageApi } from '../../src/providers/openai/image';
-import { fetchWithProxy, getFetchTlsOptions } from '../../src/util/fetch/index';
+import {
+  fetchWithProxy,
+  getFetchTlsOptions,
+  getProxyUrlForTarget,
+} from '../../src/util/fetch/index';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
@@ -28,6 +32,7 @@ vi.mock('../../src/blobs/index', async (importOriginal) => ({
 vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
   getFetchTlsOptions: vi.fn(),
+  getProxyUrlForTarget: vi.fn(),
 }));
 vi.mock('../../src/providers/openai/image', async () => {
   const actual = await vi.importActual('../../src/providers/openai/image');
@@ -47,6 +52,7 @@ describe('NscaleImageProvider', () => {
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(getFetchTlsOptions).mockResolvedValue({});
+    vi.mocked(getProxyUrlForTarget).mockReturnValue('');
     vi.mocked(callOpenAiImageApi).mockResolvedValue({
       data: {
         data: [{ url: 'https://example.com/generated.png' }],
@@ -141,11 +147,11 @@ describe('NscaleImageProvider', () => {
     vi.mocked(callOpenAiImageApi).mockResolvedValue({
       data: {
         data: [{ url: 'https://example.com/generated.png' }],
-        deleteFromCache,
       },
       cached: true,
       status: 200,
       statusText: 'OK',
+      deleteFromCache,
     });
 
     const provider = new NscaleImageProvider('BlackForestLabs/FLUX.1-schnell', {
@@ -157,5 +163,33 @@ describe('NscaleImageProvider', () => {
     expect(result.error).toContain('No base64 image data found in response');
     expect(deleteFromCache).toHaveBeenCalledWith();
     expect(fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('evicts expired cached URL responses rather than returning an unusable image output', async () => {
+    const deleteFromCache = vi.fn();
+    vi.mocked(callOpenAiImageApi).mockResolvedValue({
+      data: {
+        data: [{ url: 'https://example.com/expired.png' }],
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+    });
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      headers: new Headers(),
+    } as Response);
+
+    const provider = new NscaleImageProvider('BlackForestLabs/FLUX.1-schnell', {
+      config: { apiKey: 'test-key', response_format: 'url' },
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('cached response was evicted');
+    expect(deleteFromCache).toHaveBeenCalledWith();
   });
 });

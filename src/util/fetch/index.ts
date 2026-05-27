@@ -177,6 +177,10 @@ export async function getFetchTlsOptions(): Promise<ConnectionOptions> {
   return tlsOptions;
 }
 
+export function getProxyUrlForTarget(url: string): string {
+  return getProxyForUrl(url);
+}
+
 function getFetchUrlString(url: RequestInfo): string | undefined {
   if (typeof url === 'string') {
     return url;
@@ -248,7 +252,7 @@ export async function fetchWithProxy(
   }
 
   const tlsOptions = await getFetchTlsOptions();
-  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
+  const proxyUrl = finalUrlString ? getProxyUrlForTarget(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).

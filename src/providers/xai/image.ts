@@ -6,6 +6,8 @@ import {
   callOpenAiImageApi,
   formatStructuredImageOutput,
   OpenAiImageProvider,
+  shouldEvictCachedExternalImageResponse,
+  UNUSABLE_CACHED_EXTERNAL_IMAGE_ERROR,
 } from '../openai/image';
 import { getRequestTimeoutMs } from '../shared';
 import { getXAICostInUsd } from './chat';
@@ -196,8 +198,12 @@ export class XAIImageProvider extends OpenAiImageProvider {
     let data: any, status: number, statusText: string;
     let cached = false;
     let latencyMs: number | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    const evictFromCache = async () => {
+      await (deleteFromCache ?? data?.deleteFromCache)?.();
+    };
     try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -210,14 +216,14 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
     if (data.error) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
@@ -238,8 +244,13 @@ export class XAIImageProvider extends OpenAiImageProvider {
         images,
       );
       if (typeof formattedOutput === 'object') {
-        await data?.deleteFromCache?.();
+        await evictFromCache();
         return formattedOutput;
+      }
+
+      if (shouldEvictCachedExternalImageResponse(data, formattedOutput, cached)) {
+        await evictFromCache();
+        return { error: UNUSABLE_CACHED_EXTERNAL_IMAGE_ERROR };
       }
 
       const reportedCost = getXAICostInUsd(data.usage);
@@ -262,7 +273,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
