@@ -14,6 +14,22 @@ import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCe
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
+// EvalOutputCell consumes `useCloudConfig` for share-link metadata. The hook
+// is now TanStack-Query-backed; useQuery schedules internal cleanup/refetch
+// timers that leak into the active-timer counts asserted by the link-feedback
+// timer tests below. The cloud config isn't relevant to those assertions, so
+// stub the hook out at module scope.
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  __esModule: true,
+  default: vi.fn(() => ({
+    data: { isEnabled: false, appUrl: null, isEnterprise: false },
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}));
+
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(({ gradingResults, metadata, onClose }) => (

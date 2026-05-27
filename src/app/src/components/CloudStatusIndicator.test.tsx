@@ -45,9 +45,10 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: null,
       isLoading: true,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -65,9 +66,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -85,9 +87,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: true,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -105,9 +108,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -121,9 +125,10 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: null,
       isLoading: false,
-      error: 'Network error',
+      isError: true,
+      error: new Error('Network error'),
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -142,9 +147,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -171,9 +177,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -198,9 +205,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: true,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -224,9 +232,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -252,9 +261,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
-      error: 'Network error',
+      isError: true,
+      error: new Error('Network error'),
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -277,9 +287,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -309,9 +320,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: true,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -334,9 +346,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: true,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -359,9 +372,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -380,9 +394,10 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: null,
       isLoading: false,
-      error: 'Network connection failed',
+      isError: true,
+      error: new Error('Network connection failed'),
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -404,9 +419,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -428,9 +444,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -457,9 +474,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: false,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 
@@ -482,9 +500,10 @@ describe('CloudStatusIndicator', () => {
         isEnterprise: false,
       },
       isLoading: true,
+      isError: false,
       error: null,
       refetch: mockRefetch,
-    });
+    } as any);
 
     renderCloudStatusIndicator();
 

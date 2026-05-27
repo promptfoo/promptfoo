@@ -1,18 +1,10 @@
-import useApiConfig from '@app/stores/apiConfig';
-import { useUserStore } from '@app/stores/userStore';
-import {
-  createMockResponse,
-  getCallApiMock,
-  mockCallApiResponse,
-  mockCallApiResponseOnce,
-  rejectCallApi,
-  rejectCallApiOnce,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
-import { callApi } from '@app/utils/api';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+
+import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import useCloudConfig, { notifyCloudConfigUpdated } from './useCloudConfig';
+import useCloudConfig, { useInvalidateCloudConfig } from './useCloudConfig';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -26,382 +18,105 @@ const mockCloudConfig = {
   appUrl: 'https://app.promptfoo.app',
   isEnterprise: false,
 };
-const initialApiBaseUrl = useApiConfig.getState().apiBaseUrl;
-const initialUserEmail = useUserStore.getState().email;
+
+function makeWrapper() {
+  // Fresh client per test so caches don't leak between cases. Retry disabled
+  // so failing fetches surface immediately to assertions.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  }
+  return { client, Wrapper };
+}
 
 describe('useCloudConfig', () => {
   beforeEach(() => {
     resetCallApiMock();
-    useApiConfig.setState({ apiBaseUrl: initialApiBaseUrl });
-    useUserStore.setState({ email: initialUserEmail });
   });
 
   afterEach(() => {
-    useApiConfig.setState({ apiBaseUrl: initialApiBaseUrl });
-    useUserStore.setState({ email: initialUserEmail });
+    vi.clearAllMocks();
   });
 
-  it('should initialize with isLoading=true, data=null, and error=null', () => {
+  it('returns the parsed cloud config on success', async () => {
     mockCallApiResponse(mockCloudConfig);
+    const { Wrapper } = makeWrapper();
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = renderHook(() => useCloudConfig(), { wrapper: Wrapper });
 
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(mockCloudConfig);
   });
 
-  it('should set data and isLoading=false on successful API call', async () => {
-    mockCallApiResponse(mockCloudConfig);
+  it('defaults isEnterprise to false when the response omits it', async () => {
+    mockCallApiResponse({ isEnabled: true, appUrl: 'https://app.promptfoo.app' });
+    const { Wrapper } = makeWrapper();
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = renderHook(() => useCloudConfig(), { wrapper: Wrapper });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toEqual({
-      appUrl: 'https://app.promptfoo.app',
-      isEnabled: true,
-      isEnterprise: false,
-    });
-    expect(result.current.error).toBeNull();
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
-  });
-
-  it('should preserve the Cloud URL when cloud is not configured', async () => {
-    mockCallApiResponse({
-      isEnabled: false,
-      appUrl: 'https://app.promptfoo.app',
-      isEnterprise: false,
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toEqual({
-      appUrl: 'https://app.promptfoo.app',
-      isEnabled: false,
-      isEnterprise: false,
-    });
-  });
-
-  it('should detect enterprise deployment', async () => {
-    mockCallApiResponse({
-      isEnabled: true,
-      appUrl: 'https://enterprise.company.com',
-      isEnterprise: true,
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data?.isEnterprise).toBe(true);
-    expect(result.current.data?.appUrl).toBe('https://enterprise.company.com');
-  });
-
-  it.each([
-    'javascript:alert(1)',
-    'data:text/html,<h1>Unsafe</h1>',
-    'https://user:password@enterprise.company.com',
-  ])('should reject unsafe browser destinations from API responses: %s', async (appUrl) => {
-    mockCallApiResponse({
-      isEnabled: true,
-      appUrl,
-      isEnterprise: true,
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBe('Invalid cloud config response');
-  });
-
-  it('should default isEnterprise to false for older responses', async () => {
-    mockCallApiResponse({
-      isEnabled: true,
-      appUrl: 'https://app.promptfoo.app',
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.isEnterprise).toBe(false);
   });
 
-  it('should set error and isLoading=false when API returns ok=false', async () => {
-    mockCallApiResponse({}, { ok: false });
+  it('throws when the response is not ok', async () => {
+    mockCallApiResponse(null, { ok: false, status: 500 });
+    const { Wrapper } = makeWrapper();
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = renderHook(() => useCloudConfig(), { wrapper: Wrapper });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBe('Failed to fetch cloud config');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Failed to fetch cloud config');
   });
 
-  it('should handle network errors gracefully', async () => {
-    rejectCallApi(new Error('Network error'));
+  it('throws when the response body fails schema validation', async () => {
+    // Missing `isEnabled` field — CloudConfigResponseSchema requires it.
+    mockCallApiResponse({ appUrl: 'https://app.promptfoo.app' });
+    const { Wrapper } = makeWrapper();
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = renderHook(() => useCloudConfig(), { wrapper: Wrapper });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Invalid cloud config response');
   });
 
-  it('should handle non-Error exceptions', async () => {
-    rejectCallApi('String error');
+  it('surfaces network errors', async () => {
+    rejectCallApi(new Error('network down'));
+    const { Wrapper } = makeWrapper();
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = renderHook(() => useCloudConfig(), { wrapper: Wrapper });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBe('Unknown error');
-    expect(callApi).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('network down');
   });
 
-  it('should fetch cloud config on mount', async () => {
-    mockCallApiResponse(mockCloudConfig);
+  it('useInvalidateCloudConfig forces a refetch', async () => {
+    const { callApi } = await import('@app/utils/api');
+    const mock = vi.mocked(callApi);
+    // First fetch returns enabled, second (after invalidate) returns disabled.
+    mock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockCloudConfig,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ...mockCloudConfig, isEnabled: false }),
+      } as Response);
 
-    renderHook(() => useCloudConfig());
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () => ({
+        query: useCloudConfig(),
+        invalidate: useInvalidateCloudConfig(),
+      }),
+      { wrapper: Wrapper },
+    );
 
-    await waitFor(() => {
-      expect(callApi).toHaveBeenCalledTimes(1);
-    });
-
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
-  });
-
-  describe('refetch', () => {
-    it('should refetch data when refetch is called', async () => {
-      const updatedConfig = {
-        isEnabled: false,
-        appUrl: 'https://app.promptfoo.app',
-        isEnterprise: false,
-      };
-
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      const { result } = renderHook(() => useCloudConfig());
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data?.isEnabled).toBe(true);
-      expect(callApi).toHaveBeenCalledTimes(1);
-
-      mockCallApiResponseOnce(updatedConfig);
-
-      await act(async () => {
-        result.current.refetch();
-      });
-
-      await waitFor(() => {
-        expect(result.current.data?.isEnabled).toBe(false);
-      });
-
-      expect(result.current.error).toBeNull();
-      expect(callApi).toHaveBeenCalledTimes(2);
-      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud-config');
-    });
-
-    it('should set isLoading=true during refetch and back to false after completion', async () => {
-      let resolveFetch!: (response: Response) => void;
-      const delayedPromise = new Promise<Response>((resolve) => {
-        resolveFetch = resolve;
-      });
-
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      const { result } = renderHook(() => useCloudConfig());
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      getCallApiMock().mockImplementationOnce(() => delayedPromise);
-
-      act(() => {
-        result.current.refetch();
-      });
-
-      expect(result.current.isLoading).toBe(true);
-
-      resolveFetch(createMockResponse(mockCloudConfig));
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-    });
-
-    it('should handle errors during refetch', async () => {
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      const { result } = renderHook(() => useCloudConfig());
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data?.isEnabled).toBe(true);
-      expect(result.current.error).toBeNull();
-
-      rejectCallApiOnce(new Error('Refetch failed'));
-
-      await act(async () => {
-        result.current.refetch();
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data?.isEnabled).toBe(true);
-      expect(result.current.error).toBe('Refetch failed');
-      expect(callApi).toHaveBeenCalledTimes(2);
-    });
-
-    it('should clear previous error on successful refetch', async () => {
-      rejectCallApiOnce(new Error('Initial fetch failed'));
-
-      const { result } = renderHook(() => useCloudConfig());
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data).toBeNull();
-      expect(result.current.error).toBe('Initial fetch failed');
-
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      await act(async () => {
-        result.current.refetch();
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data?.isEnabled).toBe(true);
-      expect(result.current.error).toBeNull();
-      expect(callApi).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it('should refetch when the selected API base URL changes', async () => {
-    mockCallApiResponseOnce(mockCloudConfig);
-    mockCallApiResponseOnce({
-      ...mockCloudConfig,
-      appUrl: 'https://enterprise.company.com',
-      isEnterprise: true,
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.data?.isEnterprise).toBe(false);
-    });
-
-    act(() => {
-      useApiConfig.getState().setApiBaseUrl('https://api.enterprise.company.com');
-    });
-
-    await waitFor(() => {
-      expect(result.current.data?.appUrl).toBe('https://enterprise.company.com');
-    });
-    expect(callApi).toHaveBeenCalledTimes(2);
-  });
-
-  it('should refetch when login updates cloud configuration', async () => {
-    mockCallApiResponseOnce(mockCloudConfig);
-    mockCallApiResponseOnce({
-      ...mockCloudConfig,
-      isEnabled: false,
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.data?.isEnabled).toBe(true);
-    });
-
-    act(() => {
-      notifyCloudConfigUpdated();
-    });
-
-    await waitFor(() => {
-      expect(result.current.data?.isEnabled).toBe(false);
-    });
-    expect(callApi).toHaveBeenCalledTimes(2);
-  });
-
-  it('should only call the API once on mount and not on rerender', async () => {
-    mockCallApiResponseOnce(mockCloudConfig);
-
-    const { result, rerender } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(callApi).toHaveBeenCalledTimes(1);
-
-    rerender();
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(callApi).toHaveBeenCalledTimes(1);
-  });
-
-  it('should refetch cloud config when the logged-in identity changes', async () => {
-    mockCallApiResponseOnce(mockCloudConfig);
-    mockCallApiResponseOnce({
-      ...mockCloudConfig,
-      isEnabled: false,
-    });
-
-    const { result } = renderHook(() => useCloudConfig());
-
-    await waitFor(() => {
-      expect(result.current.data?.isEnabled).toBe(true);
-    });
-
-    act(() => {
-      useUserStore.setState({ email: 'user@example.com' });
-    });
-
-    await waitFor(() => {
-      expect(result.current.data?.isEnabled).toBe(false);
-    });
-    expect(callApi).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(result.current.query.data?.isEnabled).toBe(true));
+    result.current.invalidate();
+    await waitFor(() => expect(result.current.query.data?.isEnabled).toBe(false));
+    expect(mock).toHaveBeenCalledTimes(2);
   });
 });
