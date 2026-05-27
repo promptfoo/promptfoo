@@ -86,7 +86,7 @@ The rubric prompt is rendered with [Nunjucks](/docs/configuration/parameters), s
 
 :::note
 
-Image grading works with single-image outputs (the default). If your provider config sets `n > 1`, the output will contain multiple images and cannot be used directly in a single `image_url` block.
+Built-in `openai:image` and `google:image` providers set `{{output}}` to the first generated image and expose all returned images in `images`. Use `n: 1` when grading exactly one image per test.
 
 :::
 
@@ -96,7 +96,7 @@ Image providers that return data URIs work out of the box. For example, [Google 
 
 ```yaml
 providers:
-  - id: google:imagen:imagen-3.0-generate-002
+  - id: google:image:imagen-3.0-generate-002
 ```
 
 The grader provider must be vision-capable. Good options include `openai:chat:gpt-5`, `anthropic:messages:claude-sonnet-4-5-20250929`, or `google:gemini-2.0-flash`.
