@@ -457,6 +457,35 @@ describe('computeRunStats', () => {
     });
   });
 
+  it('should exclude operational error responses from aggregate cache stats', () => {
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: true,
+          latencyMs: 10,
+          provider: { id: 'openai:gpt-4' },
+          response: { cached: false },
+        },
+        {
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          error: '429 Rate limit exceeded',
+          latencyMs: 20,
+          provider: { id: 'openai:gpt-4' },
+          response: { cached: false },
+        },
+      ],
+      stats: createStats(),
+      providers: [createProvider('openai:gpt-4')],
+    });
+
+    expect(runStats.cache).toEqual({
+      hits: 0,
+      misses: 1,
+      hitRate: 0,
+    });
+  });
+
   it('should compute equivalent statistics from persisted result batches', async () => {
     const results: StatableResult[] = [
       {

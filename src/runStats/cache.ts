@@ -1,3 +1,5 @@
+import { isOperationalError } from './errors';
+
 import type { CacheStats, StatableResult } from './types';
 
 /**
@@ -9,8 +11,9 @@ import type { CacheStats, StatableResult } from './types';
  * @returns Cache stats including hits, misses, and hit rate
  */
 export function computeCacheStats(results: StatableResult[]): CacheStats {
-  const hits = results.filter((r) => r.response?.cached === true).length;
-  const misses = results.filter((r) => r.response && r.response.cached !== true).length;
+  const successfulResponses = results.filter((result) => !isOperationalError(result));
+  const hits = successfulResponses.filter((r) => r.response?.cached === true).length;
+  const misses = successfulResponses.filter((r) => r.response && r.response.cached !== true).length;
   const total = hits + misses;
 
   return {

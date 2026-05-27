@@ -244,7 +244,7 @@ async function recordRedteamCompletionTelemetry(
   const { successes: numPasses, failures: numFails, errors: numErrors } = evalResult.getStats();
   const numTests = numPasses + numFails + numErrors;
   const plugins = getConfigIds(config.redteam?.plugins).map(sanitizeTelemetryIdentifier);
-  const strategies = getConfigIds(config.redteam?.strategies);
+  const strategies = getConfigIds(config.redteam?.strategies).map(sanitizeTelemetryIdentifier);
   const targets = config.targets;
   const isPromptfooSampleTarget =
     typeof targets === 'string'

@@ -245,11 +245,11 @@ describe('doRedteamRun', () => {
     );
   });
 
-  it('should not emit custom plugin file paths in completion telemetry', async () => {
+  it('should not emit custom plugin or strategy file paths in completion telemetry', async () => {
     vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
       redteam: {
         plugins: [{ id: 'file://./confidential/refund-policy.yaml', numTests: 1 }],
-        strategies: [],
+        strategies: [{ id: 'file://./confidential/attack-plan.yaml' }],
       },
       targets: [{ id: 'test-provider' }],
     });
@@ -267,6 +267,7 @@ describe('doRedteamRun', () => {
       expect.objectContaining({
         phase: 'completed',
         plugins: ['file:custom'],
+        strategies: ['file:custom'],
       }),
     );
   });

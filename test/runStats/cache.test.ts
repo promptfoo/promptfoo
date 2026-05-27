@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeCacheStats } from '../../src/runStats/cache';
+import { ResultFailureReason } from '../../src/types/index';
 
 import type { StatableResult } from '../../src/runStats/types';
 
@@ -65,6 +66,21 @@ describe('computeCacheStats', () => {
     expect(stats.hits).toBe(1);
     expect(stats.misses).toBe(1);
     expect(stats.hitRate).toBe(0.5);
+  });
+
+  it('should exclude operational error responses from cache misses', () => {
+    const stats = computeCacheStats([
+      { success: true, latencyMs: 100, response: {} },
+      {
+        success: false,
+        latencyMs: 200,
+        failureReason: ResultFailureReason.ERROR,
+        error: '429 Rate limit exceeded',
+        response: { cached: false },
+      },
+    ]);
+
+    expect(stats).toEqual({ hits: 0, misses: 1, hitRate: 0 });
   });
 
   it('should return null hitRate when all results have errors', () => {

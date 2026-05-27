@@ -137,13 +137,14 @@ export class RunStatsAccumulator {
       this.latencies.push(result.latencyMs);
     }
 
-    if (result.response?.cached === true) {
+    const operationalError = isOperationalError(result);
+    if (!operationalError && result.response?.cached === true) {
       this.cacheHits++;
-    } else if (result.response) {
+    } else if (!operationalError && result.response) {
       this.cacheMisses++;
     }
 
-    if (isOperationalError(result)) {
+    if (operationalError) {
       this.errorCount++;
       const category = categorizeError(result.error || '');
       this.errors[category]++;
@@ -172,7 +173,7 @@ export class RunStatsAccumulator {
     };
     provider.requests++;
     provider.totalLatencyMs += result.latencyMs || 0;
-    if (isOperationalError(result)) {
+    if (operationalError) {
       provider.failures++;
     } else {
       provider.successes++;
