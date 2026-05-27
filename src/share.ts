@@ -16,6 +16,7 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
+import { redactAzureBlobSasTokens } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -127,10 +128,16 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
+  const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
 
   // Inject current team ID into config metadata if cloud is enabled
   // This ensures the eval is created in the correct team (not the default team)
-  let evalData: Record<string, unknown> = { ...evalRecord, results: [], traces };
+  let evalData: Record<string, unknown> = {
+    ...evalRecord,
+    config: redactedConfig,
+    results: [],
+    traces,
+  };
   if (cloudConfig.isEnabled()) {
     const currentOrgId = cloudConfig.getCurrentOrganizationId();
     const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
@@ -138,9 +145,9 @@ async function sendEvalRecord(
       evalData = {
         ...evalData,
         config: {
-          ...(evalRecord.config || {}),
+          ...(redactedConfig || {}),
           metadata: {
-            ...(evalRecord.config?.metadata || {}),
+            ...(redactedConfig?.metadata || {}),
             teamId: currentTeamId,
           },
         },
