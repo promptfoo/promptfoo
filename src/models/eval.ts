@@ -168,6 +168,11 @@ export class EvalQueries {
       acc[r.eval_id].push(r.key);
       return acc;
     }, {});
+    // Legacy evals have no persisted display order, so backfill a stable
+    // (lexicographic) order per eval; keep in sync with getVarsFromEval.
+    for (const list of Object.values(vars)) {
+      list.sort();
+    }
     return vars;
   }
 
@@ -185,7 +190,8 @@ export class EvalQueries {
     `;
 
     const results = await db.all<VarKeyResult>(query);
-    const vars = results.map((r) => r.key);
+    // Legacy evals have no persisted display order, so backfill a stable one.
+    const vars = results.map((r) => r.key).sort();
 
     return vars;
   }
@@ -466,7 +472,7 @@ export default class Eval {
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
-          isRedteam: Boolean(config.redteam),
+          isRedteam: config.redteam !== undefined,
         })
         .run();
 
@@ -613,6 +619,7 @@ export default class Eval {
     const db = getDb();
     const updateObj: Record<string, unknown> = {
       config: this.config,
+      isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
       author: this.author,
@@ -1158,8 +1165,9 @@ export default class Eval {
       return (hasSessionIds || hasSessionId) && notInVars;
     });
     if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
+      // Append sessionId instead of re-sorting so we preserve the variable
+      // order the user defined in their config. See #244, #1320.
       vars.push('sessionId');
-      vars.sort();
     }
 
     // Group results by test index
@@ -1336,6 +1344,7 @@ export default class Eval {
       config: this.config,
       author: this.author || null,
       prompts: this.getPrompts(),
+      ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces }),
     };
@@ -1399,7 +1408,7 @@ export default class Eval {
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
-          isRedteam: Boolean(newConfig.redteam),
+          isRedteam: newConfig.redteam !== undefined,
         })
         .run();
 
@@ -1553,9 +1562,9 @@ export async function getEvalSummaries(
 
   if (type) {
     if (type === 'redteam') {
-      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`);
+      whereClauses.push(eq(evalsTable.isRedteam, true));
     } else {
-      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NULL`);
+      whereClauses.push(eq(evalsTable.isRedteam, false));
     }
   }
 
@@ -1565,14 +1574,16 @@ export async function getEvalSummaries(
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
       datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      isRedteam: evalsTable.isRedteam,
       prompts: evalsTable.prompts,
-      config: evalsTable.config,
+      // Configs can contain very large embedded test definitions. Only materialize them
+      // for the report surface that requests provider labels.
+      config: includeProviders ? evalsTable.config : sql<Partial<UnifiedConfig> | null>`NULL`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(and(...whereClauses))
-    .orderBy(desc(evalsTable.createdAt))
+    .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
   /**
@@ -1609,7 +1620,7 @@ export async function getEvalSummaries(
 
     // Construct an array of providers
     const deserializedProviders = [];
-    const providers = result.config.providers;
+    const providers = result.config?.providers;
 
     if (includeProviders) {
       if (typeof providers === 'string') {
