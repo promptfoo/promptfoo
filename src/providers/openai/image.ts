@@ -7,7 +7,7 @@ import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { BLOB_MAX_SIZE, storeBlob } from '../../blobs/index';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithProxy, getFetchTlsOptions } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
@@ -555,8 +555,8 @@ function inferMimeTypeFromUrl(url: string): string | undefined {
   return undefined;
 }
 
-function isExternalHttpUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
+function isExternalImageUrl(url: string): boolean {
+  return /^(?:https?:)?\/\//i.test(url);
 }
 
 function normalizeExternalImageHostname(hostname: string): string {
@@ -805,9 +805,12 @@ function getLookupFamily(family: number | string | undefined): number | undefine
   return typeof family === 'number' && family > 0 ? family : undefined;
 }
 
-function createPinnedExternalImageDispatcher(resolvedAddresses: LookupAddress[]) {
+async function createPinnedExternalImageDispatcher(resolvedAddresses: LookupAddress[]) {
+  const tlsOptions = await getFetchTlsOptions();
+
   return new Agent({
     connect: {
+      ...tlsOptions,
       lookup: (_hostname, options, callback) => {
         const family = getLookupFamily(options.family);
         const matchingAddresses = family
@@ -869,7 +872,7 @@ export function buildStructuredImageOutputs(
       }
 
       if (item.url) {
-        if (isExternalHttpUrl(item.url)) {
+        if (isExternalImageUrl(item.url)) {
           return null;
         }
         const mimeType = inferMimeTypeFromUrl(item.url);
@@ -906,7 +909,7 @@ async function storeExternalImageUrlAsBlob(
 
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
-    const dispatcher = createPinnedExternalImageDispatcher(validatedTarget.resolvedAddresses);
+    const dispatcher = await createPinnedExternalImageDispatcher(validatedTarget.resolvedAddresses);
     let buffer: Buffer;
     let mimeType: string;
     try {
@@ -1012,6 +1015,7 @@ export async function buildSafeStructuredImageOutputs(
   data: any,
   outputFormat?: string,
   blobContext?: ImageBlobContext,
+  responseFormat?: string,
 ): Promise<ImageOutput[] | undefined> {
   if (!Array.isArray(data.data) || data.data.length === 0) {
     return undefined;
@@ -1024,11 +1028,11 @@ export async function buildSafeStructuredImageOutputs(
         return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
       }
 
-      if (!item.url) {
+      if (responseFormat === 'b64_json' || !item.url) {
         return null;
       }
 
-      if (isExternalHttpUrl(item.url)) {
+      if (isExternalImageUrl(item.url)) {
         return storeExternalImageUrlAsBlob(item.url, outputFormat, blobContext, index);
       }
 
@@ -1050,13 +1054,6 @@ export function formatStructuredImageOutput(
   outputFormat?: string,
   images?: ImageOutput[],
 ): string | { error: string } {
-  const primaryImageSource = getPrimaryImageSource(images);
-  if (primaryImageSource) {
-    return responseFormat === 'b64_json'
-      ? primaryImageSource
-      : formatImageMarkdown(prompt, primaryImageSource);
-  }
-
   if (responseFormat === 'b64_json') {
     const b64Json = data.data?.[0]?.b64_json;
     if (!b64Json) {
@@ -1064,6 +1061,11 @@ export function formatStructuredImageOutput(
     }
 
     return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
+  }
+
+  const primaryImageSource = getPrimaryImageSource(images);
+  if (primaryImageSource) {
+    return formatImageMarkdown(prompt, primaryImageSource);
   }
 
   const url = data.data?.[0]?.url;
@@ -1255,7 +1257,12 @@ export async function processApiResponse(
   }
 
   try {
-    const images = await buildSafeStructuredImageOutputs(data, outputFormat, blobContext);
+    const images = await buildSafeStructuredImageOutputs(
+      data,
+      outputFormat,
+      blobContext,
+      responseFormat,
+    );
     const formattedOutput = formatStructuredImageOutput(
       data,
       prompt,

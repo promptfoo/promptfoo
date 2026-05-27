@@ -18,7 +18,7 @@ import {
   processApiResponse,
   validateSizeForModel,
 } from '../../../src/providers/openai/image';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { fetchWithProxy, getFetchTlsOptions } from '../../../src/util/fetch/index';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
@@ -38,6 +38,7 @@ vi.mock('../../../src/blobs/index', async (importOriginal) => ({
 }));
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
+  getFetchTlsOptions: vi.fn(),
 }));
 
 const lookupMock = lookup as unknown as Mock;
@@ -49,6 +50,7 @@ describe('OpenAI Image Provider Functions', () => {
     vi.resetAllMocks();
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
+    vi.mocked(getFetchTlsOptions).mockResolvedValue({});
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
       status: 200,
@@ -575,6 +577,14 @@ describe('OpenAI Image Provider Functions', () => {
         }),
       ).toEqual([]);
     });
+
+    it('should omit protocol-relative external URLs from structured outputs', () => {
+      expect(
+        buildStructuredImageOutputs({
+          data: [{ url: '//attacker.example/image.png' }],
+        }),
+      ).toEqual([]);
+    });
   });
 
   describe('buildSafeStructuredImageOutputs', () => {
@@ -594,6 +604,7 @@ describe('OpenAI Image Provider Functions', () => {
           dispatcher: expect.anything(),
         }),
       );
+      expect(getFetchTlsOptions).toHaveBeenCalledWith();
     });
 
     it('should skip external URLs when blob storage is disabled', async () => {
@@ -663,6 +674,29 @@ describe('OpenAI Image Provider Functions', () => {
 
       expect(result).toBeUndefined();
       expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should block protocol-relative URLs before fetching', async () => {
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: '//attacker.example/image.png' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('should not download URL fallbacks for base64 responses', async () => {
+      const result = await buildSafeStructuredImageOutputs(
+        { data: [{ url: 'https://example.com/image.png' }] },
+        undefined,
+        undefined,
+        'b64_json',
+      );
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
     });
 
     it('should block hostnames that resolve to private IPs before fetching', async () => {
@@ -763,6 +797,20 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toBe('[external image URL omitted for security]');
+    });
+
+    it('should require base64 data when base64 output was requested', () => {
+      const result = formatStructuredImageOutput(
+        { data: [{ url: 'https://example.com/image.png' }] },
+        'prompt',
+        'b64_json',
+        undefined,
+        [{ blobRef: { uri: blobUri(1) } as any, mimeType: 'image/png' }],
+      );
+
+      expect(result).toEqual({
+        error: expect.stringContaining('No base64 image data found in response'),
+      });
     });
   });
 });

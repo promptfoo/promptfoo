@@ -224,7 +224,12 @@ export class XAIImageProvider extends OpenAiImageProvider {
     }
 
     try {
-      const images = await buildSafeStructuredImageOutputs(data, undefined, context);
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        context,
+        responseFormat,
+      );
       const formattedOutput = formatStructuredImageOutput(
         data,
         prompt,

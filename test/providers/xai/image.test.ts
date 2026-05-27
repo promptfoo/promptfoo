@@ -6,7 +6,7 @@ import { storeBlob } from '../../../src/blobs/index';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { fetchWithProxy, getFetchTlsOptions } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
@@ -22,6 +22,7 @@ vi.mock('../../../src/blobs/index', async (importOriginal) => ({
 }));
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
+  getFetchTlsOptions: vi.fn(),
 }));
 vi.mock('../../../src/providers/openai/image', async () => {
   const actual = await vi.importActual('../../../src/providers/openai/image');
@@ -82,6 +83,7 @@ describe('XAI Image Provider', () => {
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+    vi.mocked(getFetchTlsOptions).mockResolvedValue({});
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
       status: 200,

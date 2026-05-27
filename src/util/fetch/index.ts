@@ -157,6 +157,26 @@ export function getFetchWithProxyHeaders(
   };
 }
 
+export async function getFetchTlsOptions(): Promise<ConnectionOptions> {
+  const tlsOptions: ConnectionOptions = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+  };
+
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (caCertPath) {
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
+      tlsOptions.ca = ca;
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+    } catch (e) {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+    }
+  }
+
+  return tlsOptions;
+}
+
 function getFetchUrlString(url: RequestInfo): string | undefined {
   if (typeof url === 'string') {
     return url;
@@ -227,22 +247,7 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-    } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-    }
-  }
+  const tlsOptions = await getFetchTlsOptions();
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.

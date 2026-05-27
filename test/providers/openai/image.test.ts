@@ -5,7 +5,7 @@ import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { storeBlob } from '../../../src/blobs/index';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { fetchWithProxy, getFetchTlsOptions } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
@@ -27,6 +27,7 @@ vi.mock('../../../src/blobs/index', async (importOriginal) => ({
 }));
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
+  getFetchTlsOptions: vi.fn(),
 }));
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -64,6 +65,7 @@ describe('OpenAiImageProvider', () => {
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    vi.mocked(getFetchTlsOptions).mockResolvedValue({});
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
       status: 200,

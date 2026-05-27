@@ -216,7 +216,12 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     }
 
     try {
-      const images = await buildSafeStructuredImageOutputs(data, undefined, context);
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        context,
+        responseFormat,
+      );
       const formattedOutput = formatStructuredImageOutput(
         data,
         prompt,
@@ -225,6 +230,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
         images,
       );
       if (typeof formattedOutput === 'object') {
+        await data?.deleteFromCache?.();
         return formattedOutput;
       }
 
