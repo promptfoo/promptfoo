@@ -55,6 +55,18 @@ describe('resolveCallbackPath', () => {
     );
   });
 
+  // Regression: caught by Codex/Copilot on the first PR pass. The traversal
+  // check must reject `..` only when it's a full path segment, not when a
+  // directory name happens to start with two dots.
+  it('accepts in-base paths whose first segment starts with .. (e.g. ..foo/cb.js)', () => {
+    expect(resolveCallbackPath('..foo/cb.js', '/test/base/path')).toBe(
+      path.resolve('/test/base/path', '..foo/cb.js'),
+    );
+    expect(resolveCallbackPath('...hidden/cb.js', '/test/base/path')).toBe(
+      path.resolve('/test/base/path', '...hidden/cb.js'),
+    );
+  });
+
   it('rejects absolute paths that fall outside the base', () => {
     expect(() => resolveCallbackPath('/etc/passwd', '/test/base/path')).toThrow(
       /Path traversal rejected/,

@@ -1000,6 +1000,16 @@ Replace the assistant ID and deployment name with your actual values.
 
 Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
 
+:::warning Callback files must live inside `basePath`
+
+Callbacks referenced by `file://` URLs are loaded with a path-traversal guard:
+the resolved path must stay inside the config's `basePath`. Move the callback
+file into your project or set `PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD=true` to
+opt out. See [OpenAI provider docs](./openai.md#automatically-handling-function-tool-calls)
+for details.
+
+:::
+
 ```yaml
 providers:
   - id: azure:assistant:your_assistant_id

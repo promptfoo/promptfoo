@@ -183,10 +183,18 @@ export function resolveCallbackPath(filePath: string, basePath?: string): string
   const relativePath = path.relative(normalizedBase, resolvedPath);
 
   // Reject paths that escape the base directory:
-  // - relative path starting with '..' walks up out of base
-  // - an absolute relative path is a Windows cross-drive case (e.g. base on
+  // - relativePath is exactly '..' (the parent directory itself), OR
+  // - the first path segment is '..' (e.g. '../escape.js', '..\..\evil')
+  //   — but NOT a directory whose *name* happens to start with '..'
+  //   (e.g. '..foo/cb.js' is a legitimate in-base path).
+  // - an absolute relativePath is a Windows cross-drive case (e.g. base on
   //   `C:`, target on `D:`); path.relative then returns the absolute target.
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+  const escapesViaDotDot =
+    relativePath === '..' ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    // path.relative may emit forward slashes on Windows; check posix sep too.
+    relativePath.startsWith('../');
+  if (escapesViaDotDot || path.isAbsolute(relativePath)) {
     throw new CallbackPathTraversalError(filePath, normalizedBase);
   }
 
