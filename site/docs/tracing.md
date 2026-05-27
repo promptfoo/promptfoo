@@ -235,6 +235,38 @@ tests:
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
+### Per-LLM-turn spans {#per-llm-turn-spans}
+
+Several first-party providers run an agent loop internally. To make those internal LLM round-trips visible to trace assertions, Promptfoo emits one marker span per LLM turn. The span name and convention depend on the provider:
+
+| Provider                         | Per-turn span name pattern | Notes                                                   |
+| -------------------------------- | -------------------------- | ------------------------------------------------------- |
+| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`            | One per `assistant` message from the SDK stream         |
+| `openai:codex-sdk`               | `gen_ai.turn *`            | One per Codex `turn.started` / `turn.completed` event   |
+| `openai:codex-app-server`        | `gen_ai.turn *`            | One per Codex app-server `turn/started` notification    |
+| `azure:foundry-agent`            | `gen_ai.turn *`            | One per iteration of the function-call loop             |
+| `openai:agents` (TypeScript)     | `generation *`             | Emitted by `openai-agents-js` instrumentation           |
+| `openai-agents` Python (example) | `generation *`             | Emitted by `promptfoo_tracing.py` exporter              |
+| Google ADK (via `google.adk`)    | `call_llm`                 | Emitted by ADK's built-in OpenTelemetry instrumentation |
+
+Counting these spans tells you how many LLM round-trips an agent took. Combined with [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence), this lets you assert that an agent batched its tool calls into a single generation rather than spreading them across sequential rounds:
+
+```yaml
+assert:
+  - type: trajectory:tool-sequence
+    value:
+      mode: exact
+      steps: [search_orders, search_orders]
+  - type: trace-span-count
+    value:
+      pattern: 'gen_ai.turn *' # or `generation *`, `call_llm` per provider
+      max: 1
+```
+
+For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the turn that emitted them.
+
+External providers that wrap their own agent loops can adopt the same convention: emit one OpenTelemetry span per LLM round, with name starting `gen_ai.turn ` and the attribute `gen_ai.turn.index`.
+
 ## Configuration Reference
 
 ### Basic Configuration

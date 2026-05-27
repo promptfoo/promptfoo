@@ -772,6 +772,29 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
+#### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
+
+`tool-sequence` checks _which_ tools ran in _which_ order. To also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential), pair it with [`trace-span-count`](#trace-span-count) on the per-LLM-turn span pattern your provider emits. See [Per-LLM-turn spans](/docs/tracing#per-llm-turn-spans) for the per-provider name table.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_orders
+            - search_orders
+      - type: trace-span-count
+        value:
+          # Promptfoo first-party agent SDKs use this pattern.
+          # Use `generation *` for openai:agents, `call_llm` for Google ADK, etc.
+          pattern: 'gen_ai.turn *'
+          max: 1
+```
+
+This passes only when both tool calls were emitted by a single LLM generation — a structural test that bounds both latency and prompt-token cost.
+
 ### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
