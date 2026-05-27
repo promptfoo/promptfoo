@@ -67,6 +67,7 @@ const THRESHOLD_REQUIRED: Set<AssertionType> = new Set(['cost', 'latency']);
 // LLM assertion types for cost calculation
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
+  'not-similar',
   'llm-rubric',
   'factuality',
   'model-graded-closedqa',

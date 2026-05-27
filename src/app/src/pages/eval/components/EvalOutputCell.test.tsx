@@ -2348,6 +2348,20 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     expect(dialog).toHaveAttribute('data-test-index', '7');
   });
 
+  it('disables mutating more-menu actions for comparison outputs', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EvalOutputCell {...defaultProps} evaluationId="eval-123" testIdx={7} mutationsDisabled />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /more actions/i }));
+
+    expect(screen.getByRole('menuitem', { name: 'Re-run cell' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitem', { name: 'Add assertion' })).toHaveAttribute(
+      'data-disabled',
+    );
+  });
+
   it('copies the output as an assertion from the more actions menu', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();

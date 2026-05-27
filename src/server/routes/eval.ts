@@ -7,13 +7,14 @@ import {
   MAX_SUGGESTION_OUTPUTS,
   MAX_SUGGESTION_PROMPTS,
 } from '../../assertions/generateSuggestions';
-import { renderMetricName, runAssertions } from '../../assertions/index';
+import { hasTraceAwareAssertions, renderMetricName, runAssertions } from '../../assertions/index';
 import { DEFAULT_MAX_CONCURRENCY, HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import { loadApiProvider } from '../../providers';
 import { EvalSchemas } from '../../types/api/eval';
 import { ResultFailureReason } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
@@ -109,6 +110,27 @@ function releaseEvalMutation(evalId: string, operationId: string): void {
 
 function assertionKey(assertion: AssertionOrSet): string {
   return safeJsonStringify(assertion) ?? JSON.stringify(assertion);
+}
+
+const ORIGINAL_PROVIDER_ASSERTION_TYPES = new Set([
+  'is-valid-function-call',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+]);
+
+function assertionUsesOriginalProvider(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionUsesOriginalProvider);
+  }
+
+  return ORIGINAL_PROVIDER_ASSERTION_TYPES.has(assertion.type.replace(/^not-/, ''));
+}
+
+function getPosthocTraceTestCaseId(result: EvalResult): string {
+  const testCase = result.testCase as AtomicTestCase & { id?: string };
+  return (
+    result.testCase.metadata?.testCaseId ?? testCase.id ?? `${result.testIdx}-${result.promptIdx}`
+  );
 }
 
 function getTopLevelComponentResults(componentResults: GradingResult[]): GradingResult[] {
@@ -235,23 +257,26 @@ async function resolvePosthocAssertionTargets(
 ): Promise<PosthocAssertionTargetResolution> {
   if (scope.type === 'results') {
     const results: EvalResult[] = [];
+    const seenResultIds = new Set<string>();
     for (const resultId of scope.resultIds || []) {
+      if (seenResultIds.has(resultId)) {
+        continue;
+      }
       const result = await EvalResult.findById(resultId);
       if (!result || result.evalId !== evalId) {
         return { missingResultId: resultId };
       }
       results.push(result);
+      seenResultIds.add(resultId);
     }
     return { targetResults: results, matchedTestCount: results.length };
   }
 
   if (scope.type === 'tests') {
+    const testIndices = [...new Set(scope.testIndices || [])];
     return {
-      targetResults: await EvalResult.findManyByEvalIdAndTestIndices(
-        evalId,
-        scope.testIndices || [],
-      ),
-      matchedTestCount: scope.testIndices?.length || 0,
+      targetResults: await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices),
+      matchedTestCount: testIndices.length,
     };
   }
 
@@ -1072,101 +1097,115 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
   const { assertions, scope } = parsed.data;
 
   if (scope.type === 'results' && (!scope.resultIds || scope.resultIds.length === 0)) {
-    res.status(400).json({ success: false, error: 'resultIds are required for results scope' });
+    res.status(400).json({ error: 'resultIds are required for results scope' });
     return;
   }
 
   if (scope.type === 'tests' && (!scope.testIndices || scope.testIndices.length === 0)) {
-    res.status(400).json({ success: false, error: 'testIndices are required for tests scope' });
+    res.status(400).json({ error: 'testIndices are required for tests scope' });
     return;
   }
 
-  const eval_ = await Eval.findById(evalId);
-  if (!eval_) {
-    res.status(404).json({ success: false, error: 'Eval not found' });
-    return;
-  }
-
-  const normalizedAssertions: AssertionOrSet[] = [];
-  const seenAssertionKeys = new Set<string>();
-  for (const assertion of assertions) {
-    const key = assertionKey(assertion as AssertionOrSet);
-    if (!seenAssertionKeys.has(key)) {
-      normalizedAssertions.push(assertion as AssertionOrSet);
-      seenAssertionKeys.add(key);
+  let eval_: Eval;
+  let job: AssertionJob;
+  let jobId: string;
+  let normalizedAssertions: AssertionOrSet[];
+  let targetResults: EvalResult[];
+  try {
+    const foundEval = await Eval.findById(evalId);
+    if (!foundEval) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
     }
-  }
+    eval_ = foundEval;
 
-  if (normalizedAssertions.length === 0) {
-    res.json({
-      success: true,
-      data: {
-        jobId: null,
-        updatedResults: 0,
-        skippedResults: 0,
-        skippedAssertions: assertions.length,
-        errors: [],
-      },
-    });
-    return;
-  }
+    normalizedAssertions = [];
+    const seenAssertionKeys = new Set<string>();
+    for (const assertion of assertions) {
+      const key = assertionKey(assertion as AssertionOrSet);
+      if (!seenAssertionKeys.has(key)) {
+        normalizedAssertions.push(assertion as AssertionOrSet);
+        seenAssertionKeys.add(key);
+      }
+    }
 
-  const targetResolution = await resolvePosthocAssertionTargets(evalId, eval_, scope);
-  if ('missingResultId' in targetResolution) {
-    res.status(404).json({
-      success: false,
-      error: `Result not found: ${targetResolution.missingResultId}`,
-    });
-    return;
-  }
+    if (normalizedAssertions.length === 0) {
+      res.json(
+        EvalSchemas.AddAssertions.Response.parse({
+          success: true,
+          data: {
+            jobId: null,
+            updatedResults: 0,
+            skippedResults: 0,
+            skippedAssertions: assertions.length,
+            errors: [],
+          },
+        }),
+      );
+      return;
+    }
 
-  const { targetResults, matchedTestCount } = targetResolution;
-  if (targetResults.length === 0) {
-    res.json({
-      success: true,
-      data: {
-        jobId: null,
-        updatedResults: 0,
-        skippedResults: 0,
-        skippedAssertions: 0,
-        errors: [],
-        matchedTestCount,
-      },
-    });
-    return;
-  }
+    const targetResolution = await resolvePosthocAssertionTargets(evalId, eval_, scope);
+    if ('missingResultId' in targetResolution) {
+      res.status(404).json({ error: `Result not found: ${targetResolution.missingResultId}` });
+      return;
+    }
 
-  const jobId = crypto.randomUUID();
-  if (!reserveEvalMutation(evalId, jobId)) {
-    res.status(409).json({
-      success: false,
-      error: 'An update is already running for this evaluation. Retry when it completes.',
-    });
-    return;
-  }
+    ({ targetResults } = targetResolution);
+    const { matchedTestCount } = targetResolution;
+    if (targetResults.length === 0) {
+      res.json(
+        EvalSchemas.AddAssertions.Response.parse({
+          success: true,
+          data: {
+            jobId: null,
+            updatedResults: 0,
+            skippedResults: 0,
+            skippedAssertions: 0,
+            errors: [],
+            matchedTestCount,
+          },
+        }),
+      );
+      return;
+    }
 
-  const job: AssertionJob = {
-    evalId,
-    status: 'in-progress',
-    progress: 0,
-    total: targetResults.length,
-    completedResults: [],
-    updatedResults: 0,
-    skippedResults: 0,
-    skippedAssertions: 0,
-    errors: [],
-    matchedTestCount,
-  };
-  assertionJobs.set(jobId, job);
+    jobId = crypto.randomUUID();
+    if (!reserveEvalMutation(evalId, jobId)) {
+      res.status(409).json({
+        error: 'An update is already running for this evaluation. Retry when it completes.',
+      });
+      return;
+    }
 
-  res.json({
-    success: true,
-    data: {
-      jobId,
+    job = {
+      evalId,
+      status: 'in-progress',
+      progress: 0,
       total: targetResults.length,
+      completedResults: [],
+      updatedResults: 0,
+      skippedResults: 0,
+      skippedAssertions: 0,
+      errors: [],
       matchedTestCount,
-    },
-  });
+    };
+    assertionJobs.set(jobId, job);
+
+    res.json(
+      EvalSchemas.AddAssertions.Response.parse({
+        success: true,
+        data: {
+          jobId,
+          total: targetResults.length,
+          matchedTestCount,
+        },
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to add assertions', error);
+    return;
+  }
 
   const existingDefaultOptions =
     typeof eval_.config?.defaultTest === 'object' ? eval_.config.defaultTest?.options : undefined;
@@ -1178,6 +1217,10 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
 
   void (async () => {
     try {
+      const traceIdsByTestCaseId = hasTraceAwareAssertions(normalizedAssertions)
+        ? new Map((await eval_.getTraces()).map((trace) => [trace.testCaseId, trace.traceId]))
+        : undefined;
+
       await async.forEachLimit(targetResults, maxConcurrency, async (result) => {
         if (result.failureReason === ResultFailureReason.ERROR) {
           job.skippedResults++;
@@ -1209,14 +1252,23 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
         };
 
         try {
-          const providerResponse = result.response ?? { output: result.error ?? '' };
+          const providerResponse = {
+            ...(result.response ?? { output: result.error ?? '' }),
+            cost: result.cost,
+          };
+          const provider =
+            assertionsToAdd.some(assertionUsesOriginalProvider) && result.provider.id
+              ? await loadApiProvider(result.provider.id, { options: result.provider })
+              : undefined;
           const promptText =
             typeof result.prompt === 'string' ? result.prompt : (result.prompt?.raw ?? '');
           const newGradingResult = await runAssertions({
             prompt: promptText,
+            provider,
             providerResponse,
             test: testCaseForNewAssertions,
             latencyMs: result.latencyMs,
+            traceId: traceIdsByTestCaseId?.get(getPosthocTraceTestCaseId(result)),
           });
 
           const newComponentResults = newGradingResult.componentResults || [];
@@ -1234,7 +1286,10 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
             componentResults: combinedComponentResults,
             comment: result.gradingResult?.comment,
           };
-          result.namedScores = aggregated.namedScores || {};
+          result.namedScores = {
+            ...result.namedScores,
+            ...(aggregated.namedScores || {}),
+          };
           result.success = aggregated.pass;
           result.score = aggregated.score;
           result.failureReason = aggregated.pass
@@ -1300,24 +1355,26 @@ evalRouter.get(
     const { evalId, jobId } = paramsResult.data;
     const job = assertionJobs.get(jobId);
     if (!job || job.evalId !== evalId) {
-      res.status(404).json({ success: false, error: 'Job not found' });
+      res.status(404).json({ error: 'Job not found' });
       return;
     }
 
-    res.json({
-      success: true,
-      data: {
-        status: job.status,
-        progress: job.progress,
-        total: job.total,
-        completedResults: job.completedResults,
-        updatedResults: job.updatedResults,
-        skippedResults: job.skippedResults,
-        skippedAssertions: job.skippedAssertions,
-        errors: job.errors,
-        matchedTestCount: job.matchedTestCount,
-      },
-    });
+    res.json(
+      EvalSchemas.AssertionJob.Response.parse({
+        success: true,
+        data: {
+          status: job.status,
+          progress: job.progress,
+          total: job.total,
+          completedResults: job.completedResults,
+          updatedResults: job.updatedResults,
+          skippedResults: job.skippedResults,
+          skippedAssertions: job.skippedAssertions,
+          errors: job.errors,
+          matchedTestCount: job.matchedTestCount,
+        },
+      }),
+    );
   },
 );
 
@@ -1342,13 +1399,13 @@ evalRouter.post(
     try {
       const eval_ = await Eval.findById(evalId);
       if (!eval_) {
-        res.status(404).json({ success: false, error: 'Eval not found' });
+        res.status(404).json({ error: 'Eval not found' });
         return;
       }
 
       const prompts = eval_.prompts.map((p) => p.raw).filter(Boolean);
       if (prompts.length === 0) {
-        res.status(400).json({ success: false, error: 'No prompts found in eval' });
+        res.status(400).json({ error: 'No prompts found in eval' });
         return;
       }
 
@@ -1357,10 +1414,9 @@ evalRouter.post(
         const fetchedResults = await Promise.all(resultIds.map((id) => EvalResult.findById(id)));
         const missingResultIndex = fetchedResults.findIndex((result) => result?.evalId !== evalId);
         if (missingResultIndex !== -1) {
-          res.status(404).json({
-            success: false,
-            error: `Result not found in eval: ${resultIds[missingResultIndex]}`,
-          });
+          res
+            .status(404)
+            .json({ error: `Result not found in eval: ${resultIds[missingResultIndex]}` });
           return;
         }
         results = fetchedResults as EvalResult[];
@@ -1375,7 +1431,7 @@ evalRouter.post(
       }
 
       if (results.length === 0) {
-        res.status(400).json({ success: false, error: 'No results found in eval' });
+        res.status(400).json({ error: 'No results found in eval' });
         return;
       }
 
@@ -1391,7 +1447,7 @@ evalRouter.post(
         .filter((output): output is string => output !== null);
 
       if (outputs.length === 0) {
-        res.status(400).json({ success: false, error: 'No valid outputs found in results' });
+        res.status(400).json({ error: 'No valid outputs found in results' });
         return;
       }
 
@@ -1425,17 +1481,19 @@ evalRouter.post(
         numSuggestions: suggestions.length,
       });
 
-      res.json({
-        success: true,
-        data: {
-          assertions: suggestions,
-          context: {
-            numPromptsAnalyzed: analyzedPrompts.length,
-            numOutputsAnalyzed: analyzedOutputs.length,
-            existingAssertionCount: existingAssertions.length,
+      res.json(
+        EvalSchemas.GenerateAssertions.Response.parse({
+          success: true,
+          data: {
+            assertions: suggestions,
+            context: {
+              numPromptsAnalyzed: analyzedPrompts.length,
+              numOutputsAnalyzed: analyzedOutputs.length,
+              existingAssertionCount: existingAssertions.length,
+            },
           },
-        },
-      });
+        }),
+      );
     } catch (error) {
       sendError(res, 500, 'Failed to generate assertions', error);
     }

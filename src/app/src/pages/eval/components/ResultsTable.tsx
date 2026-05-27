@@ -2186,6 +2186,7 @@ function ResultsTable({
                     searchText={debouncedSearchText}
                     showStats={showStats}
                     evaluationId={evalId || undefined}
+                    mutationsDisabled={inComparisonMode}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
                 </ErrorBoundary>

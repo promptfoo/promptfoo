@@ -139,6 +139,19 @@ describe('PosthocAssertionsForm', () => {
     expect(screen.getByText(/each output is scored separately/)).toBeInTheDocument();
   });
 
+  it('counts negated similarity assertions as model requests', () => {
+    render(
+      <PosthocAssertionsForm
+        assertions={[{ type: 'not-similar', value: 'reference response' }]}
+        onChange={onChange}
+        targetCount={50}
+      />,
+    );
+
+    expect(screen.getByText(/1 model-based assertion × 50 outputs/)).toBeInTheDocument();
+    expect(screen.getByText(/at least 50 model requests/)).toBeInTheDocument();
+  });
+
   it('does not show LLM cost warning without LLM assertions', () => {
     render(
       <PosthocAssertionsForm

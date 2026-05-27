@@ -446,6 +446,34 @@ describe('AddAssertionsDialog', () => {
     expect(addEvalAssertions).not.toHaveBeenCalled();
   });
 
+  it('warns before running negated similarity assertions at scale', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-negated-similarity',
+      availableScopes: ['filtered'],
+      defaultScope: 'filtered',
+      filteredCount: 120,
+      promptCount: 1,
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText(/Browse all \d+\+ assertion types/));
+    await user.click(await screen.findByText('not-similar'));
+    await user.type(
+      screen.getByPlaceholderText('Describe your evaluation criteria...'),
+      'reference answer',
+    );
+    await user.click(screen.getByRole('button', { name: /Run 1 on 120/ }));
+
+    expect(screen.getByText('Confirm large assertion run')).toBeInTheDocument();
+    expect(screen.getByText(/1 LLM assertion × 120 outputs =/)).toBeInTheDocument();
+    expect(screen.getByText(/at least 120 model requests/)).toBeInTheDocument();
+    expect(addEvalAssertions).not.toHaveBeenCalled();
+  });
+
   it('shows async job progress with completed pass and fail counts', async () => {
     const user = userEvent.setup();
 

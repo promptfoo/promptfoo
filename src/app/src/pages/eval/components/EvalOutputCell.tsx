@@ -1055,6 +1055,7 @@ function renderOutputActions({
   evaluationId,
   testCaseId,
   promptCount,
+  mutationsDisabled,
   openAssertions,
   copiedAssertion,
   isReplaying,
@@ -1091,6 +1092,7 @@ function renderOutputActions({
   evaluationId?: string;
   testCaseId?: string;
   promptCount?: number;
+  mutationsDisabled: boolean;
   openAssertions: boolean;
   copiedAssertion: boolean;
   isReplaying: boolean;
@@ -1179,7 +1181,13 @@ function renderOutputActions({
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem
                 onClick={handleRerun}
-                disabled={isReplaying || !evaluationId || !output.prompt || testIdx == null}
+                disabled={
+                  mutationsDisabled ||
+                  isReplaying ||
+                  !evaluationId ||
+                  !output.prompt ||
+                  testIdx == null
+                }
               >
                 {isReplaying ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -1188,7 +1196,10 @@ function renderOutputActions({
                 )}
                 {isReplaying ? 'Re-running...' : 'Re-run cell'}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setOpenAssertions(true)} disabled={!evaluationId}>
+              <DropdownMenuItem
+                onClick={() => setOpenAssertions(true)}
+                disabled={mutationsDisabled || !evaluationId}
+              >
                 <Plus className="size-4" />
                 Add assertion
               </DropdownMenuItem>
@@ -1333,6 +1344,7 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
+  mutationsDisabled?: boolean;
 }
 
 /**
@@ -1367,6 +1379,7 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
+  mutationsDisabled = false,
 }: EvalOutputCellProps & {
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
@@ -1820,6 +1833,7 @@ function EvalOutputCell({
         evaluationId,
         testCaseId,
         promptCount: table?.head.prompts.length,
+        mutationsDisabled,
         openAssertions,
         copiedAssertion,
         isReplaying,

@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { ResultFailureReason } from '../../src/types/index';
 import { recalculatePromptMetrics } from '../../src/util/recalculatePromptMetrics';
 import EvalFactory from '../factories/evalFactory';
@@ -259,5 +260,27 @@ describe('recalculatePromptMetrics', () => {
     expect(metrics?.tokenUsage.assertions?.prompt).toBe(1);
     expect(metrics?.tokenUsage.assertions?.completion).toBe(2);
     expect(metrics?.tokenUsage.assertions?.numRequests).toBe(0);
+  });
+
+  it('recalculates expression-based derived metrics from persisted row scores', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    eval_.config.derivedMetrics = [{ name: 'double-quality', value: 'quality * 2' }];
+
+    const [result] = await eval_.getResults();
+    if (!result.id) {
+      throw new Error('Expected a persisted result ID');
+    }
+    const persistedResult = await EvalResult.findById(result.id);
+    if (!persistedResult) {
+      throw new Error('Expected a persisted result');
+    }
+    persistedResult.namedScores = { quality: 0.8 };
+    await persistedResult.save();
+
+    await recalculatePromptMetrics(eval_);
+
+    const updatedEval = await Eval.findById(eval_.id);
+    expect(updatedEval?.prompts[0].metrics?.namedScores.quality).toBeCloseTo(0.8, 5);
+    expect(updatedEval?.prompts[0].metrics?.namedScores['double-quality']).toBeCloseTo(1.6, 5);
   });
 });

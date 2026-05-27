@@ -267,6 +267,7 @@ export default function ResultsView({
   const { filterMode, setFilterMode } = useFilterMode();
 
   const {
+    inComparisonMode,
     setInComparisonMode,
     columnStates,
     setColumnState,
@@ -900,7 +901,10 @@ export default function ResultsView({
                           size="sm"
                           onClick={() => setAddAssertionsDialogOpen(true)}
                           disabled={
-                            !evalId || !hasScopedResultSelection || filteredResultsCount === 0
+                            inComparisonMode ||
+                            !evalId ||
+                            !hasScopedResultSelection ||
+                            filteredResultsCount === 0
                           }
                         >
                           <Plus className="size-4 mr-2" />
@@ -908,11 +912,13 @@ export default function ResultsView({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {hasScopedResultSelection
-                          ? filteredResultsCount === 0
-                            ? 'No test cases match the current selection'
-                            : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`
-                          : 'Apply filters or search to select test cases'}
+                        {inComparisonMode
+                          ? 'Assertions cannot be added while comparing evaluations'
+                          : hasScopedResultSelection
+                            ? filteredResultsCount === 0
+                              ? 'No test cases match the current selection'
+                              : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`
+                            : 'Apply filters or search to select test cases'}
                       </TooltipContent>
                     </Tooltip>
                     {chartsToggleButton}
@@ -1054,7 +1060,7 @@ export default function ResultsView({
         onResultsTableZoomChange={setResultsTableZoom}
       />
       <AddAssertionsDialog
-        open={addAssertionsDialogOpen}
+        open={addAssertionsDialogOpen && !inComparisonMode}
         onClose={() => setAddAssertionsDialogOpen(false)}
         evalId={evalId || undefined}
         availableScopes={['filtered']}

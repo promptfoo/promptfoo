@@ -81,6 +81,8 @@ describe('server OpenAPI generation', () => {
     const addEvalResultsOperation = paths['/api/eval/{id}/results']?.post as any;
     const createEvalJobOperation = paths['/api/eval/job']?.post as any;
     const evalTableOperation = paths['/api/eval/{id}/table']?.get as any;
+    const submitRatingOperation = paths['/api/eval/{evalId}/results/{id}/rating']?.post as any;
+    const addAssertionsOperation = paths['/api/eval/{evalId}/assertions']?.post as any;
     const getMediaOperation = paths['/api/media/{type}/{filename}']?.get as any;
     const getMediaInfoOperation = paths['/api/media/info/{type}/{filename}']?.get as any;
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
@@ -114,6 +116,18 @@ describe('server OpenAPI generation', () => {
     );
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
+    );
+    expect(submitRatingOperation?.responses['409']).toEqual(
+      expect.objectContaining({ description: 'Evaluation update already in progress' }),
+    );
+    expect(
+      addAssertionsOperation?.requestBody?.content?.['application/json']?.schema?.properties
+        ?.assertions?.items,
+    ).toEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({ type: expect.objectContaining({ type: 'string' }) }),
+        required: expect.arrayContaining(['type']),
+      }),
     );
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,

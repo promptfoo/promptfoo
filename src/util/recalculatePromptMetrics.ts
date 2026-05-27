@@ -10,7 +10,7 @@ import {
 } from '../util/tokenUsageUtils';
 
 import type EvalResult from '../models/evalResult';
-import type { PromptMetrics } from '../types/index';
+import type { DerivedMetric, PromptMetrics } from '../types/index';
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results).
 const RECALCULATE_BATCH_SIZE = 1000;
@@ -71,6 +71,41 @@ function accumulateResultMetrics(metrics: PromptMetrics, result: EvalResult): vo
   }
 }
 
+async function applyDerivedMetrics(
+  metrics: PromptMetrics,
+  derivedMetrics: DerivedMetric[],
+  existingMetrics?: PromptMetrics,
+): Promise<void> {
+  const math = await import('mathjs');
+  const evalContext: Record<string, number> = {
+    ...metrics.namedScores,
+    __count: metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount,
+  };
+
+  for (const metric of derivedMetrics) {
+    if (typeof metric.value !== 'string') {
+      const existingValue = existingMetrics?.namedScores[metric.name];
+      if (existingValue !== undefined) {
+        metrics.namedScores[metric.name] = existingValue;
+        evalContext[metric.name] = existingValue;
+      }
+      logger.debug(
+        `Preserving function-derived metric '${metric.name}' during persisted metrics recalculation`,
+      );
+      continue;
+    }
+
+    try {
+      metrics.namedScores[metric.name] = math.evaluate(metric.value, evalContext);
+      evalContext[metric.name] = metrics.namedScores[metric.name];
+    } catch (error) {
+      logger.debug(
+        `Could not evaluate derived metric '${metric.name}' during metrics recalculation: ${(error as Error).message}`,
+      );
+    }
+  }
+}
+
 /**
  * Recalculate prompt metrics based on current results in the database.
  * Intended for post-hoc updates and retry cleanup that change persisted grading results.
@@ -125,6 +160,13 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   // Update prompt metrics with recalculated values
   for (const [promptIdx, newMetrics] of promptMetricsMap.entries()) {
     if (promptIdx < evalRecord.prompts.length) {
+      if (evalRecord.config.derivedMetrics?.length) {
+        await applyDerivedMetrics(
+          newMetrics,
+          evalRecord.config.derivedMetrics,
+          evalRecord.prompts[promptIdx].metrics,
+        );
+      }
       evalRecord.prompts[promptIdx].metrics = newMetrics;
     }
   }

@@ -12,6 +12,7 @@ import EvalResult from '../../src/models/evalResult';
 import { activeEvalMutationsByEval, assertionJobs } from '../../src/server/routes/eval';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
+import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -25,13 +26,19 @@ describe('eval routes', () => {
     evalId: string,
     jobId: string,
     maxWaitMs = 10000,
-  ): Promise<{ updatedResults: number; skippedResults: number; skippedAssertions: number }> {
+  ): Promise<{
+    updatedResults: number;
+    skippedResults: number;
+    skippedAssertions: number;
+    errors: Array<{ resultId: string; error: string }>;
+  }> {
     return vi.waitFor(
       async () => {
         const statusRes = await api.get(`/api/eval/${evalId}/assertions/job/${jobId}`);
         expect(statusRes.status).toBe(200);
 
-        const { status, updatedResults, skippedResults, skippedAssertions } = statusRes.body.data;
+        const { status, updatedResults, skippedResults, skippedAssertions, errors } =
+          statusRes.body.data;
         if (status === 'error') {
           throw new Error('Assertion job failed');
         }
@@ -39,7 +46,7 @@ describe('eval routes', () => {
           throw new Error(`Assertion job still ${status}`);
         }
 
-        return { updatedResults, skippedResults, skippedAssertions };
+        return { updatedResults, skippedResults, skippedAssertions, errors };
       },
       { interval: 50, timeout: maxWaitMs },
     );
@@ -521,6 +528,19 @@ describe('eval routes', () => {
   });
 
   describe('post("/:evalId/assertions")', () => {
+    it('does not expose internal assertion setup errors', async () => {
+      vi.spyOn(Eval, 'findById').mockRejectedValueOnce(new Error('sensitive setup failure'));
+
+      const res = await api.post('/api/eval/eval-1/assertions').send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'filtered', filters: [] },
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to add assertions' });
+      expect(res.text).not.toContain('sensitive setup failure');
+    });
+
     it('adds assertions to a single result', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -545,6 +565,59 @@ describe('eval routes', () => {
       expect(updatedResult?.testCase.assert).toHaveLength(2);
       expect(updatedResult?.gradingResult?.componentResults).toHaveLength(2);
       expect(updatedResult?.success).toBe(true);
+    });
+
+    it('uses persisted row cost when adding cost assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'cost', threshold: 0.001 }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult).toMatchObject({ updatedResults: 1, errors: [] });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'cost' }),
+            pass: false,
+            reason: expect.stringContaining('0.007'),
+          }),
+        ]),
+      );
+    });
+
+    it('processes duplicate explicit result IDs only once', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id, result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.total).toBe(1);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(await waitForAssertionJob(eval_.id, res.body.data.jobId)).toMatchObject({
+        updatedResults: 1,
+        errors: [],
+      });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toHaveLength(2);
     });
 
     it('skips duplicate assertions', async () => {
@@ -761,6 +834,115 @@ describe('eval routes', () => {
       );
     });
 
+    it('preserves persisted extension named scores when adding post-hoc assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const persistedResult = await EvalResult.findById(result.id);
+      invariant(persistedResult, 'Persisted result is required');
+      persistedResult.namedScores = { extensionMetric: 0.91 };
+      await persistedResult.save();
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      invariant(res.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.namedScores.extensionMetric).toBe(0.91);
+    });
+
+    it('loads the persisted provider for provider-dependent post-hoc assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const persistedResult = await EvalResult.findById(result.id);
+      invariant(persistedResult, 'Persisted result is required');
+      persistedResult.provider = {
+        id: 'openai:chat:gpt-4o-mini',
+        config: {
+          functions: [
+            {
+              name: 'add',
+              parameters: {
+                type: 'object',
+                properties: { x: { type: 'number' }, y: { type: 'number' } },
+                required: ['x', 'y'],
+              },
+            },
+          ],
+        },
+      };
+      persistedResult.response = { output: { arguments: '{"x": 10, "y": 20}', name: 'add' } };
+      await persistedResult.save();
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'is-valid-openai-function-call' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(await waitForAssertionJob(eval_.id, res.body.data.jobId)).toMatchObject({
+        updatedResults: 1,
+        errors: [],
+      });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'is-valid-openai-function-call' }),
+            pass: true,
+          }),
+        ]),
+      );
+    });
+
+    it('resolves stored trace context for post-hoc trace assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: `posthoc-trace-${eval_.id}`,
+        evaluationId: eval_.id,
+        testCaseId: `${result.testIdx}-${result.promptIdx}`,
+      });
+      await traceStore.addSpans(`posthoc-trace-${eval_.id}`, [
+        { spanId: 'llm-span', name: 'llm.call', startTime: 1, endTime: 2 },
+      ]);
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'trace-span-count', value: { pattern: '*llm*', min: 1 } }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(await waitForAssertionJob(eval_.id, res.body.data.jobId)).toMatchObject({
+        updatedResults: 1,
+        errors: [],
+      });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'trace-span-count' }),
+            pass: true,
+          }),
+        ]),
+      );
+    });
+
     it('applies custom assertion scoring when recomputing post-hoc results', async () => {
       const scoringDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-scoring-'));
       const scoringFile = path.join(scoringDir, 'score.mjs');
@@ -867,7 +1049,6 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({
-        success: false,
         error: `Result not found in eval: ${resultB.id}`,
       });
     });
