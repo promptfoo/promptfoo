@@ -59,7 +59,7 @@ vi.mock('glob', async (importOriginal) => {
   };
 });
 
-vi.mock('better-sqlite3');
+vi.mock('libsql');
 
 describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();
