@@ -180,7 +180,11 @@ export async function closeDb() {
           await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
           logger.debug('Successfully checkpointed WAL file before closing');
         } catch (err) {
-          logger.debug(`Could not checkpoint WAL file: ${err}`);
+          // Checkpoint failure means committed WAL pages were not flushed to the
+          // main DB file. They'll be replayed on next open under normal
+          // conditions, but if the WAL is later truncated out of band the data
+          // is lost — surface this as a real warning rather than a debug log.
+          logger.warn(`Could not checkpoint WAL file before close: ${err}`);
         }
       }
 

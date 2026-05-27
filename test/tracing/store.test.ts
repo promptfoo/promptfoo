@@ -49,7 +49,7 @@ describe('TraceStore', () => {
     };
     const mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
-      run: vi.fn().mockResolvedValue(undefined),
+      run: vi.fn().mockResolvedValue({ rowsAffected: 0 }),
     };
 
     mockDb = {

@@ -390,8 +390,8 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
       const cutoffCondition = traceCreatedBefore(cutoffTime);
 
-      await db.transaction(async (tx) => {
-        await tx
+      const { spansDeleted, tracesDeleted } = await db.transaction(async (tx) => {
+        const spansResult = await tx
           .delete(spansTable)
           .where(
             sql`${spansTable.traceId} in (
@@ -402,10 +402,18 @@ export class TraceStore {
           )
           .run();
 
-        await tx.delete(tracesTable).where(cutoffCondition).run();
+        const tracesResult = await tx.delete(tracesTable).where(cutoffCondition).run();
+
+        return {
+          spansDeleted: spansResult.rowsAffected,
+          tracesDeleted: tracesResult.rowsAffected,
+        };
       });
 
-      logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
+      logger.debug(
+        `[TraceStore] Pruned traces older than ${retentionDays} days: ` +
+          `${tracesDeleted} trace(s), ${spansDeleted} span(s)`,
+      );
     } catch (error) {
       logger.error(`[TraceStore] Failed to delete old traces: ${error}`);
       throw error;
