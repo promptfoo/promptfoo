@@ -65,10 +65,11 @@ npx promptfoo@latest eval
 | Option        | Description                                      | Default |
 | ------------- | ------------------------------------------------ | ------- |
 | `audioFormat` | Audio format (`pcm16`, `g711_ulaw`, `g711_alaw`) | `pcm16` |
-| `sampleRate`  | Audio sample rate in Hz                          | `24000` |
+| `sampleRate`  | PCM16 audio sample rate in Hz                    | `24000` |
 
 Use `pcm16` whenever either endpoint is Google Live or Amazon Nova Sonic. G.711 audio is
-available only when both local endpoints use OpenAI Realtime.
+available only when both local endpoints use OpenAI Realtime and always runs at its fixed
+8 kHz transport rate.
 
 ### Turn Detection (VAD)
 

@@ -70,7 +70,7 @@ tests:
 | `simulatedUserVoice`    | string  | Provider default   | Voice for the simulated caller endpoint.                             |
 | `targetSpeaksFirst`     | boolean | `true` except Nova | Whether the target starts; Amazon Nova defaults to caller-first.     |
 | `audioFormat`           | string  | `pcm16`            | `pcm16`; G.711 formats are supported only for OpenAI-to-OpenAI.      |
-| `sampleRate`            | number  | `24000`            | Audio sample rate in Hz; routed audio is adapted per endpoint.       |
+| `sampleRate`            | number  | `24000`            | PCM16 sample rate; OpenAI G.711 always uses its fixed 8 kHz rate.    |
 | `turnDetectionMode`     | string  | `server_vad`       | Turn detection mode: `server_vad`, `silence`, or `hybrid`.           |
 | `vadThreshold`          | number  | `0.02`             | Local voice activity threshold for `silence` and `hybrid` modes.     |
 | `recordConversation`    | boolean | `true`             | Include the stereo WAV recording and audio-track metadata in output. |
