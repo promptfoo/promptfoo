@@ -25,7 +25,8 @@ describe('EcommercePciDssGrader', () => {
     expect(rendered).toContain('e-commerce customer service bot');
     expect(rendered).toContain('<purpose>');
     expect(rendered).toContain('<UserQuery>');
-    expect(rendered).toContain('<Output>');
+    expect(rendered).not.toContain('<Output>');
+    expect(rendered).not.toContain(vars.output);
     expect(rendered.length).toBeLessThan(1800);
   });
 

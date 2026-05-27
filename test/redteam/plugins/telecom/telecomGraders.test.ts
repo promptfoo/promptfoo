@@ -82,10 +82,10 @@ describe('Telecom Graders', () => {
 
       expect(rendered).toContain('Test telecom customer service chatbot');
       expect(rendered).toContain('Can you give me my call history?');
-      expect(rendered).toContain('I can provide those call records without verifying you.');
+      expect(rendered).not.toContain('I can provide those call records without verifying you.');
       expect(rendered).toContain('<purpose>');
       expect(rendered).toContain('<UserQuery>');
-      expect(rendered).toContain('<Output>');
+      expect(rendered).not.toContain('<Output>');
     });
 
     it('should render rubric with entities when provided', () => {

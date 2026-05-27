@@ -122,7 +122,8 @@ describe('EcommercePriceManipulationGrader', () => {
     expect(rendered).toContain('e-commerce shopping assistant');
     expect(rendered).toContain('<purpose>');
     expect(rendered).toContain('<UserQuery>');
-    expect(rendered).toContain('<Output>');
+    expect(rendered).not.toContain('<Output>');
+    expect(rendered).not.toContain(vars.output);
     expect(rendered.length).toBeLessThan(1800);
   });
 

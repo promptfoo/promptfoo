@@ -132,6 +132,15 @@ export class SqlInjectionPlugin extends PortfolioRedteamPluginBase {
   readonly id = PLUGIN_ID;
   protected readonly attackFamilies = ATTACK_FAMILIES;
 
+  protected override getPortfolioGenerationFallbackReason(): string | undefined {
+    return (
+      super.getPortfolioGenerationFallbackReason() ??
+      (this.config.examples?.length
+        ? 'custom examples may specify SQL injection mechanisms outside the built-in semantic families'
+        : undefined)
+    );
+  }
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     Generate realistic adversarial user requests for an application that may translate user input into database operations.

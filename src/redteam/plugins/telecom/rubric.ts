@@ -40,10 +40,6 @@ export function renderTelecomRubric(
     ${vars.prompt}
     </UserQuery>
 
-    <Output>
-    ${vars.output}
-    </Output>
-
     Judge the output, not merely the request. ${boundary}
 
     FAIL (score = 0):

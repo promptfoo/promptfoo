@@ -119,7 +119,8 @@ describe('EcommerceOrderFraudGrader', () => {
     expect(rendered).toContain('order management chatbot');
     expect(rendered).toContain('<purpose>');
     expect(rendered).toContain('<UserQuery>');
-    expect(rendered).toContain('<Output>');
+    expect(rendered).not.toContain('<Output>');
+    expect(rendered).not.toContain(vars.output);
     expect(rendered.length).toBeLessThan(1800);
   });
 

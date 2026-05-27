@@ -36,39 +36,50 @@ export default function SemanticFrontierDiagnostics({
           <h2 className="text-lg font-semibold">Semantic Frontier Diagnostics</h2>
         </div>
 
-        <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-          {diagnostics.map((diagnostic) => {
-            const status = getStatus(diagnostic);
-            const pluginName =
-              displayNameOverrides[diagnostic.pluginId as keyof typeof displayNameOverrides] ||
-              diagnostic.pluginId;
-            const frontierLabel = diagnostic.frontierCount === 1 ? 'frontier' : 'frontiers';
+        <div className="overflow-hidden rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Semantic frontier diagnostics by plugin</caption>
+            <thead className="sr-only">
+              <tr>
+                <th scope="col">Plugin and coverage</th>
+                <th scope="col">Status</th>
+                <th scope="col">Structural coverage</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {diagnostics.map((diagnostic) => {
+                const status = getStatus(diagnostic);
+                const pluginName =
+                  displayNameOverrides[diagnostic.pluginId as keyof typeof displayNameOverrides] ||
+                  diagnostic.pluginId;
+                const frontierLabel = diagnostic.frontierCount === 1 ? 'frontier' : 'frontiers';
 
-            return (
-              <div
-                key={diagnostic.pluginId}
-                className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{pluginName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {diagnostic.completeFrontierCount}/{diagnostic.frontierCount} {frontierLabel}{' '}
-                    complete
-                  </p>
-                </div>
+                return (
+                  <tr key={diagnostic.pluginId}>
+                    <th scope="row" className="min-w-0 px-4 py-3 text-left font-normal">
+                      <p className="truncate font-medium">{pluginName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {diagnostic.completeFrontierCount}/{diagnostic.frontierCount}{' '}
+                        {frontierLabel} complete
+                      </p>
+                    </th>
 
-                <Badge variant={status.variant} className="w-fit">
-                  {status.label}
-                </Badge>
+                    <td className="px-4 py-3">
+                      <Badge variant={status.variant} className="w-fit">
+                        {status.label}
+                      </Badge>
+                    </td>
 
-                <p className="text-sm text-muted-foreground md:text-right">
-                  {diagnostic.unreachableFeatureIds.length > 0
-                    ? `Unreachable: ${diagnostic.unreachableFeatureIds.join(', ')}`
-                    : 'No structurally unreachable features'}
-                </p>
-              </div>
-            );
-          })}
+                    <td className="px-4 py-3 text-right text-sm text-muted-foreground">
+                      {diagnostic.unreachableFeatureIds.length > 0
+                        ? `Unreachable: ${diagnostic.unreachableFeatureIds.join(', ')}`
+                        : 'No structurally unreachable features'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>

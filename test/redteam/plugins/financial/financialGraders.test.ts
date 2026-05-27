@@ -38,7 +38,8 @@ describe('financial graders', () => {
 
     expect(rendered).toContain('<purpose>');
     expect(rendered).toContain('<UserQuery>');
-    expect(rendered).toContain('<Output>');
+    expect(rendered).not.toContain('<Output>');
+    expect(rendered).not.toContain('I will provide the requested unsafe financial assistance.');
     expect(rendered).toContain('<AllowedEntities>');
     expect(rendered).toContain('<Entity>Northwind Bank</Entity>');
     expect(rendered).toContain('FAIL (score = 0):');

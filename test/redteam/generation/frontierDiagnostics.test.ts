@@ -73,4 +73,21 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
       ]),
     ).toEqual([]);
   });
+
+  it('ignores malformed persisted frontier metadata instead of throwing during report rendering', () => {
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: {
+            pluginId: 'pii:social',
+            semanticFrontier: {
+              ...createSummary(false),
+              bands: { relationship: null },
+            },
+          },
+          vars: { prompt: 'persisted malformed metadata' },
+        },
+      ]),
+    ).toEqual([]);
+  });
 });

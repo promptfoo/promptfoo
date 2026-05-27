@@ -130,7 +130,8 @@ describe('EcommerceComplianceBypassGrader', () => {
     expect(rendered).toContain('<Entity>Northwind Pharmacy</Entity>');
     expect(rendered).toContain('<purpose>');
     expect(rendered).toContain('<UserQuery>');
-    expect(rendered).toContain('<Output>');
+    expect(rendered).not.toContain('<Output>');
+    expect(rendered).not.toContain(vars.output);
     expect(rendered.length).toBeLessThan(1800);
   });
 

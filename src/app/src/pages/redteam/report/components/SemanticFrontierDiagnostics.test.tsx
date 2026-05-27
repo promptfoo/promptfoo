@@ -38,6 +38,11 @@ describe('SemanticFrontierDiagnostics', () => {
     render(<SemanticFrontierDiagnostics diagnostics={diagnostics} />);
 
     expect(screen.getByText('Semantic Frontier Diagnostics')).toBeInTheDocument();
+    expect(
+      screen.getByRole('table', { name: 'Semantic frontier diagnostics by plugin' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader')).toHaveLength(3);
+    expect(screen.getAllByRole('rowheader')).toHaveLength(3);
     expect(screen.getByText('1/1 frontier complete')).toBeInTheDocument();
     expect(screen.getByText('Complete')).toBeInTheDocument();
     expect(screen.getAllByText('No structurally unreachable features')).toHaveLength(2);

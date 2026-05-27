@@ -9,6 +9,28 @@ export type SemanticFrontierDiagnostic = {
   unreachableFeatureIds: string[];
 };
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isSemanticFrontierBandSummary(
+  value: unknown,
+): value is SemanticFrontierSummary['bands'][string] {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const band = value as Partial<SemanticFrontierSummary['bands'][string]>;
+  return (
+    typeof band.featureCount === 'number' &&
+    typeof band.observedFeatureCount === 'number' &&
+    isStringArray(band.observedFeatureIds) &&
+    typeof band.reachableFeatureCount === 'number' &&
+    isStringArray(band.reachableFeatureIds) &&
+    isStringArray(band.unreachableFeatureIds)
+  );
+}
+
 function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSummary {
   if (!value || typeof value !== 'object') {
     return false;
@@ -20,7 +42,8 @@ function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSum
     typeof summary.complete === 'boolean' &&
     typeof summary.minimumPortfolioSize === 'number' &&
     Boolean(summary.bands) &&
-    typeof summary.bands === 'object'
+    typeof summary.bands === 'object' &&
+    Object.values(summary.bands).every(isSemanticFrontierBandSummary)
   );
 }
 

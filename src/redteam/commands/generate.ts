@@ -834,6 +834,9 @@ async function doGenerateRedteamInternal(
       const existingYaml = configPath
         ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
+      const existingMetadata = { ...(existingYaml.metadata || {}) };
+      delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.semanticFrontierDiagnostics;
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const updatedYaml: Partial<UnifiedConfig> = {
@@ -850,7 +853,7 @@ async function doGenerateRedteamInternal(
         tests: redteamTests,
         redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
         metadata: {
-          ...(existingYaml.metadata || {}),
+          ...existingMetadata,
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath) }
             : { configHash: 'force-regenerate' }),
@@ -919,9 +922,12 @@ async function doGenerateRedteamInternal(
       const semanticFrontierDiagnostics = summarizeSemanticFrontierDiagnosticsFromTests(
         existingConfig.tests as TestCase[],
       );
+      const existingMetadata = { ...(existingConfig.metadata || {}) };
+      delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.semanticFrontierDiagnostics;
       // Add the config hash to metadata
       existingConfig.metadata = {
-        ...(existingConfig.metadata || {}),
+        ...existingMetadata,
         configHash: await getConfigHash(configPath),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
         ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),

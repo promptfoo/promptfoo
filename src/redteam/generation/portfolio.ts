@@ -68,6 +68,28 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     return undefined;
   }
 
+  protected getPortfolioGenerationFallbackReason(): string | undefined {
+    const languages = Array.isArray(this.config.language)
+      ? this.config.language
+      : this.config.language
+        ? [this.config.language]
+        : [];
+    const nonEnglishLanguage = languages.find((language) => {
+      const normalizedLanguage = language.trim().toLowerCase();
+      return (
+        normalizedLanguage !== 'en' &&
+        normalizedLanguage !== 'english' &&
+        !/^en[-_]/.test(normalizedLanguage)
+      );
+    });
+
+    if (nonEnglishLanguage) {
+      return `localized generation (${nonEnglishLanguage}) is not compatible with English-only semantic predicates`;
+    }
+
+    return undefined;
+  }
+
   protected buildAttackPlan(requestedCount: number): AttackPlan {
     const semanticFrontier = this.getSemanticFrontierConfig();
     const shouldUseSemanticFrontier =
@@ -138,6 +160,14 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
       logger.debug(
         `${this.constructor.name} falling back to legacy generation because multi-input mode is enabled`,
+      );
+      return super.generateTests(n, delayMs);
+    }
+
+    const fallbackReason = this.getPortfolioGenerationFallbackReason();
+    if (fallbackReason) {
+      logger.debug(
+        `${this.constructor.name} falling back to legacy generation because ${fallbackReason}`,
       );
       return super.generateTests(n, delayMs);
     }

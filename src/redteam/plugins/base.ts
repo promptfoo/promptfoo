@@ -8,6 +8,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { MULTI_INPUT_VAR } from '../constants';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -529,8 +530,10 @@ export abstract class RedteamGraderBase {
     const injectVar =
       typeof test.metadata?.injectVar === 'string' ? test.metadata.injectVar : 'prompt';
     const injectedPrompt = test.vars?.[injectVar];
-    const reflectedPromptCandidates =
-      typeof injectedPrompt === 'string' ? [injectedPrompt] : [prompt];
+    const reflectedPromptCandidates = [
+      ...(typeof injectedPrompt === 'string' ? [injectedPrompt] : [prompt]),
+      ...(injectVar === MULTI_INPUT_VAR && injectedPrompt !== prompt ? [prompt] : []),
+    ];
 
     return (
       !hasCustomGradingPolicy &&
