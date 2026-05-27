@@ -224,7 +224,11 @@ function getConfigIds(values: unknown): string[] {
 
 function isSampleTarget(target: unknown): boolean {
   if (typeof target === 'string') {
-    return target.includes('promptfoo:') || target.includes('promptfoo.app');
+    return (
+      target.includes('promptfoo:') ||
+      target.includes('promptfoo.app') ||
+      target.includes('promptfoo.dev')
+    );
   }
   if (!target || typeof target !== 'object') {
     return false;
