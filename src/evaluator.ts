@@ -54,6 +54,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -70,6 +71,10 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import {
+  buildConfiguredProviderMap,
+  resolveConfiguredProviderReference,
+} from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
@@ -646,6 +651,16 @@ function createRunEvalState({
   };
 }
 
+/**
+ * Reserved keys for eval-step runtime vars. `EvalRuntimeVars` below is keyed by
+ * this tuple, so adding a new key to {@link getEvalRuntimeVars} fails to
+ * type-check until the key is added here too — keeping the omit list and the
+ * producer in lockstep.
+ */
+const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
+const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
+type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
+
 function getEvalRuntimeVars({
   evalId,
   promptIndex,
@@ -656,12 +671,31 @@ function getEvalRuntimeVars({
   promptIndex: number;
   repeatIndex: number;
   testIndex: number;
-}): Vars {
+}): EvalRuntimeVars {
   return {
     ...(evalId ? { __evalId: evalId } : {}),
     __evalStepId: `test-${testIndex}-prompt-${promptIndex}-repeat-${repeatIndex}`,
     __repeatIndex: repeatIndex,
   };
+}
+
+/**
+ * Returns a copy of `vars` without the reserved `__eval*` runtime vars. They are
+ * merged into an eval step's vars so prompts and providers can reference them,
+ * but must not reach the persisted `EvaluateResult.vars` or assertion/grader
+ * inputs: they are positional per-step identifiers that would pollute stored
+ * results and — being `_`-prefixed — get restored onto re-run `test.vars` by
+ * `--filter-*` re-runs. The input is not mutated; it is shared by reference
+ * with the provider call context.
+ */
+function omitEvalRuntimeVars(vars: Vars): Vars {
+  const result: Vars = {};
+  for (const [key, value] of Object.entries(vars)) {
+    if (!EVAL_RUNTIME_VAR_KEY_SET.has(key)) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 function attachConversationVar({
@@ -1002,6 +1036,9 @@ function createEvaluateResult({
 }): EvaluateResult {
   const ret: EvaluateResult = {
     ...setup,
+    // Use the caller-provided vars (which exclude the __eval* runtime vars)
+    // for the persisted result rather than setup.vars.
+    vars,
     prompt: { ...rendered.setup.prompt, raw: rendered.renderedPrompt },
     response,
     success: false,
@@ -1402,6 +1439,12 @@ async function runEvalInternal({
 
     await applyProviderDelayIfNeeded(provider, response);
 
+    // The __eval* runtime vars were exposed to prompt/provider rendering above.
+    // Build a copy without them for the persisted result, assertions, and
+    // graders. state.vars itself is left intact — it is shared by reference
+    // with the provider call context.
+    const persistedVars = omitEvalRuntimeVars(state.vars);
+
     const ret = createEvaluateResult({
       fileMetadata: state.fileMetadata,
       latencyMs,
@@ -1412,7 +1455,7 @@ async function runEvalInternal({
       setup,
       test,
       testIdx: testIndex,
-      vars: state.vars,
+      vars: persistedVars,
     });
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
@@ -1435,7 +1478,7 @@ async function runEvalInternal({
       test,
       testIdx: testIndex,
       traceContext,
-      vars: state.vars,
+      vars: persistedVars,
     });
 
     // Update token usage stats
@@ -1467,6 +1510,8 @@ async function runEvalInternal({
     return [
       {
         ...setup,
+        // Exclude the __eval* runtime vars from the persisted error result.
+        vars: omitEvalRuntimeVars(setup.vars),
         error: errorWithStack,
         success: false,
         failureReason: ResultFailureReason.ERROR,
@@ -1950,6 +1995,51 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
   return promptIndexMap;
 }
 
+function resolveAssertionProviderReferences(
+  assertion: AssertionOrSet,
+  providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
+): AssertionOrSet {
+  if (assertion.type === 'assert-set') {
+    const resolvedAssertions = assertion.assert.map(
+      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
+    );
+    if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
+      return assertion;
+    }
+    return { ...assertion, assert: resolvedAssertions };
+  }
+
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
+  return provider === assertion.provider ? assertion : { ...assertion, provider };
+}
+
+function resolveRuntimeGradingProviderReferences(
+  testCase: AtomicTestCase,
+  providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
+): void {
+  if (testCase.options?.provider) {
+    const provider = resolveConfiguredProviderReference(
+      testCase.options.provider,
+      providerMap,
+      env,
+    );
+    if (provider !== testCase.options.provider) {
+      testCase.options = { ...testCase.options, provider };
+    }
+  }
+
+  if (testCase.assert) {
+    const assertions = testCase.assert.map((assertion) =>
+      resolveAssertionProviderReferences(assertion, providerMap, env),
+    );
+    if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
+      testCase.assert = assertions;
+    }
+  }
+}
+
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
@@ -2096,6 +2186,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const promptIdCache = new Map<Prompt, string>();
+  const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
   for (const prompt of testSuite.prompts) {
     promptIdCache.set(prompt, generateIdFromPrompt(prompt));
   }
@@ -2104,6 +2195,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -4329,6 +4421,11 @@ class Evaluator {
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
+    // Preserve configured/transformed variable order before concurrent rows finish.
+    // Result-only variables discovered at runtime are appended as they appear.
+    for (const varName of varNames) {
+      vars.add(varName);
+    }
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     const runEvalOptions = await buildRunEvalOptions({
       concurrency,

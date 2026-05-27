@@ -491,6 +491,25 @@ function buildCandidateDefaultTest(
   };
 }
 
+function buildCandidateScenarios(
+  scenarios: TestSuite['scenarios'],
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): TestSuite['scenarios'] {
+  return scenarios?.map((scenario) => ({
+    ...scenario,
+    config: scenario.config.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+    tests: scenario.tests.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+  }));
+}
+
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -528,7 +547,12 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
+    scenarios: buildCandidateScenarios(
+      testSuite.scenarios,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
   };
 }
 
@@ -591,6 +615,28 @@ function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {
   };
 }
 
+/**
+ * Detects whether `defaultTest` carries enough configuration to be a runnable test
+ * on its own. `promptfoo eval` synthesizes a single implicit `[{}]` test case when no
+ * `tests` or `scenarios` are configured and merges `defaultTest` into it (see
+ * `getInitialTests` in `src/evaluator.ts`), so a `defaultTest` with assertions
+ * or variables produces one runnable row. An assertion scoring function only
+ * combines assertion results, so a default-only implicit test that configures
+ * one without assertions is rejected rather than silently ignoring the scorer.
+ * An empty `defaultTest` (`{}`) carries nothing to evaluate and is not counted.
+ */
+function hasRunnableDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+  const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
+  const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
+  if (defaultTest.assertScoringFunction && !hasAssertions) {
+    return false;
+  }
+  return hasAssertions || hasVars;
+}
+
 function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   const explicitTests = testSuite.tests?.length || 0;
   const scenarioTests = (testSuite.scenarios || []).reduce((count, scenario) => {
@@ -598,6 +644,17 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
     const scenarioTestCount = scenario.tests?.length ?? 1;
     return count + scenarioConfigCount * scenarioTestCount;
   }, 0);
+  // `eval` synthesizes one implicit `[{}]` test (merging `defaultTest`) only
+  // when there are no `tests` and `scenarios` is absent — an empty `scenarios`
+  // array still suppresses it (see `getInitialTests` in `src/evaluator.ts`).
+  // Mirror that exactly so the preflight does not accept testless configs.
+  if (
+    explicitTests === 0 &&
+    !testSuite.scenarios &&
+    hasRunnableDefaultTest(testSuite.defaultTest)
+  ) {
+    return 1;
+  }
   return explicitTests + scenarioTests;
 }
 
@@ -609,6 +666,14 @@ function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvalua
     showProgressBar: false,
     silent: true,
   };
+}
+
+function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
+  if (evalRecord?.results.length === 0) {
+    throw new Error(
+      `No eval test cases ran for ${scope} — check filters and other test scoping options.`,
+    );
+  }
 }
 
 export async function optimizePromptTestSuite(
@@ -625,22 +690,32 @@ export async function optimizePromptTestSuite(
   }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(testSuite, options);
+  if (selectedTestSuite.prompts[0].function) {
+    throw new Error('Prompt optimization currently supports literal string prompts only.');
+  }
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(selectedTestSuite, options.validationSplit);
+
+  // Internal optimizer evals are intermediate runs and must not write to the user's
+  // configured output. Strip outputPath so the Evaluator does not append baseline or
+  // candidate result rows to a .jsonl file the user expects only `eval` to populate.
+  const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
   logger.info('Running baseline evaluation for prompt optimization...');
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
-    new Eval(config, { persisted: false }),
+    new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
-        new Eval(config, { persisted: false }),
+        new Eval(optimizationConfig, { persisted: false }),
         createEvaluationOptions(config),
       )
     : undefined;
+  assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,
@@ -700,7 +775,7 @@ export async function optimizePromptTestSuite(
     );
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
-      new Eval(config, { persisted: false }),
+      new Eval(optimizationConfig, { persisted: false }),
       createEvaluationOptions(config),
     );
     const candidateValidationEval = validationTestSuite
@@ -713,7 +788,7 @@ export async function optimizePromptTestSuite(
               candidates,
             ),
           ),
-          new Eval(config, { persisted: false }),
+          new Eval(optimizationConfig, { persisted: false }),
           createEvaluationOptions(config),
         )
       : undefined;

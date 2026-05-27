@@ -127,7 +127,7 @@ describe('RSA signature authentication', () => {
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
   });
 
-  it('should regenerate signature when expired', async () => {
+  it('should regenerate signature at the default refresh buffer boundary', async () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         method: 'POST',
@@ -151,10 +151,14 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(1);
 
-    // Second call after validity period should regenerate signature
-    vi.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    // The default refresh buffer is 10%, so a five-minute signature refreshes at 4.5 minutes.
+    vi.mocked(Date.now).mockReturnValue(270999);
     await provider.callApi('test');
-    expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    vi.mocked(Date.now).mockReturnValue(271000);
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(2);
   });
 
   it('should use custom signature data template', async () => {
@@ -539,6 +543,70 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     expect(cacheKeys.join('\n')).not.toContain('secret-a');
     expect(cacheKeys.join('\n')).not.toContain('secret-b');
     expect(cacheKeys.join('\n')).not.toContain('test-client-id');
+  });
+
+  it('should return refreshed OAuth tokens when concurrent keys exceed the cache limit', async () => {
+    let releaseRefreshes!: () => void;
+    const refreshesBlocked = new Promise<void>((resolve) => {
+      releaseRefreshes = resolve;
+    });
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: '{{ clientSecret }}',
+        },
+      },
+    });
+
+    const apiAuthHeaders = new Set<string>();
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo, options: any) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        tokenRefreshCallCount += 1;
+        await refreshesBlocked;
+        const clientSecret = new URLSearchParams(String(options.body)).get('client_secret');
+        return {
+          data: JSON.stringify({
+            access_token: `token-${clientSecret}`,
+            expires_in: 3600,
+          }),
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        };
+      }
+
+      apiAuthHeaders.add(options.headers.authorization);
+      return {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+    });
+
+    const requests = Array.from({ length: 257 }, (_, index) =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { clientSecret: `secret-${index}` },
+      }),
+    );
+
+    await vi.waitFor(() => expect(tokenRefreshCallCount).toBe(257));
+    releaseRefreshes();
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(257);
+    expect(apiAuthHeaders.size).toBe(257);
+    expect((provider as any).authTokenCache.size).toBe(256);
   });
 
   it('should not cross-use OAuth tokens across concurrent raw requests', async () => {
@@ -1676,6 +1744,52 @@ describe('HttpProvider - File Auth', () => {
     expect(cachedTokens).toHaveLength(256);
     expect(cachedTokens).not.toContain('token-for-user-0');
     expect(cachedTokens).toContain('token-for-user-259');
+  });
+
+  it('should return refreshed file auth tokens when concurrent keys exceed the cache limit', async () => {
+    let releaseRefreshes!: () => void;
+    const refreshesBlocked = new Promise<void>((resolve) => {
+      releaseRefreshes = resolve;
+    });
+    const authFn = vi.fn(async (authContext: any) => {
+      await refreshesBlocked;
+      return {
+        token: `token-for-${authContext.vars.userId}`,
+      };
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    const requests = Array.from({ length: 257 }, (_, index) =>
+      provider.callApi('same prompt', {
+        prompt: { raw: 'same prompt', label: 'same prompt' },
+        vars: { userId: `user-${index}` },
+      }),
+    );
+
+    await vi.waitFor(() => expect(authFn).toHaveBeenCalledTimes(257));
+    releaseRefreshes();
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(257);
+    const authHeaders = new Set(
+      vi
+        .mocked(fetchWithCache)
+        .mock.calls.map((call) => (call[1]?.headers as Record<string, string>).authorization),
+    );
+    expect(authHeaders.size).toBe(257);
+    expect((provider as any).authTokenCache.size).toBe(256);
   });
 
   it('should refresh a file auth token when it is within the oauth refresh buffer', async () => {

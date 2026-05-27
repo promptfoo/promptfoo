@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
@@ -32,6 +32,7 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
+import { restoreAzureBlobSasTokens } from './sanitizer';
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -40,11 +41,10 @@ export async function writeResultsToDatabase(
 ): Promise<string> {
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = createEvalId(createdAt);
-  const db = getDb();
+  const db = await getDb();
 
-  const promises = [];
-  promises.push(
-    db
+  await db.transaction(async (tx) => {
+    await tx
       .insert(evalsTable)
       .values({
         id: evalId,
@@ -53,90 +53,81 @@ export async function writeResultsToDatabase(
         description: config.description,
         config,
         results,
+        isRedteam: config.redteam !== undefined,
       })
       .onConflictDoNothing()
-      .run(),
-  );
+      .run();
 
-  logger.debug(`Inserting eval ${evalId}`);
+    logger.debug(`Inserting eval ${evalId}`);
 
-  // Record prompt relation
-  invariant(results.table, 'Table is required');
+    // Record prompt relation
+    invariant(results.table, 'Table is required');
 
-  for (const prompt of results.table.head.prompts) {
-    const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = generateIdFromPrompt(prompt);
+    for (const prompt of results.table.head.prompts) {
+      const label = prompt.label || prompt.display || prompt.raw;
+      const promptId = generateIdFromPrompt(prompt);
 
-    promises.push(
-      db
+      await tx
         .insert(promptsTable)
         .values({
           id: promptId,
           prompt: label,
         })
         .onConflictDoNothing()
-        .run(),
-    );
+        .run();
 
-    promises.push(
-      db
+      await tx
         .insert(evalsToPromptsTable)
         .values({
           evalId,
           promptId,
         })
         .onConflictDoNothing()
-        .run(),
-    );
+        .run();
 
-    logger.debug(`Inserting prompt ${promptId}`);
-  }
+      logger.debug(`Inserting prompt ${promptId}`);
+    }
 
-  // Record dataset relation
-  const datasetId = sha256(JSON.stringify(config.tests || []));
-  const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+    // Record dataset relation
+    const datasetId = sha256(JSON.stringify(config.tests || []));
+    const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
 
-  // Log when non-array tests are converted to empty array for database storage
-  if (config.tests && !Array.isArray(config.tests)) {
-    const testsType = typeof config.tests;
-    const hasPath =
-      typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
-    logger.debug(
-      `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
-    );
-  }
+    // Log when non-array tests are converted to empty array for database storage
+    if (config.tests && !Array.isArray(config.tests)) {
+      const testsType = typeof config.tests;
+      const hasPath =
+        typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
+      logger.debug(
+        `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
+      );
+    }
 
-  promises.push(
-    db
+    await tx
       .insert(datasetsTable)
       .values({
         id: datasetId,
         tests: testsForStorage,
       })
       .onConflictDoNothing()
-      .run(),
-  );
+      .run();
 
-  promises.push(
-    db
+    await tx
       .insert(evalsToDatasetsTable)
       .values({
         evalId,
         datasetId,
       })
       .onConflictDoNothing()
-      .run(),
-  );
+      .run();
 
-  logger.debug(`Inserting dataset ${datasetId}`);
+    logger.debug(`Inserting dataset ${datasetId}`);
 
-  // Record tags
-  if (config.tags) {
-    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-      const tagId = sha256(`${tagKey}:${tagValue}`);
+    // Record tags
+    if (config.tags) {
+      for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+        const tagId = sha256(`${tagKey}:${tagValue}`);
 
-      promises.push(
-        db
+        await tx
           .insert(tagsTable)
           .values({
             id: tagId,
@@ -144,26 +135,21 @@ export async function writeResultsToDatabase(
             value: tagValue,
           })
           .onConflictDoNothing()
-          .run(),
-      );
+          .run();
 
-      promises.push(
-        db
+        await tx
           .insert(evalsToTagsTable)
           .values({
             evalId,
             tagId,
           })
           .onConflictDoNothing()
-          .run(),
-      );
+          .run();
 
-      logger.debug(`Inserting tag ${tagId}`);
+        logger.debug(`Inserting tag ${tagId}`);
+      }
     }
-  }
-
-  logger.debug(`Awaiting ${promises.length} promises to database...`);
-  await Promise.all(promises);
+  });
 
   return evalId;
 }
@@ -199,7 +185,7 @@ export async function updateResult(
     }
 
     if (newConfig) {
-      existingEval.config = newConfig;
+      existingEval.config = restoreAzureBlobSasTokens(newConfig, existingEval.config);
     }
     if (newTable) {
       existingEval.setTable(newTable);
@@ -210,6 +196,7 @@ export async function updateResult(
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
     logger.error(`Failed to update eval with ID ${id}:\n${err}`);
+    throw err;
   }
 }
 
@@ -383,7 +370,7 @@ async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<EvalWithMetadata[]> {
-  const db = getDb();
+  const db = await getDb();
   const evals_ = await db
     .select({
       id: evalsTable.id,
@@ -441,20 +428,20 @@ export async function getEvalFromId(hash: string) {
 }
 
 export async function deleteEval(evalId: string) {
-  const db = getDb();
-  db.transaction(() => {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
     // Clean up FK-referenced rows first; not all relationships have onDelete: 'cascade'.
     // Spans and traces in particular must be removed before the eval row, otherwise
     // SQLite raises "FOREIGN KEY constraint failed" (foreign_keys pragma is ON).
-    deleteTraceRecordsForEvals(db, [evalId]);
-    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    await deleteTraceRecordsForEvals(tx, [evalId]);
+    await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+    await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
 
     // Finally, delete the eval record
-    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    if (deletedIds.changes === 0) {
+    const deletedIds = await tx.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+    if (deletedIds.rowsAffected === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
@@ -464,15 +451,15 @@ export async function deleteEval(evalId: string) {
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
-export function deleteEvals(ids: string[]) {
-  const db = getDb();
-  db.transaction(() => {
-    deleteTraceRecordsForEvals(db, ids);
-    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
-    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
-    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
-    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
-    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+export async function deleteEvals(ids: string[]): Promise<void> {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await deleteTraceRecordsForEvals(tx, ids);
+    await tx.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
+    await tx.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
+    await tx.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
+    await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
+    await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
 }
 
@@ -482,15 +469,15 @@ export function deleteEvals(ids: string[]) {
  * @returns {Promise<void>}
  */
 export async function deleteAllEvals(): Promise<void> {
-  const db = getDb();
-  db.transaction(() => {
-    db.delete(spansTable).run();
-    db.delete(tracesTable).run();
-    db.delete(evalResultsTable).run();
-    db.delete(evalsToPromptsTable).run();
-    db.delete(evalsToDatasetsTable).run();
-    db.delete(evalsToTagsTable).run();
-    db.delete(evalsTable).run();
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.delete(spansTable).run();
+    await tx.delete(tracesTable).run();
+    await tx.delete(evalResultsTable).run();
+    await tx.delete(evalsToPromptsTable).run();
+    await tx.delete(evalsToDatasetsTable).run();
+    await tx.delete(evalsToTagsTable).run();
+    await tx.delete(evalsTable).run();
   });
 }
 
@@ -515,6 +502,11 @@ const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
   max: 2000,
 });
 
+/** Clears the standalone eval LRU cache. Intended for tests that mutate evals. */
+export function clearStandaloneEvalCache(): void {
+  standaloneEvalCache.clear();
+}
+
 export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
@@ -531,8 +523,8 @@ export async function getStandaloneEvals({
     return cachedResult;
   }
 
-  const db = getDb();
-  const results = db
+  const db = await getDb();
+  const results = await db
     .select({
       evalId: evalsTable.id,
       description: evalsTable.description,
@@ -542,7 +534,7 @@ export async function getStandaloneEvals({
       datasetId: evalsToDatasetsTable.datasetId,
       tagName: tagsTable.name,
       tagValue: tagsTable.value,
-      isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
+      isRedteam: evalsTable.isRedteam,
     })
     .from(evalsTable)
     .leftJoin(evalsToPromptsTable, eq(evalsTable.id, evalsToPromptsTable.evalId))
@@ -574,15 +566,7 @@ export async function getStandaloneEvals({
   const evalMap = new Map(evalData.map(({ evalId, eval_, table }) => [evalId, { eval_, table }]));
 
   const standaloneEvals = results.flatMap((result) => {
-    const {
-      description,
-      createdAt,
-      evalId,
-      promptId,
-      datasetId,
-      // @ts-ignore
-      isRedteam,
-    } = result;
+    const { description, createdAt, evalId, promptId, datasetId, isRedteam } = result;
 
     const evalInfo = evalMap.get(evalId);
     invariant(evalInfo, `Eval with ID ${evalId} not found in map`);
@@ -614,7 +598,7 @@ export async function getStandaloneEvals({
         promptId,
         datasetId,
         createdAt,
-        isRedteam: isRedteam as boolean,
+        isRedteam,
         ...pluginCounts,
         ...col,
       };

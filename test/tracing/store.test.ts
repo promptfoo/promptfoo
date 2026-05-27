@@ -39,7 +39,8 @@ describe('TraceStore', () => {
     // Create mock database methods that properly chain
     const mockInsertChain = {
       values: vi.fn().mockReturnThis(),
-      onConflictDoNothing: vi.fn(() => Promise.resolve(undefined)),
+      onConflictDoNothing: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue(undefined),
     };
     const mockSelectChain = {
       from: vi.fn().mockReturnThis(),
@@ -47,13 +48,15 @@ describe('TraceStore', () => {
       limit: vi.fn(() => Promise.resolve([])),
     };
     const mockDeleteChain = {
-      where: vi.fn(() => Promise.resolve(undefined)),
+      where: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue(undefined),
     };
 
     mockDb = {
       insert: vi.fn(() => mockInsertChain),
       select: vi.fn(() => mockSelectChain),
       delete: vi.fn(() => mockDeleteChain),
+      transaction: vi.fn(async (callback) => callback(mockDb)),
     };
 
     // Create trace store and inject mock DB
@@ -94,7 +97,7 @@ describe('TraceStore', () => {
 
     it('should handle errors when creating trace', async () => {
       const error = new Error('Database error');
-      mockDb.insert().values().onConflictDoNothing.mockRejectedValueOnce(error);
+      mockDb.insert().values().onConflictDoNothing().run.mockRejectedValueOnce(error);
 
       const traceData = {
         traceId: 'test-trace-id',
@@ -200,7 +203,7 @@ describe('TraceStore', () => {
 
       // Mock insert error
       const error = new Error('Insert failed');
-      mockDb.insert().values.mockRejectedValueOnce(error);
+      mockDb.insert().values().run.mockRejectedValueOnce(error);
 
       const spans = [
         {
@@ -655,13 +658,14 @@ describe('TraceStore', () => {
 
       await traceStore.deleteOldTraces(retentionDays);
 
-      expect(mockDb.delete).toHaveBeenCalledWith(expect.anything());
+      expect(mockDb.transaction).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockDb.delete).toHaveBeenCalledTimes(2);
       expect(mockDb.delete().where).toHaveBeenCalledWith(expect.anything());
     });
 
     it('should handle errors when deleting old traces', async () => {
       const error = new Error('Delete failed');
-      mockDb.delete().where.mockRejectedValueOnce(error);
+      mockDb.delete().where().run.mockRejectedValueOnce(error);
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
     });
