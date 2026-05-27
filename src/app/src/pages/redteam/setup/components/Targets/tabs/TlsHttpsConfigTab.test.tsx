@@ -317,6 +317,30 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByDisplayValue('-----BEGIN PRIVATE KEY-----')).toBeInTheDocument();
     });
 
+    it('should infer JKS client certificates from imported backend fields', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            rejectUnauthorized: true,
+            jksPath: '/etc/ssl/client.jks',
+            keyAlias: 'client',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByText('JKS (Java KeyStore) Certificate')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('/etc/ssl/client.jks')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('client')).toBeInTheDocument();
+    });
+
     it('should re-sync collapsed sections when switching targets', () => {
       const { rerender } = renderWithProviders(
         <TlsHttpsConfigTab

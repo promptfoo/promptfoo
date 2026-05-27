@@ -13,10 +13,7 @@ interface TlsConfigUI {
   jksInputType?: 'upload' | 'path';
   pfxInputType?: 'upload' | 'path' | 'base64';
   caInputType?: 'upload' | 'path' | 'inline';
-  jksContent?: string;
   jksFileName?: string;
-  jksPath?: string;
-  keyAlias?: string;
   jksExtractConfigured?: boolean;
   certificateType?: 'pem' | 'pfx' | 'pkcs12' | 'jks';
 }

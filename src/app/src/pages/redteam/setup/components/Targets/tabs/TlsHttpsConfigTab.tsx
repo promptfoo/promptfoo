@@ -159,7 +159,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
     <>
       <p className="mb-6">
         Configure TLS certificates for secure HTTPS connections, including custom CA certificates,
-        client certificates for mutual TLS, and PFX certificate bundles. See{' '}
+        and client certificates for mutual TLS using PEM, JKS, or PFX bundles. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#tlshttps-configuration"
           target="_blank"
@@ -611,9 +611,9 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     <Info className="size-4" />
                     <AlertContent>
                       <AlertDescription>
-                        Upload a JKS file to automatically extract the certificate and private key
-                        for TLS configuration. The jks-js library will be used to convert the JKS
-                        content to PEM format.
+                        Provide a JKS file by uploading it or entering a server-side path. The
+                        jks-js library converts it to the certificate and private key required for
+                        TLS configuration.
                       </AlertDescription>
                     </AlertContent>
                   </Alert>
