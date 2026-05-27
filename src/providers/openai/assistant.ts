@@ -235,7 +235,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
-      defaultHeaders: this.assistantConfig.headers,
+      defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),
     });
 
     const messages = parseChatPrompt(prompt, [

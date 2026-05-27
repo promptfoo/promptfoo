@@ -83,6 +83,8 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(requestHeaders['X-OpenAI-Originator']).toBe('promptfoo');
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });

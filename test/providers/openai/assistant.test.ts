@@ -97,6 +97,13 @@ describe('OpenAI Provider', () => {
 
       const result = await provider.callApi('Test prompt');
 
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultHeaders: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
+        }),
+      );
       expect(result.output).toBe('[Assistant] Test response');
       expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);

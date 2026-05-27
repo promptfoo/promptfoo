@@ -837,8 +837,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-      ...config.headers,
+      ...this.getOpenAiRequestHeaders(config.headers),
     };
 
     let data, status, statusText;
