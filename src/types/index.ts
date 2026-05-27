@@ -306,6 +306,11 @@ export const EvaluateOptionsSchema = z.object({
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
+  /**
+   * Callback invoked after each result is processed, enabling real-time streaming of results.
+   * Used by cloud workers to stream results to the server during evaluation.
+   */
+  resultStreamCallback?: (result: EvaluateResult) => Promise<void>;
 };
 
 const PromptMetricsSchema = z.object({

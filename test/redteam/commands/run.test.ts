@@ -1,15 +1,35 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailValidationError } from '../../../src/globalConfig/accounts';
+import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
-import { doRedteamRun } from '../../../src/redteam/shared';
+import {
+  createCloudResultStreamer,
+  doRedteamResume,
+  doRedteamRun,
+} from '../../../src/redteam/shared';
 import { ProbeLimitExceededError } from '../../../src/redteam/types';
-import { getConfigFromCloud } from '../../../src/util/cloud';
+import {
+  getCompletedPairsFromCloud,
+  getConfigFromCloud,
+  getEvalFromCloud,
+} from '../../../src/util/cloud';
 
 vi.mock('../../../src/cliState', () => ({
   default: {
     remote: false,
+    maxConcurrency: undefined,
+    resume: false,
+    cloudResumeEvalId: undefined,
+    cloudCompletedPairs: undefined,
+  },
+}));
+
+vi.mock('../../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: vi.fn(),
+    getAppUrl: vi.fn(),
   },
 }));
 
@@ -38,12 +58,16 @@ vi.mock('../../../src/util', async (importOriginal) => {
 
 vi.mock('../../../src/redteam/shared', () => ({
   doRedteamRun: vi.fn().mockResolvedValue({}),
+  doRedteamResume: vi.fn().mockResolvedValue({}),
+  createCloudResultStreamer: vi.fn(),
 }));
 
 vi.mock('../../../src/util/cloud', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     getConfigFromCloud: vi.fn(),
+    getEvalFromCloud: vi.fn(),
+    getCompletedPairsFromCloud: vi.fn(),
   };
 });
 
@@ -53,6 +77,14 @@ describe('redteamRunCommand', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(doRedteamRun).mockResolvedValue({} as any);
+    vi.mocked(doRedteamResume).mockResolvedValue({} as any);
+    vi.mocked(createCloudResultStreamer).mockReturnValue({
+      resultStreamCallback: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.promptfoo.dev');
     program = new Command();
     redteamRunCommand(program);
     // Store original exitCode to restore later
@@ -227,6 +259,134 @@ describe('redteamRunCommand', () => {
         eventSource: 'cli',
       }),
     );
+  });
+
+  describe('--resume flag', () => {
+    it('should reject invalid eval ID format for --resume', async () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test', '--resume', 'invalid-id']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid eval ID for --resume. It must be a valid UUID or cloud eval ID.',
+      );
+      expect(process.exitCode).toBe(1);
+      expect(getEvalFromCloud).not.toHaveBeenCalled();
+      expect(doRedteamResume).not.toHaveBeenCalled();
+    });
+
+    it('should reject --resume when cloud is not configured', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      const validEvalId = '12345678-1234-1234-1234-123456789012';
+      await runCommand!.parseAsync(['node', 'test', '--resume', validEvalId]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Cloud is not configured. Please run `promptfoo auth login` to enable cloud features before resuming a scan.',
+      );
+      expect(process.exitCode).toBe(1);
+      expect(getEvalFromCloud).not.toHaveBeenCalled();
+      expect(doRedteamResume).not.toHaveBeenCalled();
+    });
+
+    it('should resume a valid UUID cloud eval', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const streamer = {
+        resultStreamCallback: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(createCloudResultStreamer).mockReturnValue(streamer);
+      const mockEval = {
+        id: '12345678-1234-1234-1234-123456789012',
+        createdAt: new Date().toISOString(),
+        config: {
+          prompts: ['Test prompt'],
+          providers: ['test-provider'],
+          tests: [{ vars: { prompt: 'test' } }],
+        },
+      };
+      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval);
+      vi.mocked(getCompletedPairsFromCloud).mockResolvedValue(new Set(['0:0']));
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      const validEvalId = '12345678-1234-1234-1234-123456789012';
+      await runCommand!.parseAsync(['node', 'test', '--resume', validEvalId]);
+
+      expect(getEvalFromCloud).toHaveBeenCalledWith(validEvalId);
+      expect(getCompletedPairsFromCloud).toHaveBeenCalledWith(validEvalId);
+      expect(createCloudResultStreamer).toHaveBeenCalledWith(validEvalId);
+      expect(doRedteamResume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          liveRedteamConfig: mockEval.config,
+          resumeEvalId: validEvalId,
+          resultStreamCallback: streamer.resultStreamCallback,
+        }),
+      );
+      expect(streamer.flush).toHaveBeenCalledTimes(1);
+      expect(doRedteamRun).not.toHaveBeenCalled();
+    });
+
+    it('should resume a valid cloud eval ID format', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const mockEval = {
+        id: 'eval-ABC-2024-01-15T10:30:00',
+        createdAt: new Date().toISOString(),
+        config: {
+          prompts: ['Test prompt'],
+          providers: ['test-provider'],
+          tests: [{ vars: { prompt: 'test' } }],
+        },
+      };
+      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval);
+      vi.mocked(getCompletedPairsFromCloud).mockResolvedValue(new Set());
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      const cloudEvalId = 'eval-ABC-2024-01-15T10:30:00';
+      await runCommand!.parseAsync(['node', 'test', '--resume', cloudEvalId]);
+
+      expect(getEvalFromCloud).toHaveBeenCalledWith(cloudEvalId);
+      expect(doRedteamResume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeEvalId: cloudEvalId,
+          liveRedteamConfig: mockEval.config,
+        }),
+      );
+      expect(doRedteamRun).not.toHaveBeenCalled();
+    });
+
+    it('should reject --resume when eval has no generated tests', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const mockEval = {
+        id: '12345678-1234-1234-1234-123456789012',
+        createdAt: new Date().toISOString(),
+        config: {
+          prompts: ['Test prompt'],
+          providers: ['test-provider'],
+          tests: [],
+        },
+      };
+      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval);
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      const validEvalId = '12345678-1234-1234-1234-123456789012';
+      await runCommand!.parseAsync(['node', 'test', '--resume', validEvalId]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Cannot resume: the eval does not contain generated tests. The scan may have failed before test generation completed.',
+      );
+      expect(process.exitCode).toBe(1);
+      expect(getCompletedPairsFromCloud).not.toHaveBeenCalled();
+      expect(doRedteamResume).not.toHaveBeenCalled();
+    });
   });
 
   describe('--description flag for custom scan names', () => {

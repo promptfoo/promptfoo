@@ -2582,15 +2582,24 @@ function buildRepeatCacheContextByTestIdx(runEvalOptions: RunEvalOptions[]) {
 }
 
 async function filterCompletedResumeSteps(runEvalOptions: RunEvalOptions[], evalRecord: Eval) {
-  if (!cliState.resume || !evalRecord.persisted) {
+  if (!cliState.resume) {
     return;
   }
 
   try {
-    const { default: EvalResult } = await import('./models/evalResult');
-    const completedPairs = await EvalResult.getCompletedIndexPairs(evalRecord.id, {
-      excludeErrors: cliState.retryMode,
-    });
+    let completedPairs: Set<string>;
+    if (cliState.cloudCompletedPairs) {
+      logger.debug('Resuming from cloud: using cloud-sourced completed pairs');
+      completedPairs = cliState.cloudCompletedPairs;
+    } else {
+      if (!evalRecord.persisted) {
+        return;
+      }
+      const { default: EvalResult } = await import('./models/evalResult');
+      completedPairs = await EvalResult.getCompletedIndexPairs(evalRecord.id, {
+        excludeErrors: cliState.retryMode,
+      });
+    }
     const originalCount = runEvalOptions.length;
     for (let i = runEvalOptions.length - 1; i >= 0; i--) {
       const step = runEvalOptions[i];
@@ -3097,6 +3106,19 @@ class Evaluator {
     for (const writer of this.fileWriters) {
       await writer.write(row);
     }
+
+    await this.streamEvalRow(row);
+  }
+
+  private async streamEvalRow(row: EvaluateResult, label = 'result'): Promise<void> {
+    if (!this.options.resultStreamCallback) {
+      return;
+    }
+    try {
+      await this.options.resultStreamCallback(row);
+    } catch (error) {
+      logger.warn(`Error streaming ${label} to cloud: ${String(error)}`);
+    }
   }
 
   private async updatePromptMetricsForRow({
@@ -3392,6 +3414,7 @@ class Evaluator {
       error,
     );
     await this.evalRecord.addResult(timeoutResult);
+    await this.streamEvalRow(timeoutResult, 'timeout result');
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4187,6 +4210,7 @@ class Evaluator {
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       await this.evalRecord.addResult(timeoutResult);
+      await this.streamEvalRow(timeoutResult, 'max-duration timeout result');
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
