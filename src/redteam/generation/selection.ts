@@ -12,7 +12,7 @@ function normalizePrompt(prompt: string): string {
 function tokenize(prompt: string): Set<string> {
   return new Set(
     normalizePrompt(prompt)
-      .split(/[^a-z0-9]+/)
+      .split(/[^\p{L}\p{N}]+/u)
       .filter(Boolean),
   );
 }

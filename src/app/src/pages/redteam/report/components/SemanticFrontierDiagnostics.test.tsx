@@ -51,4 +51,23 @@ describe('SemanticFrontierDiagnostics', () => {
     expect(screen.getByText('Structurally limited')).toBeInTheDocument();
     expect(screen.getByText('Unreachable: authorizationBypass')).toBeInTheDocument();
   });
+
+  it('renders unknown plugin identifiers and plural frontier counts', () => {
+    render(
+      <SemanticFrontierDiagnostics
+        diagnostics={[
+          {
+            completeFrontierCount: 1,
+            frontierCount: 2,
+            pluginId: 'custom-semantic-plugin',
+            structurallyDegraded: false,
+            unreachableFeatureIds: [],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole('rowheader')).toHaveTextContent('custom-semantic-plugin');
+    expect(screen.getByText('1/2 frontiers complete')).toBeInTheDocument();
+  });
 });

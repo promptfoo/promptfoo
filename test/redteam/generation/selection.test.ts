@@ -93,6 +93,19 @@ describe('selectCoverageAwareCandidates', () => {
       new Set(['alpha', 'beta']),
     );
   });
+
+  it('uses Unicode terms when maximizing novelty for localized candidates', () => {
+    const selected = selectCoverageAwareCandidates(
+      [
+        makeCandidate('حالة الحساب', 'alpha', { sensitive: true }),
+        makeCandidate('حالة الحساب الخاصة', 'beta', { sensitive: true }),
+        makeCandidate('سجل المريض', 'beta', { sensitive: true }),
+      ],
+      2,
+    );
+
+    expect(selected.map((candidate) => candidate.prompt)).toEqual(['حالة الحساب', 'سجل المريض']);
+  });
 });
 
 describe('selectSemanticBandAwareCandidates', () => {
