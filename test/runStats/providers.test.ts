@@ -237,8 +237,23 @@ describe('computeModelInfo', () => {
     expect(info.hasCustom).toBe(true);
   });
 
+  it('should detect endpoint-backed and executable providers as custom', () => {
+    const providers = [
+      createProvider('python:/Users/acme/private/grader.py:default'),
+      createProvider('sagemaker:jumpstart:private-endpoint'),
+      createProvider('azure:chat:private-deployment'),
+      createProvider('internal:private-model'),
+    ];
+    const info = computeModelInfo(providers);
+    expect(info.hasCustom).toBe(true);
+  });
+
   it('should not flag standard providers as custom', () => {
-    const providers = [createProvider('openai:gpt-4'), createProvider('anthropic:claude-3')];
+    const providers = [
+      createProvider('openai:gpt-4'),
+      createProvider('anthropic:claude-3'),
+      createProvider('openrouter:openai/gpt-5.4'),
+    ];
     const info = computeModelInfo(providers);
     expect(info.hasCustom).toBe(false);
   });

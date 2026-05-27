@@ -5,53 +5,18 @@ import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
+import { sanitizeTelemetryProviderIdentifier } from './util/telemetryIdentifiers';
 
 import type { ProviderStats } from './runStats/types';
 import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
 export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
+export {
+  sanitizeTelemetryIdentifier,
+  sanitizeTelemetryProviderIdentifier,
+} from './util/telemetryIdentifiers';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
-
-const SENSITIVE_TELEMETRY_IDENTIFIER_PREFIXES = new Set([
-  'exec',
-  'file',
-  'http',
-  'https',
-  'python',
-  'ruby',
-  'webhook',
-]);
-
-/**
- * Keep telemetry useful for model/provider analysis without transmitting
- * configured paths, endpoints, or URL/query data from custom integrations.
- */
-export function sanitizeTelemetryIdentifier(identifier: string): string {
-  const separatorIndex = identifier.indexOf(':');
-  if (separatorIndex === -1) {
-    return /[\\/?#]/.test(identifier) ? 'custom' : identifier;
-  }
-
-  const prefix = identifier.slice(0, separatorIndex).toLowerCase();
-  const suffix = identifier.slice(separatorIndex + 1);
-  if (
-    SENSITIVE_TELEMETRY_IDENTIFIER_PREFIXES.has(prefix) ||
-    suffix.includes('://') ||
-    /[\\/?#]/.test(suffix)
-  ) {
-    return `${prefix}:custom`;
-  }
-
-  return identifier;
-}
-
-/**
- * Provider IDs without a namespace are custom labels, not stable model identifiers.
- */
-export function sanitizeTelemetryProviderIdentifier(identifier: string): string {
-  return identifier.includes(':') ? sanitizeTelemetryIdentifier(identifier) : 'custom';
-}
 
 /**
  * Aggregate after sanitizing so different private endpoints do not create

@@ -79,6 +79,41 @@ describeEvaluator('evaluator metrics and scoring', () => {
     ]);
   });
 
+  it('redacts endpoint-backed providers while preserving public slash model ids', async () => {
+    const privateEndpointProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('sagemaker:jumpstart:private-endpoint'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const publicModelProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('openrouter:openai/gpt-5.4'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const recordSpy = vi.spyOn(telemetry, 'record');
+    const testSuite: TestSuite = {
+      providers: [privateEndpointProvider, publicModelProvider],
+      prompts: [toPrompt('Telemetry provider classification')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
+    expect(properties).toEqual(
+      expect.objectContaining({
+        models: ['openrouter:openai/gpt-5.4', 'sagemaker:custom'],
+        hasCustomProvider: true,
+      }),
+    );
+    expect(properties?.providerBreakdown).not.toContain('private-endpoint');
+    expect(JSON.parse(String(properties?.providerBreakdown))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: 'openrouter:openai/gpt-5.4', requests: 1 }),
+        expect.objectContaining({ provider: 'sagemaker:custom', requests: 1 }),
+      ]),
+    );
+  });
+
   it('excludes stale retry-error rows from persisted run statistics', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

@@ -1,3 +1,4 @@
+import { isCustomTelemetryProviderIdentifier } from '../util/telemetryIdentifiers';
 import { isOperationalError } from './errors';
 
 import type { ApiProvider } from '../types/index';
@@ -104,13 +105,7 @@ export function computeModelInfo(providers: ApiProvider[]): {
   // It's a comparison if there are multiple providers with different IDs
   const isComparison = providers.length > 1 && uniqueIds.size > 1;
 
-  // Check for custom/unknown providers (no colon in ID or 'unknown' prefix)
-  const providerPrefixes = providerIds.map((id) => {
-    const idParts = id.split(':');
-    return idParts.length > 1 ? idParts[0] : 'unknown';
-  });
-  const hasCustom =
-    providerPrefixes.includes('unknown') || providerIds.some((id) => !id.includes(':'));
+  const hasCustom = providerIds.some(isCustomTelemetryProviderIdentifier);
 
   return { ids, isComparison, hasCustom };
 }

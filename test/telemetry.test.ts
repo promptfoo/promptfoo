@@ -53,19 +53,68 @@ vi.mock('../src/cliState', () => ({
 }));
 
 describe('sanitizeTelemetryIdentifier', () => {
-  it('keeps standard model identifiers while hiding configured paths and endpoints', () => {
+  it('keeps public model identifiers while hiding private paths and endpoints', () => {
     expect(sanitizeTelemetryIdentifier('openai:chat:gpt-4o')).toBe('openai:chat:gpt-4o');
+    expect(sanitizeTelemetryProviderIdentifier('openrouter:openai/gpt-5.4')).toBe(
+      'openrouter:openai/gpt-5.4',
+    );
+    expect(
+      sanitizeTelemetryProviderIdentifier('huggingface:chat:meta-llama/Llama-3.3-70B-Instruct'),
+    ).toBe('huggingface:chat:meta-llama/Llama-3.3-70B-Instruct');
+    expect(sanitizeTelemetryProviderIdentifier('replicate:meta/llama-2-7b-chat')).toBe(
+      'replicate:meta/llama-2-7b-chat',
+    );
+    expect(sanitizeTelemetryProviderIdentifier('internal:team/private-model')).toBe('custom');
+    expect(sanitizeTelemetryProviderIdentifier('internal:private-model')).toBe('custom');
+    expect(sanitizeTelemetryIdentifier('custom:./private/redteam-plugin.yaml')).toBe(
+      'custom:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('bedrock:us.anthropic.claude-sonnet-4-6')).toBe(
+      'bedrock:us.anthropic.claude-sonnet-4-6',
+    );
     expect(sanitizeTelemetryIdentifier('python:/Users/acme/private/grader.py:default')).toBe(
       'python:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('golang:/Users/acme/private/provider.go:CallApi')).toBe(
+      'golang:custom',
     );
     expect(sanitizeTelemetryIdentifier('https://internal.example/eval?token=secret')).toBe(
       'https:custom',
     );
+    expect(sanitizeTelemetryIdentifier('wss://internal.example/socket?token=secret')).toBe(
+      'wss:custom',
+    );
     expect(sanitizeTelemetryIdentifier('file://./confidential/refund-policy.yaml')).toBe(
       'file:custom',
     );
+    expect(sanitizeTelemetryIdentifier('azure:chat:private-deployment')).toBe('azure:custom');
+    expect(sanitizeTelemetryIdentifier('databricks:team-serving-endpoint')).toBe(
+      'databricks:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('mlflow-gateway:team-chat-endpoint')).toBe(
+      'mlflow-gateway:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('helicone-gateway:team-router:openai/gpt-4o')).toBe(
+      'helicone-gateway:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('sagemaker:jumpstart:private-endpoint')).toBe(
+      'sagemaker:custom',
+    );
+    expect(sanitizeTelemetryIdentifier('truefoundry:internal-endpoint/gpt-5')).toBe(
+      'truefoundry:custom',
+    );
+    expect(
+      sanitizeTelemetryIdentifier(
+        'bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/private',
+      ),
+    ).toBe('bedrock:custom');
+    expect(sanitizeTelemetryIdentifier('bedrock:kb:private-knowledge-base')).toBe('bedrock:custom');
+    expect(sanitizeTelemetryIdentifier('bedrock-agent:private-agent-id')).toBe(
+      'bedrock-agent:custom',
+    );
     expect(sanitizeTelemetryIdentifier('pii')).toBe('pii');
     expect(sanitizeTelemetryProviderIdentifier('internal-client-provider')).toBe('custom');
+    expect(sanitizeTelemetryProviderIdentifier('unknown:team-provider')).toBe('custom');
   });
 });
 
