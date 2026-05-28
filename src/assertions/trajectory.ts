@@ -417,7 +417,7 @@ function resolveToolArgsMatchValue(value: unknown) {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
-    redactArgsInFailures: (value as TrajectoryToolArgsMatchValue).redactArgsInFailures === true,
+    redactArgsInFailures: (value as TrajectoryToolArgsMatchValue).redactArgsInFailures !== false,
   } as const;
 }
 
@@ -495,9 +495,13 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode, redactArgsInFailures } = resolveToolArgsMatchValue(
-    params.renderedValue ?? params.assertion.value,
-  );
+  const assertionValue = params.renderedValue ?? params.assertion.value;
+  const renderedAssertionValue =
+    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
+      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
+      : assertionValue;
+  const { matcher, expectedArgs, mode, redactArgsInFailures } =
+    resolveToolArgsMatchValue(renderedAssertionValue);
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));

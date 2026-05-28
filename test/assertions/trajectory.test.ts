@@ -1129,9 +1129,39 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "search_orders" matched expected arguments (partial) on tool:search_orders. Args: {"order_id":"123","include_history":false}',
+          'Tool "search_orders" matched expected arguments (partial) on tool:search_orders. Args: [redacted]',
         assertion: params.assertion,
       });
+    });
+
+    it('renders nested expected argument templates before matching', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          vars: { order_id: '123' },
+        },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            args: {
+              order_id: '{{ order_id }}',
+            },
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: {
+            order_id: '{{ order_id }}',
+          },
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('Args: [redacted]');
     });
 
     it('supports partial array matching for argument subsets', () => {
@@ -1160,7 +1190,7 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
+          'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1195,7 +1225,7 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
+          'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1265,7 +1295,7 @@ describe('trajectory assertions', () => {
         pass: false,
         score: 0,
         reason:
-          'No call to tool "search_orders" matched expected arguments (partial): {"order_id":"999"}. Observed args: {"order_id":"123","include_history":false}',
+          'No call to tool "search_orders" matched expected arguments (partial): [redacted]. Observed args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1376,7 +1406,7 @@ describe('trajectory assertions', () => {
         pass: false,
         score: 0,
         reason:
-          'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: {"order_id":"123","include_history":false}',
+          'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1413,7 +1443,7 @@ describe('trajectory assertions', () => {
       });
     });
 
-    it('redacts args in failure reasons when redactArgsInFailures is true', () => {
+    it('redacts args in assertion reasons by default', () => {
       const params: AssertionParams = {
         ...defaultParams,
         assertionValueContext: {
@@ -1444,14 +1474,12 @@ describe('trajectory assertions', () => {
             name: 'lookup_user',
             args: { tenant: 'private' },
             mode: 'partial',
-            redactArgsInFailures: true,
           },
         },
         renderedValue: {
           name: 'lookup_user',
           args: { tenant: 'private' },
           mode: 'partial',
-          redactArgsInFailures: true,
         },
       };
 
@@ -1462,6 +1490,30 @@ describe('trajectory assertions', () => {
       expect(result.reason).not.toContain('private');
       expect(result.reason).not.toContain('public');
       expect(result.reason).toContain('[redacted]');
+    });
+
+    it('shows non-sensitive args in reasons only when redaction is explicitly disabled', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            redactArgsInFailures: false,
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: { order_id: '123' },
+          redactArgsInFailures: false,
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('{"order_id":"123","include_history":false}');
     });
 
     it('rejects values without args', () => {

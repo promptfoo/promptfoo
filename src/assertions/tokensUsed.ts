@@ -161,7 +161,11 @@ function tokensFromProviderResponse(params: AssertionParams): number {
       ? undefined
       : (prompt ?? 0) + (completion ?? 0);
   const total = nonNegativeTokenValue(usage.total);
-  if (total !== undefined && (total > 0 || !componentTotal)) {
+  if (total !== undefined && componentTotal !== undefined) {
+    return Math.max(total, componentTotal);
+  }
+
+  if (total !== undefined) {
     return total;
   }
 
