@@ -713,6 +713,41 @@ describe('Plugins', () => {
       );
     });
 
+    it('should reject unsupported inverse remote redteam assertions', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: [
+              {
+                type: 'not-promptfoo:redteam:future-remote-plugin',
+                metric: 'FutureRemotePlugin',
+              },
+            ],
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toThrow(
+        'Remote test generation for ssrf returned unsupported redteam grader type(s): not-promptfoo:redteam:future-remote-plugin.',
+      );
+    });
+
     it('should reject unsupported remote redteam assertions nested inside assertion sets', async () => {
       vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;

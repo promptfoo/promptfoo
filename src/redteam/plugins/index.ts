@@ -337,6 +337,21 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
   };
 }
 
+function getRemoteRedteamGraderType(assertionType: string): string {
+  return assertionType.startsWith('not-') ? assertionType.slice(4) : assertionType;
+}
+
+function validateRagPoisoningAssertionValue(key: string, assertion: object): void {
+  const value = 'value' in assertion ? assertion.value : undefined;
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'promptfoo:redteam:rag-poisoning',
+      'expected a non-empty string `value`',
+    );
+  }
+}
+
 function collectUnsupportedRemoteRedteamAssertionTypes(
   key: string,
   assertions: unknown,
@@ -372,22 +387,16 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
     }
 
     const assertionType =
-      'type' in assertion && typeof assertion.type === 'string' ? assertion.type : undefined;
-    if (!assertionType?.startsWith('promptfoo:redteam:')) {
+      'type' in assertion && typeof assertion.type === 'string' ? assertion.type : '';
+    const graderType = getRemoteRedteamGraderType(assertionType);
+    if (!graderType.startsWith('promptfoo:redteam:')) {
       continue;
     }
     if (assertionType === 'promptfoo:redteam:rag-poisoning') {
-      const value = 'value' in assertion ? assertion.value : undefined;
-      if (typeof value !== 'string' || value.trim().length === 0) {
-        throw new InvalidRemoteRedteamAssertionPayloadError(
-          key,
-          assertionType,
-          'expected a non-empty string `value`',
-        );
-      }
+      validateRagPoisoningAssertionValue(key, assertion);
       hasRagPoisoningAssertion = true;
     }
-    if (!getGraderById(assertionType)) {
+    if (!getGraderById(graderType)) {
       unsupportedAssertionTypes.add(assertionType);
     }
   }

@@ -942,6 +942,12 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
   return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
 }
 
+function rethrowRemoteRedteamAssertionContractError(reason: unknown): void {
+  if (reason instanceof RemoteRedteamAssertionContractError) {
+    throw reason;
+  }
+}
+
 /**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
@@ -1423,10 +1429,7 @@ export async function synthesize({
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
-          if (result.reason instanceof RemoteRedteamAssertionContractError) {
-            throw result.reason;
-          }
-
+          rethrowRemoteRedteamAssertionContractError(result.reason);
           const lang = languages[index];
           // Handle rejected promise
           logger.warn(
