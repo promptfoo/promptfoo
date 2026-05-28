@@ -2124,6 +2124,171 @@ describe('trajectory assertions', () => {
         );
       });
     });
+
+    describe('ignore', () => {
+      const makeIgnoreParams = (
+        toolArgs: Record<string, unknown> | unknown[] | string,
+        value: Record<string, unknown>,
+        inverse = false,
+      ): AssertionParams => {
+        const argsJson = typeof toolArgs === 'string' ? toolArgs : JSON.stringify(toolArgs);
+        const trace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'ignore-tool-call',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: { 'tool.name': 'search_orders', 'tool.arguments': argsJson },
+            },
+          ],
+        };
+        return {
+          ...defaultParams,
+          inverse,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: { type: 'trajectory:tool-args-match', value },
+          renderedValue: value,
+        } as AssertionParams;
+      };
+
+      it('drops an ignored key regardless of value in exact mode', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['request_id'],
+        };
+
+        expect(
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value)).pass,
+        ).toBe(true);
+        expect(
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value)).pass,
+        ).toBe(true);
+      });
+
+      it('accepts a bare string ignore value', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: 'request_id' },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('still fails on a non-ignored hallucinated argument', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc', delete_database: true },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request_id'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('strips the ignored key from the expected payload too', () => {
+        // request_id is declared in args but ignored, so the agent omitting it still passes.
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q', request_id: 'expected' },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('composes with defaults and reports both in the pass reason', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', page: 1, request_id: 'abc' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored argument(s): request_id');
+        expect(result.reason).toContain('Ignored default argument(s): page');
+      });
+
+      it('works in partial mode', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'partial', args: { status: 'Q' }, ignore: ['request_id'] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('inverts correctly', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request_id'] },
+            true,
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('does not let a hallucinated __proto__ argument escape exact matching', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams('{"status":"Q","__proto__":{"polluted":true},"request_id":"abc"}', {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            ignore: ['request_id'],
+          }),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('treats ignore as a no-op when the actual payload is a top-level array', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams('["a","b"]', {
+            name: 'search_orders',
+            mode: 'exact',
+            args: ['a', 'b'],
+            ignore: ['request_id'],
+          }),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it.each([
+        ['number', [5]],
+        ['empty string', ['']],
+        ['null', [null]],
+        ['object', [{ request_id: true }]],
+      ])('rejects malformed ignore entries (%s)', (_label, malformed) => {
+        const params = makeIgnoreParams(
+          { status: 'Q' },
+          {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            ignore: malformed as unknown as string[],
+          },
+        );
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings',
+        );
+      });
+    });
   });
 
   describe('trajectory:step-count', () => {

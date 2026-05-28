@@ -34,6 +34,7 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   arguments?: unknown;
   mode?: 'exact' | 'partial';
   defaults?: ToolArgsDefaults;
+  ignore?: string | string[];
 }
 
 function getTraceOrThrow(params: AssertionParams) {
@@ -297,19 +298,49 @@ function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined):
   return { cleaned, stripped };
 }
 
+function stripIgnoredArgs(value: unknown, ignore: string[]): StrippedToolArgs {
+  if (ignore.length === 0 || !isRecord(value)) {
+    return { cleaned: value, stripped: [] };
+  }
+
+  const cleaned: Record<string, unknown> = {};
+  const stripped: string[] = [];
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (ignore.includes(key)) {
+      stripped.push(key);
+      continue;
+    }
+    // Mirror stripDefaults: use defineProperty so a reserved key such as "__proto__"
+    // remains an own property instead of mutating the prototype, which would otherwise
+    // let a hallucinated argument escape exact matching.
+    Object.defineProperty(cleaned, key, {
+      value: entryValue,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return { cleaned, stripped };
+}
+
 function matchesToolArgs(
   actual: unknown,
   expected: unknown,
   mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
   defaults: ToolArgsDefaults | undefined,
+  ignore: string[],
 ): boolean {
-  const { cleaned } = stripDefaults(actual, defaults);
+  // `ignore` removes a key from the comparison entirely, so it applies to both the
+  // observed and expected payloads. `defaults` only tolerates an observed value that
+  // equals its declared default, so it applies to the observed payload alone.
+  const cleanedActual = stripDefaults(stripIgnoredArgs(actual, ignore).cleaned, defaults).cleaned;
+  const cleanedExpected = stripIgnoredArgs(expected, ignore).cleaned;
 
   if (mode === 'exact') {
-    return isDeepStrictEqual(cleaned, expected);
+    return isDeepStrictEqual(cleanedActual, cleanedExpected);
   }
 
-  return matchesExpectedArgsPartial(cleaned, expected);
+  return matchesExpectedArgsPartial(cleanedActual, cleanedExpected);
 }
 
 function resolveToolArgsMatchMode(
@@ -340,6 +371,23 @@ function resolveToolArgsMatchDefaults(defaults: unknown): ToolArgsDefaults | und
   return defaults;
 }
 
+function resolveToolArgsMatchIgnore(ignore: unknown): string[] {
+  if (ignore === undefined) {
+    return [];
+  }
+
+  const entries = Array.isArray(ignore) ? ignore : [ignore];
+  for (const entry of entries) {
+    if (typeof entry !== 'string' || entry.trim().length === 0) {
+      throw new Error(
+        'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings',
+      );
+    }
+  }
+
+  return entries as string[];
+}
+
 function resolveToolArgsMatchValue(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('trajectory:tool-args-match assertion must have an object value');
@@ -363,6 +411,7 @@ function resolveToolArgsMatchValue(value: unknown) {
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
     defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
+    ignore: resolveToolArgsMatchIgnore((value as TrajectoryToolArgsMatchValue).ignore),
   } as const;
 }
 
@@ -440,7 +489,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode, defaults } = resolveToolArgsMatchValue(
+  const { matcher, expectedArgs, mode, defaults, ignore } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
   const matcherLabel = matcher.pattern || matcher.name || '*';
@@ -448,11 +497,16 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
   const matchedStep = stepsWithArgs.find((step) =>
-    matchesToolArgs(step.args, expectedArgs, mode, defaults),
+    matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
   );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
-  const ignoredDefaults = matchedStep ? stripDefaults(matchedStep.args, defaults).stripped : [];
+  const ignoredArgs = matchedStep ? stripIgnoredArgs(matchedStep.args, ignore).stripped : [];
+  const ignoredDefaults = matchedStep
+    ? stripDefaults(stripIgnoredArgs(matchedStep.args, ignore).cleaned, defaults).stripped
+    : [];
+  const ignoredArgsSuffix =
+    ignoredArgs.length > 0 ? `. Ignored argument(s): ${ignoredArgs.join(', ')}` : '';
   const ignoredDefaultsSuffix =
     ignoredDefaults.length > 0
       ? `. Ignored default argument(s): ${ignoredDefaults.join(', ')}`
@@ -473,7 +527,7 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed. Observed args: ${observedArgsLabel}`;
     }
   } else if (basePass) {
-    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}${ignoredDefaultsSuffix}`;
+    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}${ignoredArgsSuffix}${ignoredDefaultsSuffix}`;
   } else if (matchingSteps.length === 0) {
     reason = `No tool call matched "${matcherLabel}". Actual tools: ${formatStepList(actualTools)}`;
   } else if (stepsWithArgs.length === 0) {
