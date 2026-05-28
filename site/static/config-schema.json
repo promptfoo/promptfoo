@@ -371,6 +371,9 @@
         "MODELSLAB_API_KEY": {
           "type": "string"
         },
+        "N8N_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
@@ -1815,6 +1818,9 @@
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
+                    "N8N_API_KEY": {
                       "type": "string"
                     },
                     "NSCALE_SERVICE_TOKEN": {
