@@ -422,6 +422,9 @@
         "OPENCLAW_GATEWAY_URL": {
           "type": "string"
         },
+        "ORCAROUTER_API_KEY": {
+          "type": "string"
+        },
         "PALM_API_HOST": {
           "type": "string"
         },
@@ -1851,6 +1854,9 @@
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "ORCAROUTER_API_KEY": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {

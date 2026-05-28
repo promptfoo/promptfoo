@@ -86,6 +86,7 @@ export const ProviderEnvOverridesSchema = z.object({
   OPENCLAW_GATEWAY_PORT: z.string().optional(),
   OPENCLAW_GATEWAY_TOKEN: z.string().optional(),
   OPENCLAW_GATEWAY_URL: z.string().optional(),
+  ORCAROUTER_API_KEY: z.string().optional(),
   PALM_API_HOST: z.string().optional(),
   PALM_API_KEY: z.string().optional(),
   PORTKEY_API_KEY: z.string().optional(),
