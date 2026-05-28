@@ -1,7 +1,8 @@
 import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { EnvOverrides, EnvVarKey } from '../../types/env';
+import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderOptions } from '../../types/providers';
 
 const NVIDIA_NIM_API_BASE_URL = 'https://integrate.api.nvidia.com/v1';
