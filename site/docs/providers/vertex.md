@@ -186,6 +186,8 @@ providers:
 
 ## Model Capabilities
 
+<a id="gemini-20-pro-specifications"></a>
+
 ### Gemini Model Specifications
 
 Current Gemini models on Vertex AI (2.5 and 3.x):

@@ -2,7 +2,7 @@
 title: Prompt Optimization
 sidebar_position: 11
 sidebar_label: Prompt optimization
-description: Optimize one prompt against one provider with promptfoo. Learn how candidate search, validation splits, target selection, and result review work.
+description: Optimize one prompt against one provider with promptfoo. Learn how candidate search, validation splits, target selection, and result review work safely.
 ---
 
 # Prompt Optimization
