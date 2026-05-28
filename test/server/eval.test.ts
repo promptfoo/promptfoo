@@ -100,6 +100,32 @@ describe('eval routes', () => {
     return payload;
   }
 
+  describe('POST /', () => {
+    it('returns 500 when v4 prompt persistence fails', async () => {
+      const createSpy = vi.spyOn(Eval, 'create');
+      vi.spyOn(Eval.prototype, 'addPrompts').mockRejectedValueOnce(
+        new Error('prompt persistence failed'),
+      );
+
+      const res = await api.post('/api/eval').send({
+        config: {
+          description: 'v4 save test',
+          tests: [],
+        },
+        prompts: [{ raw: 'hello', label: 'hello' }],
+        results: [],
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
+
+      const createdEval = await createSpy.mock.results[0]?.value;
+      if (createdEval) {
+        testEvalIds.add(createdEval.id);
+      }
+    });
+  });
+
   describe('post("/:evalId/results/:id/rating")', () => {
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
@@ -361,6 +387,33 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
+    it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {
+      const sasUri =
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=azure-secret&sv={{ version }}';
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.config.tests = sasUri;
+      await eval_.save();
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config.tests).toBe(
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=%5BREDACTED%5D&sv={{ version }}',
+      );
+
+      const patchRes = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toBe(sasUri);
+      expect(updatedEval.config.description).toBe('renamed eval');
+    });
+
     it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);
@@ -427,7 +480,7 @@ describe('eval routes', () => {
 
       // Add eval results with metadata using direct database insert
       const { getDb } = await import('../../src/database');
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
