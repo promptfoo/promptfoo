@@ -20,9 +20,13 @@ describe('getRunnableAssertionValueError', () => {
       );
     });
 
-    it('accepts numeric 0 as a contains value', () => {
-      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toBeUndefined();
-      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toBeUndefined();
+    it('rejects numeric 0 because runtime treats it as an absent contains value', () => {
+      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toMatch(
+        /Enter an expected value/,
+      );
+      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toMatch(
+        /Enter an expected value/,
+      );
     });
 
     it('accepts non-blank strings and finite numbers', () => {
@@ -310,6 +314,45 @@ describe('required string assertions', () => {
     expect(getRunnableAssertionValueError(make({ type: 'meteor', value: '' }))).toMatch(
       /reference answer/,
     );
+    expect(getRunnableAssertionValueError(make({ type: 'levenshtein', value: '' }))).toMatch(
+      /expected value/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'not-levenshtein', value: '' }))).toMatch(
+      /expected value/,
+    );
+  });
+});
+
+describe('skill-used object values', () => {
+  it('requires finite non-negative integer count limits', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'skill-used', value: { name: 'search', min: '2' } as any }),
+      ),
+    ).toMatch(/whole numbers/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'skill-used', value: { name: 'search', min: 3, max: 2 } as any }),
+      ),
+    ).toMatch(/Maximum skill count/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'skill-used', value: { name: 'search', min: 1, max: 2 } as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('limits inverse object assertions to the runtime-supported maximum of zero', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-skill-used', value: { pattern: 'web.*', min: 0 } as any }),
+      ),
+    ).toMatch(/Forbidden skill checks/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-skill-used', value: { pattern: 'web.*', max: 0 } as any }),
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -389,6 +432,9 @@ describe('getFirstRunnableAssertionValueError', () => {
       /supported assertion type/,
     );
     expect(getRunnableAssertionValueError(make({ type: 'containz' as any }))).toMatch(
+      /supported assertion type/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'human' as any }))).toMatch(
       /supported assertion type/,
     );
   });

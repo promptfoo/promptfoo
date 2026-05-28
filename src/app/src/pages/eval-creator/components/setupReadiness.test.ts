@@ -741,6 +741,45 @@ describe('setupReadiness', () => {
       expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
     });
 
+    it('defers comparison output count checks for file-backed prompts expanded at runtime', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['file://prompts.csv'],
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+      expect(readiness.isReadyToRun).toBe(true);
+    });
+
+    it('defers filtered comparison checks when prompt labels are produced by file loading', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['file://prompts.csv'],
+        defaultTest: { prompts: ['Expanded CSV Label'] },
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+    });
+
+    it('defers comparison checks for modular provider files expanded at runtime', () => {
+      const readiness = getSetupReadiness({
+        providers: ['file://providers.yaml'],
+        prompts: ['Write a reply'],
+        defaultTest: { providers: ['Expanded provider label'] },
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+    });
+
     it('routes select-best fixes to the axis the user can still grow', () => {
       // One provider, no prompts → the comparisonOutputs fix is in step 2.
       const oneProviderNoPrompts = getSetupReadiness({
@@ -873,6 +912,12 @@ describe('setupReadiness', () => {
           '{% if not audience %}Tailor the response{% endif %}',
         ]),
       ).toEqual(['topic', 'user', 'audience']);
+    });
+
+    it('does not treat the runtime env global as a required test variable', () => {
+      expect(extractVariablesFromPrompts(['Use {{ env.OPENAI_API_KEY }} for {{ topic }}'])).toEqual(
+        ['topic'],
+      );
     });
 
     it('does not treat loop locals as required vars inside loops only', () => {

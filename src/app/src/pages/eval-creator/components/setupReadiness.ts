@@ -243,6 +243,37 @@ function countOutputsForTest(
     );
 }
 
+function mayLoadMultiplePromptsAtRuntime(rawPrompt: string): boolean {
+  return (
+    rawPrompt.startsWith('file://') ||
+    rawPrompt.startsWith('exec:') ||
+    /[*?[\]]/.test(rawPrompt) ||
+    /\.(?:csv|j2|jsonl?|md|mjs|cjs|js|ts|py|txt|ya?ml|sh|bash|rb|pl|ps1|bat|cmd)$/i.test(rawPrompt)
+  );
+}
+
+function mayLoadMultipleProvidersAtRuntime(provider: ProviderOptions): boolean {
+  return hasRunnableProviderId(provider) && /^file:\/\/.*\.(?:json|ya?ml)$/i.test(provider.id);
+}
+
+function hasDynamicOutputForTest(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+  providers: ProviderOptions[],
+  prompts: NormalizedPrompt[],
+): boolean {
+  const providerReferences = getEffectiveReferences(testCase, defaultTest, 'providers');
+  const hasSelectedProvider = providers.some((provider) =>
+    isAllowedByReferences(provider, providerReferences, providerMatchesReference),
+  );
+
+  return (
+    (hasSelectedProvider &&
+      prompts.some((prompt) => mayLoadMultiplePromptsAtRuntime(prompt.raw))) ||
+    (prompts.length > 0 && providers.some(mayLoadMultipleProvidersAtRuntime))
+  );
+}
+
 function hasMaxScoreWithoutScoringAssertion(
   tests: UnifiedConfig['tests'] | undefined,
   defaultTest: Record<string, unknown>,
@@ -282,17 +313,23 @@ function getComparisonSetupIssues(
     for (const testCase of tests.map((testCase) => (isRecord(testCase) ? testCase : {}))) {
       const assertions = getEffectiveAssertions(testCase, defaultAssertions);
       const outputCount = countOutputsForTest(testCase, defaultTest, providers, prompts);
+      const hasDynamicOutput = hasDynamicOutputForTest(testCase, defaultTest, providers, prompts);
       hasInsufficientSelectBest ||=
-        outputCount < 2 && containsComparisonAssertion(assertions, 'select-best');
+        outputCount < 2 &&
+        !hasDynamicOutput &&
+        containsComparisonAssertion(assertions, 'select-best');
       hasInsufficientMaxScore ||=
-        outputCount < 2 && containsComparisonAssertion(assertions, 'max-score');
+        outputCount < 2 &&
+        !hasDynamicOutput &&
+        containsComparisonAssertion(assertions, 'max-score');
     }
   } else if (countTests(tests) > 0) {
     const outputCount = countOutputsForTest(defaultTest, {}, providers, prompts);
+    const hasDynamicOutput = hasDynamicOutputForTest(defaultTest, {}, providers, prompts);
     hasInsufficientSelectBest = containsComparisonAssertion(defaultAssertions, 'select-best');
     hasInsufficientMaxScore = containsComparisonAssertion(defaultAssertions, 'max-score');
-    hasInsufficientSelectBest &&= outputCount < 2;
-    hasInsufficientMaxScore &&= outputCount < 2;
+    hasInsufficientSelectBest &&= outputCount < 2 && !hasDynamicOutput;
+    hasInsufficientMaxScore &&= outputCount < 2 && !hasDynamicOutput;
   }
 
   if (hasInsufficientSelectBest || hasInsufficientMaxScore) {
@@ -338,6 +375,7 @@ const IGNORED_NUNJUCKS_IDENTIFIERS = new Set([
   'and',
   'defined',
   'else',
+  'env',
   'false',
   'for',
   'if',
