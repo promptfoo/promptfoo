@@ -40,7 +40,8 @@ describe('TraceStore', () => {
     // Create mock database methods that properly chain
     const mockInsertChain = {
       values: vi.fn().mockReturnThis(),
-      onConflictDoNothing: vi.fn(() => Promise.resolve(undefined)),
+      onConflictDoNothing: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue(undefined),
     };
     const mockSelectChain = {
       from: vi.fn().mockReturnThis(),
@@ -49,14 +50,14 @@ describe('TraceStore', () => {
     };
     mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
-      run: vi.fn(),
+      run: vi.fn().mockResolvedValue(undefined),
     };
 
     mockDb = {
       insert: vi.fn(() => mockInsertChain),
       select: vi.fn(() => mockSelectChain),
       delete: vi.fn(() => mockDeleteChain),
-      transaction: vi.fn((callback) => callback()),
+      transaction: vi.fn(async (callback) => callback(mockDb)),
     };
 
     // Create trace store and inject mock DB
@@ -98,7 +99,7 @@ describe('TraceStore', () => {
 
     it('should handle errors when creating trace', async () => {
       const error = new Error('Database error');
-      mockDb.insert().values().onConflictDoNothing.mockRejectedValueOnce(error);
+      mockDb.insert().values().onConflictDoNothing().run.mockRejectedValueOnce(error);
 
       const traceData = {
         traceId: 'test-trace-id',
@@ -204,7 +205,7 @@ describe('TraceStore', () => {
 
       // Mock insert error
       const error = new Error('Insert failed');
-      mockDb.insert().values.mockRejectedValueOnce(error);
+      mockDb.insert().values().run.mockRejectedValueOnce(error);
 
       const spans = [
         {
@@ -667,9 +668,7 @@ describe('TraceStore', () => {
 
     it('should handle errors when deleting old traces', async () => {
       const error = new Error('Delete failed');
-      mockDeleteChain.run.mockImplementationOnce(() => {
-        throw error;
-      });
+      mockDeleteChain.run.mockRejectedValueOnce(error);
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
     });
