@@ -7,7 +7,15 @@ import {
   getStandaloneEvals,
   writeResultsToDatabase,
 } from '../../src/util/database';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+} from '../../src/util/standaloneEvalCache';
 import { createEvaluateSummaryV2 } from '../factories/eval';
+
+function expectWrittenHistoryCached() {
+  expect(getCachedStandaloneEvals(getStandaloneEvalCacheKey())).toBeDefined();
+}
 
 describe('writeResultsToDatabase', () => {
   beforeAll(async () => {
@@ -54,19 +62,50 @@ describe('writeResultsToDatabase', () => {
     await expect(db.select().from(tagsTable).all()).resolves.toHaveLength(0);
   });
 
-  it('includes imported evals after history has been cached', async () => {
-    const firstEvalId = await writeResultsToDatabase(
-      createEvaluateSummaryV2(),
-      {},
-      new Date('2024-01-01T00:00:00.000Z'),
-    );
+  it('keeps cached history when a later write rolls back', async () => {
+    const firstEvalId = await writeResultsToDatabase(createEvaluateSummaryV2(), {}, new Date());
     const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
     expect(beforeIds).toContain(firstEvalId);
+    expectWrittenHistoryCached();
+    const secondDate = new Date(Date.now() + 1000);
+
+    const db = await getDb();
+    await db.run(`
+      CREATE TRIGGER fail_evals_to_tags_insert
+      BEFORE INSERT ON evals_to_tags
+      BEGIN
+        SELECT RAISE(ABORT, 'forced tag failure');
+      END;
+    `);
+
+    await expect(
+      writeResultsToDatabase(
+        createEvaluateSummaryV2(),
+        {
+          tags: { suite: 'regression' },
+          tests: [],
+        },
+        secondDate,
+      ),
+    ).rejects.toThrow();
+
+    const cachedIds = getCachedStandaloneEvals(getStandaloneEvalCacheKey())?.map(
+      (row) => row.evalId,
+    );
+    expect(cachedIds).toContain(firstEvalId);
+  });
+
+  it('includes newly persisted evals after history has been cached', async () => {
+    const firstDate = new Date();
+    const firstEvalId = await writeResultsToDatabase(createEvaluateSummaryV2(), {}, firstDate);
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toContain(firstEvalId);
+    expectWrittenHistoryCached();
 
     const secondEvalId = await writeResultsToDatabase(
       createEvaluateSummaryV2(),
       {},
-      new Date('2024-01-01T00:00:01.000Z'),
+      new Date(firstDate.getTime() + 1000),
     );
 
     const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);

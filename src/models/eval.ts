@@ -1261,6 +1261,7 @@ export default class Eval {
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       updateSignalFile(this.id);
+      clearStandaloneEvalCache();
     }
   }
 
@@ -1272,6 +1273,7 @@ export default class Eval {
         .insert(evalResultsTable)
         .values(results.map((r) => ({ ...r, evalId: this.id })))
         .run();
+      clearStandaloneEvalCache();
     }
     this._resultsLoaded = true;
   }
@@ -1587,6 +1589,8 @@ export default class Eval {
         });
       }
     });
+
+    clearStandaloneEvalCache();
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,

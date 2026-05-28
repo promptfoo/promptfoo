@@ -32,13 +32,16 @@ import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 import { restoreAzureBlobSasTokens } from './sanitizer';
 import {
-  type StandaloneEval as CachedStandaloneEval,
-  clearStandaloneEvalCache as clearStandaloneEvalCacheImpl,
+  clearStandaloneEvalCache,
   getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from './standaloneEvalCache';
 
-export type StandaloneEval = CachedStandaloneEval;
+import type { StandaloneEval } from './standaloneEvalCache';
+
+export type { StandaloneEval };
+export { clearStandaloneEvalCache };
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -157,7 +160,7 @@ export async function writeResultsToDatabase(
     }
   });
 
-  clearStandaloneEvalCacheImpl();
+  clearStandaloneEvalCache();
 
   return evalId;
 }
@@ -453,7 +456,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
-  clearStandaloneEvalCacheImpl();
+  clearStandaloneEvalCache();
 }
 
 /**
@@ -470,7 +473,7 @@ export async function deleteEvals(ids: string[]): Promise<void> {
     await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
-  clearStandaloneEvalCacheImpl();
+  clearStandaloneEvalCache();
 }
 
 /**
@@ -489,17 +492,7 @@ export async function deleteAllEvals(): Promise<void> {
     await tx.delete(evalsToTagsTable).run();
     await tx.delete(evalsTable).run();
   });
-  clearStandaloneEvalCacheImpl();
-}
-
-/**
- * Invalidates the standalone eval LRU cache backing `getStandaloneEvals()`.
- * Called by mutation paths in this module (write, update, delete) so `/api/history` reflects
- * changes immediately instead of waiting up to the 2-hour TTL. Also re-exported for
- * tests that need to assert behavior across cache boundaries.
- */
-export function clearStandaloneEvalCache(): void {
-  clearStandaloneEvalCacheImpl();
+  clearStandaloneEvalCache();
 }
 
 export async function getStandaloneEvals({
@@ -511,7 +504,7 @@ export async function getStandaloneEvals({
   tag?: { key: string; value: string };
   description?: string;
 } = {}): Promise<StandaloneEval[]> {
-  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
+  const cacheKey = getStandaloneEvalCacheKey({ limit, tag, description });
   const cachedResult = getCachedStandaloneEvals(cacheKey);
 
   if (cachedResult) {
