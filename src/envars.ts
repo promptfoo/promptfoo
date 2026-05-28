@@ -234,8 +234,9 @@ type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
-  // AIML API
   AIML_API_KEY?: string;
+
+  NOVITA_API_KEY?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
@@ -342,9 +343,16 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // MiniMax
+  MINIMAX_API_KEY?: string;
+
   // Nscale
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;
+
+  // NVIDIA NIM (hosted inference)
+  NVIDIA_API_BASE_URL?: string;
+  NVIDIA_API_KEY?: string;
 
   // Ollama
   OLLAMA_API_KEY?: string;
@@ -378,6 +386,9 @@ type EnvVars = {
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;
+
+  // OrcaRouter
+  ORCAROUTER_API_KEY?: string;
 
   // Portkey
   PORTKEY_API_BASE_URL?: string;

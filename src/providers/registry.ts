@@ -68,8 +68,10 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
+import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -82,6 +84,7 @@ import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
+import { createOrcaRouterProvider } from './orcarouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
@@ -477,6 +480,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('novita:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNovitaProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
       providerPath: string,
@@ -842,6 +858,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('minimax:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMiniMaxProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
       providerPath: string,
@@ -865,6 +894,20 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nvidia:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createNvidiaProvider } = await import('./nvidia/chat');
+      return createNvidiaProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -1043,6 +1086,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('orcarouter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createOrcaRouterProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
