@@ -2,9 +2,10 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import type { Server } from 'node:http';
 
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { asMockChildProcess, createMockChildProcess } from '../../util/mockChildProcess';
 
@@ -34,10 +35,28 @@ const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
 const mockedSpawn = vi.mocked(spawn);
 
 describe('Model Audit Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
 
   beforeEach(() => {
-    app = createApp();
     // Reset mock implementations to ensure test isolation when tests run in random order.
     // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
     mockedCheckModelAuditInstalled.mockReset();
@@ -68,7 +87,7 @@ describe('Model Audit Routes', () => {
         ),
       );
 
-      const response = await request(app).get('/api/model-audit/scanners');
+      const response = await api.get('/api/model-audit/scanners');
 
       expect(response.status).toBe(200);
       expect(response.body.scanners).toHaveLength(1);
@@ -88,7 +107,7 @@ describe('Model Audit Routes', () => {
     it('should return 400 when scanners are requested without modelaudit installed', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: false, version: null });
 
-      const response = await request(app).get('/api/model-audit/scanners');
+      const response = await api.get('/api/model-audit/scanners');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('ModelAudit is not installed');
@@ -107,7 +126,7 @@ describe('Model Audit Routes', () => {
         ),
       );
 
-      const response = await request(app).get('/api/model-audit/scanners');
+      const response = await api.get('/api/model-audit/scanners');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toContain('Failed to list ModelAudit scanners');
@@ -126,7 +145,7 @@ describe('Model Audit Routes', () => {
         ),
       );
 
-      const response = await request(app).get('/api/model-audit/scanners');
+      const response = await api.get('/api/model-audit/scanners');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toContain('Failed to list ModelAudit scanners');
@@ -144,7 +163,7 @@ describe('Model Audit Routes', () => {
         ),
       );
 
-      const response = await request(app).get('/api/model-audit/scanners');
+      const response = await api.get('/api/model-audit/scanners');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toContain('Failed to list ModelAudit scanners');
@@ -180,9 +199,7 @@ describe('Model Audit Routes', () => {
       mockedSpawn.mockReturnValue(asMockChildProcess(mockChildProcess));
 
       // Request WITHOUT options - this would have caused "Cannot read properties of undefined" before the fix
-      const response = await request(app)
-        .post('/api/model-audit/scan')
-        .send({ paths: [testFilePath] });
+      const response = await api.post('/api/model-audit/scan').send({ paths: [testFilePath] });
 
       // Clean up
       fs.unlinkSync(testFilePath);
@@ -219,7 +236,7 @@ describe('Model Audit Routes', () => {
       mockedSpawn.mockReturnValue(asMockChildProcess(mockChildProcess));
 
       // Request with empty options object
-      const response = await request(app)
+      const response = await api
         .post('/api/model-audit/scan')
         .send({ paths: [testFilePath], options: {} });
 
@@ -256,7 +273,7 @@ describe('Model Audit Routes', () => {
       );
 
       try {
-        const response = await request(app)
+        const response = await api
           .post('/api/model-audit/scan')
           .send({ paths: [testFilePath], options: { timeout: 0 } });
 
@@ -302,15 +319,13 @@ describe('Model Audit Routes', () => {
       );
 
       try {
-        const response = await request(app)
-          .post('/api/model-audit/scan')
-          .send({
-            paths: [testFilePath],
-            options: {
-              scanners: ['pickle,tf_savedmodel'],
-              excludeScanner: ['weight_distribution'],
-            },
-          });
+        const response = await api.post('/api/model-audit/scan').send({
+          paths: [testFilePath],
+          options: {
+            scanners: ['pickle,tf_savedmodel'],
+            excludeScanner: ['weight_distribution'],
+          },
+        });
 
         expect(response.status).toBe(200);
         expect(response.body.auditId).toBe('scan-scanner-selection');
@@ -373,7 +388,7 @@ describe('Model Audit Routes', () => {
       );
 
       try {
-        const aliasResponse = await request(app)
+        const aliasResponse = await api
           .post('/api/model-audit/scan')
           .send({ paths: [testFilePath], options: { maxFileSize: '500MB', persist: false } });
 
@@ -384,7 +399,7 @@ describe('Model Audit Routes', () => {
           expect.any(Object),
         );
 
-        const removedAliasResponse = await request(app)
+        const removedAliasResponse = await api
           .post('/api/model-audit/scan')
           .send({ paths: [testFilePath], options: { maxTotalSize: '2GB' } });
 
@@ -410,7 +425,7 @@ describe('Model Audit Routes', () => {
       );
 
       try {
-        const response = await request(app)
+        const response = await api
           .post('/api/model-audit/scan')
           .send({ paths: [testFilePath], options: { persist: false } });
 
@@ -445,7 +460,7 @@ describe('Model Audit Routes', () => {
       );
 
       try {
-        const response = await request(app)
+        const response = await api
           .post('/api/model-audit/scan')
           .send({ paths: [testFilePath], options: { persist: false } });
 
@@ -500,7 +515,7 @@ describe('Model Audit Routes', () => {
       mockedSpawn.mockReturnValue(asMockChildProcess(splitUtf8Child as any));
 
       try {
-        const response = await request(app)
+        const response = await api
           .post('/api/model-audit/scan')
           .send({ paths: [testFilePath], options: { persist: false } });
 
@@ -541,9 +556,7 @@ describe('Model Audit Routes', () => {
       );
 
       try {
-        const response = await request(app)
-          .post('/api/model-audit/scan')
-          .send({ paths: [testFilePath] });
+        const response = await api.post('/api/model-audit/scan').send({ paths: [testFilePath] });
 
         expect(response.status).toBe(200);
         expect(createSpy).toHaveBeenCalledWith(
@@ -599,7 +612,7 @@ describe('Model Audit Routes', () => {
         });
 
       try {
-        const response = await request(app)
+        const response = await api
           .post('/api/model-audit/scan')
           .timeout({ deadline: 1000 })
           .send({ paths: [testFilePath], options: { persist: false } });
@@ -650,7 +663,7 @@ describe('Model Audit Routes', () => {
         });
 
       try {
-        const response = await request(app)
+        const response = await api
           .post('/api/model-audit/scan')
           .timeout({ deadline: 1000 })
           .send({ paths: [testFilePath], options: { persist: false } });
@@ -665,32 +678,28 @@ describe('Model Audit Routes', () => {
     });
 
     it('should return 400 when no paths provided', async () => {
-      const response = await request(app).post('/api/model-audit/scan').send({});
+      const response = await api.post('/api/model-audit/scan').send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when paths is empty array', async () => {
-      const response = await request(app).post('/api/model-audit/scan').send({ paths: [] });
+      const response = await api.post('/api/model-audit/scan').send({ paths: [] });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when paths is not an array', async () => {
-      const response = await request(app)
-        .post('/api/model-audit/scan')
-        .send({ paths: 'not-an-array' });
+      const response = await api.post('/api/model-audit/scan').send({ paths: 'not-an-array' });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when all paths are empty strings', async () => {
-      const response = await request(app)
-        .post('/api/model-audit/scan')
-        .send({ paths: ['', '  '] });
+      const response = await api.post('/api/model-audit/scan').send({ paths: ['', '  '] });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -702,9 +711,7 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-not-installed.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      const response = await request(app)
-        .post('/api/model-audit/scan')
-        .send({ paths: [testFilePath] });
+      const response = await api.post('/api/model-audit/scan').send({ paths: [testFilePath] });
 
       fs.unlinkSync(testFilePath);
 
@@ -716,7 +723,7 @@ describe('Model Audit Routes', () => {
     it('should return 400 when path does not exist', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
 
-      const response = await request(app)
+      const response = await api
         .post('/api/model-audit/scan')
         .send({ paths: ['/nonexistent/path/to/model.pkl'] });
 
@@ -730,7 +737,7 @@ describe('Model Audit Routes', () => {
     it('should return installed status when modelaudit is available', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
 
-      const response = await request(app).get('/api/model-audit/check-installed');
+      const response = await api.get('/api/model-audit/check-installed');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('installed', true);
@@ -743,7 +750,7 @@ describe('Model Audit Routes', () => {
     it('should return not installed status when modelaudit is unavailable', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: false, version: null });
 
-      const response = await request(app).get('/api/model-audit/check-installed');
+      const response = await api.get('/api/model-audit/check-installed');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('installed', false);
@@ -755,7 +762,7 @@ describe('Model Audit Routes', () => {
     it('should handle checkModelAuditInstalled throwing', async () => {
       mockedCheckModelAuditInstalled.mockRejectedValue(new Error('pip not found'));
 
-      const response = await request(app).get('/api/model-audit/check-installed');
+      const response = await api.get('/api/model-audit/check-installed');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('installed', false);
@@ -766,19 +773,34 @@ describe('Model Audit Routes', () => {
 });
 
 describe('Model Audit Routes - DB-backed', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
 
   beforeAll(async () => {
     await runDbMigrations();
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 
   beforeEach(async () => {
-    app = createApp();
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
     // Clean up model_audits table
-    const db = getDb();
-    db.run('DELETE FROM model_audits');
+    const db = await getDb();
+    await db.run('DELETE FROM model_audits');
   });
 
   afterEach(() => {
@@ -828,28 +850,28 @@ describe('Model Audit Routes - DB-backed', () => {
 
   describe('POST /api/model-audit/check-path', () => {
     it('should return 400 when path is missing', async () => {
-      const response = await request(app).post('/api/model-audit/check-path').send({});
+      const response = await api.post('/api/model-audit/check-path').send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when path is empty string', async () => {
-      const response = await request(app).post('/api/model-audit/check-path').send({ path: '' });
+      const response = await api.post('/api/model-audit/check-path').send({ path: '' });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when path is whitespace only', async () => {
-      const response = await request(app).post('/api/model-audit/check-path').send({ path: '   ' });
+      const response = await api.post('/api/model-audit/check-path').send({ path: '   ' });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return exists: false for non-existent path', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/model-audit/check-path')
         .send({ path: '/nonexistent/path/abc123' });
 
@@ -859,9 +881,7 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should return directory info for existing directory', async () => {
-      const response = await request(app)
-        .post('/api/model-audit/check-path')
-        .send({ path: os.tmpdir() });
+      const response = await api.post('/api/model-audit/check-path').send({ path: os.tmpdir() });
 
       expect(response.status).toBe(200);
       expect(response.body.exists).toBe(true);
@@ -875,9 +895,7 @@ describe('Model Audit Routes - DB-backed', () => {
       const testFile = path.join(os.tmpdir(), 'test-check-path.txt');
       fs.writeFileSync(testFile, 'test');
 
-      const response = await request(app)
-        .post('/api/model-audit/check-path')
-        .send({ path: testFile });
+      const response = await api.post('/api/model-audit/check-path').send({ path: testFile });
 
       fs.unlinkSync(testFile);
 
@@ -889,7 +907,7 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should expand ~ in paths', async () => {
-      const response = await request(app).post('/api/model-audit/check-path').send({ path: '~/' });
+      const response = await api.post('/api/model-audit/check-path').send({ path: '~/' });
 
       expect(response.status).toBe(200);
       // Home directory should exist
@@ -900,7 +918,7 @@ describe('Model Audit Routes - DB-backed', () => {
 
   describe('GET /api/model-audit/scans', () => {
     it('should return empty list when no scans exist', async () => {
-      const response = await request(app).get('/api/model-audit/scans');
+      const response = await api.get('/api/model-audit/scans');
 
       expect(response.status).toBe(200);
       expect(response.body.scans).toEqual([]);
@@ -914,7 +932,7 @@ describe('Model Audit Routes - DB-backed', () => {
       await createTestAudit({ name: 'Scan A' });
       await createTestAudit({ name: 'Scan B' });
 
-      const response = await request(app).get('/api/model-audit/scans');
+      const response = await api.get('/api/model-audit/scans');
 
       expect(response.status).toBe(200);
       expect(response.body.scans).toHaveLength(2);
@@ -927,7 +945,7 @@ describe('Model Audit Routes - DB-backed', () => {
       await createTestAudit({ name: 'Scan 2' });
       await createTestAudit({ name: 'Scan 3' });
 
-      const response = await request(app).get('/api/model-audit/scans?limit=2&offset=1');
+      const response = await api.get('/api/model-audit/scans?limit=2&offset=1');
 
       expect(response.status).toBe(200);
       expect(response.body.scans).toHaveLength(2);
@@ -940,7 +958,7 @@ describe('Model Audit Routes - DB-backed', () => {
       await createTestAudit({ name: 'Alpha Model', modelPath: '/path/alpha.pkl' });
       await createTestAudit({ name: 'Beta Model', modelPath: '/path/beta.pkl' });
 
-      const response = await request(app).get('/api/model-audit/scans?search=Alpha');
+      const response = await api.get('/api/model-audit/scans?search=Alpha');
 
       expect(response.status).toBe(200);
       expect(response.body.scans).toHaveLength(1);
@@ -952,7 +970,7 @@ describe('Model Audit Routes - DB-backed', () => {
       await createTestAudit({ name: 'Zebra' });
       await createTestAudit({ name: 'Apple' });
 
-      const response = await request(app).get('/api/model-audit/scans?sort=name&order=asc');
+      const response = await api.get('/api/model-audit/scans?sort=name&order=asc');
 
       expect(response.status).toBe(200);
       expect(response.body.scans[0].name).toBe('Apple');
@@ -960,7 +978,7 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should use scan id as a stable tie-breaker for non-unique sort fields', async () => {
-      const db = getDb();
+      const db = await getDb();
       const scanResults = {
         total_checks: 5,
         passed_checks: 5,
@@ -969,7 +987,8 @@ describe('Model Audit Routes - DB-backed', () => {
         issues: [],
         checks: [],
       };
-      db.insert(modelAuditsTable)
+      await db
+        .insert(modelAuditsTable)
         .values([
           {
             id: 'scan-b',
@@ -998,8 +1017,8 @@ describe('Model Audit Routes - DB-backed', () => {
         ])
         .run();
 
-      const ascResponse = await request(app).get('/api/model-audit/scans?sort=name&order=asc');
-      const descResponse = await request(app).get('/api/model-audit/scans?sort=name&order=desc');
+      const ascResponse = await api.get('/api/model-audit/scans?sort=name&order=asc');
+      const descResponse = await api.get('/api/model-audit/scans?sort=name&order=desc');
 
       expect(ascResponse.status).toBe(200);
       expect(ascResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
@@ -1017,7 +1036,7 @@ describe('Model Audit Routes - DB-backed', () => {
       await createTestAudit({ name: 'Second scan' });
       await createTestAudit({ name: 'First scan' });
 
-      const response = await request(app).get('/api/model-audit/scans?sort=id&order=asc');
+      const response = await api.get('/api/model-audit/scans?sort=id&order=asc');
 
       expect(response.status).toBe(200);
       expect(response.body.scans).toHaveLength(2);
@@ -1050,12 +1069,8 @@ describe('Model Audit Routes - DB-backed', () => {
         },
       });
 
-      const statusResponse = await request(app).get(
-        '/api/model-audit/scans?sort=hasErrors&order=desc',
-      );
-      const checksResponse = await request(app).get(
-        '/api/model-audit/scans?sort=totalChecks&order=asc',
-      );
+      const statusResponse = await api.get('/api/model-audit/scans?sort=hasErrors&order=desc');
+      const checksResponse = await api.get('/api/model-audit/scans?sort=totalChecks&order=asc');
 
       expect(statusResponse.status).toBe(200);
       expect(statusResponse.body.scans[0].name).toBe('Issues scan');
@@ -1064,42 +1079,42 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should return 400 for invalid sort field', async () => {
-      const response = await request(app).get('/api/model-audit/scans?sort=hackerField');
+      const response = await api.get('/api/model-audit/scans?sort=hackerField');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for invalid sort order', async () => {
-      const response = await request(app).get('/api/model-audit/scans?order=sideways');
+      const response = await api.get('/api/model-audit/scans?order=sideways');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for limit exceeding max', async () => {
-      const response = await request(app).get('/api/model-audit/scans?limit=999');
+      const response = await api.get('/api/model-audit/scans?limit=999');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for negative offset', async () => {
-      const response = await request(app).get('/api/model-audit/scans?offset=-1');
+      const response = await api.get('/api/model-audit/scans?offset=-1');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for limit of 0', async () => {
-      const response = await request(app).get('/api/model-audit/scans?limit=0');
+      const response = await api.get('/api/model-audit/scans?limit=0');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for non-numeric limit', async () => {
-      const response = await request(app).get('/api/model-audit/scans?limit=abc');
+      const response = await api.get('/api/model-audit/scans?limit=abc');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -1108,7 +1123,7 @@ describe('Model Audit Routes - DB-backed', () => {
 
   describe('GET /api/model-audit/scans/latest', () => {
     it('should return 404 when no scans exist', async () => {
-      const response = await request(app).get('/api/model-audit/scans/latest');
+      const response = await api.get('/api/model-audit/scans/latest');
 
       expect(response.status).toBe(404);
       expect(response.body).toHaveProperty('error', 'No scans found');
@@ -1127,7 +1142,7 @@ describe('Model Audit Routes - DB-backed', () => {
         updatedAt: olderCreatedAt + 1000,
       });
 
-      const response = await request(app).get('/api/model-audit/scans/latest');
+      const response = await api.get('/api/model-audit/scans/latest');
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe(latest.id);
@@ -1140,7 +1155,7 @@ describe('Model Audit Routes - DB-backed', () => {
     it('should return a scan by ID', async () => {
       const audit = await createTestAudit({ name: 'My Scan' });
 
-      const response = await request(app).get(`/api/model-audit/scans/${audit.id}`);
+      const response = await api.get(`/api/model-audit/scans/${audit.id}`);
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe(audit.id);
@@ -1151,7 +1166,7 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should return 404 for non-existent scan', async () => {
-      const response = await request(app).get('/api/model-audit/scans/nonexistent-id-123');
+      const response = await api.get('/api/model-audit/scans/nonexistent-id-123');
 
       expect(response.status).toBe(404);
       expect(response.body).toHaveProperty('error', 'Model scan not found');
@@ -1167,7 +1182,7 @@ describe('Model Audit Routes - DB-backed', () => {
         scannerVersion: '0.2.30',
       });
 
-      const response = await request(app).get(`/api/model-audit/scans/${audit.id}`);
+      const response = await api.get(`/api/model-audit/scans/${audit.id}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({
@@ -1185,7 +1200,7 @@ describe('Model Audit Routes - DB-backed', () => {
     it('should delete a scan by ID', async () => {
       const audit = await createTestAudit({ name: 'To Delete' });
 
-      const response = await request(app).delete(`/api/model-audit/scans/${audit.id}`);
+      const response = await api.delete(`/api/model-audit/scans/${audit.id}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -1193,12 +1208,12 @@ describe('Model Audit Routes - DB-backed', () => {
       expect(() => DeleteScanResponseSchema.parse(response.body)).not.toThrow();
 
       // Verify it's actually deleted
-      const getResponse = await request(app).get(`/api/model-audit/scans/${audit.id}`);
+      const getResponse = await api.get(`/api/model-audit/scans/${audit.id}`);
       expect(getResponse.status).toBe(404);
     });
 
     it('should return 404 when deleting non-existent scan', async () => {
-      const response = await request(app).delete('/api/model-audit/scans/nonexistent-id-456');
+      const response = await api.delete('/api/model-audit/scans/nonexistent-id-456');
 
       expect(response.status).toBe(404);
       expect(response.body).toHaveProperty('error', 'Model scan not found');
