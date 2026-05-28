@@ -633,6 +633,26 @@ describe('OpenAICodexAppServerProvider', () => {
     });
   });
 
+  it('marks a force-closed turn span ERROR when a new turn starts before the prior ends', () => {
+    const spans = installSpanRecorder();
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+    const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
+
+    (provider as any).startTurnSpan(state, 1);
+    // A second turn opens before the first was ended: the prior span must be
+    // force-closed with ERROR status rather than left dangling/UNSET.
+    (provider as any).startTurnSpan(state, 2);
+    (provider as any).endTurnSpan(state, 3);
+
+    const turnSpans = spans.filter((span) => span.name.startsWith('gen_ai.turn '));
+    expect(turnSpans).toHaveLength(2);
+    // SpanStatusCode.ERROR === 2
+    expect(turnSpans[0].status?.code).toBe(2);
+    expect(turnSpans[0].status?.message).toContain('not properly closed');
+  });
+
   it('uses the last completed agent message as the final output', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

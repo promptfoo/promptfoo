@@ -1082,6 +1082,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       case 'error': {
         const errorMsg =
           typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
+        if (!state.activeTurnSpan) {
+          // Mirror `turn.failed`: a stream error before any `turn.started`
+          // should still surface an errored turn span.
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
         this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex stream error', { error: errorMsg });
         throw new Error(`Codex stream error: ${errorMsg}`);
@@ -1230,7 +1235,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (state.activeTurnSpan) {
       // Codex doesn't normally double-open turns, but if a `turn.started` arrives
       // before the prior `turn.completed`, close the prior one to avoid a leak.
+      // Mark it ERROR so the never-completed turn is distinguishable from a clean one.
       try {
+        state.activeTurnSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'Turn span not properly closed before next turn started',
+        });
         state.activeTurnSpan.end(eventTime);
       } catch {
         // ignore

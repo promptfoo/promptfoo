@@ -1463,6 +1463,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               }
             }
             toolStartTimes.clear();
+            toolTurnIndex.clear();
           };
 
           // The Claude Agent SDK interleaves a `result` message for each background

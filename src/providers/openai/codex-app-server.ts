@@ -2290,6 +2290,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           break;
         }
         state.error = params.error?.message ?? 'Codex app-server error';
+        if (!state.activeTurnSpan) {
+          // An error before any `turn/started`/item event should still surface
+          // an errored turn span, mirroring the `turn/completed` lazy-open path.
+          this.startTurnSpan(state, state.lastEventTime);
+        }
         this.endTurnSpan(state, eventTime, state.error);
         state.completed.resolve();
         break;
@@ -3156,6 +3161,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): void {
     if (state.activeTurnSpan) {
       try {
+        state.activeTurnSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'Turn span not properly closed before next turn started',
+        });
         state.activeTurnSpan.end(eventTime);
       } catch {
         // ignore

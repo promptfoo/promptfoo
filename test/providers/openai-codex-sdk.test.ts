@@ -2852,6 +2852,127 @@ describe('OpenAICodexSDKProvider', () => {
 
         tracerSpy.mockRestore();
       });
+
+      // Records span name, attributes, and status so error/cleanup paths can be
+      // asserted (the SpanStatusCode.ERROR enum value is 2).
+      const installTurnSpanTracerSpy = async () => {
+        const opentelemetry = await import('@opentelemetry/api');
+        const emitted: Array<{ name: string; attrs: Record<string, any>; status?: any }> = [];
+        const spy = vi.spyOn(opentelemetry.trace, 'getTracer').mockReturnValue({
+          startSpan: (name: string, options: any) => {
+            const attrs: Record<string, any> = { ...(options?.attributes ?? {}) };
+            const entry: { name: string; attrs: Record<string, any>; status?: any } = {
+              name,
+              attrs,
+            };
+            emitted.push(entry);
+            return {
+              setAttribute: (k: string, v: unknown) => {
+                attrs[k] = v;
+              },
+              setAttributes: (a: Record<string, unknown>) => {
+                Object.assign(attrs, a);
+              },
+              setStatus: (s: unknown) => {
+                entry.status = s;
+              },
+              end: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            } as unknown as ReturnType<
+              ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
+            >;
+          },
+          startActiveSpan: (...args: any[]) => {
+            const fn = args[args.length - 1];
+            return fn({
+              end: () => undefined,
+              setAttribute: () => undefined,
+              setAttributes: () => undefined,
+              setStatus: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            });
+          },
+        } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
+        return { emitted, spy };
+      };
+
+      it('marks the turn span ERROR on turn.failed (lazy-open)', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.failed', error: { message: 'Model overloaded' } };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Codex turn failed: Model overloaded');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        expect(turnSpan?.status?.message).toContain('Model overloaded');
+        spy.mockRestore();
+      });
+
+      it('marks the turn span ERROR on a fatal stream error (lazy-open)', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'error', message: 'Stream transport failed' };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Codex stream error: Stream transport failed');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        spy.mockRestore();
+      });
+
+      it('marks a dangling turn span ERROR when the stream ends mid-turn', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        // turn.started + an unclosed item, then the stream ends with no
+        // turn.completed — the finally cleanup must close both with ERROR.
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.started' };
+            yield {
+              type: 'item.started',
+              item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+            };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        expect(turnSpan?.status?.message).toContain('not properly closed');
+        spy.mockRestore();
+      });
     });
   });
 
