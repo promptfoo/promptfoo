@@ -742,26 +742,79 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
-- optional `exclude`, a string, object, or list of strings/objects to remove from the observed and expected payloads before matching
+- optional `defaults`, a map of argument names to their default values
+- optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
-Use `exclude` when a tool has safe defaults that an agent may either omit or send explicitly, but you still want exact matching to catch hallucinated arguments:
+#### Tolerating default arguments {#trajectory-tool-args-match-defaults}
+
+Use `defaults` when an agent may or may not include arguments whose values match the tool's documented defaults (for example, pagination parameters that the API would fill in anyway). Before matching, any actual argument whose value equals its declared default is stripped from the payload.
+
+This lets you pair `mode: exact` — which catches hallucinated extra arguments — with a tolerance for harmless optional defaults. An actual argument with a non-default value is still treated as an unexpected extra.
 
 ```yaml
-assert:
-  - type: trajectory:tool-args-match
-    value:
-      name: search_orders
-      mode: exact
-      args:
-        status: Q
-      exclude:
-        - page: 1
-        - page_size: 5
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
 ```
 
-String exclude rules remove a key regardless of value. Object exclude rules remove a key only when the observed or expected value matches, so `page: 1` can be ignored while `page: 2` still fails exact matching.
+With the configuration above:
+
+| Observed tool arguments                  | Outcome | Reason                                                                                                                        |
+| ---------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                                                                                      |
+| `{ status: 'Q', page: 1 }`               | pass    | `page: 1` equals the declared default, stripped before matching                                                               |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both defaults stripped                                                                                                        |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
+| `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
+
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
+
+:::note
+
+Stripping runs before matching in both modes, but `partial` mode already ignores extra arguments, so `defaults` is only meaningful with `mode: exact`. Keep a key in `args` _or_ `defaults`, not both: an observed value equal to its default is stripped before the `args` comparison runs, so listing the same key in both can make an otherwise-matching call fail.
+
+:::
+
+#### Ignoring arguments {#trajectory-tool-args-match-ignore}
+
+Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a volatile `request_id` or `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: orders
+          mode: exact
+          args:
+            status: Q
+          ignore:
+            - request_id
+            - idempotency_key
+```
+
+With the configuration above:
+
+| Observed tool arguments                  | Outcome | Reason                                         |
+| ---------------------------------------- | ------- | ---------------------------------------------- |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                       |
+| `{ status: 'Q', request_id: 'a1b2' }`    | pass    | `request_id` is ignored regardless of value    |
+| `{ status: 'Q', request_id: '99zz' }`    | pass    | a different `request_id` is still ignored      |
+| `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `ignore` |
+
+`ignore` accepts a single string or a list of strings, applies only to top-level keys, and composes with `defaults`. Because the key is removed from both sides, it does not matter whether the agent emits the argument or omits it.
+
+An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 

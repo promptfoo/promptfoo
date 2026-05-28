@@ -140,14 +140,7 @@ vi.mock('../../../src/util/file', async () => {
 });
 
 vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test, _basePath, isDefaultTest) => {
-    // For defaultTest, just return the test as-is since it doesn't need validation
-    if (isDefaultTest) {
-      return test;
-    }
-    // For regular tests, just return the test
-    return test;
-  }),
+  readTest: vi.fn().mockImplementation(async (test) => test),
   readTests: vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
       return [];
@@ -299,19 +292,6 @@ describe('combineConfigs', () => {
     };
 
     vi.mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ) => {
-          if (typeof path === 'string' && path === 'config1.json') {
-            return JSON.stringify(config1);
-          } else if (typeof path === 'string' && path === 'config2.json') {
-            return JSON.stringify(config2);
-          }
-          return Buffer.from('');
-        },
-      )
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValueOnce(JSON.stringify(config1))
@@ -1522,7 +1502,7 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
-  it('should preserve handle string functions/tools when dereferencing', async () => {
+  it('should preserve string functions/tools when dereferencing', async () => {
     const rawConfig = {
       description: 'Test config with function parameters',
       prompts: [],

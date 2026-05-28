@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -233,6 +234,39 @@ describe('Provider Registry', () => {
         },
       });
       expect(wsProvider.id()).toBe('ws://example.com');
+    });
+
+    it('should handle n8n providers correctly', async () => {
+      const n8nOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const factory = providerMap.find((f) => f.test('n8n:https://example.com/webhook/agent'));
+      expect(factory).toBeDefined();
+      expect(factory).toBe(providerMap.find((f) => f.test('n8n')));
+
+      const providerFromPath = await factory!.create(
+        'n8n:https://example.com/webhook/agent',
+        n8nOptions,
+        mockContext,
+      );
+      expect(providerFromPath.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      const providerFromConfig = await factory!.create(
+        'n8n',
+        {
+          ...n8nOptions,
+          config: { url: 'https://example.com/webhook/config-agent' },
+        },
+        mockContext,
+      );
+      expect(providerFromConfig.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      await expect(factory!.create('n8n', n8nOptions, mockContext)).rejects.toThrow(
+        'n8n provider requires a webhook URL',
+      );
+      expect(isFoundationModelProvider('n8n:https://example.com/webhook/agent')).toBe(false);
     });
 
     it('dispatches a representative redteam path through getProviderFactories', async () => {
@@ -699,6 +733,46 @@ describe('Provider Registry', () => {
       await expect(factory!.create('groq:responses:', groqOptions, mockContext)).rejects.toThrow(
         'Invalid groq:responses provider path',
       );
+    });
+
+    it('should handle nvidia provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('nvidia:meta/llama-3.3-70b-instruct'));
+      expect(factory).toBeDefined();
+
+      const nvidiaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create(
+        'nvidia:meta/llama-3.3-70b-instruct',
+        nvidiaOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe('nvidia:meta/llama-3.3-70b-instruct');
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('nvidia:', nvidiaOptions, mockContext)).rejects.toThrow(
+        /expected "nvidia:<model>"/,
+      );
+      await expect(
+        factory!.create('nvidia:embedding:nvidia/nv-embed-v1', nvidiaOptions, mockContext),
+      ).rejects.toThrow(/Unsupported NVIDIA NIM provider subtype "embedding"/);
+    });
+
+    it('should handle orcarouter provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('orcarouter:openai/gpt-4o'));
+      expect(factory).toBeDefined();
+
+      const orcaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, {
+        ...mockContext,
+        options: orcaOptions,
+      });
+      expect(provider.id()).toBe('orcarouter:openai/gpt-4o');
+
+      const autoProvider = await factory!.create(
+        'orcarouter:orcarouter/auto',
+        orcaOptions,
+        mockContext,
+      );
+      expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
     });
   });
 

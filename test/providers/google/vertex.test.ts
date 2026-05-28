@@ -17,7 +17,7 @@ const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
 const mockImportModule = vi.hoisted(() => vi.fn());
 
 // Mock database
-vi.mock('better-sqlite3', () => {
+vi.mock('libsql', () => {
   return vi.fn().mockReturnValue({
     prepare: vi.fn(),
     transaction: vi.fn(),
@@ -2539,6 +2539,47 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
     const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
     expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.max_tokens).toBe(32);
+  });
+
+  it('omits temperature, top_p, and top_k for Claude Opus 4.8 on Vertex', async () => {
+    provider = new VertexChatProvider('claude-opus-4-8', {
+      config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-4-8',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
     expect(sentBody.max_tokens).toBe(32);
   });
 
