@@ -5,7 +5,11 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
+import {
+  isTemperatureDeprecatedClaudeModel,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -1613,14 +1617,16 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      // Claude Opus 4.7 deprecates `temperature` at the model level — Bedrock
-      // relays the resulting 400 as a ValidationException. Drop the default
-      // regardless of which IAM-region prefix the user picked.
-      const isOpus47 = modelName ? isClaudeOpus47Model(modelName) : false;
-      if (isOpus47) {
+      // Claude Opus 4.7 and 4.8 deprecate `temperature` at the model level —
+      // Bedrock relays the resulting 400 as a ValidationException. Drop the
+      // default regardless of which IAM-region prefix the user picked.
+      const temperatureDeprecated = modelName
+        ? isTemperatureDeprecatedClaudeModel(modelName)
+        : false;
+      if (temperatureDeprecated) {
         if (config?.temperature != null || getEnvFloat('AWS_BEDROCK_TEMPERATURE') != null) {
           logger.warn(
-            'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your Bedrock config (or unset AWS_BEDROCK_TEMPERATURE) to silence this warning.',
+            'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted. Remove temperature from your Bedrock config (or unset AWS_BEDROCK_TEMPERATURE) to silence this warning.',
           );
         }
       } else {
@@ -2247,6 +2253,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2319,6 +2326,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2351,6 +2359,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2391,6 +2400,11 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // (verified via `aws bedrock list-inference-profiles`).
   'global.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // Global / Japan cross-region inference profiles for Claude Opus 4.8
+  // (mirrors the Opus 4.7 profile set; add/remove as the regional rollout lands).
+  'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html

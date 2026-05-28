@@ -22,6 +22,17 @@ export const ANTHROPIC_MODELS = [
       output: 125 / 1e6, // $125 / MTok
     },
   })),
+  // Claude 4.8 models
+  // NOTE: Anthropic publishes a single dateless ID for Opus 4.8 — the documented
+  // Claude API alias is the canonical ID itself (`claude-opus-4-8`), so there is no
+  // separate `-latest` pointer to register.
+  ...['claude-opus-4-8'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
   // Claude 4.7 models
   // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
   // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
@@ -149,6 +160,28 @@ export const ANTHROPIC_MODELS = [
  */
 export function isClaudeOpus47Model(modelId: string): boolean {
   return /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i.test(modelId);
+}
+
+/**
+ * Matches Claude Opus 4.8 model IDs across Anthropic, Bedrock (including the
+ * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * deployment names. The trailing `(?![0-9])` guard keeps a hypothetical
+ * higher-numbered `claude-opus-4-80` from matching "4.8" while still matching
+ * dated snapshots like `claude-opus-4-8-20260528`.
+ */
+export function isClaudeOpus48Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i.test(modelId);
+}
+
+/**
+ * Claude Opus 4.7 and 4.8 both deprecate `temperature` at the model level — the
+ * API returns 400 `invalid_request_error` for any request that includes it
+ * (including promptfoo's built-in default of 0). Centralizes the "omit
+ * temperature" decision shared by the Anthropic, Bedrock, Vertex, and Azure
+ * providers so support for future models lands in one place.
+ */
+export function isTemperatureDeprecatedClaudeModel(modelId: string): boolean {
+  return isClaudeOpus47Model(modelId) || isClaudeOpus48Model(modelId);
 }
 
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {

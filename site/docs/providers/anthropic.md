@@ -53,6 +53,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description            |
 | -------------------------------------------------------------------------- | ---------------------- |
+| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
 | `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
 | `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
@@ -75,6 +76,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
@@ -514,6 +516,16 @@ tests:
   - vars:
       pdf_base64: file://document.pdf
 ```
+
+### Claude Opus 4.8 notes
+
+Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
+
+- **Temperature is managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and does not accept `temperature`; promptfoo omits the field from every request. Passing `temperature` in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the value out of your eval.
+- **Adaptive thinking is the default.** Use `thinking: { type: 'adaptive' }` (or leave `thinking` unset) to let the model choose how much to reason per request. Manual budget-based thinking is rejected with a 400.
+- **`effort` defaults to `high` and `xhigh` is available.** Setting `effort: high` behaves the same as omitting it. Start with `xhigh` for coding and agentic work. See the [Effort Level](#effort-level) section.
+
+The same guidance applies when you reach Opus 4.8 through AWS Bedrock, GCP Vertex, or Azure AI Foundry — promptfoo suppresses `temperature` on each of those paths as well.
 
 ### Claude Opus 4.7 notes
 

@@ -26,7 +26,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { isClaudeOpus47Model } from '../anthropic/util';
+import { isTemperatureDeprecatedClaudeModel } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -144,6 +144,8 @@ export interface BedrockConverseToolConfig {
  * Prices as of 2025 - may need updates
  */
 const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
+  // Claude Opus 4.8
+  'anthropic.claude-opus-4-8': { input: 5, output: 25 },
   // Claude Opus 4.7
   'anthropic.claude-opus-4-7': { input: 5, output: 25 },
   // Claude Opus 4.6
@@ -1055,11 +1057,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    // Claude Opus 4.7 deprecates `temperature` at the model level — any request
-    // that includes it on Bedrock returns ValidationException. Drop the value
-    // regardless of where it came from (config or AWS_BEDROCK_TEMPERATURE).
-    const isOpus47 = isClaudeOpus47Model(this.modelName);
-    const temperature = reasoningEnabled || isOpus47 ? undefined : temperatureValue;
+    // Claude Opus 4.7 and 4.8 deprecate `temperature` at the model level — any
+    // request that includes it on Bedrock returns ValidationException. Drop the
+    // value regardless of where it came from (config or AWS_BEDROCK_TEMPERATURE).
+    const temperatureDeprecated = isTemperatureDeprecatedClaudeModel(this.modelName);
+    const temperature = reasoningEnabled || temperatureDeprecated ? undefined : temperatureValue;
     const topP = reasoningEnabled ? undefined : topPValue;
 
     // Only return config if at least one field is set
