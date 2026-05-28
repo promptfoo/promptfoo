@@ -1413,8 +1413,7 @@ describe('evalTableUtils', () => {
     it('should detect metric names that first appear in a later batch on legacy evals', async () => {
       // EvalResult.findManyByEvalIdBatched yields batches of 100 testIdx, so a
       // metric introduced past the first batch would be missed by a first-batch
-      // scan. The streaming code must buffer all batches when the aggregate
-      // counts are missing.
+      // scan. Discovery must cover all batches without retaining all CSV rows.
       const prompts = [
         createCompletedPrompt('Prompt 1', {
           metrics: createPromptMetrics({
@@ -1424,11 +1423,14 @@ describe('evalTableUtils', () => {
         }),
       ];
       const chunks: string[] = [];
+      let fetchPasses = 0;
+      const streamedBeforeSecondBatch: boolean[] = [];
       await streamEvalCsv(
         {
           vars: ['n'],
           prompts,
           fetchResultsBatched: async function* () {
+            fetchPasses += 1;
             yield [
               {
                 testIdx: 0,
@@ -1443,9 +1445,12 @@ describe('evalTableUtils', () => {
                 metadata: {},
               },
             ];
+            if (fetchPasses === 2) {
+              streamedBeforeSecondBatch.push(chunks.length > 1);
+            }
             yield [
               {
-                testIdx: 1,
+                testIdx: 100,
                 promptIdx: 0,
                 testCase: { vars: { n: 'b' } },
                 response: { output: 'b' },
@@ -1471,6 +1476,8 @@ describe('evalTableUtils', () => {
       const header = csv.split('\n')[0];
       expect(header).toContain('Metric: early_metric');
       expect(header).toContain('Metric: late_metric');
+      expect(fetchPasses).toBe(2);
+      expect(streamedBeforeSecondBatch).toEqual([true]);
     });
 
     it('should omit derived/aggregate-only metric columns even on legacy evals without namedScoresCount', async () => {
