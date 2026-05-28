@@ -88,10 +88,13 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     type: 'any' | 'auto' | 'tool';
     name?: string;
   };
-  thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
-  };
+  thinking?:
+    | {
+        type: 'enabled';
+        budget_tokens: number;
+      }
+    | { type: 'adaptive' }
+    | { type: 'disabled' };
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -1645,7 +1648,11 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'thinking', config?.thinking, undefined, undefined);
+      const thinking =
+        samplingParamsDeprecated && config?.thinking?.type === 'enabled'
+          ? { type: 'adaptive' as const }
+          : config?.thinking;
+      addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }

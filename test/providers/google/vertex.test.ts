@@ -2884,6 +2884,71 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(requestData.max_tokens).toBe(11024);
     });
 
+    it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().thinking).toEqual({ type: 'adaptive' });
+    });
+
+    it('should keep manual thinking enabled and bump max_tokens for non-deprecated Claude models', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      // Non-deprecated models keep manual thinking verbatim (NOT converted to adaptive)
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+      // max_tokens guard still fires for type 'enabled': bumped to budget_tokens + 1024
+      expect(requestData.max_tokens).toBe(6024);
+    });
+
+    it('should not bump max_tokens when adaptive conversion drops budget_tokens for Claude Opus 4.8', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      // Manual thinking is converted to adaptive (no budget_tokens)
+      expect(requestData.thinking).toEqual({ type: 'adaptive' });
+      // The max_tokens guard only fires for type 'enabled', so adaptive does not
+      // force max_tokens to budget + 1024; it stays at the thinking-enabled default
+      expect(requestData.max_tokens).toBe(2048);
+    });
+
+    it('should pass through disabled thinking for Claude Opus 4.8 and treat it as not-enabled', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'disabled' },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      // 'disabled' is not 'enabled', so it passes through unchanged (not adaptive)
+      expect(requestData.thinking).toEqual({ type: 'disabled' });
+      // Disabled thinking is treated as not-enabled, so the default max_tokens is 512
+      expect(requestData.max_tokens).toBe(512);
+    });
+
     it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
         config: {

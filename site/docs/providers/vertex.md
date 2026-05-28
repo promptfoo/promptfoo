@@ -617,7 +617,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
 - Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for Opus 4.7
-- Claude Opus 4.7: adaptive thinking and `xhigh` effort level; promptfoo automatically omits `temperature` (deprecated for this model) and forwards the rest of the Anthropic Messages body to Vertex's `rawPredict` endpoint
+- Claude Opus 4.7 and 4.8: promptfoo automatically omits deprecated sampling parameters and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage
