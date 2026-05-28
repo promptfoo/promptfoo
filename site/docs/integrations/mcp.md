@@ -207,6 +207,12 @@ In addition to the general MCP integration described above, OpenAI's Responses A
 
 For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](../providers/openai.md#mcp-model-context-protocol-support).
 
+## Tool Error Reporting
+
+When an MCP-enabled model provider executes a tool that fails, Promptfoo surfaces the formatted tool error in `ProviderResponse.error`. A provider such as Anthropic may also preserve the model's recovered response in `output` for diagnosis, but the eval still records the failed tool call instead of silently treating recovery text as success.
+
+The standalone [`mcp` provider](../providers/mcp.md) intentionally behaves differently because the MCP server itself is the target under test. Protocol-level tool error content remains available as `output` for assertions, while connection and transport failures are provider errors.
+
 ## Tool Schema Compatibility
 
 Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
