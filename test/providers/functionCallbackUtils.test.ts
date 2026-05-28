@@ -326,7 +326,7 @@ describe('FunctionCallbackHandler', () => {
       const mockDefaultFunction = vi.fn().mockResolvedValue('windows default result');
       mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
       const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', { value: 'win32' });
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
       try {
         const callbacks: FunctionCallbackConfig = {
@@ -345,7 +345,10 @@ describe('FunctionCallbackHandler', () => {
           path.resolve('/test/basePath', 'C:/path/to/functions.js'),
         );
       } finally {
-        Object.defineProperty(process, 'platform', { value: originalPlatform });
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+        });
       }
     });
 

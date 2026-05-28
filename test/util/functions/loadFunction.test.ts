@@ -310,7 +310,7 @@ describe('parseFileUrl', () => {
 
   it('should handle standard Windows file URLs on Windows', () => {
     const originalPlatform = process.platform;
-    Object.defineProperty(process, 'platform', { value: 'win32' });
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
     try {
       expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
@@ -321,7 +321,10 @@ describe('parseFileUrl', () => {
         functionName: 'functionName',
       });
     } finally {
-      Object.defineProperty(process, 'platform', { value: originalPlatform });
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
     }
   });
 
