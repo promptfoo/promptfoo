@@ -262,6 +262,20 @@ describe('MiniMaxProvider', () => {
     expect(json.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
   });
 
+  it('should reject deprecated function_call configuration', async () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: {
+        config: {
+          function_call: 'auto',
+        },
+      },
+    });
+
+    await expect((provider as any).getOpenAiBody('Call a tool')).rejects.toThrow(
+      'MiniMax does not support function_call. Use tools and tool_choice for tool calling instead.',
+    );
+  });
+
   it('should preserve explicit API endpoint and API key environment overrides', () => {
     const restoreCustomEnv = mockProcessEnv({ CUSTOM_MINIMAX_KEY: 'custom-minimax-key' });
     try {
