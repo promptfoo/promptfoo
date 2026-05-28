@@ -1375,7 +1375,7 @@ describe('evalTableUtils', () => {
       expect(header).not.toContain('Metric: derived_score');
     });
 
-    it('should fall back to namedScores keys when namedScoresCount is missing (legacy evals)', async () => {
+    it('should backfill metric columns from row outputs when namedScoresCount is missing (legacy evals)', async () => {
       // Older eval rows persisted before `namedScoresCount` was reliably populated,
       // and external v4 imports via POST /api/eval that don't backfill the count,
       // still need their per-row metric columns to appear in CSV exports.
@@ -1408,6 +1408,42 @@ describe('evalTableUtils', () => {
       const header = csv.split('\n')[0];
       expect(header).toContain('Metric: accuracy');
       expect(header).toContain('Metric: fluency');
+    });
+
+    it('should omit derived/aggregate-only metric columns even on legacy evals without namedScoresCount', async () => {
+      // Reviewer scenario: an imported eval whose `metrics.namedScores` has both
+      // row-contributed metrics and an aggregate-only derived metric, but no
+      // `namedScoresCount`. The legacy backfill must still match the WebUI by
+      // scanning row outputs (which never carry derived metrics).
+      const csv = await runStreamEvalCsv({
+        vars: ['name'],
+        prompts: [
+          createCompletedPrompt('Prompt 1', {
+            metrics: createPromptMetrics({
+              namedScores: { accuracy: 0.8, aggregate_only_average: 0.5 },
+              namedScoresCount: {},
+            }),
+          }),
+        ],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { name: 'Alice' } },
+            response: { output: 'Alice output' },
+            success: true,
+            score: 0.8,
+            namedScores: { accuracy: 0.8 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: {},
+          },
+        ],
+      });
+
+      const header = csv.split('\n')[0];
+      expect(header).toContain('Metric: accuracy');
+      expect(header).not.toContain('Metric: aggregate_only_average');
     });
 
     it('should produce headers consistent with evalTableToCsv for the same data', async () => {
