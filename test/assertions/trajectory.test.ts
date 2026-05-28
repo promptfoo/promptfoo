@@ -1351,7 +1351,7 @@ describe('trajectory assertions', () => {
           pass: true,
           score: 1,
           reason:
-            'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: {"order_id":"123","include_history":false}',
+            'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: {"order_id":"123","include_history":false}. Ignored default argument(s): include_history',
           assertion: params.assertion,
         });
       });
@@ -1380,7 +1380,9 @@ describe('trajectory assertions', () => {
         const result = handleTrajectoryToolArgsMatch(params);
         expect(result.pass).toBe(false);
         expect(result.score).toBe(0);
-        expect(result.reason).toContain('No call to tool "search_orders" matched expected arguments');
+        expect(result.reason).toContain(
+          'No call to tool "search_orders" matched expected arguments',
+        );
       });
 
       it('passes in exact mode when actual contains multiple keys all matching declared defaults', () => {
@@ -1866,6 +1868,260 @@ describe('trajectory assertions', () => {
         const result = handleTrajectoryToolArgsMatch(params);
         expect(result.pass).toBe(false);
         expect(result.reason).toContain('Forbidden argument match');
+      });
+
+      it('surfaces the stripped keys in the pass reason when multiple defaults are tolerated', () => {
+        const allDefaultsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-reason-defaults',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"page_size":5}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: allDefaultsTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored default argument(s): page, page_size');
+      });
+
+      it('does not append the ignored-defaults note when nothing was stripped', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'partial',
+              args: { order_id: '123' },
+              defaults: { include_history: true },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'partial',
+            args: { order_id: '123' },
+            defaults: { include_history: true },
+          },
+        };
+
+        // The observed call has include_history:false, which does not equal the
+        // declared default (true), so nothing is stripped and no note is added.
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+        expect(result.reason).not.toContain('Ignored default');
+      });
+
+      it('does not let a hallucinated __proto__ argument escape exact matching when defaults are set', () => {
+        const protoTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-proto-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","__proto__":{"polluted":true}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: protoTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
+        };
+
+        // A non-default __proto__ key must be preserved through stripping so exact
+        // mode still rejects it as a hallucinated extra (matching no-defaults behavior).
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        // The prototype must not have been mutated by the stripping rebuild.
+        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      });
+
+      it('fails in partial mode when a key in both args and defaults is stripped to nothing', () => {
+        const collisionTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-partial-collision',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: collisionTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              // partial (default) mode; page is listed in BOTH args and defaults
+              args: { status: 'Q', page: 1 },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            args: { status: 'Q', page: 1 },
+            defaults: { page: 1 },
+          },
+        };
+
+        // Documented footgun: stripping removes page before the subset check, so the
+        // explicitly-asserted page:1 can no longer be satisfied.
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('applies defaults when the expected payload uses the arguments alias', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              arguments: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            arguments: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats defaults as a no-op when the actual payload is a top-level array', () => {
+        const arrayTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-array-args',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '[1,2,3]',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: arrayTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: [1, 2, 3],
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: [1, 2, 3],
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it.each([
+        ['null', null],
+        ['string', 'include_history'],
+        ['number', 1],
+      ])('rejects malformed defaults (%s)', (_label, malformed) => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: malformed as unknown as Record<string, unknown>,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: malformed as unknown as Record<string, unknown>,
+          },
+        };
+
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+        );
       });
     });
   });

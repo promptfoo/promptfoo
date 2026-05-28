@@ -778,6 +778,12 @@ With the configuration above:
 
 `defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
 
+:::note
+
+Stripping runs before matching in both modes, but `partial` mode already ignores extra arguments, so `defaults` is only meaningful with `mode: exact`. Keep a key in `args` _or_ `defaults`, not both: an observed value equal to its default is stripped before the `args` comparison runs, so listing the same key in both can make an otherwise-matching call fail.
+
+:::
+
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
 ### trajectory:tool-sequence {#trajectorytool-sequence}

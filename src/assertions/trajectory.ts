@@ -263,22 +263,38 @@ function matchesExpectedArgsPartial(actual: unknown, expected: unknown): boolean
   return isDeepStrictEqual(actual, expected);
 }
 
-function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined): unknown {
+interface StrippedToolArgs {
+  cleaned: unknown;
+  stripped: string[];
+}
+
+function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined): StrippedToolArgs {
   if (!defaults || !isRecord(actual)) {
-    return actual;
+    return { cleaned: actual, stripped: [] };
   }
 
-  const result: Record<string, unknown> = {};
+  const cleaned: Record<string, unknown> = {};
+  const stripped: string[] = [];
   for (const [key, value] of Object.entries(actual)) {
     if (
       Object.prototype.hasOwnProperty.call(defaults, key) &&
       isDeepStrictEqual(value, defaults[key])
     ) {
+      stripped.push(key);
       continue;
     }
-    result[key] = value;
+    // Use defineProperty rather than `cleaned[key] = value` so reserved keys such as
+    // "__proto__" are kept as own properties instead of mutating the prototype. A plain
+    // assignment would silently drop a hallucinated `__proto__` argument and let exact
+    // mode pass when it should fail — defeating the point of stripping defaults.
+    Object.defineProperty(cleaned, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
-  return result;
+  return { cleaned, stripped };
 }
 
 function matchesToolArgs(
@@ -287,13 +303,13 @@ function matchesToolArgs(
   mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
   defaults: ToolArgsDefaults | undefined,
 ): boolean {
-  const cleanedActual = stripDefaults(actual, defaults);
+  const { cleaned } = stripDefaults(actual, defaults);
 
   if (mode === 'exact') {
-    return isDeepStrictEqual(cleanedActual, expected);
+    return isDeepStrictEqual(cleaned, expected);
   }
 
-  return matchesExpectedArgsPartial(cleanedActual, expected);
+  return matchesExpectedArgsPartial(cleaned, expected);
 }
 
 function resolveToolArgsMatchMode(
@@ -436,6 +452,11 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
+  const ignoredDefaults = matchedStep ? stripDefaults(matchedStep.args, defaults).stripped : [];
+  const ignoredDefaultsSuffix =
+    ignoredDefaults.length > 0
+      ? `. Ignored default argument(s): ${ignoredDefaults.join(', ')}`
+      : '';
   const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);
   const observedArgsLabel =
     stepsWithArgs.length > 0
@@ -452,7 +473,7 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed. Observed args: ${observedArgsLabel}`;
     }
   } else if (basePass) {
-    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
+    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}${ignoredDefaultsSuffix}`;
   } else if (matchingSteps.length === 0) {
     reason = `No tool call matched "${matcherLabel}". Actual tools: ${formatStepList(actualTools)}`;
   } else if (stepsWithArgs.length === 0) {
