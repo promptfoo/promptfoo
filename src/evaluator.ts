@@ -2767,6 +2767,7 @@ interface EvalProcessingContext {
   evaluationTimeoutState?: EvaluationTimeoutState;
   numComplete: number;
   options: InternalEvaluateOptions;
+  processedIndices: Set<number>;
   promptEvalCounts: number[];
   prompts: CompletedPrompt[];
   rowsWithMaxScoreAssertion: Set<number>;
@@ -3438,9 +3439,10 @@ class Evaluator {
     }
   }
 
-  private async persistEvalRow(row: EvaluateResult): Promise<void> {
+  private async persistEvalRow(row: EvaluateResult, onResultStored?: () => void): Promise<void> {
     try {
       await this.evalRecord.addResult(row);
+      onResultStored?.();
     } catch (error) {
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
@@ -3606,7 +3608,7 @@ class Evaluator {
         }
       }
 
-      await this.persistEvalRow(row);
+      await this.persistEvalRow(row, () => context.processedIndices.add(index));
 
       if (this.abortIfTargetUnavailable(row, context)) {
         break;
@@ -5104,6 +5106,7 @@ class Evaluator {
           evaluationTimeoutState: timeoutState,
           numComplete: 0,
           options,
+          processedIndices,
           promptEvalCounts: createPromptEvalCounts(prompts),
           prompts,
           rowsWithMaxScoreAssertion,

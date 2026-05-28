@@ -13,6 +13,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockProcessEnv } from '../util/utils';
@@ -1439,6 +1440,63 @@ describeEvaluator('evaluator execution control', () => {
         }),
       );
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not append a max-duration row after the completed result is already persisted', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('completed-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Completed output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create(
+      { outputPath: '/tmp/pr6344-timeout-row.jsonl' },
+      testSuite.prompts,
+      { id: randomUUID() },
+    );
+    let releaseFileWrite!: () => void;
+    let notifyFileWrite!: () => void;
+    const fileWriteStarted = new Promise<void>((resolve) => {
+      notifyFileWrite = resolve;
+    });
+    const writeSpy = vi.spyOn(JsonlFileWriter.prototype, 'write').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          notifyFileWrite();
+          releaseFileWrite = resolve;
+        }),
+    );
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await fileWriteStarted;
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          response: expect.objectContaining({ output: 'Completed output' }),
+          success: true,
+        }),
+      );
+    } finally {
+      releaseFileWrite?.();
+      writeSpy.mockRestore();
       vi.useRealTimers();
     }
   });
