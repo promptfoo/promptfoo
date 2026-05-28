@@ -9,7 +9,7 @@ import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
-import { evalsToPromptsTable } from '../../src/database/tables';
+import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -47,18 +47,18 @@ describe('importCommand', () => {
     process.exitCode = undefined;
 
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     // Delete related tables first
-    db.run('DELETE FROM blob_references');
-    db.run('DELETE FROM blob_assets');
-    db.run('DELETE FROM spans');
-    db.run('DELETE FROM traces');
-    db.run('DELETE FROM eval_results');
-    db.run('DELETE FROM evals_to_datasets');
-    db.run('DELETE FROM evals_to_prompts');
-    db.run('DELETE FROM evals_to_tags');
+    await db.run('DELETE FROM blob_references');
+    await db.run('DELETE FROM blob_assets');
+    await db.run('DELETE FROM spans');
+    await db.run('DELETE FROM traces');
+    await db.run('DELETE FROM eval_results');
+    await db.run('DELETE FROM evals_to_datasets');
+    await db.run('DELETE FROM evals_to_prompts');
+    await db.run('DELETE FROM evals_to_tags');
     // Then delete from main table
-    db.run('DELETE FROM evals');
+    await db.run('DELETE FROM evals');
   });
 
   afterEach(() => {
@@ -392,7 +392,8 @@ describe('importCommand', () => {
         expect(imported.data).toEqual(data);
         expect(imported.metadata.mimeType).toBe('image/png');
 
-        const references = (await getDb().all(
+        const db = await getDb();
+        const references = (await db.all(
           sql`SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = ${hash}`,
         )) as Array<{ blob_hash: string; eval_id: string }>;
         expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
@@ -483,7 +484,8 @@ describe('importCommand', () => {
         const imported = await getBlobByHash(hash);
         expect(imported.data).toEqual(data);
 
-        const references = (await getDb().all(
+        const db = await getDb();
+        const references = (await db.all(
           sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
         )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
         expect(references).toContainEqual({
@@ -676,7 +678,7 @@ describe('importCommand', () => {
           id: evalId,
           createdAt: '2024-01-02T03:04:05.000Z',
           author: 'legacy-author',
-          config: { description: 'legacy import' },
+          config: { description: 'legacy import', redteam: {} },
           results: {
             version: 2,
             timestamp: '2024-01-02T03:04:05.000Z',
@@ -694,6 +696,13 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
+      const db = await getDb();
+      const storedEval = await db
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(sql`${evalsTable.id} = ${evalId}`)
+        .get();
+      expect(storedEval?.isRedteam).toBe(true);
       expect(await importedEval!.toEvaluateSummary()).toMatchObject({
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
@@ -812,12 +821,10 @@ describe('importCommand', () => {
       expect(results).toHaveLength(2);
       expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
       expect(new Set(results.map((result) => result.promptId)).size).toBe(2);
+      const db = await getDb();
+      const promptLinks = await db.select().from(evalsToPromptsTable).all();
       expect(
-        getDb()
-          .select()
-          .from(evalsToPromptsTable)
-          .all()
-          .filter((promptLink) => promptLink.evalId === importedEvals[0].id),
+        promptLinks.filter((promptLink) => promptLink.evalId === importedEvals[0].id),
       ).toHaveLength(2);
 
       const errorResult = results.find(

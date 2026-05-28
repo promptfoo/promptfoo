@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
-import { TraceStore } from '../../src/tracing/store';
+import { getTraceSpans, TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -17,19 +17,16 @@ describe('TraceStore retention cleanup', () => {
   });
 
   beforeEach(async () => {
-    const db = getDb();
-    await db.run('DELETE FROM spans');
-    await db.run('DELETE FROM traces');
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
+    const db = await getDb();
+    await db.delete(spansTable).run();
+    await db.delete(tracesTable).run();
   });
 
   async function insertTrace(evalId: string, traceId: string, createdAt: number | string) {
-    const db = getDb();
-    db.insert(tracesTable)
+    const db = await getDb();
+
+    await db
+      .insert(tracesTable)
       .values({
         id: `${traceId}-id`,
         traceId,
@@ -38,7 +35,9 @@ describe('TraceStore retention cleanup', () => {
         createdAt: createdAt as number,
       })
       .run();
-    db.insert(spansTable)
+
+    await db
+      .insert(spansTable)
       .values({
         id: `${traceId}-span-id`,
         traceId,
@@ -49,7 +48,7 @@ describe('TraceStore retention cleanup', () => {
       .run();
   }
 
-  it('prunes both numeric and legacy SQLite timestamp traces', async () => {
+  it('prunes spans and traces for both numeric and SQLite timestamp rows', async () => {
     const eval_ = await EvalFactory.create({ numResults: 0 });
     const now = Date.now();
 
@@ -60,20 +59,58 @@ describe('TraceStore retention cleanup', () => {
 
     await new TraceStore().deleteOldTraces(30);
 
-    const traces = getDb()
-      .select({ traceId: tracesTable.traceId })
-      .from(tracesTable)
-      .all()
+    const db = await getDb();
+    const traces = (await db.select({ traceId: tracesTable.traceId }).from(tracesTable).all())
       .map(({ traceId }) => traceId)
       .sort();
-    const spans = getDb()
-      .select({ traceId: spansTable.traceId })
-      .from(spansTable)
-      .all()
+    const spans = (await db.select({ traceId: spansTable.traceId }).from(spansTable).all())
       .map(({ traceId }) => traceId)
       .sort();
 
     expect(traces).toEqual(['legacy-new', 'numeric-new']);
     expect(spans).toEqual(['legacy-new', 'numeric-new']);
+  });
+});
+
+describe('getTraceSpans', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(async () => {
+    const db = await getDb();
+    await db.delete(spansTable).run();
+    await db.delete(tracesTable).run();
+  });
+
+  it('returns spans for a stored trace', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 0 });
+    const db = await getDb();
+
+    await db
+      .insert(tracesTable)
+      .values({
+        id: 'trace-fetch-id',
+        traceId: 'trace-fetch',
+        evaluationId: eval_.id,
+        testCaseId: 'trace-fetch-test',
+        createdAt: Date.now(),
+      })
+      .run();
+    await db
+      .insert(spansTable)
+      .values({
+        id: 'trace-fetch-span-id',
+        traceId: 'trace-fetch',
+        spanId: 'trace-fetch-span',
+        name: 'fetch-operation',
+        startTime: 100,
+      })
+      .run();
+
+    const spans = await getTraceSpans('trace-fetch');
+
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toMatchObject({ spanId: 'trace-fetch-span', name: 'fetch-operation' });
   });
 });

@@ -988,18 +988,6 @@ function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   return otlpReceiver;
 }
 
-export function updateOTLPReceiverOptions(
-  acceptFormats?: OTLPFormat[],
-  extra?: { commandToolNames?: string[]; redactAttributes?: string[] },
-): void {
-  if (!otlpReceiver) {
-    return;
-  }
-  otlpReceiver.setAcceptFormats(acceptFormats);
-  otlpReceiver.setCommandToolNames(extra?.commandToolNames);
-  otlpReceiver.setRedactAttributes(extra?.redactAttributes);
-}
-
 export async function startOTLPReceiver(
   port?: number,
   host?: string,

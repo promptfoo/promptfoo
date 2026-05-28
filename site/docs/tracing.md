@@ -242,13 +242,28 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 ```yaml
 tracing:
   enabled: true # Enable/disable tracing
+  # Fail the evaluation instead of continuing without local HTTP ingestion if startup fails
+  failOnReceiverStartFailure: true
+  # Treat additional tool names as command trajectory steps
+  commandToolNames: ['bash']
   otlp:
     http:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
       # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
+      # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
+  storage:
+    # Remove trace and span records older than this many days
+    retentionDays: 30
 ```
+
+`redactAttributes` is matched case-insensitively against attribute keys. For traces
+created by an evaluation, Promptfoo stores the evaluation's redaction and
+`commandToolNames` policy with that trace so overlapping evaluations do not change
+one another's results. Traces created only when spans arrive at the receiver use the
+active receiver's startup defaults. Similarly, `acceptFormats` configures the active
+HTTP receiver endpoint and is not changed by an overlapping evaluation.
 
 ### Supported Formats
 
