@@ -596,6 +596,180 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('omits temperature when a fallback model rejects it, even if the primary is non-reasoning', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        // Primary is openai/gpt-4o (which accepts temperature), but the
+        // fallback list includes anthropic/claude-opus-4.7 (which rejects
+        // it). supportsTemperature() only checks this.modelName, so without
+        // the fallback-list scan we'd ship temperature upstream.
+        const p = new OrcaRouterProvider('openai/gpt-4o', {
+          config: { models: ['openai/gpt-4o', 'anthropic/claude-opus-4.7'] },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body.models).toEqual(['openai/gpt-4o', 'anthropic/claude-opus-4.7']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('omits temperature when a DeepSeek r2+ family is in the fallback list (regex future-proofing)', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('deepseek/deepseek-r3', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).not.toHaveProperty('temperature');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('omits temperature for hypothetical claude-opus-25 (regex future-proofing, multi-digit major)', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-25', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).not.toHaveProperty('temperature');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('renders models / route when provided only via config.passthrough', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {
+          config: {
+            passthrough: {
+              models: ['openai/gpt-4o', 'anthropic/claude-haiku-4.5'],
+              route: 'fallback',
+            },
+          },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.models).toEqual(['openai/gpt-4o', 'anthropic/claude-haiku-4.5']);
+        expect(body.route).toBe('fallback');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('actually renders Nunjucks templates end-to-end for reasoning_effort on OpenAI-family upstreams', async () => {
+      // Regression: the base OpenAi chat builder unconditionally overwrites
+      // body.reasoning_effort with the raw config value for reasoning models
+      // (`openai/gpt-5.5` is one), clobbering the rendered version. The
+      // OrcaRouter override now re-renders unconditionally. This test asserts
+      // the rendered VALUE reaches the wire — verifying the real Nunjucks
+      // engine, not just that `renderVarsInObject` was called.
+      const utilModule = await import('../../src/util');
+      const realUtilModule =
+        await vi.importActual<typeof import('../../src/util')>('../../src/util');
+      vi.mocked(utilModule.renderVarsInObject).mockImplementation(
+        realUtilModule.renderVarsInObject,
+      );
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {
+          config: { reasoning_effort: '{{ effort }}' },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi', {
+          vars: { effort: 'high' },
+          prompt: { raw: 'Hi', label: 'Hi' },
+        });
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.reasoning_effort).toBe('high');
+        expect(body.reasoning_effort).not.toBe('{{ effort }}');
+      } finally {
+        vi.mocked(utilModule.renderVarsInObject).mockImplementation((x) => x);
+        restoreEnv();
+      }
+    });
+
     it('renders Nunjucks vars in models / route / reasoning_effort', async () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       const utilModule = await import('../../src/util');

@@ -12,7 +12,16 @@ providers:
 tests:
   - vars:
       country: France
+    assert:
+      - type: icontains
+        value: Paris
   - vars:
       country: Germany
+    assert:
+      - type: icontains
+        value: Berlin
   - vars:
       country: Italy
+    assert:
+      - type: icontains
+        value: Rome

@@ -128,6 +128,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       | undefined;
     const config = result.config as typeof result.config & {
       models?: unknown;
+      passthrough?: { models?: unknown; route?: unknown };
       reasoning_effort?: unknown;
       route?: unknown;
     };
@@ -137,16 +138,41 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       route?: unknown;
     };
 
-    const models = promptConfig?.models ?? config.models;
+    // Resolve routing fields with precedence: per-test prompt.config wins over
+    // provider-level config, with config.passthrough as the final fallback so
+    // users who put `models` / `route` only in `passthrough` still get them
+    // rendered (otherwise the base `...(config.passthrough || {})` spread would
+    // ship the raw template values onto the wire).
+    const models = promptConfig?.models ?? config.models ?? config.passthrough?.models;
     if (models !== undefined) {
       body.models = renderVarsInObject(models, context?.vars);
     }
-    const route = promptConfig?.route ?? config.route;
+    const route = promptConfig?.route ?? config.route ?? config.passthrough?.route;
     if (route !== undefined) {
       body.route = renderVarsInObject(route, context?.vars);
     }
-    if (config.reasoning_effort !== undefined && body.reasoning_effort === undefined) {
+    // Always render reasoning_effort when set — for OpenAI-family OrcaRouter
+    // upstreams (e.g. orcarouter:openai/gpt-5.5), the base getOpenAiBody
+    // unconditionally overwrites `body.reasoning_effort` with the RAW config
+    // value at the end of body construction, clobbering the rendered version
+    // it set earlier. Re-render here so Nunjucks templates like `{{ effort }}`
+    // never reach the wire literal.
+    if (config.reasoning_effort !== undefined) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
+    }
+
+    // Strip body.temperature when ANY rendered candidate model is a reasoning
+    // family that rejects it. `supportsTemperature()` only inspects
+    // `this.modelName`, so the case where the primary model is non-reasoning
+    // but a fallback (config.models / prompt.config.models) is a reasoning
+    // family would otherwise still ship `temperature` upstream.
+    if ('temperature' in body && Array.isArray(body.models)) {
+      const anyFallbackRejectsTemperature = (body.models as unknown[]).some(
+        (m) => typeof m === 'string' && reasoningUpstreamRejectsTemperature(m),
+      );
+      if (anyFallbackRejectsTemperature) {
+        delete body.temperature;
+      }
     }
 
     return result;
@@ -163,17 +189,25 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     if (!super.supportsTemperature()) {
       return false;
     }
-    const m = this.modelName;
-    // Anthropic Claude Opus 4+ (Opus 2/3 still accept `temperature`).
-    if (/(^|\/)claude-opus-(?!2|3)\d/.test(m)) {
-      return false;
-    }
-    // DeepSeek Reasoner / R1 family.
-    if (/(^|\/)deepseek-(reasoner|r1)\b/.test(m)) {
-      return false;
-    }
+    return !reasoningUpstreamRejectsTemperature(this.modelName);
+  }
+}
+
+/**
+ * Whether an OrcaRouter upstream model name belongs to a reasoning family that
+ * rejects the OpenAI-style `temperature` field. Matches:
+ *   - Anthropic Claude Opus 4+ (single-digit 4-9 OR multi-digit major version);
+ *     Opus 2 / 3 still accept `temperature` and are excluded by the digit class.
+ *   - DeepSeek Reasoner and the `r<N>` family for any major version.
+ */
+function reasoningUpstreamRejectsTemperature(modelName: string): boolean {
+  if (/(^|\/)claude-opus-([4-9]|\d{2,})/.test(modelName)) {
     return true;
   }
+  if (/(^|\/)deepseek-(reasoner|r\d+)\b/.test(modelName)) {
+    return true;
+  }
+  return false;
 }
 
 export function createOrcaRouterProvider(
