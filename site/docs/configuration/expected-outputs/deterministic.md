@@ -814,6 +814,8 @@ With the configuration above:
 
 `ignore` accepts a single string or a list of strings, applies only to top-level keys, and composes with `defaults`. Because the key is removed from both sides, it does not matter whether the agent emits the argument or omits it.
 
+An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
+
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
 ### trajectory:tool-sequence {#trajectorytool-sequence}

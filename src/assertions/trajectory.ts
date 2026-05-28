@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -298,6 +299,18 @@ function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined):
   return { cleaned, stripped };
 }
 
+function matchesIgnoreKey(entry: string, key: string): boolean {
+  if (entry === key) {
+    return true;
+  }
+  // Entries containing glob characters are treated as patterns (e.g. "*_id" to ignore
+  // request_id, order_id, ...). Plain entries stay an exact, case-sensitive match.
+  if (/[*?]/.test(entry)) {
+    return matchesPattern(key, entry);
+  }
+  return false;
+}
+
 function stripIgnoredArgs(value: unknown, ignore: string[]): StrippedToolArgs {
   if (ignore.length === 0 || !isRecord(value)) {
     return { cleaned: value, stripped: [] };
@@ -306,7 +319,7 @@ function stripIgnoredArgs(value: unknown, ignore: string[]): StrippedToolArgs {
   const cleaned: Record<string, unknown> = {};
   const stripped: string[] = [];
   for (const [key, entryValue] of Object.entries(value)) {
-    if (ignore.includes(key)) {
+    if (ignore.some((entry) => matchesIgnoreKey(entry, key))) {
       stripped.push(key);
       continue;
     }

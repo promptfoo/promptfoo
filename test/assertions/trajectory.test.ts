@@ -2269,6 +2269,48 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(true);
       });
 
+      it('treats entries containing glob characters as key patterns', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1', order_id: 'b2' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['*_id'] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored argument(s): request_id, order_id');
+      });
+
+      it('still fails when a glob pattern does not cover a hallucinated key', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1', delete_database: true },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['*_id'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('supports single-character ? glob patterns', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', v1: 'x' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['v?'] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats a plain entry as an exact match, not a substring or pattern', () => {
+        // "request" must not strip "request_id"; only an exact key or glob does.
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
       it.each([
         ['number', [5]],
         ['empty string', ['']],
