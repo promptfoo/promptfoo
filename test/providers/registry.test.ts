@@ -700,6 +700,24 @@ describe('Provider Registry', () => {
         'Invalid groq:responses provider path',
       );
     });
+
+    it('should handle nvidia provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('nvidia:meta/llama-3.3-70b-instruct'));
+      expect(factory).toBeDefined();
+
+      const nvidiaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create(
+        'nvidia:meta/llama-3.3-70b-instruct',
+        nvidiaOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe('nvidia:meta/llama-3.3-70b-instruct');
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('nvidia:', nvidiaOptions, mockContext)).rejects.toThrow(
+        /expected "nvidia:<model>"/,
+      );
+    });
   });
 
   // Kept at the very end of the file because it uses vi.doMock + resetModules

@@ -146,6 +146,20 @@ describe('NVIDIA NIM', () => {
         restoreEnv();
       }
     });
+
+    it('does not route through OPENAI_API_HOST / OPENAI_API_BASE_URL / OPENAI_BASE_URL', () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_HOST: 'evil-openai-proxy.example.com',
+        OPENAI_API_BASE_URL: 'https://evil-openai-proxy.example.com/v1',
+        OPENAI_BASE_URL: 'https://evil-openai-proxy.example.com/v1',
+      });
+      try {
+        const provider = new NvidiaProvider('meta/llama-3.3-70b-instruct', {});
+        expect(provider.getApiUrl()).toBe(NVIDIA_NIM_API_BASE);
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('createNvidiaProvider', () => {

@@ -49,6 +49,15 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
     return undefined;
   }
 
+  // The base provider's getApiUrl() consults OPENAI_API_HOST / OPENAI_API_BASE_URL /
+  // OPENAI_BASE_URL before config.apiBaseUrl, so an environment configured for an
+  // OpenAI-compatible host would silently route nvidia:* requests there. The
+  // constructor already merged NVIDIA_API_BASE_URL into config.apiBaseUrl, so we
+  // only need to consult that.
+  override getApiUrl(): string {
+    return this.config.apiBaseUrl || NVIDIA_NIM_API_BASE_URL;
+  }
+
   toJSON() {
     return {
       provider: 'nvidia',
