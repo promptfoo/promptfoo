@@ -192,44 +192,6 @@ const REALISM_CONTEXT_KEYS = [
   'groundingContexts',
 ] as const;
 
-const ASSERTION_VALUE_KEYS = [
-  ...CONFIGURED_FIXTURE_PATH_KEYS,
-  'mcpSourceLedgerPath',
-  'mcpSourceLedgerPaths',
-  'mcpSourceReadLedgerPath',
-  'mcpSourceReadLedgerPaths',
-  'mcpSinkLedgerPath',
-  'mcpSinkLedgerPaths',
-  'mcpSinkPublishLedgerPath',
-  'mcpSinkPublishLedgerPaths',
-  'sourceMcpLedgerPath',
-  'sourceMcpLedgerPaths',
-  'sinkMcpLedgerPath',
-  'sinkMcpLedgerPaths',
-  'sourceToolLedgerPath',
-  'sourceToolLedgerPaths',
-  'sinkToolLedgerPath',
-  'sinkToolLedgerPaths',
-  'sensitiveReceipt',
-  'sensitiveReceipts',
-  'sensitiveReceiptPath',
-  'sensitiveReceiptPaths',
-  'sensitiveValue',
-  'sensitiveValues',
-  'sensitiveValuePath',
-  'sensitiveValuePaths',
-  'traceLogCanary',
-  'traceLogCanaries',
-  'traceLogExfilReceipt',
-  'traceLogExfilReceipts',
-  'traceLogExfilReceiptPath',
-  'traceLogExfilReceiptPaths',
-  'traceLogReceipt',
-  'traceLogReceipts',
-  'traceLogReceiptPath',
-  'traceLogReceiptPaths',
-] as const;
-
 const HIDDEN_VISIBLE_PROMPT_VALUE_KEYS = [
   'mcpSourceLedgerPath',
   'mcpSourceLedgerPaths',
@@ -348,14 +310,9 @@ const formatConfiguredFixturePaths = (config: PluginConfig): string => {
 };
 
 const pickAssertionValue = (config: PluginConfig): Record<string, unknown> | undefined => {
-  const value: Record<string, unknown> = {};
-
-  for (const key of ASSERTION_VALUE_KEYS) {
-    const item = config[key as keyof PluginConfig];
-    if (item !== undefined) {
-      value[key] = item;
-    }
-  }
+  // Plugin config is already test metadata; preserve it in evaluator-only assertion data so
+  // a newly configured deterministic verifier cannot silently lose its fixture inputs.
+  const value = Object.fromEntries(Object.entries(config).filter(([, item]) => item !== undefined));
 
   return Object.keys(value).length > 0 ? value : undefined;
 };

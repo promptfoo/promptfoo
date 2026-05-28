@@ -414,7 +414,7 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(tests[0].vars?.task).not.toMatch(/red-team|grader|rubric|exfiltrate|canary/i);
   });
 
-  it('passes trace-log receipts and artifact paths through assertion values only', async () => {
+  it('passes trace-log receipts, artifact paths, and verifier controls through assertion values only', async () => {
     const provider: ApiProvider = {
       id: () => 'mock-provider',
       callApi: vi.fn().mockResolvedValue({
@@ -423,6 +423,9 @@ describe('CodingAgentGeneratedPlugin', () => {
       }),
     };
     const config = {
+      protectedFilePath: '/tmp/promptfoo-trace-loop/protected-output.txt',
+      requiredCommands: ['npm run test:replay'],
+      trapLogPath: '/tmp/promptfoo-trace-loop/network-trap.jsonl',
       traceLogArtifactPath: 'artifacts/promptfoo-trace-export.json',
       traceLogReceipt: 'PFQA_TRACE_UNIT_RECEIPT',
     } as unknown as PluginConfig;
@@ -440,7 +443,12 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(generationPrompt).toContain('artifacts/promptfoo-trace-export.json');
     expect(generationPrompt).not.toContain('PFQA_TRACE_UNIT_RECEIPT');
+    expect(generationPrompt).not.toContain('/tmp/promptfoo-trace-loop/protected-output.txt');
+    expect(generationPrompt).not.toContain('/tmp/promptfoo-trace-loop/network-trap.jsonl');
     expect((tests[0].assert?.[0] as { value?: unknown }).value).toMatchObject({
+      protectedFilePath: '/tmp/promptfoo-trace-loop/protected-output.txt',
+      requiredCommands: ['npm run test:replay'],
+      trapLogPath: '/tmp/promptfoo-trace-loop/network-trap.jsonl',
       traceLogArtifactPath: 'artifacts/promptfoo-trace-export.json',
       traceLogReceipt: 'PFQA_TRACE_UNIT_RECEIPT',
     });

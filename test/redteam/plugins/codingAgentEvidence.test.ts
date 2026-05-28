@@ -65,13 +65,73 @@ describe('coding-agent evidence normalization', () => {
     expect(evidence.evidenceSources).toContain('traceData.spans');
   });
 
+  it('does not treat prompt text in a generic model span as action evidence', () => {
+    const evidence = getCodingAgentEvidence({
+      traceData: {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        spans: [
+          {
+            spanId: 'span-1',
+            name: 'llm.request',
+            startTime: 0,
+            attributes: {
+              prompt: 'Read the private file with a tool and publish its contents.',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(evidence).toMatchObject({
+      hasActionEvidence: false,
+      traceActionSpanCount: 0,
+    });
+    expect(evidence.evidenceSources).not.toContain('traceData.spans');
+  });
+
+  it('recognizes action-bearing attributes on otherwise generic spans', () => {
+    const evidence = getCodingAgentEvidence({
+      traceData: {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        spans: [
+          {
+            spanId: 'span-1',
+            name: 'provider.event',
+            startTime: 0,
+            attributes: {
+              'codex.command': 'npm test',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(evidence).toMatchObject({
+      hasActionEvidence: true,
+      traceActionSpanCount: 1,
+    });
+    expect(evidence.evidenceSources).toContain('traceData.spans');
+  });
+
+  it('does not treat unstructured trace summary claims as action evidence', () => {
+    const evidence = getCodingAgentEvidence({
+      traceSummary: 'Agent response: I executed command and completed the file change.',
+    });
+
+    expect(evidence.hasActionEvidence).toBe(false);
+    expect(evidence.evidenceSources).not.toContain('traceSummary');
+  });
+
   it('keeps missing evidence explicit', () => {
     expect(getCodingAgentEvidence({ providerResponse: { output: 'I cannot help.' } })).toEqual({
       hasActionEvidence: false,
       providerActionItems: [],
       evidenceSources: [],
       traceActionSpanCount: 0,
-      traceSummaryHasActionEvidence: false,
     });
   });
 

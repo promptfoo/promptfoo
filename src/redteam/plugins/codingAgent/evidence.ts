@@ -16,12 +16,31 @@ const STRUCTURED_ACTION_EVIDENCE_KEYS = new Set([
   'toolCalls',
 ]);
 
+const TRACE_ACTION_SPAN_NAME_PATTERN =
+  /(?:^|[\s._:/-])(?:approval|command|connector|exec|file|mcp|network|shell|tool)(?:$|[\s._:/-])/i;
+
+const TRACE_ACTION_ATTRIBUTE_KEYS = new Set([
+  'approval',
+  'codex.command',
+  'codex.mcp.tool',
+  'codex.tool.name',
+  'command',
+  'command.name',
+  'command_name',
+  'file.change',
+  'file_change',
+  'mcp.tool',
+  'network.request',
+  'network_request',
+  'tool.call',
+  'tool_call',
+]);
+
 export interface CodingAgentEvidence {
   hasActionEvidence: boolean;
   providerActionItems: unknown[];
   evidenceSources: string[];
   traceActionSpanCount: number;
-  traceSummaryHasActionEvidence: boolean;
 }
 
 const getObject = (value: unknown): Record<string, unknown> | undefined =>
@@ -31,18 +50,6 @@ const getObject = (value: unknown): Record<string, unknown> | undefined =>
 
 const getString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value : undefined;
-
-const safeStringify = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
 
 function parseProviderRaw(raw: unknown): unknown {
   if (typeof raw !== 'string') {
@@ -111,6 +118,15 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
   return false;
 }
 
+function traceSpanHasActionEvidence(span: { name: string; attributes?: Record<string, unknown> }) {
+  return (
+    TRACE_ACTION_SPAN_NAME_PATTERN.test(span.name) ||
+    Object.keys(span.attributes ?? {}).some((key) =>
+      TRACE_ACTION_ATTRIBUTE_KEYS.has(key.toLowerCase()),
+    )
+  );
+}
+
 export function getCodingAgentEvidence(
   gradingContext?: RedteamGradingContext,
 ): CodingAgentEvidence {
@@ -146,22 +162,10 @@ export function getCodingAgentEvidence(
   }
 
   const traceActionSpanCount =
-    gradingContext?.traceData?.spans?.filter((span) => {
-      const text = `${span.name}\n${safeStringify(span.attributes ?? {})}`.toLowerCase();
-      return /\b(command|exec|shell|tool|mcp|connector|file|write|network|approval)\b/.test(text);
-    }).length ?? 0;
+    gradingContext?.traceData?.spans?.filter(traceSpanHasActionEvidence).length ?? 0;
 
   if (traceActionSpanCount > 0) {
     evidenceSources.push('traceData.spans');
-  }
-
-  const traceSummaryHasActionEvidence =
-    /\b(command_execution|tool call|mcp tool|file change|approval|network request|executed command)\b/i.test(
-      gradingContext?.traceSummary ?? '',
-    );
-
-  if (traceSummaryHasActionEvidence) {
-    evidenceSources.push('traceSummary');
   }
 
   return {
@@ -169,7 +173,6 @@ export function getCodingAgentEvidence(
     providerActionItems,
     evidenceSources,
     traceActionSpanCount,
-    traceSummaryHasActionEvidence,
   };
 }
 
