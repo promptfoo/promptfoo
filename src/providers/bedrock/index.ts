@@ -2402,7 +2402,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'jp.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // Global / Japan cross-region inference profiles for Claude Opus 4.8
-  // (mirrors the Opus 4.7 profile set; add/remove as the regional rollout lands).
+  // (verified via `aws bedrock list-inference-profiles`; same `us.`/`eu.`/`jp.`/`global.`
+  // set as Opus 4.7, with no older `apac.` prefix).
   'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
