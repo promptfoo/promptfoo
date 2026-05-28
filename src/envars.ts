@@ -342,6 +342,9 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // MiniMax
+  MINIMAX_API_KEY?: string;
+
   // Nscale
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;
