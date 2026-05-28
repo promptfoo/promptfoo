@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
+import { clearCountCache, getTotalResultRowCount } from '../../src/models/evalPerformance';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import {
@@ -786,6 +787,26 @@ describe('EvalResult', () => {
   });
 
   describe('save', () => {
+    it('busts the result-count cache when inserting a new (non-persisted) result', async () => {
+      const evalId = 'save-count-cache-insert';
+      clearCountCache(evalId);
+
+      // Persist one result and prime the total-count cache.
+      await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);
+      await expect(getTotalResultRowCount(evalId)).resolves.toBe(1);
+
+      // Insert a second result via the non-persisted save() path.
+      const second = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult, {
+        persist: false,
+      });
+      expect(second.persisted).toBe(false);
+      await second.save();
+      expect(second.persisted).toBe(true);
+
+      // The cached count must reflect the inserted row, not the stale value of 1.
+      await expect(getTotalResultRowCount(evalId)).resolves.toBe(2);
+    });
+
     it('should save new results', async () => {
       const result = new EvalResult({
         id: 'test-save-id',
