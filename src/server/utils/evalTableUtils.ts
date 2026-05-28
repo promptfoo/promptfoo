@@ -212,11 +212,11 @@ function collectMetricNamesFromRowOutputs(
 }
 
 /**
- * Backfill empty per-prompt metric name lists in-place by scanning a batch's
- * row outputs. Called once with the first batch in `streamEvalCsv` so legacy
- * evals (no `namedScoresCount`) and external imports still get the metric
- * columns the WebUI CSV would emit, without re-introducing derived metrics
- * (which never land on row outputs).
+ * Backfill empty per-prompt metric name lists in-place by scanning the rows
+ * passed in. Called by `streamEvalCsv` after buffering every batch when the
+ * aggregate `namedScoresCount` was missing, so legacy evals (and external
+ * imports) get the same metric columns the WebUI CSV would emit, without
+ * re-introducing derived metrics (which never land on row outputs).
  */
 function backfillMetricNamesFromRows(
   namedScoreNamesByPrompt: string[][],
@@ -227,6 +227,71 @@ function backfillMetricNamesFromRows(
       namedScoreNamesByPrompt[promptIndex] = collectMetricNamesFromRowOutputs(rows, promptIndex);
     }
   }
+}
+
+type StreamRow = {
+  testIdx: number;
+  vars: string[];
+  outputs: Array<{
+    text: string;
+    pass: boolean;
+    score?: number;
+    namedScores?: Record<string, number>;
+    failureReason?: ResultFailureReason;
+    gradingResult?: { reason?: string; comment?: string } | null;
+    metadata?: Record<string, unknown>;
+  } | null>;
+  test: { description?: string };
+};
+
+/**
+ * Convert a batch of `EvalResult` rows (grouped by testIdx) into the table-row
+ * shape that `tableRowToCsvValues` accepts. Used by `streamEvalCsv` to keep its
+ * per-batch processing tight; the outputs array is pre-sized so columns line up
+ * with prompts even when results arrive out of promptIdx order.
+ */
+function batchToStreamRows(
+  batchResults: Iterable<{
+    testIdx: number;
+    promptIdx: number;
+    testCase?: { vars?: Record<string, unknown>; description?: string };
+    response?: { output?: string };
+    success: boolean;
+    score?: number;
+    namedScores?: Record<string, number>;
+    failureReason?: ResultFailureReason;
+    gradingResult?: { reason?: string; comment?: string } | null;
+    metadata?: Record<string, unknown>;
+  }>,
+  varNames: string[],
+  numPrompts: number,
+): StreamRow[] {
+  const rowsByTestIdx = new Map<number, StreamRow>();
+  for (const result of batchResults) {
+    let row = rowsByTestIdx.get(result.testIdx);
+    if (!row) {
+      row = {
+        testIdx: result.testIdx,
+        vars: varNames.map((varName) => {
+          const value = result.testCase?.vars?.[varName];
+          return value === undefined ? '' : String(value);
+        }),
+        outputs: new Array(numPrompts).fill(null),
+        test: { description: result.testCase?.description },
+      };
+      rowsByTestIdx.set(result.testIdx, row);
+    }
+    row.outputs[result.promptIdx] = {
+      text: result.response?.output ?? '',
+      pass: result.success,
+      score: result.score,
+      namedScores: result.namedScores,
+      failureReason: result.failureReason,
+      gradingResult: result.gradingResult,
+      metadata: result.metadata,
+    };
+  }
+  return Array.from(rowsByTestIdx.values());
 }
 
 /**
@@ -608,84 +673,40 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
   // Derive metric column names from `namedScoresCount` so derived/aggregate-only
-  // metrics don't introduce columns that the WebUI path would omit. Prompts
-  // whose aggregate count is missing or empty (legacy evals, external imports)
-  // get backfilled from the first batch's row outputs below.
+  // metrics don't introduce columns that the WebUI path would omit.
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPromptFromAggregate(prompts);
+  // Legacy evals and external imports may persist `metrics.namedScores` without
+  // a matching `namedScoresCount`, so the aggregate read returns an empty list
+  // for those prompts. We can't trust the first batch alone — `EvalResult`
+  // batches are slices of `testIdx` ranges (default 100), so a metric that first
+  // appears past testIdx 99 would be missed. Buffer every batch into memory in
+  // this case, then derive metric names from the full row set (the same source
+  // the WebUI path uses), keeping CSVs identical at the cost of streaming.
+  const needsRowScanFallback = namedScoreNamesByPrompt.some((names) => names.length === 0);
 
   // Track whether we've written headers yet
   let headersWritten = false;
   let hasDescriptions = false;
 
-  // Buffer to accumulate the first batch while we determine hasDescriptions
-  let firstBatchBuffer: Array<{
-    testIdx: number;
-    vars: string[];
-    outputs: Array<{
-      text: string;
-      pass: boolean;
-      score?: number;
-      namedScores?: Record<string, number>;
-      failureReason?: ResultFailureReason;
-      gradingResult?: { reason?: string; comment?: string } | null;
-      metadata?: Record<string, unknown>;
-    }>;
-    test: { description?: string };
-  }> | null = null;
+  // Buffer to accumulate the first batch while we determine hasDescriptions.
+  // When `needsRowScanFallback` is true, this buffer holds ALL batches instead
+  // so we can scan rows for metric names before emitting headers.
+  let firstBatchBuffer: StreamRow[] | null = null;
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
-    // Group results by testIdx to reconstruct table rows
-    const rowsByTestIdx = new Map<
-      number,
-      {
-        testIdx: number;
-        vars: string[];
-        outputs: Array<{
-          text: string;
-          pass: boolean;
-          score?: number;
-          namedScores?: Record<string, number>;
-          failureReason?: ResultFailureReason;
-          gradingResult?: { reason?: string; comment?: string } | null;
-          metadata?: Record<string, unknown>;
-        }>;
-        test: { description?: string };
-      }
-    >();
+    const rows = batchToStreamRows(batchResults, varNames, numPrompts);
 
-    for (const result of batchResults) {
-      if (!rowsByTestIdx.has(result.testIdx)) {
-        // Pre-allocate outputs array with correct size for all prompts
-        // This ensures outputs align with prompt columns regardless of result order
-        rowsByTestIdx.set(result.testIdx, {
-          testIdx: result.testIdx,
-          vars: varNames.map((varName) => {
-            const value = result.testCase?.vars?.[varName];
-            return value === undefined ? '' : String(value);
-          }),
-          outputs: new Array(numPrompts).fill(null),
-          test: { description: result.testCase?.description },
-        });
-      }
-      const row = rowsByTestIdx.get(result.testIdx)!;
-      // Use promptIdx to position output correctly (matches prompt column order)
-      row.outputs[result.promptIdx] = {
-        text: result.response?.output ?? '',
-        pass: result.success,
-        score: result.score,
-        namedScores: result.namedScores,
-        failureReason: result.failureReason,
-        gradingResult: result.gradingResult,
-        metadata: result.metadata,
-      };
+    // Legacy fallback: hold every batch in memory so we can scan the full row
+    // set for metric names before writing headers. The post-loop block below
+    // emits headers + all buffered rows in one go.
+    if (needsRowScanFallback) {
+      firstBatchBuffer = firstBatchBuffer ? firstBatchBuffer.concat(rows) : rows;
+      continue;
     }
-
-    const rows = Array.from(rowsByTestIdx.values());
 
     // On first batch, determine hasDescriptions and write headers
     if (!headersWritten) {
       hasDescriptions = rows.some((r) => r.test.description);
-      backfillMetricNamesFromRows(namedScoreNamesByPrompt, rows);
       const headers = buildCsvHeaders(varNames, prompts, {
         hasDescriptions,
         isRedteam,
@@ -737,6 +758,32 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     if (csvRows.length > 0) {
       await write(csvStringify(csvRows));
     }
+  }
+
+  // Legacy fallback: scan the fully-buffered row set for metric names so the
+  // streaming CSV emits the same columns the WebUI exporter would, then emit
+  // headers and rows in one go.
+  if (needsRowScanFallback) {
+    const rows = firstBatchBuffer ?? [];
+    hasDescriptions = rows.some((r) => r.test.description);
+    backfillMetricNamesFromRows(namedScoreNamesByPrompt, rows);
+    const headers = buildCsvHeaders(varNames, prompts, {
+      hasDescriptions,
+      isRedteam,
+      namedScoreNamesByPrompt,
+    });
+    await write(csvStringify([headers]));
+    if (rows.length > 0) {
+      const csvRows = rows.map((row) =>
+        tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+          hasDescriptions,
+          isRedteam,
+          namedScoreNamesByPrompt,
+        }),
+      );
+      await write(csvStringify(csvRows));
+    }
+    return;
   }
 
   // Handle case where we only had one batch and it was buffered

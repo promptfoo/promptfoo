@@ -1410,6 +1410,69 @@ describe('evalTableUtils', () => {
       expect(header).toContain('Metric: fluency');
     });
 
+    it('should detect metric names that first appear in a later batch on legacy evals', async () => {
+      // EvalResult.findManyByEvalIdBatched yields batches of 100 testIdx, so a
+      // metric introduced past the first batch would be missed by a first-batch
+      // scan. The streaming code must buffer all batches when the aggregate
+      // counts are missing.
+      const prompts = [
+        createCompletedPrompt('Prompt 1', {
+          metrics: createPromptMetrics({
+            namedScores: { early_metric: 1.0 },
+            namedScoresCount: {},
+          }),
+        }),
+      ];
+      const chunks: string[] = [];
+      await streamEvalCsv(
+        {
+          vars: ['n'],
+          prompts,
+          fetchResultsBatched: async function* () {
+            yield [
+              {
+                testIdx: 0,
+                promptIdx: 0,
+                testCase: { vars: { n: 'a' } },
+                response: { output: 'a' },
+                success: true,
+                score: 1,
+                namedScores: { early_metric: 1.0 },
+                failureReason: ResultFailureReason.NONE,
+                gradingResult: null,
+                metadata: {},
+              },
+            ];
+            yield [
+              {
+                testIdx: 1,
+                promptIdx: 0,
+                testCase: { vars: { n: 'b' } },
+                response: { output: 'b' },
+                success: true,
+                score: 1,
+                namedScores: { early_metric: 1.0, late_metric: 0.5 },
+                failureReason: ResultFailureReason.NONE,
+                gradingResult: null,
+                metadata: {},
+              },
+            ];
+          },
+        } as unknown as Eval,
+        {
+          isRedteam: false,
+          write: (data: string) => {
+            chunks.push(data);
+          },
+        },
+      );
+
+      const csv = chunks.join('');
+      const header = csv.split('\n')[0];
+      expect(header).toContain('Metric: early_metric');
+      expect(header).toContain('Metric: late_metric');
+    });
+
     it('should omit derived/aggregate-only metric columns even on legacy evals without namedScoresCount', async () => {
       // Reviewer scenario: an imported eval whose `metrics.namedScores` has both
       // row-contributed metrics and an aggregate-only derived metric, but no
