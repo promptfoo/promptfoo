@@ -101,26 +101,30 @@ vi.mock('../../src/util/provider', async (importOriginal) => ({
   checkProviderApiKeys: vi.fn(() => new Map<string, string[]>()),
 }));
 vi.mock('../../src/database/index', async (importOriginal) => {
+  const dbMock = {
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({
+        onConflictDoNothing: vi.fn(() => ({
+          run: vi.fn(),
+        })),
+        run: vi.fn(),
+      })),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({
+          run: vi.fn(),
+        })),
+      })),
+    })),
+  };
+
   return {
     ...(await importOriginal()),
 
     getDb: vi.fn(() => ({
-      transaction: vi.fn((fn) => fn()),
-      insert: vi.fn(() => ({
-        values: vi.fn(() => ({
-          onConflictDoNothing: vi.fn(() => ({
-            run: vi.fn(),
-          })),
-          run: vi.fn(),
-        })),
-      })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => ({
-            run: vi.fn(),
-          })),
-        })),
-      })),
+      ...dbMock,
+      transaction: vi.fn((fn) => fn(dbMock)),
     })),
   };
 });
