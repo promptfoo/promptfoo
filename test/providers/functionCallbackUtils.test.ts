@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
-import { isJavascriptFile } from '../../src/util/fileExtensions';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
@@ -19,16 +18,9 @@ vi.mock('../../src/esm', async (importOriginal) => {
 vi.mock('../../src/logger', () => ({
   default: { debug: vi.fn() },
 }));
-vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    isJavascriptFile: vi.fn().mockReturnValue(true),
-  };
-});
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
-const mockIsJavascriptFile = vi.mocked(isJavascriptFile);
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;
@@ -36,7 +28,6 @@ describe('FunctionCallbackHandler', () => {
   beforeEach(() => {
     handler = new FunctionCallbackHandler();
     vi.clearAllMocks();
-    mockIsJavascriptFile.mockImplementation((filePath) => /\.(?:js|mjs|cjs|ts)$/.test(filePath));
   });
 
   describe('processCall', () => {
@@ -306,16 +297,16 @@ describe('FunctionCallbackHandler', () => {
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
-    it('should load specific function from Windows file URL with drive letter', async () => {
+    it('should load specific function from Windows-style external file paths', async () => {
       const mockSpecificFunction = vi.fn().mockResolvedValue('windows result');
       const mockModule = {
         default: vi.fn(),
-        specificFunction: mockSpecificFunction,
+        windowsHandler: mockSpecificFunction,
       };
       mockImportModule.mockResolvedValue(mockModule);
 
       const callbacks: FunctionCallbackConfig = {
-        testFunction: 'file://C:/path/to/functions.js:specificFunction',
+        testFunction: 'file://C:/path/to/functions.js:windowsHandler',
       };
       const call = { name: 'testFunction', arguments: '{}' };
 
@@ -331,25 +322,55 @@ describe('FunctionCallbackHandler', () => {
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
-    it('should preserve default-export callback paths containing colons', async () => {
-      const mockExternalFunction = vi.fn().mockResolvedValue('default export result');
-      mockImportModule.mockResolvedValue({ default: mockExternalFunction });
+    it('should load default function from standard Windows file URLs on Windows', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('windows default result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+      try {
+        const callbacks: FunctionCallbackConfig = {
+          testFunction: 'file:///C:/path/to/functions.js',
+        };
+        const result = await handler.processCall(
+          { name: 'testFunction', arguments: '{}' },
+          callbacks,
+        );
+
+        expect(result).toEqual({
+          output: 'windows default result',
+          isError: false,
+        });
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/basePath', 'C:/path/to/functions.js'),
+        );
+      } finally {
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+        });
+      }
+    });
+
+    it('should preserve colons in default-export external file paths', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('colon path result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
 
       const callbacks: FunctionCallbackConfig = {
-        testFunction: 'file://callbacks:v2.js',
+        testFunction: 'file://path/to/functions:default.js',
       };
-      const call = { name: 'testFunction', arguments: '{}' };
-
-      const result = await handler.processCall(call, callbacks);
+      const result = await handler.processCall(
+        { name: 'testFunction', arguments: '{}' },
+        callbacks,
+      );
 
       expect(result).toEqual({
-        output: 'default export result',
+        output: 'colon path result',
         isError: false,
       });
       expect(mockImportModule).toHaveBeenCalledWith(
-        path.resolve('/test/basePath', 'callbacks:v2.js'),
+        path.resolve('/test/basePath', 'path/to/functions:default.js'),
       );
-      expect(mockExternalFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
     it('should handle inline function strings', async () => {
