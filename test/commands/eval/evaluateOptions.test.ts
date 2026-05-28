@@ -4,6 +4,7 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableCache, isCacheEnabled } from '../../../src/cache';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
@@ -354,6 +355,85 @@ describe('evaluateOptions behavior', () => {
           tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
         },
       ]);
+    });
+
+    it('should load config env before hydrating scenarios in reusable prefilter hooks', async () => {
+      const scenariosPath = path.join(tmpDir, 'env-scenarios.yaml');
+      fs.writeFileSync(
+        scenariosPath,
+        yaml.dump([
+          {
+            config: [{}],
+            tests: [{ vars: { role: 'auditor' } }],
+          },
+        ]),
+      );
+      const envPath = path.join(tmpDir, 'scenario-path.env');
+      fs.writeFileSync(envPath, `PR9208_SCENARIOS_PATH=${scenariosPath}\n`);
+
+      let observedScenarios: TestSuite['scenarios'];
+      await doEval(
+        {
+          table: false,
+          write: false,
+        },
+        {
+          commandLineOptions: { envPath },
+          providers: ['echo'],
+          prompts: ['Hello {{role}}'],
+          scenarios: ['file://{{env.PR9208_SCENARIOS_PATH}}'],
+        },
+        undefined,
+        { eventSource: 'mcp' },
+        {
+          beforeFilterTestSuite: (testSuite) => {
+            observedScenarios = testSuite.scenarios;
+          },
+        },
+      );
+
+      expect(observedScenarios).toEqual([
+        {
+          config: [{}],
+          tests: [{ vars: { role: 'auditor' } }],
+        },
+      ]);
+    });
+
+    it('should scope reusable no-cache runs without disabling cache for later calls', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-mcp-scoped-cache.yaml', {
+        providers: ['echo'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'scoped cache' } }],
+      });
+      let cacheEnabledDuringRun: boolean | undefined;
+      let cacheEnabledAfterRun: boolean | undefined;
+
+      enableCache();
+      try {
+        evaluateMock.mockImplementationOnce(async (_testSuite, evalRecord) => {
+          cacheEnabledDuringRun = isCacheEnabled();
+          return evalRecord;
+        });
+
+        await doEval(
+          {
+            config: [tempConfig],
+            cache: false,
+            table: false,
+            write: false,
+          },
+          {},
+          undefined,
+          { eventSource: 'mcp' },
+        );
+        cacheEnabledAfterRun = isCacheEnabled();
+      } finally {
+        enableCache();
+      }
+
+      expect(cacheEnabledDuringRun).toBe(false);
+      expect(cacheEnabledAfterRun).toBe(true);
     });
 
     it('should apply evaluate option overrides after config evaluateOptions', async () => {

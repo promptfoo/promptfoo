@@ -612,7 +612,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           },
         };
 
-        return createToolResponse('run_evaluation', false, errorData);
+        return createToolResponse('run_evaluation', false, errorData, errorMessage);
       }
     },
   );

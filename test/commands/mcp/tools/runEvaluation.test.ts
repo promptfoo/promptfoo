@@ -946,6 +946,8 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBe(true);
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.error).toBe('You must provide at least 1 prompt');
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
         'Evaluation execution failed: You must provide at least 1 prompt',

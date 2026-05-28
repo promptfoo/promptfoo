@@ -34,7 +34,10 @@ import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
-vi.mock('../../src/cache');
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  disableCache: vi.fn(),
+}));
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
@@ -605,7 +608,7 @@ describe('evalCommand', () => {
 
   it('should handle --no-cache option', async () => {
     const cmdObj = { cache: false };
-    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
     expect(disableCache).toHaveBeenCalledTimes(1);
   });
 

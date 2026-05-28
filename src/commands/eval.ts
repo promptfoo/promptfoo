@@ -7,7 +7,7 @@ import { InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache } from '../cache';
+import { disableCache, withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
@@ -457,16 +457,17 @@ export async function doEval(
       }
     };
 
+    // Phase 2: Load environment from config files if not already set via CLI.
+    // Prefilter hooks may hydrate env-templated scenario file paths.
+    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
+      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+      setupEnv(commandLineOptions.envPath);
+    }
+
     if (!resumeEval && customization.beforeFilterTestSuite) {
       // Hooks that filter or summarize the executable suite need hydrated scenarios too.
       await hydrateExternalScenarios(testSuite);
       await customization.beforeFilterTestSuite(testSuite, config);
-    }
-
-    // Phase 2: Load environment from config files if not already set via CLI
-    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
-      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
@@ -539,7 +540,9 @@ export async function doEval(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
+      if (isCliInvocation) {
+        disableCache();
+      }
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
@@ -823,12 +826,18 @@ export async function doEval(
     // Run the evaluation!!!!!!
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
+      const executableTestSuite = testSuite;
+      const effectiveConfig = config;
+      const runEvaluation = () =>
+        evaluate(executableTestSuite, evalRecord, {
+          ...options,
+          filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+          abortSignal: evaluateOptions.abortSignal,
+          isRedteam: Boolean(effectiveConfig.redteam),
+        });
+      ret = isCliInvocation
+        ? await runEvaluation()
+        : await withCacheEnabled(cache === false ? false : undefined, runEvaluation);
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
