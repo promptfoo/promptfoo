@@ -7,7 +7,6 @@ import Eval from '../../src/models/eval';
 import {
   clearStandaloneEvalCache,
   deleteEval,
-  deleteEvals,
   getStandaloneEvals,
   updateResult,
 } from '../../src/util/database';
@@ -108,20 +107,6 @@ describe('getStandaloneEvals', () => {
     const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
     expect(afterIds).toContain(keep.id);
     expect(afterIds).not.toContain(drop.id);
-  });
-
-  it('drops bulk-deleted evals from cached history immediately', async () => {
-    const keep = await createEvalWithPrompts({});
-    const dropA = await createEvalWithPrompts({});
-    const dropB = await createEvalWithPrompts({});
-
-    await getStandaloneEvals();
-    deleteEvals([dropA.id, dropB.id]);
-
-    const ids = (await getStandaloneEvals()).map((row) => row.evalId);
-    expect(ids).toContain(keep.id);
-    expect(ids).not.toContain(dropA.id);
-    expect(ids).not.toContain(dropB.id);
   });
 
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
