@@ -254,7 +254,7 @@ async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
   // Check monthly probe limit for non-cloud users
-  const probeLimitResult = checkRedteamProbeLimit();
+  const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
     logger.error(dedent`
       ${chalk.red.bold('Monthly probe limit reached')}
