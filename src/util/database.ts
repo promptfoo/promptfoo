@@ -200,7 +200,6 @@ export async function updateResult(
     }
 
     await existingEval.save();
-    clearStandaloneEvalCacheImpl();
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
