@@ -87,7 +87,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     // Generate new test cases
     logger.info('Generating test cases...');
-    const { maxConcurrency, ...passThroughOptions } = options;
+    // Run-specific tags describe the eval result, not the reusable generated probes.
+    const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
     let redteamConfig;
     const generationStartTime = Date.now();

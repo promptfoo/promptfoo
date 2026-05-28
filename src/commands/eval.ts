@@ -3,7 +3,6 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import chokidar from 'chokidar';
-import { InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
@@ -53,6 +52,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
+import { collectKeyValueOption } from './options';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
@@ -75,22 +75,6 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
-
-function collectKeyValueOption(
-  optionName: string,
-  value: string,
-  previous: Record<string, string> | undefined,
-): Record<string, string> {
-  const separatorIndex = value.indexOf('=');
-  const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
-  const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
-
-  if (!key || val === undefined) {
-    throw new InvalidArgumentError(`${optionName} must be specified in key=value format.`);
-  }
-
-  return { ...previous, [key]: val };
-}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,

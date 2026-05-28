@@ -345,6 +345,57 @@ describe('redteamRunCommand', () => {
     });
   });
 
+  describe('--tag flag for run-specific eval tags', () => {
+    it('should document the repeatable --tag option in help text', () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      const helpText = runCommand!.helpInformation();
+
+      expect(helpText).toContain('--tag <key=value>');
+      expect(helpText).toContain('Set an eval tag in key=value format.');
+    });
+
+    it('should pass repeated tags to the evaluation stage with Commander normalization', async () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--tag',
+        'build=first',
+        '--tag',
+        'build=second',
+        '--tag',
+        'token=a=b',
+        '--tag',
+        'empty=',
+      ]);
+
+      const options = vi.mocked(doRedteamRun).mock.calls[0][0];
+      expect(options).toMatchObject({
+        tags: {
+          build: 'second',
+          token: 'a=b',
+          empty: '',
+        },
+        eventSource: 'cli',
+      });
+      expect(options).not.toHaveProperty('tag');
+    });
+
+    it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+      runCommand!.exitOverride();
+
+      expect(() => runCommand!.parseOptions(['--tag', tagValue])).toThrow(
+        '--tag must be specified in key=value format.',
+      );
+    });
+  });
+
   describe('error handling', () => {
     it('should suppress stack trace when doRedteamRun throws ProbeLimitExceededError', async () => {
       vi.mocked(doRedteamRun).mockRejectedValueOnce(new ProbeLimitExceededError(100, 100));
