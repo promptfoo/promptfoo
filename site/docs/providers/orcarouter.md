@@ -18,23 +18,24 @@ OrcaRouter follows the OpenAI API format — see the [OpenAI provider documentat
 
 OrcaRouter's full live catalog is at [orcarouter.ai/models](https://www.orcarouter.ai/models). A few common IDs:
 
-| Model ID                        | Notes                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| `orcarouter/auto`               | Adaptive router — picks an upstream per request based on workspace policy. |
-| `openai/gpt-5.5`                | OpenAI flagship.                                                           |
-| `anthropic/claude-opus-4.7`     | Anthropic flagship (reasoning model — does not accept `temperature`).      |
-| `google/gemini-3-flash-preview` | Google preview model.                                                      |
-| `deepseek/deepseek-v4-pro`      | DeepSeek flagship.                                                         |
-| `grok/grok-4.3`                 | xAI flagship.                                                              |
-| `qwen/qwen3.6-flash`            | Alibaba Qwen flagship.                                                     |
-| `minimax/minimax-m2.7`          | MiniMax flagship.                                                          |
+| Model ID                      | Notes                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `orcarouter/auto`             | Adaptive router — picks an upstream per request based on workspace policy. |
+| `openai/gpt-4o`               | OpenAI general-purpose chat.                                               |
+| `openai/gpt-4o-mini`          | Cheaper / faster OpenAI option.                                            |
+| `anthropic/claude-opus-4.7`   | Anthropic reasoning model (`temperature` is stripped — see note below).    |
+| `anthropic/claude-haiku-4.5`  | Anthropic small / fast option.                                             |
+| `google/gemini-2.5-pro`       | Google general-purpose.                                                    |
+| `google/gemini-3-pro-preview` | Google reasoning preview.                                                  |
+| `deepseek/deepseek-reasoner`  | DeepSeek reasoning model (`temperature` is stripped — see note below).     |
+| `grok/grok-4-fast-reasoning`  | xAI reasoning model.                                                       |
 
 ## Basic Configuration
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: orcarouter:openai/gpt-5.5
+  - id: orcarouter:openai/gpt-4o-mini
     config:
       temperature: 0.7
       max_tokens: 1000
@@ -54,7 +55,7 @@ The same pattern applies to `apiKeyEnvar` — set it to read your API key from a
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: orcarouter:openai/gpt-5.5
+  - id: orcarouter:openai/gpt-4o-mini
     config:
       apiBaseUrl: https://proxy.example.com/orcarouter/v1
       apiKeyEnvar: MY_PROXY_KEY # optional: read the Bearer token from $MY_PROXY_KEY
@@ -68,15 +69,20 @@ You can also pass a `models` fallback list and a `route` mode for hard-failover 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: orcarouter:openai/gpt-5.5
+  - id: orcarouter:openai/gpt-4o
     config:
       route: fallback
       models:
-        - openai/gpt-5.5
-        - anthropic/claude-opus-4.7
+        - openai/gpt-4o
+        - anthropic/claude-haiku-4.5
+        - google/gemini-2.5-flash
 ```
 
 When `route: fallback` and the primary upstream errors out, OrcaRouter walks the `models` list in order.
+
+:::note
+OrcaRouter's own docs show fallback configuration as `extra_body: { models, route }` because they're written for the OpenAI Python SDK, which merges `extra_body` into the wire request. In promptfoo's YAML, write `models` and `route` directly at the provider `config` level — the provider promotes them to top-level body fields for you.
+:::
 
 ## Thinking / Reasoning Models
 
