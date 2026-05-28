@@ -6,6 +6,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import {
   clearStandaloneEvalCache,
+  deleteEval,
   getStandaloneEvals,
   updateResult,
 } from '../../src/util/database';
@@ -82,7 +83,7 @@ describe('getStandaloneEvals', () => {
     expect(byId.get(regularEval.id)).toBe(true);
   });
 
-  it('reflects flag transitions after updateResult rewrites config', async () => {
+  it('reflects flag transitions after updateResult rewrites config without stale cached history', async () => {
     const eval_ = await createEvalWithPrompts({});
     expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
       false,
@@ -90,11 +91,23 @@ describe('getStandaloneEvals', () => {
 
     await updateResult(eval_.id, { redteam: {} as any });
 
-    // updateResult does not invalidate the LRU cache; tests clear it to observe the new value.
-    clearStandaloneEvalCache();
     expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
       true,
     );
+  });
+
+  it('drops deleted evals from cached history immediately', async () => {
+    const keep = await createEvalWithPrompts({});
+    const drop = await createEvalWithPrompts({});
+
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toEqual(expect.arrayContaining([keep.id, drop.id]));
+
+    await deleteEval(drop.id);
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(afterIds).toContain(keep.id);
+    expect(afterIds).not.toContain(drop.id);
   });
 
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
