@@ -155,7 +155,7 @@ async function getFailedTestCases(
     }
 
     // Always also check local SQLite database
-    const db = getDb();
+    const db = await getDb();
 
     const targetResults = await db
       .select()

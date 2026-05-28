@@ -11,6 +11,7 @@ import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
 
@@ -36,7 +37,7 @@ describe('retry command', () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
       evalId = evalRecord.id;
 
-      const db = getDb();
+      const db = await getDb();
 
       const mockProvider = { id: 'test-provider' };
 
@@ -109,7 +110,7 @@ describe('retry command', () => {
 
     it('should return empty array if no ERROR results', async () => {
       const emptyEval = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
 
       await db.insert(evalResultsTable).values([
         {
@@ -135,7 +136,7 @@ describe('retry command', () => {
   describe('deleteErrorResults', () => {
     it('should delete specified results', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
 
       // Insert results
@@ -181,6 +182,46 @@ describe('retry command', () => {
       expect(remaining[0].id).toBe(`${evalRecord.id}-del-2`);
     });
 
+    it('should invalidate the cached total row count after deleting results', async () => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = await getDb();
+
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-del-1`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+          testCase: { vars: {} },
+          provider: { id: 'test-provider' },
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        },
+        {
+          id: `${evalRecord.id}-del-2`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 1,
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+          testCase: { vars: {} },
+          provider: { id: 'test-provider' },
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        },
+      ]);
+
+      expect(await getTotalResultRowCount(evalRecord.id)).toBe(2);
+
+      await deleteErrorResults([`${evalRecord.id}-del-1`]);
+
+      expect(await getTotalResultRowCount(evalRecord.id)).toBe(1);
+    });
+
     it('should handle empty array gracefully', async () => {
       // Should not throw
       await expect(deleteErrorResults([])).resolves.not.toThrow();
@@ -188,7 +229,7 @@ describe('retry command', () => {
 
     it('should delete multiple results in a single batch operation', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
 
       // Insert multiple results
@@ -292,7 +333,7 @@ describe('retry command', () => {
     it('should recalculate metrics after results change', async () => {
       // Create an eval with prompts
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -348,7 +389,7 @@ describe('retry command', () => {
 
     it('should count ERROR results correctly', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -392,7 +433,7 @@ describe('retry command', () => {
 
     it('should handle multiple prompts', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt1 = {
         raw: 'test1',
@@ -464,7 +505,7 @@ describe('retry command', () => {
 
     it('should accumulate named scores correctly', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -510,7 +551,7 @@ describe('retry command', () => {
 
     it('should preserve weighted named score totals and assertion counts', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -563,7 +604,7 @@ describe('retry command', () => {
       // Test that metrics accumulate correctly when results span multiple batch boundaries
       // Batch size is 1000 (by testIdx), so results at testIdx 0-999, 1000-1999, 2000-2999 are in different batches
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -665,7 +706,7 @@ describe('retry command', () => {
 
     it('should handle results at exact batch boundary (testIdx 999 and 1000)', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -711,7 +752,7 @@ describe('retry command', () => {
 
     it('should handle single result edge case', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -747,7 +788,7 @@ describe('retry command', () => {
 
     it('should use fetchResultsBatched for streaming iteration', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -784,7 +825,7 @@ describe('retry command', () => {
 
     it('should accumulate assertion counts from componentResults', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -848,7 +889,7 @@ describe('retry command', () => {
 
     it('should accumulate token usage from response', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -911,7 +952,7 @@ describe('retry command', () => {
 
     it('should accumulate assertion token usage from gradingResult', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -979,7 +1020,7 @@ describe('retry command', () => {
 
     it('should skip results with invalid promptIdx', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -1065,7 +1106,7 @@ describe('retry command', () => {
 
     it('should handle results with null/undefined optional fields', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 
@@ -1101,7 +1142,7 @@ describe('retry command', () => {
 
     it('should handle results with null score', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const db = getDb();
+      const db = await getDb();
       const mockProvider = { id: 'test-provider' };
       const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
 

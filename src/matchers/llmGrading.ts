@@ -411,6 +411,8 @@ export async function matchesGEval(
   const tokensUsed = normalizeMatcherTokenUsage(undefined);
 
   const failWithTokens = (reason: string) => graderFail(reason, tokensUsed);
+  const failNoOutput = (phase: 'step-generation' | 'evaluation') =>
+    failWithTokens(`G-Eval ${phase} call to ${textProvider.id()} returned no output`);
 
   // Step 1: Get evaluation steps using renderLlmRubricPrompt
   const stepsRubricPrompt =
@@ -434,7 +436,7 @@ export async function matchesGEval(
     return failWithTokens(respSteps.error);
   }
   if (!respSteps.output) {
-    return failWithTokens('No output');
+    return failNoOutput('step-generation');
   }
   if (typeof respSteps.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation steps response is not a string');
@@ -497,7 +499,7 @@ export async function matchesGEval(
     return failWithTokens(resp.error);
   }
   if (!resp.output) {
-    return failWithTokens('No output');
+    return failNoOutput('evaluation');
   }
   if (typeof resp.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation result response is not a string');
