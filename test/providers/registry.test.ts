@@ -717,6 +717,9 @@ describe('Provider Registry', () => {
       await expect(factory!.create('nvidia:', nvidiaOptions, mockContext)).rejects.toThrow(
         /expected "nvidia:<model>"/,
       );
+      await expect(
+        factory!.create('nvidia:embedding:nvidia/nv-embed-v1', nvidiaOptions, mockContext),
+      ).rejects.toThrow(/Unsupported NVIDIA NIM provider subtype "embedding"/);
     });
   });
 

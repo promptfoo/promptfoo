@@ -3,9 +3,47 @@ import { OpenAiChatCompletionProvider } from '../openai/chat';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, ProviderOptions } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../../types/providers';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 const NVIDIA_NIM_API_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_RESERVED_PROVIDER_SUBTYPES = new Set([
+  'chat',
+  'completion',
+  'embedding',
+  'embeddings',
+  'image',
+  'moderation',
+  'realtime',
+  'responses',
+]);
+
+export function calculateNvidiaCost(
+  config: Pick<OpenAiCompletionOptions, 'cost' | 'inputCost' | 'outputCost'>,
+  promptTokens?: number,
+  completionTokens?: number,
+  cached = false,
+): number | undefined {
+  const inputCost = config.inputCost ?? config.cost;
+  const outputCost = config.outputCost ?? config.cost;
+
+  if (
+    inputCost === undefined ||
+    outputCost === undefined ||
+    promptTokens === undefined ||
+    completionTokens === undefined
+  ) {
+    return undefined;
+  }
+
+  return cached ? 0 : inputCost * promptTokens + outputCost * completionTokens;
+}
 
 export class NvidiaProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
@@ -58,6 +96,30 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
     return this.config.apiBaseUrl || NVIDIA_NIM_API_BASE_URL;
   }
 
+  override async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const response = await super.callApi(prompt, context, callApiOptions);
+    if (response.error) {
+      return response;
+    }
+
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+    response.cost = calculateNvidiaCost(
+      config,
+      response.tokenUsage?.prompt,
+      response.tokenUsage?.completion,
+      response.cached,
+    );
+
+    return response;
+  }
+
   toJSON() {
     return {
       provider: 'nvidia',
@@ -79,6 +141,12 @@ export function createNvidiaProvider(
   } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
+  if (NVIDIA_RESERVED_PROVIDER_SUBTYPES.has(splits[1])) {
+    throw new Error(
+      `Unsupported NVIDIA NIM provider subtype "${splits[1]}" in "${providerPath}". Use "nvidia:<model>" for chat-completion models.`,
+    );
+  }
+
   const modelName = splits.slice(1).join(':');
   if (!modelName) {
     throw new Error(

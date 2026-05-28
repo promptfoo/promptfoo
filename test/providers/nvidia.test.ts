@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import { createNvidiaProvider, NvidiaProvider } from '../../src/providers/nvidia/chat';
+import {
+  calculateNvidiaCost,
+  createNvidiaProvider,
+  NvidiaProvider,
+} from '../../src/providers/nvidia/chat';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { mockProcessEnv } from '../util/utils';
 
 const NVIDIA_NIM_API_BASE = 'https://integrate.api.nvidia.com/v1';
@@ -160,6 +165,29 @@ describe('NVIDIA NIM', () => {
         restoreEnv();
       }
     });
+
+    it('records explicitly configured token-cost estimates for NIM models', async () => {
+      const provider = new NvidiaProvider('meta/llama-3.3-70b-instruct', {
+        config: { inputCost: 0.001, outputCost: 0.002 },
+      });
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { prompt: 10, completion: 5, total: 15 },
+        cached: false,
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBe(0.02);
+    });
+  });
+
+  describe('calculateNvidiaCost', () => {
+    it('requires explicit input and output rates because NVIDIA has no built-in pricing', () => {
+      expect(calculateNvidiaCost({ inputCost: 0.001 }, 10, 5)).toBeUndefined();
+      expect(calculateNvidiaCost({ inputCost: 0.001, outputCost: 0.002 }, 10, 5)).toBe(0.02);
+      expect(calculateNvidiaCost({ cost: 0.003 }, 10, 5, true)).toBe(0);
+    });
   });
 
   describe('createNvidiaProvider', () => {
@@ -175,6 +203,12 @@ describe('NVIDIA NIM', () => {
 
     it('throws when the provider path is missing the model', () => {
       expect(() => createNvidiaProvider('nvidia:')).toThrow(/expected "nvidia:<model>"/);
+    });
+
+    it('rejects endpoint subtypes that this chat-only provider does not implement', () => {
+      expect(() => createNvidiaProvider('nvidia:embedding:nvidia/nv-embed-v1')).toThrow(
+        /Unsupported NVIDIA NIM provider subtype "embedding"/,
+      );
     });
 
     it('forwards config and env into the constructed provider', () => {

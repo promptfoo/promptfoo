@@ -50,7 +50,6 @@ providers:
       max_tokens: 1024
       top_p: 0.9
       stop: ['END']
-      stream: true
 ```
 
 To override the base URL (for example, when routing through a corporate proxy or to a self-hosted NIM):
@@ -116,5 +115,6 @@ defaultTest:
 
 ## Notes
 
-- Cost calculation is not built in for NVIDIA models. NIM bills against credits rather than per-token public price lists for many models, and the actual cost depends on your account tier. Use `inputCost` and `outputCost` on the provider config if you want to record an estimate in eval output.
-- Tool calling, JSON-mode responses, and streaming follow the same configuration as the [OpenAI provider](./openai.md) because the API surface is the same.
+- Cost calculation is not built in for NVIDIA models. NIM bills against credits rather than per-token public price lists for many models, and the actual cost depends on your account tier. Set both `inputCost` and `outputCost` on the provider config if you want to record an estimate in eval output.
+- Tool calling and JSON-mode responses follow the same configuration as the [OpenAI provider](./openai.md) because the API surface is OpenAI-compatible. Streaming responses are not implemented by this provider.
+- This provider supports NIM chat-completion models. Retrieval, embedding, reranking, and other NIM APIs require a provider that targets their corresponding endpoint.
