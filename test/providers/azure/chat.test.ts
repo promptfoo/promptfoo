@@ -788,6 +788,23 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 
+    it('omits sampling params for a custom Claude deployment when configured explicitly', async () => {
+      const provider = new AzureChatCompletionProvider('prod-claude-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          isClaudeOpus47OrLater: true,
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
     it('should use max_completion_tokens for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {

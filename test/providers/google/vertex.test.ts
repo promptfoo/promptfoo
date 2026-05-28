@@ -2884,6 +2884,19 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(requestData.max_tokens).toBe(11024);
     });
 
+    it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().thinking).toEqual({ type: 'adaptive' });
+    });
+
     it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
         config: {
