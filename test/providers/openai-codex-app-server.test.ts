@@ -529,6 +529,110 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(state.tokenUsage).toBeUndefined();
   });
 
+  it('preserves first-turn usage that arrived before the first turn/started', () => {
+    const spans = installSpanRecorder();
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+    const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
+
+    // Usage can arrive via `thread/tokenUsage/updated` before the first
+    // `turn/started` notification. That usage belongs to the first turn.
+    state.rawTokenUsage = { last: { inputTokens: 11, outputTokens: 7 } };
+    state.tokenUsage = { prompt: 11, completion: 7, total: 18 };
+
+    // The first `turn/started` passes clearPreviousUsage=true, but there is no
+    // previous turn yet (turnCount === 0), so the usage must survive.
+    (provider as any).startTurnSpan(state, 1, true);
+    expect(state.tokenUsage).toEqual({ prompt: 11, completion: 7, total: 18 });
+    expect(state.rawTokenUsage).toEqual({ last: { inputTokens: 11, outputTokens: 7 } });
+
+    (provider as any).endTurnSpan(state, 2);
+    const turnSpan = spans.find((span) => span.name === 'gen_ai.turn 1');
+    expect(turnSpan?.attributes).toMatchObject({
+      'gen_ai.usage.input_tokens': 11,
+      'gen_ai.usage.output_tokens': 7,
+    });
+  });
+
+  it('reports token usage on the response when usage arrives before turn/started', async () => {
+    const spans = installSpanRecorder();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Trace usage ordering');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_order' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_order', status: 'inProgress' } },
+    });
+
+    // Usage arrives BEFORE the turn/started notification. A naive
+    // clearPreviousUsage would drop these counts from the final response.
+    server.send({
+      method: 'thread/tokenUsage/updated',
+      params: {
+        threadId: 'thr_order',
+        turnId: 'turn_order',
+        tokenUsage: {
+          last: {
+            inputTokens: 21,
+            outputTokens: 8,
+            cachedInputTokens: 3,
+            reasoningOutputTokens: 2,
+          },
+        },
+      },
+    });
+    server.send({
+      method: 'turn/started',
+      params: {
+        threadId: 'thr_order',
+        turn: { id: 'turn_order', status: 'inProgress' },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_order',
+        turnId: 'turn_order',
+        item: { type: 'agentMessage', id: 'msg_order', text: 'Done' },
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_order',
+        turn: { id: 'turn_order', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result).toMatchObject({
+      output: 'Done',
+      tokenUsage: { prompt: 21, completion: 8 },
+    });
+
+    const turnSpan = spans.find((span) => span.name === 'gen_ai.turn 1');
+    expect(turnSpan?.attributes).toMatchObject({
+      'gen_ai.usage.input_tokens': 21,
+      'gen_ai.usage.output_tokens': 8,
+    });
+  });
+
   it('uses the last completed agent message as the final output', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

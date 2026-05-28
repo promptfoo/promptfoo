@@ -3162,10 +3162,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
       state.activeTurnSpan = undefined;
     }
-    if (clearPreviousUsage) {
+    if (clearPreviousUsage && state.turnCount > 0) {
       // Usage is associated with the active protocol turn. Do not attribute the
       // previous turn's most recent update when an explicit later turn starts.
       // Lazy-open paths may run after usage for their current turn arrived.
+      //
+      // Guard on a prior turn existing (turnCount > 0): on the very first
+      // `turn/started`, usage from an earlier `thread/tokenUsage/updated` belongs
+      // to THIS turn, so clearing it would drop token counts and cost from the
+      // final response.
       state.rawTokenUsage = undefined;
       state.tokenUsage = undefined;
     }
