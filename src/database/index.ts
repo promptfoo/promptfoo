@@ -43,6 +43,12 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   // Enable foreign key constraints (required for referential integrity)
   await client.execute('PRAGMA foreign_keys = ON');
 
+  // better-sqlite3 applied a 5s busy timeout by default; libsql defaults to 0,
+  // i.e. fail immediately when the write lock is held. Restore the prior
+  // behavior so a writer that briefly contends with another process or
+  // connection for the lock waits instead of erroring with SQLITE_BUSY.
+  await client.execute('PRAGMA busy_timeout = 5000');
+
   // Configure WAL mode unless explicitly disabled or using in-memory database
   if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
     try {
