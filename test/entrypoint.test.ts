@@ -120,6 +120,27 @@ const nodeEngineComparatorSets: NodeEngineComparator[][] = [
   ],
   [{ operator: '>=', version: '22.22.0' }],
 ];
+const deprecatedNodeMajorVersions = new Set([20]);
+
+function shouldWarnForDeprecatedNodeVersion(currentVersion: string): boolean {
+  const parsedCurrentVersion = parseNodeEngineVersion(currentVersion);
+  return (
+    parsedCurrentVersion !== null &&
+    isSupportedNodeEngineVersion(currentVersion, nodeEngineComparatorSets) === true &&
+    deprecatedNodeMajorVersions.has(parsedCurrentVersion[0])
+  );
+}
+
+function formatDeprecatedNodeVersionMessage(currentVersion: string): string {
+  return [
+    '\x1b[33mWarning: Node.js 20 has reached end-of-life and is deprecated in promptfoo.',
+    '',
+    `Detected: ${currentVersion}`,
+    'Recommended: Node.js >=22.22.0 (Node.js 24 LTS preferred)',
+    '',
+    'Upgrade your Node.js runtime to avoid disruption in a future promptfoo release.\x1b[0m',
+  ].join('\n');
+}
 
 describe('entrypoint version check logic', () => {
   describe('Node.js version parsing', () => {
@@ -265,6 +286,30 @@ describe('entrypoint version check logic', () => {
       expect(errorMessage).toContain('Unable to parse the current Node.js version');
       expect(errorMessage).toContain('node-20.9.0');
       expect(errorMessage).toContain(`Required: ${nodeEngineRange}`);
+    });
+  });
+
+  describe('deprecation warning', () => {
+    it('warns for supported Node.js 20 versions', () => {
+      expect(shouldWarnForDeprecatedNodeVersion('v20.20.0')).toBe(true);
+      expect(shouldWarnForDeprecatedNodeVersion('v20.20.2')).toBe(true);
+    });
+
+    it('does not warn for recommended or unparsable runtimes', () => {
+      expect(shouldWarnForDeprecatedNodeVersion('v20.19.0')).toBe(false);
+      expect(shouldWarnForDeprecatedNodeVersion('v22.22.0')).toBe(false);
+      expect(shouldWarnForDeprecatedNodeVersion('v24.16.0')).toBe(false);
+      expect(shouldWarnForDeprecatedNodeVersion('invalid')).toBe(false);
+    });
+
+    it('formats an actionable warning for Node.js 20', () => {
+      const warningMessage = formatDeprecatedNodeVersionMessage('v20.20.2');
+
+      expect(warningMessage).toContain('Node.js 20 has reached end-of-life');
+      expect(warningMessage).toContain('deprecated in promptfoo');
+      expect(warningMessage).toContain('Detected: v20.20.2');
+      expect(warningMessage).toContain('Recommended: Node.js >=22.22.0');
+      expect(warningMessage).toContain('Upgrade your Node.js runtime');
     });
   });
 
