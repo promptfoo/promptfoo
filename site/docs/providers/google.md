@@ -549,8 +549,6 @@ promptfoo eval --no-cache
 
 See the [Google Video example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configurations.
 
-<a id="gemini-20-flash"></a>
-
 ### Basic Configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:

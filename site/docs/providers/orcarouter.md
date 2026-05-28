@@ -1,8 +1,6 @@
 ---
-title: OrcaRouter
 sidebar_label: OrcaRouter
-sidebar_position: 59
-description: 'Use OrcaRouter with promptfoo to evaluate OpenAI-compatible routed models, configure adaptive or fallback routing, and compare upstream providers in one eval.'
+description: 'Access OpenAI, Anthropic, Google, DeepSeek, Grok, Qwen and more through OrcaRouter, an OpenAI-compatible adaptive routing gateway with per-workspace tunable strategies.'
 ---
 
 # OrcaRouter
@@ -34,7 +32,7 @@ OrcaRouter's full live catalog is at [orcarouter.ai/models](https://www.orcarout
 
 ## Basic Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: orcarouter:openai/gpt-4o-mini
@@ -55,7 +53,7 @@ If you route OrcaRouter traffic through a proxy or compatible gateway, set `apiB
 
 The same pattern applies to `apiKeyEnvar` — set it to read your API key from a custom environment variable name (default `ORCAROUTER_API_KEY`).
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: orcarouter:openai/gpt-4o-mini
     config:
@@ -69,7 +67,7 @@ providers:
 
 You can also pass a `models` fallback list and a `route` mode for hard-failover behavior:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: orcarouter:openai/gpt-4o
     config:
@@ -90,7 +88,7 @@ OrcaRouter's own docs show fallback configuration as `extra_body: { models, rout
 
 Reasoning-capable models (Anthropic Claude Opus, OpenAI GPT-5 family, DeepSeek Reasoner, Gemini reasoning previews, etc.) may return a `reasoning` field alongside `content`. By default, promptfoo prefixes the reasoning content as `Thinking: ...\n\n<actual response>`. Hide it with `showThinking: false`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: orcarouter:anthropic/claude-opus-4.7
     config:

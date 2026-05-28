@@ -657,20 +657,6 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
-    it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      };
-      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        config,
-        'hi',
-        undefined,
-        'us.anthropic.claude-opus-4-8',
-      );
-      expect(params.thinking).toEqual({ type: 'adaptive' });
-    });
-
     it('silently omits temperature on Claude Opus 4.8 invokeModel path (no per-request warning)', async () => {
       // The shared CLAUDE_MESSAGES.params handler has no per-instance state to
       // dedup a warning across requests, so it normalizes silently; the Anthropic

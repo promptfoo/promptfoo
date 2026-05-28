@@ -291,15 +291,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
     }
 
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
-      this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
     const thinkingConfig: ClaudeThinkingConfig | undefined =
-      samplingParamsDeprecated && requestedThinkingConfig?.type === 'enabled'
-        ? { type: 'adaptive' }
-        : requestedThinkingConfig;
-    const isThinkingEnabled =
-      thinkingConfig?.type === 'enabled' || thinkingConfig?.type === 'adaptive';
+      this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const isThinkingEnabled = thinkingConfig?.type === 'enabled';
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
@@ -307,8 +301,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     // Claude requires max_tokens >= budget_tokens when thinking is enabled
     if (
-      thinkingConfig?.type === 'enabled' &&
-      thinkingConfig.budget_tokens &&
+      isThinkingEnabled &&
+      thinkingConfig?.budget_tokens &&
       maxTokens < thinkingConfig.budget_tokens
     ) {
       maxTokens = thinkingConfig.budget_tokens + 1024;
@@ -318,6 +312,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // level — the underlying Anthropic API returns 400 for any request that
     // pins `temperature`, `top_p`, or `top_k`. Vertex forwards the request body
     // verbatim to rawPredict, so suppress all three here too.
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
     const resolvedTopP = samplingParamsDeprecated
       ? undefined

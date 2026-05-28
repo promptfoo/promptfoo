@@ -701,7 +701,6 @@ These properties can be set under the provider `config` key:
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
 | isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
-| isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                         |
 | max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
 | reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
@@ -877,17 +876,7 @@ providers:
       max_tokens: 4096
 ```
 
-Opus 4.7 and 4.8 deployments whose names contain the model identifier automatically omit `temperature` and `top_p` from the request body on this path too. If your Azure deployment uses a custom alias, set `isClaudeOpus47OrLater: true`:
-
-```yaml
-providers:
-  - id: azure:chat:prod-claude
-    config:
-      apiHost: 'your-deployment.services.ai.azure.com'
-      apiVersion: '2025-04-01-preview'
-      isClaudeOpus47OrLater: true
-      max_tokens: 4096
-```
+Opus 4.7 and 4.8 deployments automatically omit `temperature` and `top_p` from the request body on this path too.
 
 Available Claude deployments on Azure AI Foundry:
 

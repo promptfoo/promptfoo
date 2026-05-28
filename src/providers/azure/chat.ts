@@ -112,10 +112,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * strip the sampling params here and leave the rest of the chat body intact.
    */
   protected isSamplingParamsDeprecatedClaudeModel(): boolean {
-    return (
-      Boolean(this.config.isClaudeOpus47OrLater) ||
-      isSamplingParamsDeprecatedClaudeModel(this.deploymentName)
-    );
+    return isSamplingParamsDeprecatedClaudeModel(this.deploymentName);
   }
 
   async getOpenAiBody(

@@ -190,8 +190,6 @@ targets one resolved prompt/provider pair at a time.
 
 When `--validation-split` is omitted, optimization uses the full eval set and
 may overfit to the configured cases.
-Validation splitting requires explicit `tests`; configs that use `scenarios`
-must be expanded into explicit test cases first.
 
 See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
 target selection details, and validation split recommendations.

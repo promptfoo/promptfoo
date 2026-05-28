@@ -107,7 +107,7 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
 }
 
 function parseValidationSplit(value: string): number {
-  const split = Number(value);
+  const split = Number.parseFloat(value);
   if (!Number.isFinite(split) || split <= 0 || split > 0.5) {
     throw new InvalidArgumentError(
       '--validation-split must be greater than 0 and less than or equal to 0.5',

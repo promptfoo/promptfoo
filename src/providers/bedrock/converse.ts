@@ -76,13 +76,10 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stop?: string[]; // Alias for compatibility
 
   // Extended thinking (Claude models)
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-      }
-    | { type: 'adaptive' }
-    | { type: 'disabled' };
+  thinking?: {
+    type: 'enabled';
+    budget_tokens: number;
+  };
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -1171,11 +1168,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
-      fields.thinking =
-        isSamplingParamsDeprecatedClaudeModel(this.modelName) &&
-        this.config.thinking.type === 'enabled'
-          ? { type: 'adaptive' }
-          : this.config.thinking;
+      fields.thinking = this.config.thinking;
     }
 
     // Add reasoning configuration for Amazon Nova 2 models

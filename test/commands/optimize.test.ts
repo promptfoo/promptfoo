@@ -234,11 +234,6 @@ describe('optimize command', () => {
       '0.75',
       '--validation-split must be greater than 0 and less than or equal to 0.5',
     ],
-    [
-      '--validation-split',
-      '0.2typo',
-      '--validation-split must be greater than 0 and less than or equal to 0.5',
-    ],
   ])('rejects invalid %s values', async (flag, value, message) => {
     const program = new Command();
     program.exitOverride();

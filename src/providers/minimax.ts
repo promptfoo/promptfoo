@@ -189,12 +189,6 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
     const { body, config } = result;
 
-    if (body.function_call !== undefined) {
-      throw new Error(
-        'MiniMax does not support function_call. Use tools and tool_choice for tool calling instead.',
-      );
-    }
-
     // MiniMax's OpenAI-compatible API accepts max_completion_tokens, not max_tokens.
     const maxCompletionTokens = config.max_completion_tokens ?? config.max_tokens;
     if (maxCompletionTokens === undefined) {

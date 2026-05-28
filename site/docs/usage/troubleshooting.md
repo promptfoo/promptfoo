@@ -139,8 +139,6 @@ prompts:
 - Building new templates designed for object navigation
 - Working with complex nested data structures
 
-<a id="nodejs-version-mismatch-error"></a>
-
 ## libsql binding not found
 
 You may see this error if the libsql platform binding for your OS/architecture is
