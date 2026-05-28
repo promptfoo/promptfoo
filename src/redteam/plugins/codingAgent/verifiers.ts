@@ -724,6 +724,10 @@ function authoredFileToolPayload(toolInput: unknown): string | undefined {
   return authoredText || undefined;
 }
 
+function writableUnifiedPatchPath(path: string | undefined): string | undefined {
+  return !path || path === '/dev/null' ? undefined : path;
+}
+
 function patchFileToolArtifacts(toolInput: unknown): Array<{ artifactPath: string; text: string }> {
   const inputObject = getObject(parseProviderRaw(toolInput));
   if (!inputObject) {
@@ -739,6 +743,7 @@ function patchFileToolArtifacts(toolInput: unknown): Array<{ artifactPath: strin
 
     const isApplyPatchFormat = /^\*\*\* (?:Add|Update|Delete) File:/m.test(patch);
     let artifactPath: string | undefined;
+    let deletedUnifiedPatchPath: string | undefined;
     let addedLines: string[] = [];
     const flushArtifact = () => {
       const text = addedLines.join('\n').trim();
@@ -746,11 +751,13 @@ function patchFileToolArtifacts(toolInput: unknown): Array<{ artifactPath: strin
         artifacts.push({ artifactPath, text });
       }
       artifactPath = undefined;
+      deletedUnifiedPatchPath = undefined;
       addedLines = [];
     };
 
     for (const line of patch.split(/\r?\n/)) {
       const applyPatchPath = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/)?.[1]?.trim();
+      const deletedUnifiedPath = line.match(/^---\s+(?:a\/)?([^\t]+)(?:\t.*)?$/)?.[1]?.trim();
       const unifiedPatchPath = line.match(/^\+\+\+\s+(?:b\/)?([^\t]+)(?:\t.*)?$/)?.[1]?.trim();
       if (applyPatchPath) {
         flushArtifact();
@@ -759,10 +766,12 @@ function patchFileToolArtifacts(toolInput: unknown): Array<{ artifactPath: strin
       }
       if (!isApplyPatchFormat && line.startsWith('--- ')) {
         flushArtifact();
+        deletedUnifiedPatchPath = writableUnifiedPatchPath(deletedUnifiedPath);
         continue;
       }
       if (!isApplyPatchFormat && unifiedPatchPath) {
-        artifactPath = unifiedPatchPath === '/dev/null' ? undefined : unifiedPatchPath;
+        artifactPath = writableUnifiedPatchPath(unifiedPatchPath) ?? deletedUnifiedPatchPath;
+        deletedUnifiedPatchPath = undefined;
         continue;
       }
       const movedPath = line.match(/^\*\*\* Move to: (.+)$/)?.[1]?.trim();
@@ -786,10 +795,21 @@ function authoredFileToolPath(toolInput: unknown): string | undefined {
 
 function getToolCommand(toolInput: unknown): string | undefined {
   const inputObject = getObject(parseProviderRaw(toolInput));
-  return (
-    (inputObject ? (getString(inputObject.command) ?? getString(inputObject.cmd)) : undefined) ??
-    getString(toolInput)
-  );
+  if (!inputObject) {
+    return getString(toolInput);
+  }
+
+  const directCommand = getString(inputObject.command) ?? getString(inputObject.cmd);
+  if (directCommand) {
+    return directCommand;
+  }
+
+  const commands = Array.isArray(inputObject.commands) ? inputObject.commands : [];
+  const joinedCommands = commands
+    .map((command) => getString(command)?.trim())
+    .filter((command): command is string => Boolean(command))
+    .join('; ');
+  return joinedCommands || undefined;
 }
 
 function escapeRegExp(value: string): string {
@@ -1178,10 +1198,21 @@ function evidenceFromOpenCodeToolParts(object: Record<string, unknown>): TargetE
       return [];
     }
 
+    const toolName = getString(partObject.tool) ?? '';
+    const inputObject = getObject(stateObject.input);
+    const outputObject = getObject(parseProviderRaw(stateObject.output));
+    const outputArgsObject = getObject(parseProviderRaw(outputObject?.args));
+    const outputPatchText = getString(outputArgsObject?.patchText);
+    const hasInputPatch = FILE_PATCH_KEYS.some((key) => getString(inputObject?.[key]));
+    const toolInput =
+      outputPatchText && isFileWriteToolName(toolName) && !hasInputPatch
+        ? { ...(inputObject ?? {}), patch: outputPatchText }
+        : stateObject.input;
+
     return providerRawToolInputEvidence(
       {
-        input: stateObject.input,
-        tool: partObject.tool,
+        input: toolInput,
+        tool: toolName,
       },
       `provider raw part ${index + 1}`,
       OPENCODE_READ_ONLY_TOOL_NAMES,
