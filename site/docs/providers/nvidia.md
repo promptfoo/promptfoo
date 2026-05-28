@@ -80,7 +80,7 @@ The full list is on [build.nvidia.com](https://build.nvidia.com). Some commonly 
 
 ## Example
 
-A minimal eval comparing two NIM-hosted models:
+A minimal eval comparing two NIM-hosted models. Uses deterministic assertions so the example runs end-to-end with only `NVIDIA_API_KEY` configured — `llm-rubric` would otherwise fall back to promptfoo's default OpenAI grader and require a separate `OPENAI_API_KEY`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -100,8 +100,18 @@ tests:
   - vars:
       passage: 'Photosynthesis is the process by which plants convert light energy into chemical energy stored in glucose.'
     assert:
-      - type: llm-rubric
-        value: 'Single sentence, mentions plants converting light to energy.'
+      - type: icontains
+        value: plants
+      - type: icontains-any
+        value: [light, energy, glucose]
+```
+
+If you want a model-graded assertion, point `llm-rubric` at a NIM-hosted grader so the example stays self-contained:
+
+```yaml
+defaultTest:
+  options:
+    provider: nvidia:meta/llama-3.3-70b-instruct
 ```
 
 ## Notes
