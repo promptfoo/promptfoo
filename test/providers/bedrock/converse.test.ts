@@ -1911,6 +1911,35 @@ Third line`;
       );
     });
 
+    it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 16000,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'adaptive',
+            },
+          },
+        }),
+      );
+    });
+
     it('should merge custom additional fields with thinking', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {

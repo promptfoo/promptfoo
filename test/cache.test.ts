@@ -858,7 +858,7 @@ describe('fetchWithCache', () => {
       expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
     });
 
-    it('should isolate cached responses by request headers without storing secrets in the key', async () => {
+    it('should not cache responses whose request identity contains credentials', async () => {
       const cache = getCache();
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'token one data' }))
@@ -887,16 +887,10 @@ describe('fetchWithCache', () => {
       expect(tokenOneResult.data).toEqual({ data: 'token one data' });
       expect(tokenTwoResult.data).toEqual({ data: 'token two data' });
 
-      const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
-      expect(cacheKeys).toHaveLength(2);
-      for (const cacheKey of cacheKeys) {
-        expect(cacheKey).not.toContain('secret-url-token');
-        expect(cacheKey).not.toContain('secret-header-token');
-        expect(cacheKey).not.toContain('secret-body-token');
-      }
+      expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
     });
 
-    it('should isolate cloud requests by injected API key without storing the key', async () => {
+    it('should not cache cloud requests with injected API keys', async () => {
       const cache = getCache();
       const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'secret-cloud-token-one' });
       mockFetchWithRetries.mockImplementation(() =>
@@ -935,18 +929,13 @@ describe('fetchWithCache', () => {
         expect(tokenOneResult.data).toEqual({ data: 'cloud token one data' });
         expect(tokenTwoResult.data).toEqual({ data: 'cloud token two data' });
 
-        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
-        expect(cacheKeys).toHaveLength(2);
-        for (const cacheKey of cacheKeys) {
-          expect(cacheKey).not.toContain('secret-cloud-token-one');
-          expect(cacheKey).not.toContain('secret-cloud-token-two');
-        }
+        expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
       } finally {
         restoreEnv();
       }
     });
 
-    it('should preserve Request headers when isolating cached responses', async () => {
+    it('should not cache Request instances with authorization headers', async () => {
       const cache = getCache();
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'request token one' }))
@@ -966,12 +955,7 @@ describe('fetchWithCache', () => {
       expect(firstResult.data).toEqual({ data: 'request token one' });
       expect(secondResult.data).toEqual({ data: 'request token two' });
 
-      const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
-      expect(cacheKeys).toHaveLength(2);
-      for (const cacheKey of cacheKeys) {
-        expect(cacheKey).not.toContain('request-token-one');
-        expect(cacheKey).not.toContain('request-token-two');
-      }
+      expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
     });
 
     it('should treat init headers as replacing Request headers in cache keys', async () => {
@@ -992,10 +976,8 @@ describe('fetchWithCache', () => {
       expect(initHeaderResult.data).toEqual({ data: 'init headers' });
 
       const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
-      expect(cacheKeys).toHaveLength(2);
-      for (const cacheKey of cacheKeys) {
-        expect(cacheKey).not.toContain('request-token');
-      }
+      expect(cacheKeys).toHaveLength(1);
+      expect(cacheKeys[0]).not.toContain('request-token');
     });
 
     it('should normalize request method casing in cache keys', async () => {

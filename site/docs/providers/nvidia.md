@@ -1,6 +1,7 @@
 ---
 title: NVIDIA NIM
-description: Use NVIDIA's hosted inference API (build.nvidia.com) with promptfoo for evaluating Llama, Qwen, Nemotron, DeepSeek, and Mistral models.
+sidebar_position: 58
+description: Use NVIDIA NIM hosted inference APIs with promptfoo to evaluate Llama, Qwen, Nemotron, DeepSeek, and Mistral chat models through OpenAI-compatible endpoints.
 ---
 
 # NVIDIA NIM

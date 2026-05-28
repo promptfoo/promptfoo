@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -287,31 +286,11 @@ type PreparedFetchResponse = {
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
-const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
-const FETCH_CACHE_SECRET_HMAC_KEY = crypto.randomBytes(32);
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
-function fingerprintFetchCacheSecret(value: string) {
-  return {
-    __promptfooSecretFingerprint: crypto
-      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
-      .update(FETCH_CACHE_SECRET_HMAC_CONTEXT)
-      .update('\0')
-      .update(value)
-      .digest('hex'),
-  };
-}
-
 function isSensitiveFetchCacheString(value: string, fieldName?: string) {
   return (fieldName && isSecretField(fieldName)) || looksLikeSecret(value);
-}
-
-function getStringForFetchCacheKey(value: string, fieldName?: string): unknown {
-  if (isSensitiveFetchCacheString(value, fieldName)) {
-    return fingerprintFetchCacheSecret(value);
-  }
-  return value;
 }
 
 function hasSensitiveJsonValue(value: unknown, fieldName?: string): boolean {
@@ -329,35 +308,11 @@ function hasSensitiveJsonValue(value: unknown, fieldName?: string): boolean {
   return false;
 }
 
-function getJsonValueForFetchCacheKey(value: unknown, fieldName?: string): unknown {
-  if (typeof value === 'string') {
-    return getStringForFetchCacheKey(value, fieldName);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => getJsonValueForFetchCacheKey(item, fieldName));
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [
-        key,
-        getJsonValueForFetchCacheKey(nestedValue, key),
-      ]),
-    );
-  }
-  return value;
-}
-
-function getBodyStringForFetchCacheKey(value: string): unknown {
+function isSensitiveBodyStringForFetchCacheKey(value: string): boolean {
   try {
-    const parsedValue = JSON.parse(value);
-    return hasSensitiveJsonValue(parsedValue)
-      ? {
-          encoding: 'json',
-          value: getJsonValueForFetchCacheKey(parsedValue),
-        }
-      : value;
+    return hasSensitiveJsonValue(JSON.parse(value));
   } catch {
-    return getStringForFetchCacheKey(value);
+    return isSensitiveFetchCacheString(value);
   }
 }
 
@@ -367,30 +322,16 @@ function hasSensitiveSearchParam(searchParams: URLSearchParams) {
   );
 }
 
-function getSearchParamsForFetchCacheKey(searchParams: URLSearchParams): unknown {
-  if (!hasSensitiveSearchParam(searchParams)) {
-    return searchParams.toString();
-  }
-  return Array.from(searchParams.entries()).map(([name, value]) => [
-    name,
-    getStringForFetchCacheKey(value, name),
-  ]);
+function getUrlForFetchCacheKey(url: RequestInfo) {
+  return url instanceof Request ? url.url : String(url);
 }
 
-function getUrlForFetchCacheKey(url: RequestInfo) {
-  const urlString = url instanceof Request ? url.url : String(url);
+function hasSensitiveUrlForFetchCacheKey(url: RequestInfo) {
+  const urlString = getUrlForFetchCacheKey(url);
   try {
-    const parsedUrl = new URL(urlString);
-    if (!hasSensitiveSearchParam(parsedUrl.searchParams)) {
-      return urlString;
-    }
-    parsedUrl.search = '';
-    return {
-      href: parsedUrl.toString(),
-      searchParams: getSearchParamsForFetchCacheKey(new URL(urlString).searchParams),
-    };
+    return hasSensitiveSearchParam(new URL(urlString).searchParams);
   } catch {
-    return getStringForFetchCacheKey(urlString);
+    return isSensitiveFetchCacheString(urlString);
   }
 }
 
@@ -404,31 +345,14 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
     }
   }
 
-  return Array.from(headers.entries())
-    .sort(([nameA, valueA], [nameB, valueB]) => {
-      const nameComparison = nameA.localeCompare(nameB);
-      return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
-    })
-    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
+  return Array.from(headers.entries()).sort(([nameA, valueA], [nameB, valueB]) => {
+    const nameComparison = nameA.localeCompare(nameB);
+    return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
+  });
 }
 
 function hashFetchCacheKey(identity: unknown) {
   return sha256(JSON.stringify(identity));
-}
-
-function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
-  const buffer = ArrayBuffer.isView(bytes)
-    ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    : Buffer.from(bytes);
-  return {
-    byteLength: buffer.byteLength,
-    hmacSha256: crypto
-      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
-      .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:bytes`)
-      .update('\0')
-      .update(buffer)
-      .digest('hex'),
-  };
 }
 
 function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | null | undefined) {
@@ -437,28 +361,28 @@ function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | nu
   }
 
   if (typeof body === 'string') {
+    if (isSensitiveBodyStringForFetchCacheKey(body)) {
+      return { cacheable: false, identity: undefined };
+    }
     return {
       cacheable: true,
-      identity: { type: 'string', value: getBodyStringForFetchCacheKey(body) },
+      identity: { type: 'string', value: body },
     };
   }
 
   if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
+    if (hasSensitiveSearchParam(body)) {
+      return { cacheable: false, identity: undefined };
+    }
     return {
       cacheable: true,
-      identity: { type: 'url-search-params', value: getSearchParamsForFetchCacheKey(body) },
+      identity: { type: 'url-search-params', value: body.toString() },
     };
   }
 
-  if (body instanceof ArrayBuffer) {
-    return { cacheable: true, identity: { type: 'array-buffer', ...hashBytesForCacheKey(body) } };
-  }
-
-  if (ArrayBuffer.isView(body)) {
-    return {
-      cacheable: true,
-      identity: { type: body.constructor.name, ...hashBytesForCacheKey(body) },
-    };
+  if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+    // Binary request bodies cannot be inspected for credentials before deriving a disk key.
+    return { cacheable: false, identity: undefined };
   }
 
   return { cacheable: false, identity: undefined };
@@ -501,6 +425,15 @@ function getFetchCacheKey(
   format: 'json' | 'text',
   repeatIndex?: number,
 ) {
+  if (hasSensitiveUrlForFetchCacheKey(url)) {
+    return null;
+  }
+
+  const headersForCacheKey = getHeadersForCacheKey(url, options);
+  if (headersForCacheKey.some(([name, value]) => isSensitiveFetchCacheString(value, name))) {
+    return null;
+  }
+
   const bodyForCacheKey = getBodyForFetchCacheKey(
     options.body ?? (url instanceof Request ? url.body : undefined),
   );
@@ -517,7 +450,7 @@ function getFetchCacheKey(
   return getScopedCacheKey(
     `fetch:v3:${hashFetchCacheKey({
       format,
-      headers: getHeadersForCacheKey(url, options),
+      headers: headersForCacheKey,
       method,
       options: optionsForCacheKey.identity,
       url: getUrlForFetchCacheKey(url),

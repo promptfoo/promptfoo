@@ -53,7 +53,7 @@ and `top_p` are forwarded through the shared provider implementation. Promptfoo
 uses Novita's documented `https://api.novita.ai/openai/v1` base URL by default.
 For an OpenAI-compatible proxy or test server, set `apiBaseUrl` explicitly:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: novita:chat:meta-llama/llama-3.3-70b-instruct
     config:

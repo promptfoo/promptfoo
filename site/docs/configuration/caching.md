@@ -34,8 +34,9 @@ Cache entries are stored using provider-specific composite keys that include:
 - Context variables (when applicable)
 
 Cache key formats are implementation details and may change between versions.
-Sensitive request payloads and headers are hashed where possible instead of
-being embedded directly in cache keys.
+Fetch responses whose cache identity includes credentials or other sensitive
+values are not written to the persistent cache. This avoids storing secrets or
+stable secret-derived fingerprints in cache keys.
 
 ```js
 // Provider-specific scope plus a digest of request material
@@ -48,6 +49,7 @@ const fetchCacheKey = `fetch:v3:<request-digest>`;
 ### Cache Behavior
 
 - Successful API responses are cached with their complete response data
+- Credential-bearing fetch requests are not stored in the persistent fetch cache
 - Error responses are not cached to allow for retry attempts
 - When `evaluateOptions.repeat` or `--repeat` is greater than 1, each repeat index uses a separate cache namespace. Re-running the same eval can reuse those per-repeat cached responses, while preserving distinct outputs between repeat 0, repeat 1, etc.
 - Cache is automatically invalidated when:

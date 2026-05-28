@@ -37,6 +37,7 @@ providers:
 - `max_completion_tokens` - Maximum completion tokens; the OpenAI-compatible API currently allows up to `2048`. Legacy `max_tokens` config is translated to this field for compatibility.
 - `apiBaseUrl` - Optional custom MiniMax-compatible proxy endpoint
 - `top_p`
+- `tools` and `tool_choice` - Use these for tool calling. MiniMax rejects the deprecated `function_call` parameter.
 
 When MiniMax reports prompt-cache reads, promptfoo calculates cost using the returned cached token count and the model's cache-read rate.
 
