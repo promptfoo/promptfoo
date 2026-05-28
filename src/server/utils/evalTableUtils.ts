@@ -185,50 +185,59 @@ function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[
 }
 
 /**
- * Collect per-row metric names from a single batch of row outputs for one
- * prompt index. Used by `streamEvalCsv` to backfill prompts whose aggregate
- * `namedScoresCount` is missing or empty (legacy evals, external imports).
+ * Accumulator for the `streamEvalCsv` legacy-eval discovery pass. Records
+ * per-prompt metric name sets and whether any row carries a description, so
+ * `streamEvalCsv` can size CSV columns correctly before emitting headers.
  *
- * Mirrors the filtering in `collectNamedScoreNamesByPrompt` so the streaming
- * CSV column set matches the WebUI CSV column set for the same prompt.
+ * Lives outside the streaming hot path; populated incrementally by
+ * `scanBatchForDiscovery` so we never retain row content across batches.
  */
-function collectMetricNamesFromRowOutputs(
-  rows: Array<{ outputs: Array<{ namedScores?: Record<string, number> } | null | undefined> }>,
-  promptIndex: number,
-): string[] {
-  const names: string[] = [];
-  for (const row of rows) {
-    const namedScores = row.outputs[promptIndex]?.namedScores;
+type DiscoveryAccumulator = {
+  metricNamesByPrompt: Map<number, Set<string>>;
+  hasDescriptions: boolean;
+};
+
+/**
+ * Scan one batch of `EvalResult` rows for the metric names that will need
+ * dedicated `Metric: <name>` columns. Only inspects the prompts in
+ * `fallbackPromptIndices` (those whose aggregate `namedScoresCount` is
+ * missing/empty), and only touches `namedScores` + `testCase.description` —
+ * not the full row shape — so the discovery pass stays allocation-light even
+ * for very large legacy evals.
+ *
+ * Mirrors the row-output filter in `collectNamedScoreNamesByPrompt` so the
+ * streaming CSV column set matches the WebUI CSV column set.
+ */
+function scanBatchForDiscovery(
+  batchResults: Iterable<{
+    promptIdx: number;
+    testCase?: { description?: string };
+    namedScores?: Record<string, number>;
+  }>,
+  acc: DiscoveryAccumulator,
+  fallbackPromptIndices: ReadonlySet<number>,
+): void {
+  for (const result of batchResults) {
+    if (!acc.hasDescriptions && result.testCase?.description) {
+      acc.hasDescriptions = true;
+    }
+    if (!fallbackPromptIndices.has(result.promptIdx)) {
+      continue;
+    }
+    const namedScores = result.namedScores;
     if (!namedScores) {
       continue;
     }
+    let names = acc.metricNamesByPrompt.get(result.promptIdx);
+    if (!names) {
+      names = new Set();
+      acc.metricNamesByPrompt.set(result.promptIdx, names);
+    }
     for (const [name, value] of Object.entries(namedScores)) {
       if (typeof value === 'number' && !Number.isNaN(value)) {
-        names.push(name);
+        names.add(name);
       }
     }
-  }
-  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
-}
-
-/**
- * Merge per-row metric names into selected prompt lists while performing the
- * discovery pass for legacy evals and external imports. This lets streamed CSV
- * exports discover names across every batch without retaining all result rows
- * in memory, and excludes derived metrics because they never land on rows.
- */
-function mergeMetricNamesFromRows(
-  namedScoreNamesByPrompt: string[][],
-  rows: Array<{ outputs: Array<{ namedScores?: Record<string, number> } | null | undefined> }>,
-  promptIndices: readonly number[],
-): void {
-  for (const promptIndex of promptIndices) {
-    namedScoreNamesByPrompt[promptIndex] = [
-      ...new Set([
-        ...namedScoreNamesByPrompt[promptIndex],
-        ...collectMetricNamesFromRowOutputs(rows, promptIndex),
-      ]),
-    ].sort((a, b) => a.localeCompare(b));
   }
 }
 
@@ -681,8 +690,18 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // Legacy evals and external imports may persist `metrics.namedScores` without
   // a matching `namedScoresCount`, so the aggregate read returns an empty list
   // for those prompts. We can't trust the first batch alone because `EvalResult`
-  // batches are slices of `testIdx` ranges (default 100). Perform a bounded-
-  // memory discovery pass for those prompts before emitting the streaming CSV.
+  // batches slice `testIdx` ranges (default 100), so a metric that only appears
+  // past testIdx 99 would be missed. For those prompts we run a bounded-memory
+  // discovery pass over every batch first — it only inspects `namedScores` keys
+  // and `testCase.description`, never the full row, so memory stays O(prompts ×
+  // distinct metric names). Streaming is preserved in the main pass below.
+  //
+  // Note: in the rare case of concurrent writes between the two passes (e.g. a
+  // CLI export run while results are still being persisted), a metric that
+  // appears only in a row added after the discovery pass would be missing from
+  // the column header but still present in the JSON `Named Scores` cell. CLI
+  // exports normally run after the eval completes, so this is a documented
+  // limitation rather than a defended invariant.
   const fallbackPromptIndices = namedScoreNamesByPrompt.flatMap((names, promptIndex) =>
     names.length === 0 ? [promptIndex] : [],
   );
@@ -696,10 +715,20 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   let firstBatchBuffer: StreamRow[] | null = null;
 
   if (needsRowScanFallback) {
+    const fallbackPromptIndexSet = new Set(fallbackPromptIndices);
+    const accumulator: DiscoveryAccumulator = {
+      metricNamesByPrompt: new Map(),
+      hasDescriptions: false,
+    };
     for await (const batchResults of eval_.fetchResultsBatched()) {
-      const rows = batchToStreamRows(batchResults, varNames, numPrompts);
-      hasDescriptions ||= rows.some((row) => row.test.description);
-      mergeMetricNamesFromRows(namedScoreNamesByPrompt, rows, fallbackPromptIndices);
+      scanBatchForDiscovery(batchResults, accumulator, fallbackPromptIndexSet);
+    }
+    hasDescriptions = accumulator.hasDescriptions;
+    for (const promptIndex of fallbackPromptIndices) {
+      const names = accumulator.metricNamesByPrompt.get(promptIndex);
+      namedScoreNamesByPrompt[promptIndex] = names
+        ? [...names].sort((a, b) => a.localeCompare(b))
+        : [];
     }
 
     const headers = buildCsvHeaders(varNames, prompts, {
