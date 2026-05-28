@@ -90,6 +90,17 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
+   * Ignore `OPENAI_API_HOST` / `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL` — those env
+   * vars are meant for the OpenAI provider and would otherwise misroute OrcaRouter
+   * traffic to whatever OpenAI-compatible host the user has wired up for OpenAI.
+   * `apiBaseUrl` is always populated by the constructor (default
+   * `https://api.orcarouter.ai/v1`) so we only need to consult that.
+   */
+  getApiUrl(): string {
+    return this.config.apiBaseUrl || 'https://api.orcarouter.ai/v1';
+  }
+
+  /**
    * Extend the base class's OpenAI-only reasoning detection with the upstream
    * reasoning families OrcaRouter routes to that also reject `temperature`.
    * Without this, default `temperature: 0` is sent to Claude Opus / DeepSeek
@@ -200,6 +211,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          this.config.maxRetries,
         ));
 
       if (status < 200 || status >= 300) {
@@ -216,8 +228,9 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       return { error: formatOpenAiError(data as OpenAIErrorResponse) };
     }
 
-    const message: any = data.choices[0].message;
-    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+    const choice = data.choices[0];
+    const message: any = choice.message;
+    const finishReason = normalizeFinishReason(choice.finish_reason);
     const showThinking = this.config.showThinking ?? true;
     let output = extractOutput(message, showThinking);
     output = maybeParseJsonSchemaOutput(output, message, config);
@@ -232,6 +245,11 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       ),
+      ...(choice.logprobs?.content && {
+        logProbs: choice.logprobs.content.map(
+          (lp: { token: string; logprob: number }) => lp.logprob,
+        ),
+      }),
       ...(finishReason && { finishReason }),
     };
   }

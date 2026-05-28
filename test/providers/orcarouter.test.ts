@@ -268,6 +268,104 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('does not route through OPENAI_API_HOST / OPENAI_API_BASE_URL env vars', async () => {
+      const restoreEnv = mockProcessEnv({
+        ORCAROUTER_API_KEY: 'test-key',
+        OPENAI_API_HOST: 'evil-openai-proxy.example.com',
+        OPENAI_API_BASE_URL: 'https://evil-openai-proxy.example.com/v1',
+        OPENAI_BASE_URL: 'https://evil-openai-proxy.example.com/v1',
+      });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${ORCAROUTER_API_BASE}/chat/completions`);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('forwards config.maxRetries to fetchWithCache', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      const cacheModule = await import('../../src/cache');
+      const fetchWithCacheSpy = vi.spyOn(cacheModule, 'fetchWithCache').mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+        } as never,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {
+          config: { maxRetries: 0 },
+        });
+
+        await p.callApi('Hi');
+
+        // fetchWithCache(url, opts, timeout, format, bust, maxRetries)
+        expect(fetchWithCacheSpy).toHaveBeenCalled();
+        const args = fetchWithCacheSpy.mock.calls[0];
+        expect(args?.[5]).toBe(0);
+      } finally {
+        fetchWithCacheSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
+    it('surfaces logprobs returned by OrcaRouter', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'hi' },
+                  finish_reason: 'stop',
+                  logprobs: {
+                    content: [
+                      { token: 'hi', logprob: -0.5 },
+                      { token: '!', logprob: -1.25 },
+                    ],
+                  },
+                },
+              ],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await p.callApi('Hi');
+        expect(result.logProbs).toEqual([-0.5, -1.25]);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('passes routing options (models / route) as top-level body fields', async () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       try {
