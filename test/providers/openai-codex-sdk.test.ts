@@ -2791,7 +2791,9 @@ describe('OpenAICodexSDKProvider', () => {
               isRecording: () => true,
               updateName: () => undefined,
               setAttributeIfMissing: () => undefined,
-            } as unknown as ReturnType<ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']>;
+            } as unknown as ReturnType<
+              ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
+            >;
           },
           startActiveSpan: (...args: any[]) => {
             const fn = args[args.length - 1];

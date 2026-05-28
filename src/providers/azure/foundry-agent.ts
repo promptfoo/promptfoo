@@ -7,9 +7,9 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  getGenAITracer,
   type GenAISpanContext,
   type GenAISpanResult,
+  getGenAITracer,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import {

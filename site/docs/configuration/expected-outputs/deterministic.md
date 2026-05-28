@@ -774,7 +774,7 @@ tests:
 
 #### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
 
-`tool-sequence` checks _which_ tools ran in _which_ order. To also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential), pair it with [`trace-span-count`](#trace-span-count) on the per-LLM-turn span pattern your provider emits. See [Per-LLM-turn spans](/docs/tracing#per-llm-turn-spans) for the per-provider name table.
+`tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential) by pairing it with [`trace-span-count`](#trace-span-count). See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider name table and the providers whose markers represent model generations.
 
 ```yaml
 tests:
@@ -787,13 +787,15 @@ tests:
             - search_orders
       - type: trace-span-count
         value:
-          # Promptfoo first-party agent SDKs use this pattern.
+          # Claude Agent SDK and Azure Foundry use this per-generation pattern.
           # Use `generation *` for openai:agents, `call_llm` for Google ADK, etc.
           pattern: 'gen_ai.turn *'
           max: 1
 ```
 
 This passes only when both tool calls were emitted by a single LLM generation — a structural test that bounds both latency and prompt-token cost.
+
+Do not use this batching inference with `openai:codex-sdk` or `openai:codex-app-server`: their `gen_ai.turn *` spans represent an SDK or protocol turn that can contain multiple hidden model generations.
 
 ### trajectory:step-count {#trajectorystep-count}
 

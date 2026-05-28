@@ -118,9 +118,9 @@ interface CodexStreamingState {
   reasoningTexts: string[];
   conversationMessages: Array<{ role: string; content: string }>;
   /**
-   * Counter for LLM turns observed in this run. Codex emits explicit
-   * `turn.started` / `turn.completed` events around each LLM round-trip; we
-   * use those as turn boundaries and emit a `gen_ai.turn N` span per turn.
+   * Counter for SDK turns observed in this run. A streamed provider call
+   * normally contains one `turn.started` / `turn.completed` lifecycle. This
+   * marker exposes that SDK boundary; it does not reveal hidden model rounds.
    */
   turnCount: number;
   /** Active `gen_ai.turn` span, opened on `turn.started` and ended on `turn.completed`. */
@@ -1064,7 +1064,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         if (!state.activeTurnSpan) {
           // Some Codex SDK streams emit `turn.completed` without a prior
           // `turn.started`. Lazily synthesize a turn span so the
-          // `gen_ai.turn *` count still reflects this LLM round.
+          // `gen_ai.turn *` count still reflects this SDK turn.
           this.startTurnSpan(state, tracer, state.lastEventTime);
         }
         this.endTurnSpan(state, eventTime, event.usage);

@@ -235,21 +235,21 @@ tests:
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
-### Per-LLM-turn spans {#per-llm-turn-spans}
+### Turn marker spans {#per-llm-turn-spans}
 
-Several first-party providers run an agent loop internally. To make those internal LLM round-trips visible to trace assertions, Promptfoo emits one marker span per LLM turn. The span name and convention depend on the provider:
+Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
 
-| Provider                         | Per-turn span name pattern                 | Notes                                                                                                                                   |
+| Provider                         | Turn span name pattern                     | What a counted span represents                                                                                                          |
 | -------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One per `assistant` message from the SDK stream                                                                                         |
-| `openai:codex-sdk`               | `gen_ai.turn *`                            | One per Codex `turn.started` / `turn.completed` event                                                                                   |
-| `openai:codex-app-server`        | `gen_ai.turn *`                            | One per Codex app-server `turn/started` notification                                                                                    |
-| `azure:foundry-agent`            | `gen_ai.turn *`                            | One per iteration of the function-call loop                                                                                             |
+| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round                                                                      |
+| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round                                                           |
 | `openai:agents` (TypeScript)     | `response *` (preferred) or `generation *` | `openai-agents-js` emits `response <id>` per LLM round; `generation *` is also produced when the SDK includes a `generation`-typed span |
 | `openai-agents` Python (example) | `turn *` (preferred) or `response *`       | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                       |
 | Google ADK (via `google.adk`)    | `call_llm`                                 | Emitted by ADK's built-in OpenTelemetry instrumentation                                                                                 |
+| `openai:codex-sdk`               | `gen_ai.turn *`                            | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                              |
+| `openai:codex-app-server`        | `gen_ai.turn *`                            | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                          |
 
-Counting these spans tells you how many LLM round-trips an agent took. Combined with [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence), this lets you assert that an agent batched its tool calls into a single generation rather than spreading them across sequential rounds:
+For providers whose rows above identify an internal LLM round, counting these spans tells you how many model round-trips an agent took. Combined with [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence), this lets you assert that an agent batched its tool calls into a single generation rather than spreading them across sequential rounds:
 
 ```yaml
 assert:
@@ -263,7 +263,9 @@ assert:
       max: 1
 ```
 
-For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the turn that emitted them.
+Codex SDK and app-server turn markers are still useful for correlating item spans and token usage to a provider turn, but they cannot distinguish batched from sequential tool calls within that turn because those APIs do not expose internal model-generation boundaries.
+
+For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the exposed turn that emitted them.
 
 External providers that wrap their own agent loops can adopt the same convention: emit one OpenTelemetry span per LLM round, with name starting `gen_ai.turn ` and the attribute `gen_ai.turn.index`.
 

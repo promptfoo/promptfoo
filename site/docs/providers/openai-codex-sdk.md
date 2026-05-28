@@ -396,14 +396,19 @@ providers:
 With streaming enabled, the provider creates spans for:
 
 - **Provider-level calls** - Overall request timing and token usage
-- **Per-LLM-turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes. Count them with `trace-span-count pattern: 'gen_ai.turn *'` to assert how many LLM round-trips an agent took.
+- **SDK turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes.
 - **Agent responses** - Individual message completions
 - **Reasoning steps** - Model reasoning captured in span events
 - **Command executions** - Shell commands with exit codes and output
 - **File changes** - File modifications with paths and change types
 - **MCP tool calls** - External tool invocations
 
-Every item span (commands, file changes, MCP tools, etc.) is additionally tagged with `gen_ai.turn.index` so callers can correlate it back to the LLM turn that emitted it.
+Every item span (commands, file changes, MCP tools, etc.) is additionally tagged with `gen_ai.turn.index` so callers can correlate it back to the SDK turn that emitted it.
+
+The Codex SDK exposes a turn for each `thread.runStreamed()` call, including its
+intermediate tool items. It does not expose each internal model generation, so these
+markers can verify and correlate SDK turns but cannot prove whether tool calls were
+batched into one LLM round-trip.
 
 ### Deep Tracing
 

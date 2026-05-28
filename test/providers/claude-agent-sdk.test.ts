@@ -5107,17 +5107,13 @@ describe('ClaudeCodeSDKProvider', () => {
               {
                 type: 'assistant',
                 parent_tool_use_id: null,
-                message: createMockBetaMessage([
-                  { type: 'text', text: 'planning' },
-                ]),
+                message: createMockBetaMessage([{ type: 'text', text: 'planning' }]),
                 session_id: 'test-session',
               },
               {
                 type: 'assistant',
                 parent_tool_use_id: null,
-                message: createMockBetaMessage([
-                  { type: 'text', text: 'final answer' },
-                ]),
+                message: createMockBetaMessage([{ type: 'text', text: 'final answer' }]),
                 session_id: 'test-session',
               },
               {
@@ -5191,7 +5187,12 @@ describe('ClaudeCodeSDKProvider', () => {
                 message: {
                   role: 'user',
                   content: [
-                    { type: 'tool_result', tool_use_id: 'tool-3', content: 'ls output', is_error: false },
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'tool-3',
+                      content: 'ls output',
+                      is_error: false,
+                    },
                   ],
                 },
                 session_id: 'test-session',
@@ -5234,9 +5235,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 type: 'assistant',
                 parent_tool_use_id: 'task-tool-1',
                 subagent_type: 'researcher',
-                message: createMockBetaMessage([
-                  { type: 'text', text: 'subagent thinking' },
-                ]),
+                message: createMockBetaMessage([{ type: 'text', text: 'subagent thinking' }]),
                 session_id: 'test-session',
               },
               {

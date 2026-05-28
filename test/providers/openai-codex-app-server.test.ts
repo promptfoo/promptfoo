@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -100,6 +101,53 @@ async function waitForMessageWithoutTimers(
     await flushMicrotasks();
   }
   throw new Error('Timed out waiting for mock app-server message');
+}
+
+interface RecordedSpan {
+  name: string;
+  attributes: Record<string, unknown>;
+  status?: { code: number; message?: string };
+  ended: boolean;
+}
+
+function installSpanRecorder(): RecordedSpan[] {
+  const spans: RecordedSpan[] = [];
+  const createSpan = (name: string, attributes: Record<string, unknown> = {}) => {
+    const entry: RecordedSpan = { name, attributes: { ...attributes }, ended: false };
+    spans.push(entry);
+    return {
+      addEvent: vi.fn(),
+      end: vi.fn(() => {
+        entry.ended = true;
+      }),
+      isRecording: vi.fn(() => true),
+      recordException: vi.fn(),
+      setAttribute: vi.fn((key: string, value: unknown) => {
+        entry.attributes[key] = value;
+      }),
+      setAttributes: vi.fn((values: Record<string, unknown>) => {
+        Object.assign(entry.attributes, values);
+      }),
+      setStatus: vi.fn((status: { code: number; message?: string }) => {
+        entry.status = status;
+      }),
+      spanContext: vi.fn(() => ({ traceId: 'trace', spanId: 'span' })),
+      updateName: vi.fn(),
+    };
+  };
+
+  vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startSpan: (name: string, options?: { attributes?: Record<string, unknown> }) =>
+      createSpan(name, options?.attributes),
+    startActiveSpan: (
+      name: string,
+      options: { attributes?: Record<string, unknown> },
+      _parentContext: unknown,
+      callback: (span: unknown) => unknown,
+    ) => callback(createSpan(name, options?.attributes)),
+  } as any);
+
+  return spans;
 }
 
 describe('OpenAICodexAppServerProvider', () => {
@@ -381,6 +429,104 @@ describe('OpenAICodexAppServerProvider', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       }),
     );
+  });
+
+  it('emits a protocol turn span with nested usage when no turn/started notification arrives', async () => {
+    const spans = installSpanRecorder();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Trace this app-server turn');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_tracing' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_tracing', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_tracing',
+        turnId: 'turn_tracing',
+        item: { type: 'agentMessage', id: 'msg_tracing', text: 'Done' },
+      },
+    });
+    server.send({
+      method: 'thread/tokenUsage/updated',
+      params: {
+        threadId: 'thr_tracing',
+        turnId: 'turn_tracing',
+        tokenUsage: {
+          last: {
+            inputTokens: 13,
+            outputTokens: 5,
+            cachedInputTokens: 2,
+            reasoningOutputTokens: 1,
+          },
+        },
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_tracing',
+        turn: { id: 'turn_tracing', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Done' });
+
+    const turnSpan = spans.find((span) => span.name === 'gen_ai.turn 1');
+    expect(turnSpan?.attributes).toMatchObject({
+      'gen_ai.turn.index': 1,
+      'gen_ai.usage.input_tokens': 13,
+      'gen_ai.usage.output_tokens': 5,
+      'gen_ai.usage.cached_tokens': 2,
+      'gen_ai.usage.reasoning_tokens': 1,
+    });
+    expect(turnSpan?.ended).toBe(true);
+
+    const messageSpan = spans.find((span) => span.name === 'agent response');
+    expect(messageSpan?.attributes['gen_ai.turn.index']).toBe(1);
+  });
+
+  it('does not reuse usage from an earlier protocol turn marker', () => {
+    const spans = installSpanRecorder();
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+    const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
+
+    (provider as any).startTurnSpan(state, 1);
+    state.rawTokenUsage = { last: { inputTokens: 9, outputTokens: 4 } };
+    state.tokenUsage = { prompt: 9, completion: 4, total: 13 };
+    (provider as any).endTurnSpan(state, 2);
+
+    (provider as any).startTurnSpan(state, 3, true);
+    (provider as any).endTurnSpan(state, 4);
+
+    const turnSpans = spans.filter((span) => span.name.startsWith('gen_ai.turn '));
+    expect(turnSpans).toHaveLength(2);
+    expect(turnSpans[0].attributes).toMatchObject({
+      'gen_ai.usage.input_tokens': 9,
+      'gen_ai.usage.output_tokens': 4,
+    });
+    expect(turnSpans[1].attributes).not.toHaveProperty('gen_ai.usage.input_tokens');
+    expect(turnSpans[1].attributes).not.toHaveProperty('gen_ai.usage.output_tokens');
+    expect(state.tokenUsage).toBeUndefined();
   });
 
   it('uses the last completed agent message as the final output', async () => {

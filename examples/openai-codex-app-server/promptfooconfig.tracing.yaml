@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Codex app-server: count LLM turns via gen_ai.turn marker spans'
+description: 'Codex app-server: verify traced protocol turn markers'
 
 prompts:
   - 'Return a concise JSON summary of this workspace. Include the main purpose.'

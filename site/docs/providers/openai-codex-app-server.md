@@ -326,17 +326,23 @@ Command output, tool arguments, and approval metadata are sanitized before they 
 
 ## Tracing
 
-Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` → `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the LLM turn that emitted them.
+Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
 
-To assert how many LLM round-trips an agent took, count the turn markers:
+To verify that an app-server protocol turn was traced, count the turn markers:
 
 ```yaml
 assert:
   - type: trace-span-count
     value:
       pattern: 'gen_ai.turn *'
-      max: 2
+      min: 1
+      max: 1
 ```
+
+An app-server `turn/start` request covers one agent turn, including any internal model
+generations and tool execution. App-server notifications do not expose those internal
+model-generation boundaries, so these markers cannot distinguish batched from
+sequential tool calls inside a turn.
 
 Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 

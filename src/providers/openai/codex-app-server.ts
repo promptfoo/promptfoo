@@ -303,10 +303,10 @@ interface CodexAppServerTurnState {
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
   /**
-   * Count of `turn/started` notifications received. Each corresponds to one
-   * Codex app-server LLM round-trip. We emit a `gen_ai.turn N` marker span
-   * between `turn/started` and `turn/completed` so trace assertions can count
-   * internal turns hidden inside the wrapping `chat *` provider span.
+   * Count of `turn/started` notifications received. Each represents an
+   * app-server protocol turn; it does not expose model-internal rounds hidden
+   * inside that turn. We emit a `gen_ai.turn N` marker span between
+   * `turn/started` and `turn/completed` for correlation and usage visibility.
    */
   turnCount: number;
   /** Active `gen_ai.turn` span, opened on `turn/started`. */
@@ -2240,7 +2240,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         if (typeof params.turn?.id === 'string') {
           this.updateTurnStateId(state, params.turn.id);
         }
-        this.startTurnSpan(state, eventTime);
+        this.startTurnSpan(state, eventTime, true);
         break;
       case 'item/started':
         if (!state.activeTurnSpan) {
@@ -3136,12 +3136,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.deepTracingWarningShown = true;
   }
 
-  private startItemSpan(
-    item: any,
-    itemId: string,
-    startTime?: number,
-    turnIndex?: number,
-  ): Span {
+  private startItemSpan(item: any, itemId: string, startTime?: number, turnIndex?: number): Span {
     return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
@@ -3154,7 +3149,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     });
   }
 
-  private startTurnSpan(state: CodexAppServerTurnState, eventTime: number): void {
+  private startTurnSpan(
+    state: CodexAppServerTurnState,
+    eventTime: number,
+    clearPreviousUsage = false,
+  ): void {
     if (state.activeTurnSpan) {
       try {
         state.activeTurnSpan.end(eventTime);
@@ -3162,6 +3161,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         // ignore
       }
       state.activeTurnSpan = undefined;
+    }
+    if (clearPreviousUsage) {
+      // Usage is associated with the active protocol turn. Do not attribute the
+      // previous turn's most recent update when an explicit later turn starts.
+      // Lazy-open paths may run after usage for their current turn arrived.
+      state.rawTokenUsage = undefined;
+      state.tokenUsage = undefined;
     }
     state.turnCount += 1;
     state.activeTurnIndex = state.turnCount;
