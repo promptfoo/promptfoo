@@ -99,14 +99,29 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
+  const normalizeFilePath = (filePath: string) =>
+    process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(filePath)
+      ? filePath.slice(1)
+      : filePath;
+
   if (lastColonIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+
+    // Only executable function files support a :functionName suffix. This preserves
+    // colons that are part of a valid file or directory name on POSIX systems.
+    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
+      return {
+        filePath: normalizeFilePath(urlWithoutProtocol),
+      };
+    }
+
     return {
-      filePath: urlWithoutProtocol.slice(0, lastColonIndex),
+      filePath: normalizeFilePath(candidateFilePath),
       functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
     };
   }
 
   return {
-    filePath: urlWithoutProtocol,
+    filePath: normalizeFilePath(urlWithoutProtocol),
   };
 }
