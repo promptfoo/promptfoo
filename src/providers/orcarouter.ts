@@ -119,20 +119,35 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const promptConfig = context?.prompt?.config as
+      | {
+          models?: unknown;
+          route?: unknown;
+        }
+      | undefined;
     const config = result.config as typeof result.config & {
       models?: unknown;
+      reasoning_effort?: unknown;
       route?: unknown;
     };
     const body = result.body as typeof result.body & {
       models?: unknown;
+      reasoning_effort?: unknown;
       route?: unknown;
     };
 
-    if (config.models !== undefined && body.models === undefined) {
+    if (promptConfig?.models !== undefined) {
+      body.models = promptConfig.models;
+    } else if (config.models !== undefined) {
       body.models = config.models;
     }
-    if (config.route !== undefined && body.route === undefined) {
+    if (promptConfig?.route !== undefined) {
+      body.route = promptConfig.route;
+    } else if (config.route !== undefined) {
       body.route = config.route;
+    }
+    if (config.reasoning_effort !== undefined && body.reasoning_effort === undefined) {
+      body.reasoning_effort = config.reasoning_effort;
     }
 
     return result;

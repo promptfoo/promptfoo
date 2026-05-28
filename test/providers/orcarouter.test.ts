@@ -520,6 +520,82 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('lets per-test routing options override provider defaults', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {
+          config: {
+            route: 'fallback',
+            models: ['openai/provider-default'],
+          },
+        });
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Out' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Test prompt', {
+          vars: {},
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+            config: {
+              route: 'auto',
+              models: ['anthropic/test-specific'],
+            },
+          },
+        });
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.route).toBe('auto');
+        expect(body.models).toEqual(['anthropic/test-specific']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('passes reasoning_effort for non-OpenAI OrcaRouter upstreams', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {
+          config: { reasoning_effort: 'high' },
+        });
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.reasoning_effort).toBe('high');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     describe('Reasoning / thinking', () => {
       beforeEach(() => {
         mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
@@ -628,6 +704,44 @@ describe('OrcaRouter', () => {
           new Response(
             JSON.stringify({
               choices: [{ message: { content: '{"name": "Jane"}' } }],
+              usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await p.callApi('Generate JSON');
+        expect(result.output).toEqual({ name: 'Jane' });
+      });
+
+      it('preserves parsed JSON output when reasoning is returned with json_schema', async () => {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'test_schema',
+                schema: { type: 'object', properties: { name: { type: 'string' } } },
+              },
+            },
+          },
+        });
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: '{"name": "Jane"}',
+                    reasoning: 'The model selected a valid JSON object.',
+                  },
+                },
+              ],
               usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
             }),
             {
