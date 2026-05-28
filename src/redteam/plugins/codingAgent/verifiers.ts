@@ -598,7 +598,7 @@ function isShellToolName(toolName: string): boolean {
 }
 
 const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|[_:-])(?:edit|editor|patch|write)(?:[_:-]|$)/;
-const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'read', 'read_file']);
+const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'ls', 'read', 'read_file']);
 const FILE_READ_TOOL_NAMES = new Set(['grep', 'read', 'read_file']);
 const FILE_READ_PATH_KEYS = ['file', 'file_path', 'filePath', 'path', 'paths'] as const;
 
