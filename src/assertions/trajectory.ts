@@ -27,10 +27,13 @@ interface TrajectoryGoalSuccessValue {
   goal: string;
 }
 
+type ToolArgsDefaults = Record<string, unknown>;
+
 interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
   arguments?: unknown;
   mode?: 'exact' | 'partial';
+  defaults?: ToolArgsDefaults;
 }
 
 function getTraceOrThrow(params: AssertionParams) {
@@ -260,16 +263,53 @@ function matchesExpectedArgsPartial(actual: unknown, expected: unknown): boolean
   return isDeepStrictEqual(actual, expected);
 }
 
+interface StrippedToolArgs {
+  cleaned: unknown;
+  stripped: string[];
+}
+
+function stripDefaults(actual: unknown, defaults: ToolArgsDefaults | undefined): StrippedToolArgs {
+  if (!defaults || !isRecord(actual)) {
+    return { cleaned: actual, stripped: [] };
+  }
+
+  const cleaned: Record<string, unknown> = {};
+  const stripped: string[] = [];
+  for (const [key, value] of Object.entries(actual)) {
+    if (
+      Object.prototype.hasOwnProperty.call(defaults, key) &&
+      isDeepStrictEqual(value, defaults[key])
+    ) {
+      stripped.push(key);
+      continue;
+    }
+    // Use defineProperty rather than `cleaned[key] = value` so reserved keys such as
+    // "__proto__" are kept as own properties instead of mutating the prototype. A plain
+    // assignment would silently drop a hallucinated `__proto__` argument and let exact
+    // mode pass when it should fail — defeating the point of stripping defaults.
+    Object.defineProperty(cleaned, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return { cleaned, stripped };
+}
+
 function matchesToolArgs(
   actual: unknown,
   expected: unknown,
   mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
+  defaults: ToolArgsDefaults | undefined,
 ): boolean {
+  const { cleaned } = stripDefaults(actual, defaults);
+
   if (mode === 'exact') {
-    return isDeepStrictEqual(actual, expected);
+    return isDeepStrictEqual(cleaned, expected);
   }
 
-  return matchesExpectedArgsPartial(actual, expected);
+  return matchesExpectedArgsPartial(cleaned, expected);
 }
 
 function resolveToolArgsMatchMode(
@@ -284,6 +324,20 @@ function resolveToolArgsMatchMode(
   }
 
   throw new Error('trajectory:tool-args-match assertion mode must be "partial" or "exact"');
+}
+
+function resolveToolArgsMatchDefaults(defaults: unknown): ToolArgsDefaults | undefined {
+  if (defaults === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(defaults)) {
+    throw new Error(
+      'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+    );
+  }
+
+  return defaults;
 }
 
 function resolveToolArgsMatchValue(value: unknown) {
@@ -308,6 +362,7 @@ function resolveToolArgsMatchValue(value: unknown) {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
+    defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
   } as const;
 }
 
@@ -385,16 +440,23 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode } = resolveToolArgsMatchValue(
+  const { matcher, expectedArgs, mode, defaults } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
-  const matchedStep = stepsWithArgs.find((step) => matchesToolArgs(step.args, expectedArgs, mode));
+  const matchedStep = stepsWithArgs.find((step) =>
+    matchesToolArgs(step.args, expectedArgs, mode, defaults),
+  );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
+  const ignoredDefaults = matchedStep ? stripDefaults(matchedStep.args, defaults).stripped : [];
+  const ignoredDefaultsSuffix =
+    ignoredDefaults.length > 0
+      ? `. Ignored default argument(s): ${ignoredDefaults.join(', ')}`
+      : '';
   const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);
   const observedArgsLabel =
     stepsWithArgs.length > 0
@@ -411,7 +473,7 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed. Observed args: ${observedArgsLabel}`;
     }
   } else if (basePass) {
-    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
+    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}${ignoredDefaultsSuffix}`;
   } else if (matchingSteps.length === 0) {
     reason = `No tool call matched "${matcherLabel}". Actual tools: ${formatStepList(actualTools)}`;
   } else if (stepsWithArgs.length === 0) {
