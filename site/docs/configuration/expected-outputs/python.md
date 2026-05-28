@@ -1,7 +1,7 @@
 ---
 sidebar_position: 51
 sidebar_label: Python
-description: Write Python assertions for LLM outputs using custom scores, provider metadata, external scripts, trace context, and clear failure handling in promptfoo evals.
+description: Create advanced Python validation scripts with complex logic, external APIs, and ML libraries for sophisticated output grading
 ---
 
 # Python assertions
@@ -113,33 +113,6 @@ tests:
       - type: python
         value: 'context["vars"]["example"] in output'
 ```
-
-## Accessing provider metadata
-
-Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access optional metadata via `context.get('metadata', {})`.
-
-```yaml
-tests:
-  - vars:
-      query: 'What is the weather?'
-    assert:
-      - type: python
-        value: 'context.get("metadata", {}).get("http", {}).get("status") == 200'
-
-      - type: python
-        value: '200 <= context.get("metadata", {}).get("http", {}).get("status", 0) < 300'
-
-      - type: python
-        value: 'context.get("metadata", {}).get("customField", 0) <= 10'
-```
-
-Common metadata fields (varies by provider):
-
-- `http['status']` - HTTP response status code ([HTTP provider](/docs/providers/http))
-- `http['statusText']` - HTTP response status text
-- `http['headers']` - HTTP response headers
-- `groundingMetadata` - Search grounding info ([Google providers](/docs/providers/vertex))
-- `redteamFinalPrompt` - Final prompt used in red team attacks
 
 ## External .py
 

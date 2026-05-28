@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
-description: Write JavaScript assertions for LLM outputs using async logic, custom scores, provider metadata, trace context, and clear failure handling in promptfoo evals.
+description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
 ---
 
 # Javascript assertions
@@ -171,33 +171,6 @@ tests:
       - type: javascript
         value: 'output.length >= context.vars.min_length'
 ```
-
-## Accessing provider metadata
-
-Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access metadata via `context.metadata`, which is a shortcut for `context.providerResponse?.metadata`.
-
-```yaml
-tests:
-  - vars:
-      query: 'What is the weather?'
-    assert:
-      - type: javascript
-        value: 'context.metadata?.http?.status === 200'
-
-      - type: javascript
-        value: '(context.metadata?.http?.status ?? 0) >= 200 && (context.metadata?.http?.status ?? 0) < 300'
-
-      - type: javascript
-        value: '(context.metadata?.customField ?? 0) <= 10'
-```
-
-Common metadata fields (varies by provider):
-
-- `http.status` - HTTP response status code ([HTTP provider](/docs/providers/http))
-- `http.statusText` - HTTP response status text
-- `http.headers` - HTTP response headers
-- `groundingMetadata` - Search grounding info ([Google providers](/docs/providers/vertex))
-- `redteamFinalPrompt` - Final prompt used in red team attacks
 
 ## Passing assertion-specific parameters
 

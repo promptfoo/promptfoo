@@ -1,7 +1,7 @@
 ---
 sidebar_position: 52
 sidebar_label: Ruby
-description: Write Ruby assertions for LLM outputs using custom scores, provider metadata, external scripts, trace context, and clear failure handling in promptfoo evals.
+description: Create advanced Ruby validation scripts with complex logic, external APIs, and custom libraries for sophisticated output grading
 ---
 
 # Ruby assertions
@@ -111,20 +111,6 @@ tests:
     assert:
       - type: ruby
         value: 'output.include?(context["vars"]["example"])'
-```
-
-## Accessing provider metadata
-
-Providers can include metadata in their responses. Access optional metadata through `context.fetch('metadata', {})`:
-
-```yaml
-tests:
-  - assert:
-      - type: ruby
-        value: "context.fetch('metadata', {}).dig('http', 'status') == 200"
-
-      - type: ruby
-        value: "context.fetch('metadata', {}).fetch('customField', 0) <= 10"
 ```
 
 ## External .rb
