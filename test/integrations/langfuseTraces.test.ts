@@ -99,6 +99,8 @@ describe('langfuseTraces', () => {
 
     it('should throw on invalid limit', () => {
       expect(() => parseTracesUrl('langfuse://traces?limit=abc')).toThrow('Invalid limit');
+      expect(() => parseTracesUrl('langfuse://traces?limit=10traces')).toThrow('Invalid limit');
+      expect(() => parseTracesUrl('langfuse://traces?limit=1.5')).toThrow('Invalid limit');
       expect(() => parseTracesUrl('langfuse://traces?limit=-1')).toThrow('Invalid limit');
       expect(() => parseTracesUrl('langfuse://traces?limit=0')).toThrow('Invalid limit');
     });
@@ -504,6 +506,30 @@ describe('langfuseTraces', () => {
       expect(tests[0].vars?.input).toBe('Describe this dashboard');
     });
 
+    it('should extract Responses API message arrays nested under input', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-responses-input',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: {
+              input: [
+                {
+                  role: 'user',
+                  content: [{ type: 'input_text', text: 'Classify this request' }],
+                },
+              ],
+            },
+            output: 'Classified',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Classify this request');
+    });
+
     it('should extract Responses API output_text blocks from output arrays', async () => {
       mockTraceList.mockResolvedValueOnce({
         data: [
@@ -532,6 +558,41 @@ describe('langfuseTraces', () => {
 
       expect(tests[0].vars?.output).toBe('Final answer\nAdditional detail');
       expect(tests[0].providerOutput).toBe('Final answer\nAdditional detail');
+    });
+
+    it('should preserve OpenAI chat tool calls when assistant content is null', async () => {
+      const toolCalls = [
+        {
+          id: 'call_123',
+          type: 'function',
+          function: { name: 'lookup_weather', arguments: '{"city":"Paris"}' },
+        },
+      ];
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-tool-call-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Get weather',
+            output: {
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: toolCalls,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toEqual(toolCalls);
+      expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
     });
 
     it('should handle traces with Anthropic format', async () => {

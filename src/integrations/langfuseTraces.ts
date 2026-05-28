@@ -178,6 +178,26 @@ function extractOutputItemsText(outputItems: unknown[]): unknown | undefined {
   return textValues.length > 0 ? joinTextValues(textValues) : undefined;
 }
 
+function extractChatChoiceText(choice: unknown): unknown | undefined {
+  if (!isRecord(choice)) {
+    return undefined;
+  }
+
+  if (isRecord(choice.message)) {
+    const content = choice.message.content;
+    if (content !== undefined && content !== null) {
+      return Array.isArray(content) ? extractTextBlocks(content) : content;
+    }
+
+    const toolCall = choice.message.tool_calls ?? choice.message.function_call;
+    if (toolCall !== undefined && toolCall !== null) {
+      return toolCall;
+    }
+  }
+
+  return choice.text;
+}
+
 function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
   if (!htmlPath) {
     return undefined;
@@ -248,8 +268,8 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
   // Parse limit with validation
   const limitParam = params.get('limit');
   if (limitParam) {
-    const limit = parseInt(limitParam, 10);
-    if (isNaN(limit) || limit < 1) {
+    const limit = Number(limitParam);
+    if (!Number.isInteger(limit) || limit < 1) {
       throw new Error(`Invalid limit parameter: ${limitParam}`);
     }
     query.limit = Math.min(limit, MAX_LIMIT);
@@ -311,8 +331,22 @@ function extractInputText(input: unknown): unknown {
     }
   }
 
-  // Simple key patterns: { query, prompt, message, input, text }
-  return obj.query ?? obj.prompt ?? obj.message ?? obj.input ?? obj.text ?? input;
+  // Simple key patterns: { query, prompt, message, input, text }.
+  // Responses requests commonly nest message arrays under `input`; process
+  // those through the same extractor rather than stringifying envelopes.
+  if (obj.query !== undefined) {
+    return obj.query;
+  }
+  if (obj.prompt !== undefined) {
+    return obj.prompt;
+  }
+  if (obj.message !== undefined) {
+    return obj.message;
+  }
+  if (obj.input !== undefined) {
+    return extractInputText(obj.input);
+  }
+  return obj.text ?? input;
 }
 
 /**
@@ -335,16 +369,9 @@ function extractOutputText(output: unknown): unknown {
 
   // OpenAI completion format: { choices: [{message: {content: '...'}}] } or { choices: [{text: '...'}] }
   if (Array.isArray(obj.choices) && obj.choices.length > 0) {
-    const choice = obj.choices[0];
-    if (isRecord(choice)) {
-      if (isRecord(choice.message) && choice.message.content !== undefined) {
-        return Array.isArray(choice.message.content)
-          ? extractTextBlocks(choice.message.content)
-          : choice.message.content;
-      }
-      if (choice.text !== undefined) {
-        return choice.text;
-      }
+    const choiceText = extractChatChoiceText(obj.choices[0]);
+    if (choiceText !== undefined) {
+      return choiceText;
     }
   }
 
