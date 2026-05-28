@@ -701,6 +701,57 @@ describe('Provider Registry', () => {
       );
     });
 
+    it('should route novita sub-types and reject unknown ones', async () => {
+      const factory = providerMap.find((f) => f.test('novita:meta/llama-3.1-8b-instruct'));
+      expect(factory).toBeDefined();
+
+      const novitaOptions = { ...mockProviderOptions, id: undefined };
+
+      // Shorthand `novita:<model>` resolves to chat.
+      const shorthand = await factory!.create(
+        'novita:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(shorthand.id()).toBe('novita:chat:meta/llama-3.1-8b-instruct');
+
+      // Explicit sub-types resolve to their respective providers.
+      const chat = await factory!.create(
+        'novita:chat:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(chat.id()).toBe('novita:chat:meta/llama-3.1-8b-instruct');
+
+      const completion = await factory!.create(
+        'novita:completion:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(completion.id()).toBe('novita:completion:meta/llama-3.1-8b-instruct');
+
+      const embedding = await factory!.create(
+        'novita:embedding:baai/bge-m3',
+        novitaOptions,
+        mockContext,
+      );
+      expect(embedding.id()).toBe('novita:embedding:baai/bge-m3');
+
+      // Unknown sub-types (image, moderation, typos) fail-fast instead of silently
+      // routing to chat — a routing regression flagged in `src/providers/AGENTS.md`.
+      await expect(factory!.create('novita:image:foo', novitaOptions, mockContext)).rejects.toThrow(
+        /Unknown Novita provider sub-type "image"/,
+      );
+      await expect(
+        factory!.create('novita:moderation:bar', novitaOptions, mockContext),
+      ).rejects.toThrow(/Unknown Novita provider sub-type "moderation"/);
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('novita:', novitaOptions, mockContext)).rejects.toThrow(
+        /Novita model name is required/,
+      );
+    });
+
     it('should handle orcarouter provider correctly', async () => {
       const factory = providerMap.find((f) => f.test('orcarouter:openai/gpt-4o'));
       expect(factory).toBeDefined();
