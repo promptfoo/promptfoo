@@ -671,6 +671,48 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.thinking).toEqual({ type: 'adaptive' });
     });
 
+    it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'enabled', budget_tokens: 5000 },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+    });
+
+    it('keeps disabled thinking unchanged for Claude Opus 4.8 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'disabled' },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.thinking).toEqual({ type: 'disabled' });
+    });
+
+    it('keeps adaptive thinking unchanged for Claude Opus 4.8 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'adaptive' },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+    });
+
     it('silently omits temperature on Claude Opus 4.8 invokeModel path (no per-request warning)', async () => {
       // The shared CLAUDE_MESSAGES.params handler has no per-instance state to
       // dedup a warning across requests, so it normalizes silently; the Anthropic

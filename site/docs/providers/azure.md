@@ -889,6 +889,10 @@ providers:
       max_tokens: 4096
 ```
 
+:::note
+The `azure:chat:` provider and `isClaudeOpus47OrLater` only apply to Azure Claude deployments that expose the OpenAI-compatible chat-completions API. Some Azure AI Foundry models-as-a-service Claude deployments only support the Anthropic Messages API and return `api_not_supported` for chat completions; those deployments are not reachable via `azure:chat:`. Use Option 1 (the Anthropic Messages API endpoint) for them.
+:::
+
 Available Claude deployments on Azure AI Foundry:
 
 | Model                        | Description       |

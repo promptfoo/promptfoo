@@ -1940,6 +1940,99 @@ Third line`;
       );
     });
 
+    it('should keep manual thinking enabled for non-deprecated Claude models', async () => {
+      // claude-3-5-sonnet is not in the sampling-params-deprecated set, so an
+      // explicit budget_tokens thinking config must pass through untouched
+      // rather than being downgraded to adaptive.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 12000,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 12000,
+            },
+          },
+        }),
+      );
+    });
+
+    it('should pass through disabled thinking unchanged for Claude Opus 4.8', async () => {
+      // Only type: 'enabled' is rewritten to adaptive for deprecated Opus
+      // models; a disabled thinking block must be forwarded as-is.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'disabled',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'disabled',
+            },
+          },
+        }),
+      );
+    });
+
+    it('should pass through adaptive thinking unchanged for Claude Opus 4.8', async () => {
+      // An already-adaptive thinking block must not be touched by the
+      // enabled->adaptive conversion for deprecated Opus models.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'adaptive',
+            },
+          },
+        }),
+      );
+    });
+
     it('should merge custom additional fields with thinking', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
