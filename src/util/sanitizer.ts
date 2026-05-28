@@ -255,6 +255,23 @@ export function redactAzureBlobSasTokens<T>(value: T): T {
 }
 
 /**
+ * Find a stored string whose redacted form matches `redactedValue`, regardless of
+ * its position in the stored array. Only the SAS `sig` is redacted, so the rest
+ * of the blob URI is preserved and acts as a stable identity for the match.
+ */
+function findStoredSasMatchByValue(
+  redactedValue: string,
+  storedItems: readonly unknown[],
+): string | undefined {
+  for (const stored of storedItems) {
+    if (typeof stored === 'string' && redactAzureBlobSasToken(stored) === redactedValue) {
+      return stored;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Preserve stored SAS credentials when a sanitized config is written back unchanged.
  * If the caller edits the resource or supplies a replacement token, retain its value.
  */
@@ -268,7 +285,20 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    return value.map((item, index) => restoreAzureBlobSasTokens(item, storedItems[index])) as T;
+    return value.map((item, index) => {
+      const positional = restoreAzureBlobSasTokens(item, storedItems[index]);
+      // Positional restore fails when the array was reordered or had entries
+      // inserted/removed since it was sanitized, leaving a redacted SAS
+      // placeholder in place. Fall back to matching a stored token by value (its
+      // blob URI) so the real `sig` is restored regardless of position.
+      if (typeof item === 'string' && positional === item) {
+        const restored = findStoredSasMatchByValue(item, storedItems);
+        if (restored !== undefined && restored !== item) {
+          return restored;
+        }
+      }
+      return positional;
+    }) as T;
   }
 
   if (!value || typeof value !== 'object' || isClassInstance(value)) {
