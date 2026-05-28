@@ -40,6 +40,10 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 Anthropic's Claude models are available with the following versions:
 
+**Claude 4.8:**
+
+- `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+
 **Claude 4.7:**
 
 - `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, long-running agents, and computer use. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. See the [Google Cloud announcement](https://cloud.google.com/blog/products/ai-machine-learning/claude-opus-4-7-on-vertex-ai) for details.

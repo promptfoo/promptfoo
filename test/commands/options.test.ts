@@ -71,8 +71,9 @@ describe('normalizeTagOption', () => {
   });
 
   it('adds no "tags" key when neither "tag" nor "tags" is present', () => {
-    const input: { config: string; tag?: Record<string, string>; tags?: Record<string, string> } =
-      { config: 'promptfooconfig.yaml' };
+    const input: { config: string; tag?: Record<string, string>; tags?: Record<string, string> } = {
+      config: 'promptfooconfig.yaml',
+    };
     const result = normalizeTagOption(input);
 
     expect(result).toEqual({ config: 'promptfooconfig.yaml' });
