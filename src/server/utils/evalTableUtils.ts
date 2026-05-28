@@ -170,9 +170,11 @@ function collectNamedScoreNamesByPrompt(table: {
  * `updateDerivedMetrics`), so this keeps the streaming column set aligned
  * with what `collectNamedScoreNamesByPrompt` would produce from row outputs.
  *
- * Returns an empty list for prompts whose count map is missing or empty;
- * the streaming caller backfills those with a discovery pass over row outputs,
- * which naturally excludes derived metrics (they never appear on rows).
+ * Returns an empty list both for prompts with no per-row contributions
+ * (`namedScoresCount: {}` — modern eval with no named metrics configured)
+ * and for prompts whose count map is missing entirely (legacy/imported
+ * evals). Use `promptNeedsDiscoveryFallback` to distinguish the two: only
+ * the latter requires a row-scan pre-pass.
  */
 function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
   return collectMetricNamesByPrompt(prompts, (prompt) => {
@@ -182,6 +184,18 @@ function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[
     }
     return Object.keys(counts).filter((name) => (counts[name] ?? 0) > 0);
   });
+}
+
+/**
+ * True when a prompt's aggregate `metrics.namedScoresCount` is missing/absent,
+ * not merely empty. Legacy evals persisted before count tracking shipped, and
+ * external imports via `POST /api/eval` that don't backfill the count, both
+ * land here. Modern evals always have an object (possibly empty) and skip the
+ * discovery pass.
+ */
+function promptNeedsDiscoveryFallback(prompt: Prompt): boolean {
+  const metrics = (prompt as CompletedPrompt).metrics;
+  return !metrics || !metrics.namedScoresCount;
 }
 
 /**
@@ -688,13 +702,19 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // metrics don't introduce columns that the WebUI path would omit.
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPromptFromAggregate(prompts);
   // Legacy evals and external imports may persist `metrics.namedScores` without
-  // a matching `namedScoresCount`, so the aggregate read returns an empty list
-  // for those prompts. We can't trust the first batch alone because `EvalResult`
-  // batches slice `testIdx` ranges (default 100), so a metric that only appears
-  // past testIdx 99 would be missed. For those prompts we run a bounded-memory
-  // discovery pass over every batch first — it only inspects `namedScores` keys
-  // and `testCase.description`, never the full row, so memory stays O(prompts ×
-  // distinct metric names). Streaming is preserved in the main pass below.
+  // a matching `namedScoresCount`, so the aggregate read can't tell row-level
+  // metrics from derived ones. We can't trust the first batch alone because
+  // `EvalResult` batches slice `testIdx` ranges (default 100), so a metric that
+  // only appears past testIdx 99 would be missed. For those prompts we run a
+  // bounded-memory discovery pass over every batch first — it only inspects
+  // `namedScores` keys and `testCase.description`, never the full row, so
+  // memory stays O(prompts × distinct metric names). Streaming is preserved in
+  // the main pass below.
+  //
+  // Only prompts where `metrics.namedScoresCount` is *missing* trigger this
+  // pass — a present-but-empty count (modern eval with no named-metric
+  // assertions) is authoritative and means "no metric columns," so we avoid the
+  // extra DB round trip for the common no-metrics case.
   //
   // Note: in the rare case of concurrent writes between the two passes (e.g. a
   // CLI export run while results are still being persisted), a metric that
@@ -702,8 +722,8 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // the column header but still present in the JSON `Named Scores` cell. CLI
   // exports normally run after the eval completes, so this is a documented
   // limitation rather than a defended invariant.
-  const fallbackPromptIndices = namedScoreNamesByPrompt.flatMap((names, promptIndex) =>
-    names.length === 0 ? [promptIndex] : [],
+  const fallbackPromptIndices = prompts.flatMap((prompt, promptIndex) =>
+    promptNeedsDiscoveryFallback(prompt) ? [promptIndex] : [],
   );
   const needsRowScanFallback = fallbackPromptIndices.length > 0;
 

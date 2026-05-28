@@ -1179,6 +1179,21 @@ describe('evalTableUtils', () => {
     });
   });
 
+  // Build a CompletedPrompt that mimics legacy/imported persistence: the
+  // `metrics` object exists but lacks `namedScoresCount`. The streaming CSV
+  // path must fall back to a row-scan discovery pass for these prompts.
+  function createLegacyCompletedPrompt(
+    raw: string,
+    overrides: { namedScores: Record<string, number> } & Partial<Omit<CompletedPrompt, 'metrics'>>,
+  ): CompletedPrompt {
+    const { namedScores, ...rest } = overrides;
+    const prompt = createCompletedPrompt(raw, rest);
+    return {
+      ...prompt,
+      metrics: { ...createPromptMetrics({ namedScores }), namedScoresCount: undefined as never },
+    };
+  }
+
   describe('streamEvalCsv', () => {
     it('should order outputs by promptIdx regardless of database return order', async () => {
       // Simulate results coming back in non-sequential order (prompt 2, then 0, then 1)
@@ -1382,11 +1397,8 @@ describe('evalTableUtils', () => {
       const csv = await runStreamEvalCsv({
         vars: ['name'],
         prompts: [
-          createCompletedPrompt('Prompt 1', {
-            metrics: createPromptMetrics({
-              namedScores: { accuracy: 0.8, fluency: 0.6 },
-              namedScoresCount: {},
-            }),
+          createLegacyCompletedPrompt('Prompt 1', {
+            namedScores: { accuracy: 0.8, fluency: 0.6 },
           }),
         ],
         results: [
@@ -1410,16 +1422,62 @@ describe('evalTableUtils', () => {
       expect(header).toContain('Metric: fluency');
     });
 
+    it('should skip discovery pass for modern evals with explicitly empty namedScoresCount', async () => {
+      // Modern eval where no test uses `metric:` — `namedScoresCount` is
+      // present-but-empty. We must NOT scan the database twice for a CSV that
+      // has no metric columns to discover.
+      const prompts = [
+        createCompletedPrompt('Prompt 1', {
+          metrics: createPromptMetrics({
+            namedScores: {},
+            namedScoresCount: {},
+          }),
+        }),
+      ];
+      const chunks: string[] = [];
+      let fetchPasses = 0;
+      await streamEvalCsv(
+        {
+          vars: ['n'],
+          prompts,
+          fetchResultsBatched: async function* () {
+            fetchPasses += 1;
+            yield [
+              {
+                testIdx: 0,
+                promptIdx: 0,
+                testCase: { vars: { n: 'a' } },
+                response: { output: 'a' },
+                success: true,
+                score: 1,
+                namedScores: {},
+                failureReason: ResultFailureReason.NONE,
+                gradingResult: null,
+                metadata: {},
+              },
+            ];
+          },
+        } as unknown as Eval,
+        {
+          isRedteam: false,
+          write: (data: string) => {
+            chunks.push(data);
+          },
+        },
+      );
+
+      const header = chunks.join('').split('\n')[0];
+      expect(header).not.toContain('Metric:');
+      expect(fetchPasses).toBe(1);
+    });
+
     it('should detect metric names that first appear in a later batch on legacy evals', async () => {
       // EvalResult.findManyByEvalIdBatched yields batches of 100 testIdx, so a
       // metric introduced past the first batch would be missed by a first-batch
       // scan. Discovery must cover all batches without retaining all CSV rows.
       const prompts = [
-        createCompletedPrompt('Prompt 1', {
-          metrics: createPromptMetrics({
-            namedScores: { early_metric: 1.0 },
-            namedScoresCount: {},
-          }),
+        createLegacyCompletedPrompt('Prompt 1', {
+          namedScores: { early_metric: 1.0 },
         }),
       ];
       const chunks: string[] = [];
@@ -1488,11 +1546,8 @@ describe('evalTableUtils', () => {
       const csv = await runStreamEvalCsv({
         vars: ['name'],
         prompts: [
-          createCompletedPrompt('Prompt 1', {
-            metrics: createPromptMetrics({
-              namedScores: { accuracy: 0.8, aggregate_only_average: 0.5 },
-              namedScoresCount: {},
-            }),
+          createLegacyCompletedPrompt('Prompt 1', {
+            namedScores: { accuracy: 0.8, aggregate_only_average: 0.5 },
           }),
         ],
         results: [
