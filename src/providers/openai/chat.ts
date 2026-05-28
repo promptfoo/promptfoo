@@ -1,7 +1,6 @@
-import crypto from 'node:crypto';
 import path from 'path';
 
-import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
+import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
@@ -11,7 +10,6 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { sha256 } from '../../util/createHash';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -96,20 +94,6 @@ type OpenAiStreamingState = {
   completed: boolean;
   malformed: boolean;
 };
-
-const OPENAI_STREAMING_CACHE_HASH_KEY = 'promptfoo:openai-streaming-cache-key:v1';
-
-function hashOpenAiStreamingCacheValue(value: unknown): string {
-  const serialized = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
-  return crypto
-    .createHmac('sha256', OPENAI_STREAMING_CACHE_HASH_KEY)
-    .update(serialized)
-    .digest('hex');
-}
-
-function getOpenAiStreamingAuthCacheNamespace(apiKey: string): string {
-  return crypto.createHmac('sha256', apiKey).update(OPENAI_STREAMING_CACHE_HASH_KEY).digest('hex');
-}
 
 function getStreamingPassthroughOptions(body: Record<string, any>): Record<string, unknown> {
   if (
@@ -325,60 +309,6 @@ function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string 
   return undefined;
 }
 
-function getCachedOpenAiStreamingTokenUsage(
-  tokenUsage: ProviderResponse['tokenUsage'],
-): ProviderResponse['tokenUsage'] {
-  if (!tokenUsage) {
-    return undefined;
-  }
-  const total =
-    tokenUsage.total ??
-    (tokenUsage.prompt === undefined && tokenUsage.completion === undefined
-      ? tokenUsage.cached
-      : (tokenUsage.prompt ?? 0) + (tokenUsage.completion ?? 0));
-  if (total === undefined) {
-    return undefined;
-  }
-  return {
-    total,
-    cached: total,
-  };
-}
-
-async function getCachedOpenAiStreamingResponse(
-  cache: ReturnType<typeof getCache>,
-  cacheKey: string,
-  modelName: string,
-): Promise<ProviderResponse | undefined> {
-  const cachedResponse = await cache.get<string | undefined>(cacheKey);
-  if (!cachedResponse) {
-    return undefined;
-  }
-
-  logger.debug(`Returning cached streaming response for ${modelName}`);
-  try {
-    const parsed = JSON.parse(cachedResponse) as ProviderResponse;
-    const tokenUsage = getCachedOpenAiStreamingTokenUsage(parsed.tokenUsage);
-    return {
-      ...parsed,
-      ...(tokenUsage === undefined ? {} : { tokenUsage }),
-      cached: true,
-      ...(parsed.cost === undefined ? {} : { cost: 0 }),
-    };
-  } catch {
-    logger.warn('Failed to parse cached streaming response');
-    return undefined;
-  }
-}
-
-async function maybeGetCachedOpenAiStreamingResponse(
-  cache: ReturnType<typeof getCache> | undefined,
-  cacheKey: string,
-  modelName: string,
-): Promise<ProviderResponse | undefined> {
-  return cache ? getCachedOpenAiStreamingResponse(cache, cacheKey, modelName) : undefined;
-}
-
 function getOpenAiStreamingToolCalls(choice: OpenAiStreamingChoice): OpenAiStreamingToolCall[] {
   return Array.from(choice.toolCalls.entries())
     .sort(([left], [right]) => left - right)
@@ -523,77 +453,6 @@ function createOpenAiStreamingAbortSignal(
       abortSignal.removeEventListener('abort', abortFromCaller);
     },
   };
-}
-
-async function cacheOpenAiStreamingResponse(
-  cache: ReturnType<typeof getCache>,
-  cacheKey: string,
-  providerResponse: ProviderResponse,
-) {
-  if (providerResponse.guardrails?.flagged) {
-    return;
-  }
-
-  try {
-    await cache.set(cacheKey, JSON.stringify(providerResponse));
-  } catch (err) {
-    logger.error(`Failed to cache streaming response: ${String(err)}`);
-  }
-}
-
-async function maybeCacheOpenAiStreamingResponse(
-  cache: ReturnType<typeof getCache> | undefined,
-  cacheKey: string,
-  providerResponse: ProviderResponse,
-) {
-  if (cache) {
-    await cacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
-  }
-}
-
-function canonicalizeOpenAiStreamingCacheValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(canonicalizeOpenAiStreamingCacheValue);
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, nestedValue]) => [key, canonicalizeOpenAiStreamingCacheValue(nestedValue)]),
-    );
-  }
-  return value;
-}
-
-function getOpenAiStreamingCacheKey(identity: {
-  providerId: string;
-  apiUrl: string;
-  body: Record<string, any>;
-  apiKey?: string;
-  organization?: string;
-  headers?: Record<string, string>;
-}): string {
-  const canonicalBody = canonicalizeOpenAiStreamingCacheValue(identity.body);
-  const cacheIdentity = {
-    providerId: identity.providerId,
-    apiUrl: hashOpenAiStreamingCacheValue(identity.apiUrl),
-    body: hashOpenAiStreamingCacheValue(canonicalBody),
-    apiKey: identity.apiKey ? getOpenAiStreamingAuthCacheNamespace(identity.apiKey) : 'no-api-key',
-    organization: identity.organization
-      ? hashOpenAiStreamingCacheValue(identity.organization)
-      : undefined,
-    headers: identity.headers
-      ? Object.fromEntries(
-          Object.entries(identity.headers).map(([name, value]) => [
-            name,
-            hashOpenAiStreamingCacheValue(value),
-          ]),
-        )
-      : undefined,
-  };
-  return `openai:stream:${sha256(
-    JSON.stringify(canonicalizeOpenAiStreamingCacheValue(cacheIdentity)),
-  )}`;
 }
 
 function getOpenAiStreamingHttpMetadata(response: Response): ProviderResponse['metadata'] {
@@ -1211,7 +1070,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // Streaming helps prevent 504 gateway timeouts for long-running requests
     const shouldStream = config.stream ?? false;
     if (shouldStream) {
-      return this.callApiStreaming(body, config, context, callApiOptions);
+      return this.callApiStreaming(body, config, callApiOptions);
     }
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
@@ -1539,7 +1398,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private async callApiStreaming(
     body: Record<string, any>,
     config: OpenAiCompletionOptions,
-    context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
@@ -1552,27 +1410,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     const apiKey = this.getApiKey();
     const organization = this.getOrganization();
-    const hasLocalToolExecution = Boolean(config.functionToolCallbacks) || Boolean(this.mcpClient);
-    const shouldBustCache = context?.bustCache ?? context?.debug;
-    const shouldUseCache = isCacheEnabled() && !shouldBustCache && !hasLocalToolExecution;
-    const cacheKey = getOpenAiStreamingCacheKey({
-      providerId: this.id(),
-      apiUrl: this.getApiUrl(),
-      body,
-      apiKey,
-      organization,
-      headers: config.headers,
-    });
-    const cache = shouldUseCache ? getCache() : undefined;
-
-    const cachedResponse = await maybeGetCachedOpenAiStreamingResponse(
-      cache,
-      cacheKey,
-      this.modelName,
-    );
-    if (cachedResponse) {
-      return cachedResponse;
-    }
 
     const requestTimeoutMs = getRequestTimeoutMs();
     const streamingAbort = createOpenAiStreamingAbortSignal(
@@ -1649,8 +1486,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         providerResponse.output = callbackOutput;
       }
       providerResponse.metadata = { ...providerResponse.metadata, ...metadata };
-
-      await maybeCacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
 
       return providerResponse;
     } catch (err) {

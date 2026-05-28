@@ -1,13 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  disableCache,
-  enableCache,
-  fetchWithCache,
-  getCache,
-  isCacheEnabled,
-} from '../../../src/cache';
+import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
@@ -23,8 +17,6 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
     enableCache: vi.fn(),
     disableCache: vi.fn(),
-    isCacheEnabled: vi.fn(),
-    getCache: vi.fn(),
   };
 });
 vi.mock('../../../src/util/fetch/index', () => ({
@@ -47,8 +39,6 @@ vi.mock('../../../src/esm', async (importOriginal) => {
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 const mockFetchWithRetries = vi.mocked(fetchWithRetries);
-const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
-const mockGetCache = vi.mocked(getCache);
 const mockLogger = vi.mocked(logger);
 const mockImportModule = vi.mocked(importModule);
 const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
@@ -2713,12 +2703,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       vi.clearAllMocks();
       mockFetchWithRetries.mockReset();
       mockFetchWithCache.mockReset();
-      // Disable cache for streaming tests to ensure test isolation
-      mockIsCacheEnabled.mockReturnValue(false);
-      mockGetCache.mockReturnValue({
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      } as any);
     });
 
     it('should handle basic streaming response with content', async () => {
@@ -2758,7 +2742,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         statusText: 'OK',
         headers: { 'x-request-id': 'stream-123' },
       });
-      expect(mockGetCache).not.toHaveBeenCalled();
     });
 
     it('should preserve prompt-cache token details in streaming usage', async () => {
@@ -2964,7 +2947,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         ok: true,
         body: createMockSSEStream(sseChunks),
       } as unknown as Response);
-      mockIsCacheEnabled.mockReturnValue(true);
 
       const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25C');
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2981,7 +2963,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"NYC"}');
       expect(result.output).toBe('Sunny, 25C');
-      expect(mockGetCache).not.toHaveBeenCalled();
     });
 
     it('should surface MCP tool error results in streaming mode', async () => {
@@ -3017,7 +2998,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         path: '../../../etc/passwd',
       });
       expect(result.output).toBe('MCP Tool Error (read_file): Path traversal not allowed');
-      expect(mockGetCache).not.toHaveBeenCalled();
     });
 
     it('should handle streaming API error response', async () => {
@@ -3468,12 +3448,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should reject an incomplete stream instead of returning or caching partial output', async () => {
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
       mockFetchWithRetries.mockResolvedValue({
         ok: true,
         status: 200,
@@ -3490,16 +3464,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.error).toBe(
         'Streaming response ended before the [DONE] completion marker was received',
       );
-      expect(mockCache.set).not.toHaveBeenCalled();
     });
 
     it('should reject a stream that closes after finish_reason but before DONE', async () => {
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
       mockFetchWithRetries.mockResolvedValue({
         ok: true,
         status: 200,
@@ -3519,7 +3486,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.error).toBe(
         'Streaming response ended before the [DONE] completion marker was received',
       );
-      expect(mockCache.set).not.toHaveBeenCalled();
     });
 
     it('should handle invalid JSON output with response_format json_schema', async () => {
@@ -3570,268 +3536,33 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.error).toContain('timed out');
     });
 
-    it('should return cached streaming response when available', async () => {
-      const cachedResponse = {
-        output: 'Cached response',
-        tokenUsage: {
-          prompt: 10,
-          completion: 5,
-          total: 15,
-          cached: 0,
-          numRequests: 1,
-          completionDetails: { reasoning: 2 },
-        },
-        cost: 0.01,
-      };
-
-      // Enable cache for this test
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
+    it('should fetch again instead of persisting streaming responses in the response cache', async () => {
+      const buildResponse = (content: string) =>
+        ({
+          ok: true,
+          body: createMockSSEStream([
+            `data: {"choices":[{"delta":{"content":"${content}"},"finish_reason":"stop"}]}\n\n`,
+            'data: [DONE]\n\n',
+          ]),
+        }) as unknown as Response;
+      mockFetchWithRetries
+        .mockResolvedValueOnce(buildResponse('First response'))
+        .mockResolvedValueOnce(buildResponse('Second response'));
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: { stream: true },
       });
-      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-
-      expect(result.output).toBe('Cached response');
-      expect(result.cached).toBe(true);
-      // Cache hits should match the non-streaming path and avoid counting fresh usage.
-      expect(result.tokenUsage).toEqual({ total: 15, cached: 15 });
-      expect(result.cost).toBe(0);
-      expect(mockFetchWithRetries).not.toHaveBeenCalled();
-    });
-
-    it('should let explicit bustCache false override debug for streaming cache reads', async () => {
-      const cachedResponse = {
-        output: 'Debug cache hit',
-        tokenUsage: { total: 8 },
-      };
-
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: { stream: true },
-      });
-      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]), {
-        debug: true,
-        bustCache: false,
-      } as any);
-
-      expect(result.output).toBe('Debug cache hit');
-      expect(result.cached).toBe(true);
-      expect(mockCache.get).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithRetries).not.toHaveBeenCalled();
-    });
-
-    it('should handle corrupted cache data gracefully', async () => {
-      // Enable cache but return corrupted data
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue('not valid json {{{'),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
-
-      const sseChunks = [
-        'data: {"choices":[{"delta":{"content":"Fresh response"}}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
-        'data: [DONE]\n\n',
-      ];
-
-      mockFetchWithRetries.mockResolvedValue({
-        ok: true,
-        body: createMockSSEStream(sseChunks),
-      } as unknown as Response);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: { stream: true },
-      });
-      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-
-      // Should fall through to make a fresh API call
-      expect(result.output).toBe('Fresh response');
-      expect(mockFetchWithRetries).toHaveBeenCalled();
-    });
-
-    it('should cache successful streaming responses', async () => {
-      // Enable cache for this test
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
-
-      const sseChunks = [
-        'data: {"choices":[{"delta":{"content":"Response to cache"}}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n',
-        'data: [DONE]\n\n',
-      ];
-
-      mockFetchWithRetries.mockResolvedValue({
-        ok: true,
-        body: createMockSSEStream(sseChunks),
-      } as unknown as Response);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: { stream: true },
-      });
-      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-
-      expect(result.output).toBe('Response to cache');
-      expect(mockCache.set).toHaveBeenCalledTimes(1);
-      expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('openai:stream:'),
-        expect.stringContaining('Response to cache'),
+      const first = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Sensitive prompt' }]),
       );
-      expect(mockCache.set.mock.calls[0]?.[0]).not.toContain('Test');
-    });
+      const second = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Sensitive prompt' }]),
+      );
 
-    it('should partition streaming cache entries by API identity without exposing credentials', async () => {
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
-      mockFetchWithRetries.mockImplementation(async () => {
-        return {
-          ok: true,
-          body: createMockSSEStream([
-            'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            'data: [DONE]\n\n',
-          ]),
-        } as unknown as Response;
-      });
-
-      await new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: { stream: true, apiKey: 'sk-tenant-a-secret' },
-      }).callApi(JSON.stringify([{ role: 'user', content: 'Sensitive prompt' }]));
-      await new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: { stream: true, apiKey: 'sk-tenant-b-secret' },
-      }).callApi(JSON.stringify([{ role: 'user', content: 'Sensitive prompt' }]));
-
-      const firstKey = mockCache.get.mock.calls[0]?.[0] as string;
-      const secondKey = mockCache.get.mock.calls[1]?.[0] as string;
-      expect(firstKey).not.toBe(secondKey);
-      expect(firstKey).not.toContain('sk-tenant-a-secret');
-      expect(secondKey).not.toContain('sk-tenant-b-secret');
-      expect(firstKey).not.toContain('Sensitive prompt');
-    });
-
-    it('should canonicalize streaming request bodies before creating cache keys', async () => {
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
-      mockFetchWithRetries.mockImplementation(async () => {
-        return {
-          ok: true,
-          body: createMockSSEStream([
-            'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            'data: [DONE]\n\n',
-          ]),
-        } as unknown as Response;
-      });
-
-      await new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          stream: true,
-          apiKey: 'sk-stable-identity',
-          passthrough: { alpha: { first: 1, second: 2 }, omega: true },
-        },
-      }).callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-      await new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          stream: true,
-          apiKey: 'sk-stable-identity',
-          passthrough: { omega: true, alpha: { second: 2, first: 1 } },
-        },
-      }).callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-
-      expect(mockCache.get.mock.calls[0]?.[0]).toBe(mockCache.get.mock.calls[1]?.[0]);
-    });
-
-    it('should keep streaming cache keys stable across module reloads', async () => {
-      async function getCacheKeyFromFreshModule() {
-        vi.resetModules();
-        const cacheModule = await import('../../../src/cache');
-        const fetchModule = await import('../../../src/util/fetch/index');
-        const openAiModule = await import('../../../src/providers/openai/chat');
-        const mockCache = {
-          get: vi.fn().mockResolvedValue(undefined),
-          set: vi.fn().mockResolvedValue(undefined),
-        };
-
-        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
-        vi.mocked(cacheModule.getCache).mockReturnValue(mockCache as any);
-        vi.mocked(fetchModule.fetchWithRetries).mockResolvedValue({
-          ok: true,
-          body: createMockSSEStream([
-            'data: {"choices":[{"delta":{"content":"Response"},"finish_reason":"stop"}]}\n\n',
-            'data: [DONE]\n\n',
-          ]),
-        } as unknown as Response);
-
-        await new openAiModule.OpenAiChatCompletionProvider('gpt-4o-mini', {
-          config: {
-            stream: true,
-            apiKey: 'sk-stable-module-key',
-            passthrough: { nested: { z: 2, a: 1 } },
-          },
-        }).callApi(JSON.stringify([{ role: 'user', content: 'Stable prompt' }]));
-
-        return mockCache.get.mock.calls[0]?.[0];
-      }
-
-      const firstKey = await getCacheKeyFromFreshModule();
-      const secondKey = await getCacheKeyFromFreshModule();
-
-      expect(firstKey).toBe(secondKey);
-      expect(firstKey).not.toContain('sk-stable-module-key');
-      expect(firstKey).not.toContain('Stable prompt');
-    });
-
-    it('should not cache content-filtered responses', async () => {
-      // Enable cache for this test
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(undefined),
-        set: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetCache.mockReturnValue(mockCache as any);
-
-      const sseChunks = [
-        'data: {"choices":[{"delta":{"content":"Filtered"}}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"content_filter"}]}\n\n',
-        'data: [DONE]\n\n',
-      ];
-
-      mockFetchWithRetries.mockResolvedValue({
-        ok: true,
-        body: createMockSSEStream(sseChunks),
-      } as unknown as Response);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: { stream: true },
-      });
-      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-
-      expect(result.output).toBe('Filtered');
-      expect(result.guardrails).toEqual({ flagged: true });
-      // Should NOT cache content-filtered responses
-      expect(mockCache.set).not.toHaveBeenCalled();
+      expect(first.output).toBe('First response');
+      expect(second.output).toBe('Second response');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
     });
   });
 });

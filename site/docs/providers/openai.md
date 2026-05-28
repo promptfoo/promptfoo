@@ -198,15 +198,15 @@ options, add them under `passthrough.stream_options`; Promptfoo preserves those 
 and still requests usage.
 
 Streaming keeps the same function-tool callback behavior as non-streaming chat
-completions. When local `functionToolCallbacks` or MCP tools are configured, Promptfoo
-does not cache the final streaming provider response because callback results may depend
-on local or external state. Streamed refusal signals are preserved; request audio output
-with `stream: false`, because streaming audio assembly is not supported here.
+completions. Native streaming responses are not persisted in Promptfoo's response cache:
+authenticated requests, custom authorization headers, and response content can contain
+sensitive material that should not be represented by long-lived cache identifiers. Use
+`stream: false` when you require normal cached-response reuse. Streamed refusal signals
+are preserved; request audio output with `stream: false`, because streaming audio
+assembly is not supported here.
 
 Promptfoo applies its normal retry and quota handling to streaming requests, and rejects
 malformed or prematurely terminated event streams instead of returning partial output.
-Streaming cache keys are partitioned by API identity and do not persist request content
-or credentials in the key string.
 
 ### Generating Multiple Responses
 
