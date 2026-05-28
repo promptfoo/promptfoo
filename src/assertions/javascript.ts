@@ -8,7 +8,7 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 
-import type { AssertionParams } from '../types/index';
+import type { ApiProvider, AssertionParams } from '../types/index';
 
 /**
  * Checks if a character at the given index is escaped by backslashes.
@@ -132,33 +132,43 @@ const validateResult = async (result: unknown): Promise<boolean | number | Gradi
   }
 };
 
-type JavascriptWorkerRequest =
+type JavascriptWorkerRequest = {
+  output: unknown;
+  context: Record<string, unknown>;
+} & (
   | {
       mode: 'inline';
       functionBody: string;
-      output: unknown;
-      context: Record<string, unknown>;
     }
   | {
       mode: 'file';
       filePath: string;
       functionName?: string;
-      output: unknown;
-      context: Record<string, unknown>;
-    };
+    }
+);
 
-type JavascriptWorkerResponse =
+type JavascriptWorkerResult =
   | {
+      type: 'result';
       ok: true;
       result: unknown;
     }
   | {
+      type: 'result';
       ok: false;
       error: {
         message: string;
         stack?: string;
       };
     };
+
+type JavascriptWorkerProviderCall = {
+  type: 'providerCall';
+  callId: number;
+  args: unknown[];
+};
+
+type JavascriptWorkerMessage = JavascriptWorkerResult | JavascriptWorkerProviderCall;
 
 const JAVASCRIPT_ASSERTION_WORKER_SOURCE = `
 const fs = require('node:fs');
@@ -192,6 +202,8 @@ function loadCjsModule(modulePath) {
     require: moduleRequire,
     __dirname: dirname,
     __filename: modulePath,
+    global: globalThis,
+    globalThis,
     console,
     process,
     Buffer,
@@ -206,6 +218,8 @@ function loadCjsModule(modulePath) {
     URLSearchParams,
     TextEncoder,
     TextDecoder,
+    atob: globalThis.atob,
+    btoa: globalThis.btoa,
     fetch: globalThis.fetch,
     Request: globalThis.Request,
     Response: globalThis.Response,
@@ -320,6 +334,17 @@ function getWorkerProcessShim() {
   return processShim;
 }
 
+let nextProviderCallId = 0;
+const pendingProviderCalls = new Map();
+
+function callParentProvider(args) {
+  return new Promise((resolve, reject) => {
+    const callId = ++nextProviderCallId;
+    pendingProviderCalls.set(callId, { resolve, reject });
+    parentPort.postMessage({ type: 'providerCall', callId, args });
+  });
+}
+
 async function runRequest(request) {
   switch (request.mode) {
     case 'inline': {
@@ -353,19 +378,37 @@ function shimContext(ctx) {
         return idValue;
       },
     });
+    ctx.provider.callApi = (...args) => callParentProvider(args);
   }
   return ctx;
 }
 
-parentPort.on('message', async (request) => {
+parentPort.on('message', async (message) => {
+  if (message.type === 'providerResult') {
+    const pending = pendingProviderCalls.get(message.callId);
+    if (!pending) {
+      return;
+    }
+    pendingProviderCalls.delete(message.callId);
+    if (message.ok) {
+      pending.resolve(message.result);
+    } else {
+      const error = new Error(message.error.message);
+      error.stack = message.error.stack;
+      pending.reject(error);
+    }
+    return;
+  }
+
+  const request = message;
   try {
     request.context = shimContext(request.context);
     const result = await Promise.resolve(runRequest(request));
-    parentPort.postMessage({ ok: true, result });
+    parentPort.postMessage({ type: 'result', ok: true, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    parentPort.postMessage({ ok: false, error: { message, stack } });
+    parentPort.postMessage({ type: 'result', ok: false, error: { message, stack } });
   }
 });
 `;
@@ -436,6 +479,7 @@ function runJavascriptInWorker(
   request: JavascriptWorkerRequest,
   timeoutMs: number | undefined,
   abortSignal: AbortSignal | undefined,
+  provider: ApiProvider | undefined,
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -472,7 +516,45 @@ function runJavascriptInWorker(
       terminateAndReject(new Error('Javascript assertion aborted'));
     }
 
-    worker.on('message', (message: JavascriptWorkerResponse) => {
+    function postProviderResult(
+      callId: number,
+      result:
+        | { ok: true; result: unknown }
+        | { ok: false; error: { message: string; stack?: string } },
+    ): void {
+      if (!settled) {
+        worker.postMessage({ type: 'providerResult', callId, ...result });
+      }
+    }
+
+    worker.on('message', (message: JavascriptWorkerMessage) => {
+      if (message.type === 'providerCall') {
+        if (!provider) {
+          postProviderResult(message.callId, {
+            ok: false,
+            error: { message: 'Provider callApi is unavailable in worker mode' },
+          });
+          return;
+        }
+
+        const args = message.args as Parameters<ApiProvider['callApi']>;
+        void Promise.resolve()
+          .then(() => provider.callApi(...args))
+          .then(
+            (result) =>
+              postProviderResult(message.callId, { ok: true, result: toWorkerValue(result) }),
+            (error: unknown) =>
+              postProviderResult(message.callId, {
+                ok: false,
+                error: {
+                  message: error instanceof Error ? error.message : String(error),
+                  stack: error instanceof Error ? error.stack : undefined,
+                },
+              }),
+          );
+        return;
+      }
+
       if (message.ok) {
         settleWith(() => {
           void worker.terminate();
@@ -649,7 +731,14 @@ export const handleJavascript = async ({
               output: toWorkerValue(output),
               context: workerContext,
             };
-        result = await validateResult(await runJavascriptInWorker(request, timeoutMs, abortSignal));
+        result = await validateResult(
+          await runJavascriptInWorker(
+            request,
+            timeoutMs,
+            abortSignal,
+            assertionValueContext.provider,
+          ),
+        );
       } else {
         // Pass process shim for ESM compatibility - allows process.mainModule.require to work
         const customFunction = new Function('output', 'context', 'process', functionBody);

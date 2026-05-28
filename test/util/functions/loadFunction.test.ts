@@ -382,6 +382,18 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it.each([
+    'valid?',
+    'check!',
+    'Validators::valid?',
+    'Validators::check!',
+  ])('should handle Ruby predicate and bang method reference %s', (functionName) => {
+    expect(parseFileUrl(`file://assert.rb:${functionName}`)).toEqual({
+      filePath: 'assert.rb',
+      functionName,
+    });
+  });
+
   it('should handle colons in Ruby filenames with a namespace method suffix', () => {
     expect(parseFileUrl('file:///tmp/assert:one.rb:MyModule::Nested.check')).toEqual({
       filePath: '/tmp/assert:one.rb',

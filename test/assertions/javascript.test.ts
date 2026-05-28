@@ -13,7 +13,7 @@ import {
   resolvePackageReference,
 } from '../../src/providers/packageParser';
 
-import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -1786,6 +1786,30 @@ return isCallable && typeof callResult === 'string' && callResult.length > 0 && 
       expect(result.score).toBe(1);
     });
 
+    it('should preserve context.provider.callApi in worker mode', async () => {
+      const callApi = vi.fn().mockResolvedValue({ output: 'provider response' });
+      const provider = {
+        id: () => 'worker-provider',
+        callApi,
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'javascript',
+          value:
+            'context.provider.callApi("follow-up").then((response) => response.output === "provider response")',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test output' },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(callApi).toHaveBeenCalledWith('follow-up');
+    });
+
     it('should load file-based typescript assertions under timeout', async () => {
       const realFs = await vi.importActual<typeof import('fs')>('fs');
       const tempDir = realFs.mkdtempSync(
@@ -1818,6 +1842,48 @@ return isCallable && typeof callResult === 'string' && callResult.length > 0 && 
         });
 
         expect(result.pass).toBe(true);
+      } finally {
+        realFs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should expose Node global aliases to timed CommonJS assertion files', async () => {
+      const realFs = await vi.importActual<typeof import('fs')>('fs');
+      const tempDir = realFs.mkdtempSync(
+        nodePath.join(os.tmpdir(), 'promptfoo-js-assert-timeout-'),
+      );
+      const scriptPath = nodePath.join(tempDir, 'assert.js');
+      realFs.writeFileSync(
+        nodePath.join(tempDir, 'package.json'),
+        JSON.stringify({ type: 'module' }),
+        'utf8',
+      );
+      realFs.writeFileSync(
+        scriptPath,
+        'if (this === undefined) { throw new Error("require is not defined"); } module.exports = function usesGlobalAliases() { return typeof global !== "undefined" && typeof globalThis !== "undefined"; };',
+        'utf8',
+      );
+
+      vi.mocked(path.resolve).mockReturnValue(scriptPath);
+      vi.mocked(path.extname).mockReturnValue('.js');
+      vi.mocked(isPackagePath).mockReturnValue(false);
+
+      try {
+        const result: GradingResult = await runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion: {
+            type: 'javascript',
+            value: `file://${scriptPath}`,
+          },
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'Expected output' },
+          timeoutMs: 5000,
+        });
+
+        expect(result.reason).toBe('Assertion passed');
+        expect(result.pass).toBe(true);
+        expect(result.reason).not.toContain('global is not defined');
       } finally {
         realFs.rmSync(tempDir, { recursive: true, force: true });
       }

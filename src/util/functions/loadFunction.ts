@@ -11,6 +11,14 @@ export const functionCache: Record<string, Function> = {};
 const FILE_URL_FUNCTION_EXTENSIONS = [...JAVASCRIPT_EXTENSIONS, '.py', '.rb'];
 const FUNCTION_REFERENCE_PATTERN =
   /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|::)[A-Za-z_$][A-Za-z0-9_$]*)*$/;
+const RUBY_FUNCTION_REFERENCE_PATTERN =
+  /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|::)[A-Za-z_$][A-Za-z0-9_$]*)*[!?]?$/;
+
+function isFunctionReference(candidate: string, extension: string): boolean {
+  return (extension === '.rb' ? RUBY_FUNCTION_REFERENCE_PATTERN : FUNCTION_REFERENCE_PATTERN).test(
+    candidate,
+  );
+}
 
 interface LoadFunctionOptions {
   filePath: string;
@@ -97,6 +105,7 @@ export async function loadFunction<T extends Function>({
  * The function name suffix is only recognized when:
  * - The colon is not at index 1 (to skip Windows drive letters like C:)
  * - The part after the colon is a valid function reference (identifier or dotted path)
+ * - Ruby references may additionally end with `?` or `!`
  *
  * This means paths containing colons (e.g., file:///tmp/assert:one.js) are
  * treated as literal filenames when the suffix doesn't look like an identifier.
@@ -121,7 +130,7 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 
     if (
       FILE_URL_FUNCTION_EXTENSIONS.includes(extension) &&
-      FUNCTION_REFERENCE_PATTERN.test(candidateFn)
+      isFunctionReference(candidateFn, extension)
     ) {
       return {
         filePath,
