@@ -461,6 +461,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
+  clearStandaloneEvalCache();
 }
 
 /**
@@ -477,6 +478,7 @@ export function deleteEvals(ids: string[]) {
     db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
+  clearStandaloneEvalCache();
 }
 
 /**
@@ -495,6 +497,7 @@ export async function deleteAllEvals(): Promise<void> {
     db.delete(evalsToTagsTable).run();
     db.delete(evalsTable).run();
   });
+  clearStandaloneEvalCache();
 }
 
 export type StandaloneEval = CompletedPrompt & {
@@ -518,7 +521,12 @@ const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
   max: 2000,
 });
 
-/** Clears the standalone eval LRU cache. Intended for tests that mutate evals. */
+/**
+ * Invalidates the standalone eval LRU cache backing `getStandaloneEvals()`.
+ * Called by mutation paths in this module (update, delete) so `/api/history` reflects
+ * changes immediately instead of waiting up to the 2-hour TTL. Also re-exported for
+ * tests that need to assert behavior across cache boundaries.
+ */
 export function clearStandaloneEvalCache(): void {
   standaloneEvalCache.clear();
 }
