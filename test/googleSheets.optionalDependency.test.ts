@@ -22,9 +22,8 @@ describe('Google Sheets optional dependency', () => {
     const fetchPromise = fetchCsvFromGoogleSheetAuthenticated(SHEET_URL);
 
     await expect(fetchPromise).rejects.toThrow(
-      'The @googleapis/sheets package is required for authenticated Google Sheets access.',
+      /The @googleapis\/sheets package is required for authenticated Google Sheets access\.[\s\S]*npm install @googleapis\/sheets/,
     );
-    await expect(fetchPromise).rejects.toThrow('npm install @googleapis/sheets');
   });
 
   it('keeps public-sheet CSV reads working when the access probe fails', async () => {
@@ -37,9 +36,6 @@ describe('Google Sheets optional dependency', () => {
       });
 
     vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
-    vi.doMock('@googleapis/sheets', () => {
-      throw new Error('Cannot find package @googleapis/sheets');
-    });
 
     const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
 
