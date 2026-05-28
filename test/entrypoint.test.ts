@@ -291,15 +291,35 @@ describe('entrypoint version check logic', () => {
 
   describe('deprecation warning', () => {
     it('warns for supported Node.js 20 versions', () => {
-      expect(shouldWarnForDeprecatedNodeVersion('v20.20.0')).toBe(true);
-      expect(shouldWarnForDeprecatedNodeVersion('v20.20.2')).toBe(true);
+      const deprecatedVersions = ['v20.20.0', 'v20.20.2', 'v20.21.1'];
+
+      for (const version of deprecatedVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(true);
+      }
     });
 
-    it('does not warn for recommended or unparsable runtimes', () => {
-      expect(shouldWarnForDeprecatedNodeVersion('v20.19.0')).toBe(false);
-      expect(shouldWarnForDeprecatedNodeVersion('v22.22.0')).toBe(false);
-      expect(shouldWarnForDeprecatedNodeVersion('v24.16.0')).toBe(false);
-      expect(shouldWarnForDeprecatedNodeVersion('invalid')).toBe(false);
+    it('does not warn for unsupported Node.js versions', () => {
+      const unsupportedVersions = ['v20.19.0', 'v21.0.0', 'v22.13.0'];
+
+      for (const version of unsupportedVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
+      }
+    });
+
+    it('does not warn for supported Node.js versions outside the deprecated majors', () => {
+      const recommendedVersions = ['v22.22.0', 'v24.16.0'];
+
+      for (const version of recommendedVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
+      }
+    });
+
+    it('does not warn for prerelease or unparsable Node.js versions', () => {
+      const unparsableVersions = ['v20.20.0-rc.1', 'node-20.20.0', 'invalid'];
+
+      for (const version of unparsableVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
+      }
     });
 
     it('formats an actionable warning for Node.js 20', () => {
@@ -310,6 +330,8 @@ describe('entrypoint version check logic', () => {
       expect(warningMessage).toContain('Detected: v20.20.2');
       expect(warningMessage).toContain('Recommended: Node.js >=22.22.0');
       expect(warningMessage).toContain('Upgrade your Node.js runtime');
+      expect(warningMessage).toContain('\x1b[33m');
+      expect(warningMessage).toContain('\x1b[0m');
     });
   });
 
