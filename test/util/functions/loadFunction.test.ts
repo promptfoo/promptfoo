@@ -315,4 +315,19 @@ describe('parseFileUrl', () => {
       functionName: 'functionName',
     });
   });
+
+  it('should preserve JavaScript filenames with colons when no function name is present', () => {
+    const result = parseFileUrl('file://callbacks:v2.js');
+    expect(result).toEqual({
+      filePath: 'callbacks:v2.js',
+    });
+  });
+
+  it('should parse function names from JavaScript paths that contain colons', () => {
+    const result = parseFileUrl('file://path:with:colons/hooks.js:functionName');
+    expect(result).toEqual({
+      filePath: 'path:with:colons/hooks.js',
+      functionName: 'functionName',
+    });
+  });
 });

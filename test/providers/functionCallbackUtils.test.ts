@@ -28,7 +28,7 @@ vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
-vi.mocked(isJavascriptFile);
+const mockIsJavascriptFile = vi.mocked(isJavascriptFile);
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;
@@ -36,6 +36,7 @@ describe('FunctionCallbackHandler', () => {
   beforeEach(() => {
     handler = new FunctionCallbackHandler();
     vi.clearAllMocks();
+    mockIsJavascriptFile.mockImplementation((filePath) => /\.(?:js|mjs|cjs|ts)$/.test(filePath));
   });
 
   describe('processCall', () => {
@@ -328,6 +329,27 @@ describe('FunctionCallbackHandler', () => {
         path.resolve('/test/basePath', 'C:/path/to/functions.js'),
       );
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+    });
+
+    it('should preserve default-export callback paths containing colons', async () => {
+      const mockExternalFunction = vi.fn().mockResolvedValue('default export result');
+      mockImportModule.mockResolvedValue({ default: mockExternalFunction });
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://callbacks:v2.js',
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: 'default export result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'callbacks:v2.js'),
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
     it('should handle inline function strings', async () => {

@@ -100,10 +100,20 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
   if (lastColonIndex > 1) {
-    return {
-      filePath: urlWithoutProtocol.slice(0, lastColonIndex),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
+    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+    const functionName = urlWithoutProtocol.slice(lastColonIndex + 1);
+
+    if (
+      functionName &&
+      (isJavascriptFile(candidateFilePath) ||
+        candidateFilePath.endsWith('.py') ||
+        candidateFilePath.endsWith('.go'))
+    ) {
+      return {
+        filePath: candidateFilePath,
+        functionName,
+      };
+    }
   }
 
   return {
