@@ -710,24 +710,29 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
-    it('flags Claude Opus 4.7 via isClaudeOpus47 without treating it as reasoning', () => {
-      // Claude Opus 4.7 uses the chat body's standard max_tokens path but
-      // rejects `temperature` at the model level. Must NOT flip to the
+    it('flags Claude Opus 4.7 and 4.8 as sampling-params-deprecated without treating them as reasoning', () => {
+      // Claude Opus 4.7 and 4.8 use the chat body's standard max_tokens path but
+      // reject `temperature` at the model level. Must NOT flip to the
       // reasoning-model branch (which would swap max_tokens and send
       // reasoning_effort).
       const opus47 = new AzureChatCompletionProvider('claude-opus-4-7', { config: {} });
       expect((opus47 as any).isReasoningModel()).toBe(false);
-      expect((opus47 as any).isClaudeOpus47()).toBe(true);
+      expect((opus47 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(true);
+
+      const opus48 = new AzureChatCompletionProvider('claude-opus-4-8', { config: {} });
+      expect((opus48 as any).isReasoningModel()).toBe(false);
+      expect((opus48 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(true);
 
       // Opus 4.6 regression: not matched.
       const opus46 = new AzureChatCompletionProvider('claude-opus-4-6-20260205', { config: {} });
       expect((opus46 as any).isReasoningModel()).toBe(false);
-      expect((opus46 as any).isClaudeOpus47()).toBe(false);
+      expect((opus46 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(false);
 
-      // Boundary: a hypothetical `claude-opus-4-70` or `claude-opus-4-7N`
-      // model must not be accidentally matched by the 4.7 predicate.
+      // Boundary: hypothetical suffix variants must not be accidentally matched.
       const opus470 = new AzureChatCompletionProvider('claude-opus-4-70', { config: {} });
-      expect((opus470 as any).isClaudeOpus47()).toBe(false);
+      expect((opus470 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(false);
+      const opus480 = new AzureChatCompletionProvider('claude-opus-4-80', { config: {} });
+      expect((opus480 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(false);
     });
 
     it('should detect reasoning models with isReasoningModel flag', () => {
@@ -762,6 +767,24 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).toHaveProperty('max_tokens', 512);
       expect(body).not.toHaveProperty('max_completion_tokens');
       expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
+    it('omits temperature and top_p for Claude Opus 4.8 while keeping the standard chat body', async () => {
+      const provider = new AzureChatCompletionProvider('claude-opus-4-8', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 

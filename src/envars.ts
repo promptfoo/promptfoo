@@ -234,8 +234,9 @@ type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
-  // AIML API
   AIML_API_KEY?: string;
+
+  NOVITA_API_KEY?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
