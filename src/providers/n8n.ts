@@ -221,9 +221,55 @@ function formatN8nError(error: unknown): string {
   return typeof error === 'string' ? error : JSON.stringify(error);
 }
 
-function getSafeProviderId(url: string): string {
-  const urlFingerprint = createHash('sha256').update(url).digest('hex').slice(0, 12);
-  return `n8n:webhook:${urlFingerprint}`;
+/**
+ * Stable JSON stringify with sorted object keys at every depth. Two configs
+ * that differ only in key insertion order produce the same string, so the
+ * fingerprint below stays stable across YAML edits / TypeScript object literal
+ * shuffling (per the canonicalization rule in `src/providers/AGENTS.md`).
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value ?? null);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
+}
+
+/**
+ * Build a stable provider ID for an n8n webhook configuration.
+ *
+ * The fingerprint covers every config field that materially affects the
+ * request shape so two providers wired against the same URL but with different
+ * body / headers / transformResponse / session handling produce distinct IDs
+ * — eval pipelines key per-test results by `provider.id()` (see
+ * `src/evaluator.ts`), so a URL-only hash would silently collide results.
+ *
+ * `transformResponse` may be a function; functions can't be serialized
+ * deterministically, so we substitute a sentinel based on `.toString()` —
+ * sufficient for `provider.id()` separation without claiming structural
+ * equivalence.
+ */
+function getSafeProviderId(url: string, config?: N8nProviderConfig): string {
+  const transform = config?.transformResponse;
+  const fingerprintInput = {
+    url,
+    method: config?.method ?? 'POST',
+    body: config?.body,
+    headers: config?.headers,
+    sessionField: config?.sessionField,
+    sessionHeader: config?.sessionHeader,
+    sessionParser: config?.sessionParser,
+    transformResponse: typeof transform === 'function' ? `fn:${transform.toString()}` : transform,
+  };
+  const fingerprint = createHash('sha256')
+    .update(stableStringify(fingerprintInput))
+    .digest('hex')
+    .slice(0, 12);
+  return `n8n:webhook:${fingerprint}`;
 }
 
 /**
@@ -263,7 +309,7 @@ export class N8nProvider implements ApiProvider {
     this.providerId =
       configuredId && configuredId !== 'n8n' && !configuredId.startsWith('n8n:')
         ? configuredId
-        : getSafeProviderId(this.getUrl());
+        : getSafeProviderId(this.getUrl(), this.config);
   }
 
   id(): string {
@@ -479,8 +525,27 @@ export class N8nProvider implements ApiProvider {
     let latencyMs: number | undefined;
 
     try {
+      // n8n webhooks for non-idempotent methods (POST/PATCH) are stateful —
+      // the workflow may have already accepted the request and dispatched
+      // side-effects (sending messages, writing to a database) before the
+      // transport-level failure surfaces. The default `fetchWithRetries`
+      // budget of 4 would silently re-deliver those side-effects. Pass
+      // maxRetries=0 for non-idempotent methods so transient failures fail
+      // through to the caller (who can re-run the eval if appropriate).
+      // Idempotent methods (GET/HEAD/OPTIONS/PUT/DELETE) keep the default
+      // retry budget.
+      const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
+      const maxRetries = isIdempotent ? undefined : 0;
+
       // Webhook URLs and session-bearing requests can be sensitive and stateful.
-      const response = await fetchWithCache<string>(url, fetchOptions, timeout, 'text', true);
+      const response = await fetchWithCache<string>(
+        url,
+        fetchOptions,
+        timeout,
+        'text',
+        true,
+        maxRetries,
+      );
 
       rawText =
         typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
@@ -525,7 +590,12 @@ export class N8nProvider implements ApiProvider {
       raw: data,
     };
 
-    if (toolCalls) {
+    // Only attach metadata when there is at least one tool call. n8n workflows
+    // routinely return `tool_calls: []` (or `actions: []`) to signal "no tools
+    // invoked"; treating that as truthy would pollute every response with an
+    // empty `metadata.toolCalls`, breaking downstream filters that test
+    // `metadata?.toolCalls?.length > 0`.
+    if (toolCalls && toolCalls.length > 0) {
       response.metadata = { toolCalls };
     }
     if (sessionId) {

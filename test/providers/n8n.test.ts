@@ -102,6 +102,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
 
       expect(result).toEqual({
@@ -199,6 +200,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -230,6 +232,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -253,6 +256,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -287,6 +291,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -303,6 +308,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -325,6 +331,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        undefined,
       );
     });
 
@@ -346,6 +353,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        undefined,
       );
     });
 
@@ -441,6 +449,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -471,6 +480,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -503,6 +513,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -582,6 +593,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
     });
 
@@ -620,7 +632,70 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
+        0,
       );
+    });
+
+    it('does not attach empty toolCalls metadata when the workflow returns tool_calls: []', async () => {
+      const mockResponse = createMockResponse({ output: 'No tools used', tool_calls: [] });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Hello');
+
+      expect(result.output).toBe('No tools used');
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('does not attach empty toolCalls metadata when the workflow returns actions: []', async () => {
+      const mockResponse = createMockResponse({ output: 'No actions taken', actions: [] });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Hello');
+
+      expect(result.output).toBe('No actions taken');
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('passes maxRetries=0 to fetchWithCache for non-idempotent methods (POST/PATCH)', async () => {
+      const mockResponse = createMockResponse({ output: 'ok' });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const postProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { method: 'POST' },
+      });
+      await postProvider.callApi('Hello');
+      const [, , , , , postMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(postMaxRetries).toBe(0);
+
+      vi.mocked(fetchWithCache).mockClear();
+      const patchProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { method: 'PATCH' },
+      });
+      await patchProvider.callApi('Hello');
+      const [, , , , , patchMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(patchMaxRetries).toBe(0);
+    });
+
+    it('lets fetchWithCache use the default retry budget for idempotent methods (GET/PUT)', async () => {
+      const mockResponse = createMockResponse({ output: 'ok' });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const getProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { method: 'GET' },
+      });
+      await getProvider.callApi('Hello');
+      const [, , , , , getMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(getMaxRetries).toBeUndefined();
+
+      vi.mocked(fetchWithCache).mockClear();
+      const putProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { method: 'PUT' },
+      });
+      await putProvider.callApi('Hello');
+      const [, , , , , putMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(putMaxRetries).toBeUndefined();
     });
   });
 });
@@ -656,5 +731,55 @@ describe('createN8nProvider', () => {
       },
     });
     expect(provider.id()).toBe('custom-id');
+  });
+
+  it('produces distinct fingerprints when configs differ on body / headers / transformResponse', () => {
+    // Same URL, different body shape → distinct IDs. Without this, two
+    // providers wired against the same URL but with different request
+    // shapes would collide on `provider.id()` and overwrite each other in
+    // the evaluator's per-result keying (see src/evaluator.ts).
+    const base = createN8nProvider('n8n:https://n8n.example.com/webhook/agent');
+    const withDifferentBody = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { body: { message: '{{prompt}}' } },
+    });
+    const withDifferentHeaders = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { headers: { 'X-Workflow': 'agent-v2' } },
+    });
+    const withDifferentMethod = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { method: 'PUT' },
+    });
+    const withDifferentTransform = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { transformResponse: 'json.message' },
+    });
+
+    const ids = new Set([
+      base.id(),
+      withDifferentBody.id(),
+      withDifferentHeaders.id(),
+      withDifferentMethod.id(),
+      withDifferentTransform.id(),
+    ]);
+    expect(ids.size).toBe(5);
+  });
+
+  it('produces the same fingerprint for semantically identical configs regardless of key order', () => {
+    // The fingerprint canonicalizes via sorted-key JSON (per the cache-key
+    // hygiene guidance in src/providers/AGENTS.md) so two configs that
+    // differ only in key insertion order do not get different IDs.
+    const ordering1 = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: {
+        method: 'POST',
+        headers: { 'X-A': '1', 'X-B': '2' },
+        body: { a: 1, b: 2 },
+      },
+    });
+    const ordering2 = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: {
+        body: { b: 2, a: 1 },
+        headers: { 'X-B': '2', 'X-A': '1' },
+        method: 'POST',
+      },
+    });
+    expect(ordering1.id()).toBe(ordering2.id());
   });
 });
