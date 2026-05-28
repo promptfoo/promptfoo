@@ -6,6 +6,11 @@ import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import {
+  registerTestDatabaseClient,
+  resetTestDatabaseClient,
+  unregisterTestDatabaseClient,
+} from './testing';
 
 // Lazy types; the runtime modules below are imported inside getDb() so that a
 // missing libsql platform binding (`@libsql/<target>`) surfaces as a catchable
@@ -37,6 +42,12 @@ export function getDbSignalPath() {
 async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
   // Enable foreign key constraints (required for referential integrity)
   await client.execute('PRAGMA foreign_keys = ON');
+
+  // better-sqlite3 applied a 5s busy timeout by default; libsql defaults to 0,
+  // i.e. fail immediately when the write lock is held. Restore the prior
+  // behavior so a writer that briefly contends with another process or
+  // connection for the lock waits instead of erroring with SQLITE_BUSY.
+  await client.execute('PRAGMA busy_timeout = 5000');
 
   // Configure WAL mode unless explicitly disabled or using in-memory database
   if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
@@ -145,6 +156,9 @@ export async function getDb() {
       const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
       const client = createClient({ url: dbUrl });
       sqliteInstance = client;
+      if (isTesting) {
+        registerTestDatabaseClient(client);
+      }
 
       await configureDatabase(client, isTesting);
 
@@ -152,7 +166,10 @@ export async function getDb() {
       dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }));
       return dbInstance;
     })().catch((error) => {
-      sqliteInstance?.close();
+      if (sqliteInstance) {
+        unregisterTestDatabaseClient(sqliteInstance);
+        sqliteInstance.close();
+      }
       sqliteInstance = null;
       dbInstance = null;
       dbPromise = null;
@@ -171,8 +188,9 @@ export async function getDb() {
 export async function closeDb() {
   if (sqliteInstance) {
     try {
+      const isTesting = getEnvBool('IS_TESTING');
       // Attempt to checkpoint WAL file before closing
-      if (!getEnvBool('IS_TESTING') && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+      if (!isTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
           await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
           logger.debug('Successfully checkpointed WAL file before closing');
@@ -181,8 +199,13 @@ export async function closeDb() {
         }
       }
 
+      if (isTesting) {
+        await resetTestDatabaseClient(sqliteInstance);
+      }
+
       // libsql Client.close() is synchronous; the WAL checkpoint above already
       // awaited the I/O that needed to finish before the underlying connection drops.
+      unregisterTestDatabaseClient(sqliteInstance);
       sqliteInstance.close();
       logger.debug('Database connection closed successfully');
     } catch (err) {

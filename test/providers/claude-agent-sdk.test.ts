@@ -115,6 +115,7 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
   speed: 'standard',
   inference_geo: '',
   iterations: [],
+  output_tokens_details: { thinking_tokens: 0 },
 });
 
 // Helper to create a mock BetaMessage with required fields
@@ -145,6 +146,7 @@ const createMockBetaMessage = (
     server_tool_use: null,
     service_tier: 'standard' as const,
     speed: 'standard' as const,
+    output_tokens_details: null,
   },
 });
 
