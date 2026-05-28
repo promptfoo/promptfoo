@@ -359,6 +359,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MINIMAX_API_KEY": {
+          "type": "string"
+        },
         "MLFLOW_GATEWAY_API_KEY": {
           "type": "string"
         },
@@ -426,6 +429,9 @@
           "type": "string"
         },
         "OPENCLAW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "ORCAROUTER_API_KEY": {
           "type": "string"
         },
         "PALM_API_HOST": {
@@ -1796,6 +1802,9 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MINIMAX_API_KEY": {
+                      "type": "string"
+                    },
                     "MLFLOW_GATEWAY_API_KEY": {
                       "type": "string"
                     },
@@ -1863,6 +1872,9 @@
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "ORCAROUTER_API_KEY": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {

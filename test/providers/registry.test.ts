@@ -721,6 +721,25 @@ describe('Provider Registry', () => {
         factory!.create('nvidia:embedding:nvidia/nv-embed-v1', nvidiaOptions, mockContext),
       ).rejects.toThrow(/Unsupported NVIDIA NIM provider subtype "embedding"/);
     });
+
+    it('should handle orcarouter provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('orcarouter:openai/gpt-4o'));
+      expect(factory).toBeDefined();
+
+      const orcaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, {
+        ...mockContext,
+        options: orcaOptions,
+      });
+      expect(provider.id()).toBe('orcarouter:openai/gpt-4o');
+
+      const autoProvider = await factory!.create(
+        'orcarouter:orcarouter/auto',
+        orcaOptions,
+        mockContext,
+      );
+      expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
+    });
   });
 
   // Kept at the very end of the file because it uses vi.doMock + resetModules
