@@ -87,7 +87,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     // Generate new test cases
     logger.info('Generating test cases...');
-    const { maxConcurrency, ...passThroughOptions } = options;
+    // Strip run-specific tags from the generation options so they do not leak into the
+    // reusable generated redteam.yaml (which feeds `doGenerateRedteam`). The tags still reach
+    // the eval below via `evalOptions`, which is destructured from the untouched `options`
+    // object (see the `doEval` call), where they are persisted onto the eval result.
+    const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
     let redteamConfig;
     const generationStartTime = Date.now();
