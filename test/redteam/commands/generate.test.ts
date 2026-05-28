@@ -4116,7 +4116,7 @@ describe('target ID extraction for retry strategy', () => {
 
   describe('probe limit enforcement', () => {
     it('should block generation when probe limit is exceeded', async () => {
-      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+      vi.mocked(checkRedteamProbeLimit).mockResolvedValue({
         withinLimit: false,
         used: TEST_PROBE_LIMIT + 1,
         limit: TEST_PROBE_LIMIT,
@@ -4138,7 +4138,9 @@ describe('target ID extraction for retry strategy', () => {
       );
       expect(synthesize).not.toHaveBeenCalled();
 
-      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+      // Reset
+      process.exitCode = 0;
+      vi.mocked(checkRedteamProbeLimit).mockResolvedValue({
         withinLimit: true,
         used: 0,
         limit: TEST_PROBE_LIMIT,
@@ -4160,7 +4162,7 @@ describe('target ID extraction for retry strategy', () => {
       expectOverride,
       expectInfoLog,
     }) => {
-      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+      vi.mocked(checkRedteamProbeLimit).mockResolvedValue({
         withinLimit: true,
         used: 0,
         limit: TEST_PROBE_LIMIT,
@@ -4189,7 +4191,7 @@ describe('target ID extraction for retry strategy', () => {
     });
 
     it('should not block generation when within probe limit', async () => {
-      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+      vi.mocked(checkRedteamProbeLimit).mockResolvedValue({
         withinLimit: true,
         used: 500,
         limit: TEST_PROBE_LIMIT,
