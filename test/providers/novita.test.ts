@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
-import logger from '../../src/logger';
 import {
-  clearNovitaModelsCache,
   createNovitaProvider,
-  fetchNovitaModels,
   NovitaChatCompletionProvider,
   NovitaCompletionProvider,
   NovitaEmbeddingProvider,
@@ -32,7 +29,6 @@ describe('Novita providers', () => {
 
   beforeEach(() => {
     vi.mocked(fetchWithCache).mockReset();
-    clearNovitaModelsCache();
     restoreEnv = mockProcessEnv({
       NOVITA_API_KEY: undefined,
       OPENAI_API_KEY: undefined,
@@ -70,6 +66,23 @@ describe('Novita providers', () => {
     it('rejects provider identifiers that do not include a model', () => {
       expect(() => createNovitaProvider('novita:chat:')).toThrow('Novita model name is required');
       expect(() => createNovitaProvider('novita:')).toThrow('Novita model name is required');
+    });
+
+    it('rejects unknown sub-types like `novita:image:foo` instead of silently routing to chat', () => {
+      expect(() => createNovitaProvider('novita:image:foo')).toThrow(
+        /Unknown Novita provider sub-type "image"/,
+      );
+      expect(() => createNovitaProvider('novita:moderation:bar')).toThrow(
+        /Unknown Novita provider sub-type "moderation"/,
+      );
+      expect(() => createNovitaProvider('novita:embeddin:typo')).toThrow(
+        /Unknown Novita provider sub-type "embeddin"/,
+      );
+    });
+
+    it('treats `novita:embeddings:model` plural as embedding (documented alias)', () => {
+      const provider = createNovitaProvider('novita:embeddings:embed-model');
+      expect(provider).toBeInstanceOf(NovitaEmbeddingProvider);
     });
 
     it('preserves explicit endpoint, key environment, provider id, and sampling settings', () => {
@@ -132,51 +145,6 @@ describe('Novita providers', () => {
 
       await expect(provider.callApi('hello')).rejects.toThrow('Novita API key is not set');
       expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('fetchNovitaModels', () => {
-    it('fetches models from the documented OpenAI-compatible endpoint', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { data: [{ id: 'model-a' }, { model: 'model-b' }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
-
-      const models = await fetchNovitaModels({ NOVITA_API_KEY: 'sk-test' } as any);
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://api.novita.ai/openai/v1/models',
-        { headers: { Accept: 'application/json', Authorization: 'Bearer sk-test' } },
-        expect.any(Number),
-      );
-      expect(models).toEqual([{ id: 'model-a' }, { id: 'model-b' }]);
-    });
-
-    it('uses cache on subsequent model-list calls', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { data: [{ id: 'cached-model' }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
-
-      const first = await fetchNovitaModels();
-      vi.mocked(fetchWithCache).mockClear();
-      const second = await fetchNovitaModels();
-
-      expect(first).toEqual(second);
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
-    it('returns an empty model list when the models request fails', async () => {
-      const error = new Error('network unavailable');
-      const warnSpy = vi.spyOn(logger, 'warn');
-      vi.mocked(fetchWithCache).mockRejectedValue(error);
-
-      await expect(fetchNovitaModels()).resolves.toEqual([]);
-      expect(warnSpy).toHaveBeenCalledWith('[Novita] Failed to fetch models', { error });
     });
   });
 

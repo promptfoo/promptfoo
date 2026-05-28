@@ -1,10 +1,7 @@
-import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
-import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { getRequestTimeoutMs } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -13,22 +10,13 @@ import type { OpenAiCompletionOptions } from './openai/types';
 
 const NOVITA_API_BASE_URL = 'https://api.novita.ai/openai/v1';
 const NOVITA_API_KEY_ENV_VAR = 'NOVITA_API_KEY';
-
-export interface NovitaModel {
-  id: string;
-}
+const NOVITA_SUBTYPES = new Set(['chat', 'completion', 'embedding', 'embeddings']);
 
 type NovitaProviderOptions = {
   config?: OpenAiCompletionOptions;
   id?: string;
   env?: EnvOverrides;
 };
-
-let modelCache: NovitaModel[] | null = null;
-
-export function clearNovitaModelsCache() {
-  modelCache = null;
-}
 
 function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
   if (env && Object.prototype.hasOwnProperty.call(env, key)) {
@@ -63,38 +51,6 @@ function getNovitaConfig(
 
 function getNovitaMissingApiKeyErrorMessage(config: OpenAiCompletionOptions): string {
   return `Novita API key is not set. Set the ${config.apiKeyEnvar ?? NOVITA_API_KEY_ENV_VAR} environment variable or add \`apiKey\` to the provider config.`;
-}
-
-export async function fetchNovitaModels(env?: EnvOverrides): Promise<NovitaModel[]> {
-  if (modelCache) {
-    return modelCache;
-  }
-
-  try {
-    const apiKey = getNovitaApiKey({}, env);
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-
-    const { data } = await fetchWithCache<any>(
-      `${NOVITA_API_BASE_URL}/models`,
-      { headers },
-      getRequestTimeoutMs(),
-    );
-
-    const models = data?.data || data?.models || data;
-    if (Array.isArray(models)) {
-      modelCache = models.map((m: any) => ({ id: m.id || m.model || m.name || m }));
-    } else {
-      modelCache = [];
-    }
-  } catch (err) {
-    logger.warn('[Novita] Failed to fetch models', { error: err });
-    modelCache = [];
-  }
-
-  return modelCache;
 }
 
 export class NovitaChatCompletionProvider extends OpenAiChatCompletionProvider {
@@ -192,7 +148,20 @@ export function createNovitaProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
   const type = splits[1];
-  const isTypedProvider = ['chat', 'completion', 'embedding', 'embeddings'].includes(type);
+  const isTypedProvider = NOVITA_SUBTYPES.has(type);
+
+  // Reject `novita:<unknown-subtype>:<model>` rather than silently treating
+  // `<unknown-subtype>` as part of the model name. A model identifier always
+  // contains either a `/` or `.` (e.g. `meta/llama-3.1-8b-instruct`, `qwen/qwen-2.5`),
+  // so a bare alphabetic segment followed by more `:` segments is the user
+  // signaling a sub-type that this provider does not support.
+  if (!isTypedProvider && splits.length >= 3 && /^[a-z][a-z0-9_-]*$/i.test(type)) {
+    throw new Error(
+      `Unknown Novita provider sub-type "${type}". Supported sub-types are: chat, completion, embedding, embeddings. ` +
+        'Use `novita:<model>` for chat, or `novita:<sub-type>:<model>` for an explicit sub-type.',
+    );
+  }
+
   const modelName = (isTypedProvider ? splits.slice(2) : splits.slice(1)).join(':');
 
   if (!modelName.trim()) {
