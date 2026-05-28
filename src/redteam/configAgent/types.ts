@@ -228,9 +228,16 @@ export interface RunProbesResponse {
 /**
  * User input to the agent
  */
-export interface UserInput {
-  sessionId: string;
-  type: 'message' | 'option' | 'api_key' | 'confirmation';
-  value: string | boolean;
-  field?: string;
-}
+export type UserInput =
+  | {
+      sessionId: string;
+      type: 'message' | 'option' | 'api_key';
+      value: string;
+      field?: string;
+    }
+  | {
+      sessionId: string;
+      type: 'confirmation';
+      value: boolean;
+      field?: string;
+    };

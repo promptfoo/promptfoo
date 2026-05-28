@@ -545,7 +545,7 @@ redteamRouter.post('/config-agent/input', async (req: Request, res: Response): P
 
     cleanExpiredConfigAgentSessions();
 
-    const input = parsedBody.data as UserInput;
+    const input: UserInput = parsedBody.data;
     const agent = configAgentSessions.get(input.sessionId);
 
     if (!agent) {

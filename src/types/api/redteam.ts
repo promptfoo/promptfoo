@@ -120,12 +120,24 @@ export const ConfigAgentStartRequestSchema = z.object({
     .optional(),
 });
 
-export const ConfigAgentInputRequestSchema = z.object({
+const ConfigAgentStringInputSchema = z.object({
   sessionId: z.string(),
-  type: z.enum(['message', 'option', 'api_key', 'confirmation']),
-  value: z.union([z.string(), z.boolean()]),
+  type: z.enum(['message', 'option', 'api_key']),
+  value: z.string(),
   field: z.string().optional(),
 });
+
+const ConfigAgentConfirmationInputSchema = z.object({
+  sessionId: z.string(),
+  type: z.literal('confirmation'),
+  value: z.boolean(),
+  field: z.string().optional(),
+});
+
+export const ConfigAgentInputRequestSchema = z.discriminatedUnion('type', [
+  ConfigAgentStringInputSchema,
+  ConfigAgentConfirmationInputSchema,
+]);
 
 export const ConfigAgentStartResponseSchema = z.object({
   success: z.literal(true),

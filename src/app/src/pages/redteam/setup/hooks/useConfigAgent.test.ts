@@ -89,6 +89,22 @@ describe('useConfigAgent', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it('surfaces polling failures instead of leaving a started session inert', async () => {
+    mockCallApi
+      .mockResolvedValueOnce(
+        apiResponse({ success: true, data: { sessionId: 'session-1', messages: [] } }),
+      )
+      .mockResolvedValueOnce(apiResponse({ error: 'poll failed' }, false));
+
+    const { result } = renderHook(() => useConfigAgent());
+
+    await act(async () => {
+      await result.current.startSession('https://api.example.com');
+    });
+
+    await waitFor(() => expect(result.current.error).toBe('poll failed'));
+  });
+
   it('submits messages, options, confirmations, and restores masked API-key headers', async () => {
     mockCallApi
       .mockResolvedValueOnce(

@@ -26,6 +26,8 @@ import type {
 
 const DEFAULT_TIMEOUT = 10000;
 const DNS_CACHE_TTL = DEFAULT_TIMEOUT;
+const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
+const RESPONSE_TRUNCATED_SUFFIX = '\n...[truncated]';
 const CLOUD_METADATA_HOSTS = new Set([
   'metadata.google.internal',
   'metadata.goog',
@@ -35,6 +37,49 @@ const CLOUD_METADATA_HOSTS = new Set([
 
 function cloneValue<T>(value: T): T {
   return structuredClone(value);
+}
+
+async function readBoundedResponseText(response: Response): Promise<string> {
+  if (!response.body) {
+    const contentLength = Number.parseInt(response.headers.get('content-length') ?? '', 10);
+    if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BODY_BYTES) {
+      return RESPONSE_TRUNCATED_SUFFIX.trimStart();
+    }
+    const text = await response.text();
+    return text.length > MAX_RESPONSE_BODY_BYTES
+      ? `${text.slice(0, MAX_RESPONSE_BODY_BYTES)}${RESPONSE_TRUNCATED_SUFFIX}`
+      : text;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+
+  try {
+    while (total <= MAX_RESPONSE_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const room = MAX_RESPONSE_BODY_BYTES + 1 - total;
+      const boundedChunk = value.byteLength <= room ? value : value.slice(0, room);
+      chunks.push(boundedChunk);
+      total += boundedChunk.byteLength;
+
+      if (value.byteLength > room || total > MAX_RESPONSE_BODY_BYTES) {
+        truncated = true;
+        await reader.cancel();
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const text = Buffer.concat(chunks).subarray(0, MAX_RESPONSE_BODY_BYTES).toString('utf8');
+  return truncated ? `${text}${RESPONSE_TRUNCATED_SUFFIX}` : text;
 }
 
 function renderTemplateValue(value: unknown, replacements: Record<string, string>): unknown {
@@ -381,6 +426,8 @@ export class ConfigurationAgent {
    * Run through discovery strategies
    */
   private async runDiscoveryStrategies(): Promise<void> {
+    const authCandidates: Array<{ match: StrategyMatch; results: ProbeResult[] }> = [];
+
     for (const strategy of ALL_STRATEGIES) {
       if (this.abortController?.signal.aborted) {
         break;
@@ -396,6 +443,15 @@ export class ConfigurationAgent {
       this.session.probeHistory.push(...results);
 
       const match = analyzeProbeResults(strategy.id, results);
+      const hasSuccessfulResponse = results.some(
+        (result) => result.status !== null && result.status >= 200 && result.status < 300,
+      );
+      const authNeeded = results.some((result) => result.status === 401 || result.status === 403);
+
+      if (!hasSuccessfulResponse && authNeeded && match) {
+        authCandidates.push({ match, results });
+        continue;
+      }
 
       if (match && match.confidence >= strategy.minConfidence) {
         this.session.bestMatch = match;
@@ -403,16 +459,31 @@ export class ConfigurationAgent {
         await this.handleMatchFound(match, results);
         return;
       }
+    }
 
-      // Check if auth is needed
-      const authNeeded = results.some((r) => r.status === 401 || r.status === 403);
-      if (authNeeded && match) {
-        // Format might be right, just needs auth
-        this.session.bestMatch = match;
-        this.session.phase = 'analyzing';
-        await this.handleAuthRequired(match, results);
-        return;
-      }
+    if (authCandidates.length === 1) {
+      const [{ match, results }] = authCandidates;
+      this.session.bestMatch = match;
+      this.session.phase = 'analyzing';
+      await this.handleAuthRequired(match, results);
+      return;
+    }
+
+    if (authCandidates.length > 1) {
+      this.session.phase = 'analyzing';
+      this.addMessage(
+        'question',
+        'This endpoint requires authentication before I can identify its API format. Select its format to continue.',
+        {
+          options: [
+            { id: 'openai', label: "It's OpenAI-compatible", value: 'openai', primary: true },
+            { id: 'anthropic', label: "It's Anthropic-compatible", value: 'anthropic' },
+            { id: 'azure', label: "It's Azure OpenAI", value: 'azure' },
+            { id: 'custom', label: "It's a custom API", value: 'custom' },
+          ],
+        },
+      );
+      return;
     }
 
     // No strategy matched
@@ -425,6 +496,7 @@ export class ConfigurationAgent {
           { id: 'example', label: 'Show me an example request', value: 'example' },
           { id: 'openai', label: "It's OpenAI-compatible", value: 'openai' },
           { id: 'anthropic', label: "It's Anthropic-compatible", value: 'anthropic' },
+          { id: 'azure', label: "It's Azure OpenAI", value: 'azure' },
           { id: 'custom', label: "It's a custom API", value: 'custom' },
         ],
       },
@@ -559,33 +631,61 @@ export class ConfigurationAgent {
     });
   }
 
+  private selectAuthenticatedStrategy(
+    strategyId: 'openai_compatible' | 'anthropic_compatible' | 'azure_openai',
+  ): void {
+    this.session.bestMatch = {
+      strategyId,
+      confidence: 0.9,
+      discoveredConfig: getBaseConfigForStrategy(strategyId),
+      evidence: ['User selected API format'],
+    };
+    this.addMessage(
+      'info',
+      `Using ${this.getStrategyDisplayName(strategyId)} format. Do you have an API key?`,
+      {
+        inputRequest: {
+          type: 'api_key',
+          prompt: 'Enter your API key:',
+          field: 'apiKey',
+          sensitive: true,
+        },
+        options: [
+          { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
+          { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
+        ],
+      },
+    );
+  }
+
   /**
    * Handle user input
    */
   async handleUserInput(input: UserInput): Promise<AgentMessage[]> {
     // Add user message to conversation
     if (input.type === 'message') {
-      this.addMessage('user', input.value as string);
+      this.addMessage('user', input.value);
     }
 
-    // Store the input
-    if (input.field) {
+    // API keys are persisted only under the canonical sensitive field in
+    // handleApiKeyInput so a client-supplied alias cannot bypass masking.
+    if (input.field && input.type !== 'api_key') {
       this.session.userInputs[input.field] = input.value;
     }
 
     // Process based on input type and current state
     switch (input.type) {
       case 'api_key':
-        return this.handleApiKeyInput(input.value as string);
+        return this.handleApiKeyInput(input.value);
 
       case 'option':
-        return this.handleOptionSelect(input.value as string);
+        return this.handleOptionSelect(input.value);
 
       case 'confirmation':
-        return this.handleConfirmation(input.value as boolean);
+        return this.handleConfirmation(input.value);
 
       case 'message':
-        return this.handleFreeformMessage(input.value as string);
+        return this.handleFreeformMessage(input.value);
 
       default:
         return this.session.messages;
@@ -694,45 +794,15 @@ export class ConfigurationAgent {
         break;
 
       case 'openai':
-        this.session.bestMatch = {
-          strategyId: 'openai_compatible',
-          confidence: 0.9,
-          discoveredConfig: getBaseConfigForStrategy('openai_compatible'),
-          evidence: ['User indicated OpenAI-compatible'],
-        };
-        this.addMessage('info', 'Using OpenAI-compatible format. Do you have an API key?', {
-          inputRequest: {
-            type: 'api_key',
-            prompt: 'Enter your API key:',
-            field: 'apiKey',
-            sensitive: true,
-          },
-          options: [
-            { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
-            { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
-          ],
-        });
+        this.selectAuthenticatedStrategy('openai_compatible');
         break;
 
       case 'anthropic':
-        this.session.bestMatch = {
-          strategyId: 'anthropic_compatible',
-          confidence: 0.9,
-          discoveredConfig: getBaseConfigForStrategy('anthropic_compatible'),
-          evidence: ['User indicated Anthropic-compatible'],
-        };
-        this.addMessage('info', 'Using Anthropic-compatible format. Do you have an API key?', {
-          inputRequest: {
-            type: 'api_key',
-            prompt: 'Enter your API key:',
-            field: 'apiKey',
-            sensitive: true,
-          },
-          options: [
-            { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
-            { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
-          ],
-        });
+        this.selectAuthenticatedStrategy('anthropic_compatible');
+        break;
+
+      case 'azure':
+        this.selectAuthenticatedStrategy('azure_openai');
         break;
 
       case 'custom':
@@ -948,7 +1018,7 @@ export class ConfigurationAgent {
         return false;
       }
 
-      const responseText = await response.text();
+      const responseText = await readBoundedResponseText(response);
       let responseJson: unknown;
 
       try {
@@ -1050,7 +1120,7 @@ export class ConfigurationAgent {
         });
 
         const timing = Date.now() - start;
-        const body = await response.text();
+        const body = await readBoundedResponseText(response);
 
         let json: unknown = null;
         try {

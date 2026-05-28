@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -78,6 +78,8 @@ interface GeneratedConfig {
   };
 }
 
+type HeaderEntry = { key: string; value: string };
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -89,6 +91,65 @@ const highlightJS = (code: string): string => {
     return code;
   }
 };
+
+function useConfigAgentDiscovery({
+  selectedConfig,
+  setBodyError,
+  setConfigAgentOpen,
+  setHeaders,
+  setRequestBody,
+  setUrlError,
+  updateCustomTarget,
+}: {
+  selectedConfig: ProviderOptions['config'];
+  setBodyError: HttpEndpointConfigurationProps['setBodyError'];
+  setConfigAgentOpen: Dispatch<SetStateAction<boolean>>;
+  setHeaders: Dispatch<SetStateAction<HeaderEntry[]>>;
+  setRequestBody: Dispatch<SetStateAction<string>>;
+  setUrlError: HttpEndpointConfigurationProps['setUrlError'];
+  updateCustomTarget: HttpEndpointConfigurationProps['updateCustomTarget'];
+}) {
+  return useCallback(
+    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
+      const fullUrl = discoveredConfig.path
+        ? `${baseUrl.replace(/\/$/, '')}${discoveredConfig.path}`
+        : baseUrl;
+      const headers = discoveredConfig.headers ?? {};
+      const body = discoveredConfig.body ?? '';
+
+      setBodyError(null);
+      setUrlError(null);
+      setHeaders(
+        Object.entries(headers).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+      updateCustomTarget('config', {
+        ...selectedConfig,
+        request: undefined,
+        url: fullUrl,
+        method: discoveredConfig.method,
+        headers,
+        body,
+        transformResponse: discoveredConfig.transformResponse,
+        useHttps: false,
+      });
+
+      setConfigAgentOpen(false);
+    },
+    [
+      selectedConfig,
+      setBodyError,
+      setConfigAgentOpen,
+      setHeaders,
+      setRequestBody,
+      setUrlError,
+      updateCustomTarget,
+    ],
+  );
+}
 
 const HttpEndpointConfiguration = ({
   selectedTarget,
@@ -105,7 +166,7 @@ const HttpEndpointConfiguration = ({
       ? selectedTarget.config.body
       : JSON.stringify(selectedTarget.config.body, null, 2) || '',
   );
-  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(
+  const [headers, setHeaders] = useState<HeaderEntry[]>(
     Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
       key,
       value: String(value),
@@ -155,6 +216,15 @@ Content-Type: application/json
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
+  const handleConfigAgentDiscovered = useConfigAgentDiscovery({
+    selectedConfig: selectedTarget.config,
+    setBodyError,
+    setConfigAgentOpen,
+    setHeaders,
+    setRequestBody,
+    setUrlError,
+    updateCustomTarget,
+  });
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -529,39 +599,6 @@ ${exampleRequest}`;
       updateCustomTarget('body', config.body);
     }
   };
-
-  const handleConfigAgentDiscovered = useCallback(
-    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
-      const fullUrl = discoveredConfig.path
-        ? `${baseUrl.replace(/\/$/, '')}${discoveredConfig.path}`
-        : baseUrl;
-      const headers = discoveredConfig.headers ?? {};
-      const body = discoveredConfig.body ?? '';
-
-      setBodyError(null);
-      setUrlError(null);
-      setHeaders(
-        Object.entries(headers).map(([key, value]) => ({
-          key,
-          value: String(value),
-        })),
-      );
-      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
-      updateCustomTarget('config', {
-        ...selectedTarget.config,
-        request: undefined,
-        url: fullUrl,
-        method: discoveredConfig.method,
-        headers,
-        body,
-        transformResponse: discoveredConfig.transformResponse,
-        useHttps: false,
-      });
-
-      setConfigAgentOpen(false);
-    },
-    [selectedTarget.config, setBodyError, setUrlError, updateCustomTarget],
-  );
 
   return (
     <div className="min-w-0">

@@ -73,6 +73,11 @@ export interface ConfigAgentSession {
   finalConfig: DiscoveredConfig | null;
 }
 
+interface PolledSessionData {
+  messages?: AgentMessage[];
+  session?: ConfigAgentSession | null;
+}
+
 interface UseConfigAgentReturn {
   // State
   sessionId: string | null;
@@ -168,6 +173,26 @@ export function useConfigAgent(): UseConfigAgentReturn {
     [restoreSensitiveHeaders],
   );
 
+  const canPoll = useCallback(() => mountedRef.current && pollingActiveRef.current, []);
+
+  const applyPolledSession = useCallback(
+    (data: PolledSessionData): boolean => {
+      setMessages(data.messages || []);
+      setSession(restoreSessionSecrets(data.session || null));
+
+      if (!data.session || ['complete', 'error'].includes(data.session.phase)) {
+        stopPolling();
+        return false;
+      }
+
+      const lastMessage = data.messages?.[data.messages.length - 1];
+      const waitingForInput = lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
+
+      return !waitingForInput;
+    },
+    [restoreSessionSecrets, stopPolling],
+  );
+
   /**
    * Poll for session updates
    */
@@ -178,52 +203,37 @@ export function useConfigAgent(): UseConfigAgentReturn {
       pollingActiveRef.current = true;
 
       const poll = async () => {
-        // Check if polling should continue
-        if (!mountedRef.current || !pollingActiveRef.current) {
+        if (!canPoll()) {
           return;
         }
 
         try {
           const response = await callApi(`/redteam/config-agent/session/${sid}`);
-          if (!response.ok || !mountedRef.current || !pollingActiveRef.current) {
+          if (!response.ok) {
+            const responseBody = await response.json().catch(() => null);
+            throw new Error(responseBody?.error || 'Failed to poll configuration assistant');
+          }
+          if (!canPoll()) {
             return;
           }
 
-          const { data } = await response.json();
-
-          // Only update state if still mounted and polling is active
-          if (!mountedRef.current || !pollingActiveRef.current) {
+          const { data } = (await response.json()) as { data: PolledSessionData };
+          if (applyPolledSession(data) && canPoll()) {
+            pollingTimeoutRef.current = setTimeout(poll, 1000);
+          }
+        } catch (err) {
+          if (!canPoll()) {
             return;
           }
 
-          setMessages(data.messages || []);
-          setSession(restoreSessionSecrets(data.session || null));
-
-          // Continue polling if not complete
-          if (data.session && !['complete', 'error'].includes(data.session.phase)) {
-            // Check if we're waiting for user input
-            const lastMessage = data.messages?.[data.messages.length - 1];
-            const waitingForInput =
-              lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
-
-            if (!waitingForInput && pollingActiveRef.current) {
-              pollingTimeoutRef.current = setTimeout(poll, 1000);
-            }
-          } else {
-            // Polling complete, clean up
-            pollingActiveRef.current = false;
-          }
-        } catch {
-          // Ignore polling errors, but stop if unmounted
-          if (!mountedRef.current) {
-            pollingActiveRef.current = false;
-          }
+          stopPolling();
+          setError(err instanceof Error ? err.message : 'Failed to poll configuration assistant');
         }
       };
 
       poll();
     },
-    [stopPolling, restoreSessionSecrets],
+    [applyPolledSession, canPoll, stopPolling],
   );
 
   /**

@@ -262,6 +262,9 @@ describe('ConfigurationAgent', () => {
             choices: [{ message: { content: 'hello' } }],
           });
         }
+        if (!String(_url).endsWith('/v1/chat/completions')) {
+          return jsonResponse({ error: 'not found' }, { status: 404 });
+        }
         return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
       });
 
@@ -376,7 +379,7 @@ describe('ConfigurationAgent', () => {
           .getMessages()
           .at(-1)
           ?.metadata?.options?.map((option) => option.id),
-      ).toEqual(['example', 'openai', 'anthropic', 'custom']);
+      ).toEqual(['example', 'openai', 'anthropic', 'azure', 'custom']);
     });
 
     it('handles auth-required discovery and verifies the provided bearer token', async () => {
@@ -433,6 +436,45 @@ describe('ConfigurationAgent', () => {
         true,
       );
       expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks for the API format when authentication masks every probe path', async () => {
+      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        return jsonResponse(
+          { error: { message: 'Bearer token required' } },
+          { status: 401, headers: { 'www-authenticate': 'Bearer realm="api"' } },
+        );
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(agent.getSession().bestMatch).toBeNull();
+      expect(
+        agent
+          .getMessages()
+          .at(-1)
+          ?.metadata?.options?.map((option) => option.id),
+      ).toEqual(['openai', 'anthropic', 'azure', 'custom']);
+    });
+
+    it('bounds response bodies retained from discovery probes', async () => {
+      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        return textResponse('x'.repeat(200_000));
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      const retainedBody = agent.getSession().probeHistory[0]?.body;
+      expect(retainedBody?.length).toBeLessThan(200_000);
+      expect(retainedBody).toContain('[truncated]');
     });
   });
 

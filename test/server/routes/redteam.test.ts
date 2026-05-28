@@ -757,6 +757,9 @@ describe('Redteam Routes', () => {
             choices: [{ message: { content: 'hello' } }],
           });
         }
+        if (!String(_url).endsWith('/v1/chat/completions')) {
+          return jsonResponse({ error: 'not found' }, { status: 404 });
+        }
         return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
       });
 
@@ -767,17 +770,18 @@ describe('Redteam Routes', () => {
       expect(startResponse.status).toBe(200);
       const { sessionId } = startResponse.body.data;
 
-      await waitForFetchCalls(3);
+      await waitForFetchCalls(17);
 
       const inputResponse = await request(app).post('/api/redteam/config-agent/input').send({
         sessionId,
         type: 'api_key',
         value: 'sk-test-secret',
-        field: 'apiKey',
+        field: 'publicNote',
       });
 
       expect(inputResponse.status).toBe(200);
       expect(JSON.stringify(inputResponse.body)).not.toContain('sk-test-secret');
+      expect(inputResponse.body.data.session.userInputs).not.toHaveProperty('publicNote');
       expect(Object.values(inputResponse.body.data.session.finalConfig.headers)).toContain(
         'Bearer ••••cret',
       );
