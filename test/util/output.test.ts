@@ -64,7 +64,7 @@ describe('writeOutput', () => {
     );
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -85,7 +85,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -150,6 +150,7 @@ describe('writeOutput', () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
       description: 'Test config',
+      tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
@@ -177,6 +178,7 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
+    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
   });
 
   it.each([
@@ -1056,7 +1058,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -1084,7 +1086,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -1130,6 +1132,7 @@ describe('writeOutput', () => {
     expect(templateContent).toContain('{{ cell.text | escape }}');
     expect(templateContent).toContain('{{ cell.reason | escape }}');
     expect(templateContent).toContain('{{ cell.error | escape }}');
+    expect(templateContent).toContain('{{ cell.description | escape }}');
 
     // Ensure structured output content and derived search fields are escaped.
     expect(templateContent).toContain('data-search="{{ cell.statusLabel | escape }}');
@@ -1170,7 +1173,7 @@ describe('writeOutput', () => {
       vars: { input: 'one' },
       promptIdx: 0,
       testIdx: 0,
-      testCase: { vars: { input: 'one' } },
+      testCase: { vars: { input: 'one' }, description: 'Passing <test> description' },
       promptId: 'prompt',
       gradingResult: {
         pass: true,
@@ -1212,6 +1215,8 @@ describe('writeOutput', () => {
     expect(html).toContain('Score 0.00');
     expect(html).toContain('Passing output');
     expect(html).toContain('Failing output');
+    expect(html).toContain('Passing &lt;test&gt; description');
+    expect(html).not.toContain('Passing <test> description');
     expect(html).toContain('Passing reason');
     expect(html).toContain('Failing reason');
     expect(html).toContain('View detail');

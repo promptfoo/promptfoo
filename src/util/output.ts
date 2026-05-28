@@ -405,7 +405,7 @@ export async function writeOutput(
           kind: 'output',
           detailId: `result-detail-${rowIndex}-${outputIndex}`,
           detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || '',
+          description: row.description || row.test?.description || '',
           ...outputToHtmlReportCell(output),
         })),
       ]),

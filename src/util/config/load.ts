@@ -36,6 +36,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
+import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -405,6 +406,39 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
 }
 
 /**
+ * Build a dedupe key for a provider entry. Provider functions and instances
+ * whose behavior is identity-sensitive use reference identity. Provider option
+ * objects that contain functions serialize those function references into the
+ * key because config normalization may clone the surrounding object.
+ *
+ * This allows repeated executable configs to dedupe while preserving configs
+ * that differ only by their transform or other function fields.
+ */
+function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>): unknown {
+  if (typeof provider === 'string') {
+    return provider;
+  }
+  if (typeof provider === 'function' || isApiProvider(provider)) {
+    return provider;
+  }
+  try {
+    return JSON.stringify(provider, (_key, value) => {
+      if (typeof value !== 'function') {
+        return value;
+      }
+      let id = functionIds.get(value);
+      if (id === undefined) {
+        id = functionIds.size;
+        functionIds.set(value, id);
+      }
+      return { __promptfooFunctionReference: id };
+    });
+  } catch {
+    return provider;
+  }
+}
+
+/**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
  * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
@@ -431,7 +465,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   }
 
   const providers: UnifiedConfig['providers'] = [];
-  const seenProviders = new Set<string>();
+  const seenProviders = new Set<unknown>();
+  const functionIds = new Map<Function, number>();
   configs.forEach((config) => {
     invariant(
       typeof config.providers !== 'function',
@@ -444,9 +479,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        if (!seenProviders.has(JSON.stringify(provider))) {
+        const key = providerDedupeKey(provider, functionIds);
+        if (!seenProviders.has(key)) {
           providers.push(provider);
-          seenProviders.add(JSON.stringify(provider));
+          seenProviders.add(key);
         }
       });
     }
@@ -580,7 +616,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     providers,
     prompts,
     tests,
-    scenarios: configs.flatMap((config) => config.scenarios || []),
+    scenarios: configs.some((config) => config.scenarios !== undefined)
+      ? configs.flatMap((config) => config.scenarios || [])
+      : undefined,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
