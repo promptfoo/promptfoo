@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import { OrcaRouterProvider } from '../../src/providers/orcarouter';
+import { createOrcaRouterProvider, OrcaRouterProvider } from '../../src/providers/orcarouter';
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
 
@@ -61,6 +61,13 @@ describe('OrcaRouter', () => {
       });
     });
 
+    it('redacts inline API keys when serializing to JSON', () => {
+      const p = new OrcaRouterProvider('openai/gpt-5.5', {
+        config: { apiKey: 'secret-key' },
+      });
+      expect(p.toJSON().config.apiKey).toBeUndefined();
+    });
+
     it('lets user-supplied headers override attribution defaults', () => {
       const p = new OrcaRouterProvider('openai/gpt-5.5', {
         config: { headers: { 'X-Title': 'my-app', 'X-Custom': 'foo' } },
@@ -99,6 +106,58 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('prefers provider env overrides over process API keys', () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'global-test-key' });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {
+          env: { ORCAROUTER_API_KEY: 'provider-test-key' },
+        });
+        expect(p.getApiKey()).toBe('provider-test-key');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not inherit OpenAI organization configuration', async () => {
+      const restoreEnv = mockProcessEnv({
+        ORCAROUTER_API_KEY: 'test-key',
+        OPENAI_ORGANIZATION: 'org-leak',
+      });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {});
+        expect(p.getOrganization()).toBeUndefined();
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const headers = (init as RequestInit | undefined)?.headers as Record<string, string>;
+        expect(headers).not.toHaveProperty('OpenAI-Organization');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('uses OrcaRouter as the GenAI tracing system', () => {
+      const p = new OrcaRouterProvider('openai/gpt-5.5', {});
+      expect((p as unknown as { getGenAISystem: () => string }).getGenAISystem()).toBe(
+        'orcarouter',
+      );
+    });
+
     it('throws a clear error when no API key is configured', async () => {
       const restoreEnv = mockProcessEnv({
         OPENAI_API_KEY: 'openai-secret',
@@ -127,6 +186,12 @@ describe('OrcaRouter', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('falls back to the default API URL if config is cleared after construction', () => {
+      const p = new OrcaRouterProvider('openai/gpt-5.5', {});
+      p.config.apiBaseUrl = undefined;
+      expect(p.getApiUrl()).toBe(ORCAROUTER_API_BASE);
     });
 
     it('calls the default OrcaRouter host and attaches attribution headers', async () => {
@@ -415,6 +480,46 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('passes per-test routing options (models / route) as top-level body fields', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {});
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Out' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Test prompt', {
+          vars: {},
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+            config: {
+              route: 'fallback',
+              models: ['openai/gpt-5.5', 'anthropic/claude-opus-4.7'],
+            },
+          },
+        });
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.route).toBe('fallback');
+        expect(body.models).toEqual(['openai/gpt-5.5', 'anthropic/claude-opus-4.7']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     describe('Reasoning / thinking', () => {
       beforeEach(() => {
         mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
@@ -580,6 +685,38 @@ describe('OrcaRouter', () => {
         const result = await provider.callApi('Test prompt');
         expect(result.error).toContain('400 Bad Request');
       });
+    });
+  });
+
+  describe('createOrcaRouterProvider', () => {
+    it('creates providers from registry-style provider paths', () => {
+      const provider = createOrcaRouterProvider('orcarouter:openai/gpt-5.5');
+
+      expect(provider.id()).toBe('orcarouter:openai/gpt-5.5');
+    });
+
+    it('passes env and id options into the provider', () => {
+      const provider = createOrcaRouterProvider('orcarouter:openai/gpt-5.5', {
+        id: 'custom-orca',
+        env: { ORCAROUTER_API_KEY: 'provider-test-key' },
+      }) as OrcaRouterProvider;
+
+      expect(provider.id()).toBe('custom-orca');
+      expect(provider.getApiKey()).toBe('provider-test-key');
+    });
+
+    it('preserves env and id already present in provider config', () => {
+      const provider = createOrcaRouterProvider('orcarouter:openai/gpt-5.5', {
+        id: 'ignored-id',
+        env: { ORCAROUTER_API_KEY: 'ignored-key' },
+        config: {
+          id: 'configured-id',
+          env: { ORCAROUTER_API_KEY: 'configured-key' },
+        },
+      }) as OrcaRouterProvider;
+
+      expect(provider.id()).toBe('configured-id');
+      expect(provider.getApiKey()).toBe('configured-key');
     });
   });
 });

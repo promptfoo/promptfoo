@@ -2,7 +2,12 @@ import { type EnvVarKey, getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+} from '../types/providers';
 
 /**
  * OrcaRouter provider — OpenAI-compatible meta-router (https://www.orcarouter.ai).
@@ -80,9 +85,13 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     const envar = this.config?.apiKeyEnvar || 'ORCAROUTER_API_KEY';
     return (
       this.config.apiKey ||
-      getEnvString(envar as EnvVarKey) ||
-      this.env?.[envar as keyof EnvOverrides]
+      this.env?.[envar as keyof EnvOverrides] ||
+      getEnvString(envar as EnvVarKey)
     );
+  }
+
+  getOrganization(): undefined {
+    return undefined;
   }
 
   protected getMissingApiKeyErrorMessage(): string {
@@ -98,6 +107,35 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
    */
   getApiUrl(): string {
     return this.config.apiBaseUrl || 'https://api.orcarouter.ai/v1';
+  }
+
+  protected getGenAISystem(): string {
+    return 'orcarouter';
+  }
+
+  async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const config = result.config as typeof result.config & {
+      models?: unknown;
+      route?: unknown;
+    };
+    const body = result.body as typeof result.body & {
+      models?: unknown;
+      route?: unknown;
+    };
+
+    if (config.models !== undefined && body.models === undefined) {
+      body.models = config.models;
+    }
+    if (config.route !== undefined && body.route === undefined) {
+      body.route = config.route;
+    }
+
+    return result;
   }
 
   /**

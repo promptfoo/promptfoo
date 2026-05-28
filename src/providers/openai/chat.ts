@@ -215,6 +215,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return this.modelName;
   }
 
+  protected getGenAISystem(): string {
+    return 'openai';
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -378,7 +382,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'openai',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
