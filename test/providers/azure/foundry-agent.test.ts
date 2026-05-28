@@ -418,6 +418,50 @@ describe('AzureFoundryAgentProvider', () => {
       });
     });
 
+    it('wraps each call in a chat <model> span', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce(createMessageResponse('Hello'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      await provider.callApi('test prompt');
+
+      const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
+      expect(chatSpan).toBeDefined();
+      expect(chatSpan?.attributes).toMatchObject({
+        'gen_ai.system': 'azure',
+        'gen_ai.operation.name': 'chat',
+      });
+    });
+
+    it('emits a chat span but no gen_ai.turn spans on a cache hit', async () => {
+      const spans = installSpanRecorder();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue({ output: 'cached response' }),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('weather in Paris');
+
+      // A cache hit performs no LLM round, so no gen_ai.turn marker is emitted,
+      // but the request is still wrapped in a chat span (with cache_hit set).
+      expect(result.cached).toBe(true);
+      expect(mockResponsesCreate).not.toHaveBeenCalled();
+      expect(spans.filter((span) => span.name.startsWith('gen_ai.turn '))).toHaveLength(0);
+      const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
+      expect(chatSpan).toBeDefined();
+      expect(chatSpan?.attributes['promptfoo.cache_hit']).toBe(true);
+    });
+
     it('should return unresolved function calls when callbacks are missing', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
