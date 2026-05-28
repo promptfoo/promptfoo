@@ -596,6 +596,65 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('renders Nunjucks vars in models / route / reasoning_effort', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      const utilModule = await import('../../src/util');
+      const renderSpy = vi.mocked(utilModule.renderVarsInObject);
+      renderSpy.mockClear();
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {
+          config: {
+            reasoning_effort: '{{ effort }}',
+            route: '{{ mode }}',
+            models: ['{{ primary }}', '{{ secondary }}'],
+          },
+        });
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const vars = {
+          effort: 'high',
+          mode: 'fallback',
+          primary: 'openai/gpt-4o',
+          secondary: 'anthropic/claude-haiku-4.5',
+        };
+        await p.callApi('Hi', {
+          vars,
+          prompt: { raw: 'Hi', label: 'Hi' },
+        });
+
+        const renderArgs = renderSpy.mock.calls.map((call) => call[0]);
+        expect(renderArgs).toEqual(
+          expect.arrayContaining([
+            ['{{ primary }}', '{{ secondary }}'],
+            '{{ mode }}',
+            '{{ effort }}',
+          ]),
+        );
+        renderSpy.mock.calls.forEach((call) => {
+          if (Array.isArray(call[0]) || typeof call[0] === 'string') {
+            expect(call[1]).toBe(vars);
+          }
+        });
+      } finally {
+        renderSpy.mockReset();
+        renderSpy.mockImplementation((x) => x);
+        restoreEnv();
+      }
+    });
+
     describe('Reasoning / thinking', () => {
       beforeEach(() => {
         mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });

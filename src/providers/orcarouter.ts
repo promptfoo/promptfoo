@@ -1,4 +1,5 @@
 import { type EnvVarKey, getEnvString } from '../envars';
+import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -136,18 +137,16 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       route?: unknown;
     };
 
-    if (promptConfig?.models !== undefined) {
-      body.models = promptConfig.models;
-    } else if (config.models !== undefined) {
-      body.models = config.models;
+    const models = promptConfig?.models ?? config.models;
+    if (models !== undefined) {
+      body.models = renderVarsInObject(models, context?.vars);
     }
-    if (promptConfig?.route !== undefined) {
-      body.route = promptConfig.route;
-    } else if (config.route !== undefined) {
-      body.route = config.route;
+    const route = promptConfig?.route ?? config.route;
+    if (route !== undefined) {
+      body.route = renderVarsInObject(route, context?.vars);
     }
     if (config.reasoning_effort !== undefined && body.reasoning_effort === undefined) {
-      body.reasoning_effort = config.reasoning_effort;
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
     return result;
