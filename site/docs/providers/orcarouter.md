@@ -43,7 +43,7 @@ providers:
     config:
       max_tokens: 2000
 
-  - id: orcarouter:auto
+  - id: orcarouter:orcarouter/auto
     config:
       max_tokens: 1000
 ```
@@ -62,7 +62,7 @@ providers:
 
 ## Adaptive routing with `orcarouter/auto`
 
-`orcarouter/auto` is a virtual router (not a model). OrcaRouter seeds each workspace with an `auto` router whose strategy and candidate model pool are configured in the [routing console](https://www.orcarouter.ai/console/routing). The same `/chat/completions` endpoint is used; OrcaRouter selects the upstream per request.
+`orcarouter/auto` is a virtual router (not a model) — invoke it as `orcarouter:orcarouter/auto`. OrcaRouter seeds each workspace with an `auto` router whose strategy and candidate model pool are configured in the [routing console](https://www.orcarouter.ai/console/routing). The same `/chat/completions` endpoint is used; OrcaRouter selects the upstream per request.
 
 You can also pass a `models` fallback list and a `route` mode for hard-failover behavior:
 
@@ -90,7 +90,7 @@ providers:
 ```
 
 :::note
-Some reasoning models (`anthropic/claude-opus-4.7`, OpenAI `gpt-5*`, `deepseek/deepseek-reasoner`) reject `temperature`. Omit it for those models, or you will get a 400 from the upstream provider.
+Several reasoning families reject `temperature` outright: `anthropic/claude-opus-4.x+`, OpenAI `gpt-5*` and `o`-series, and `deepseek/deepseek-reasoner` / `deepseek-r1`. The provider auto-omits `temperature` for these so the default `temperature: 0` does not slip through; if you pass an explicit `temperature` for one of them, expect a 400 from the upstream. For other vendors' reasoning previews not in this list, use `omitDefaults: true` or set `temperature: undefined` explicitly.
 :::
 
 ## Features

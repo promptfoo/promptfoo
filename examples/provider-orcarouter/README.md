@@ -29,6 +29,6 @@ cd provider-orcarouter
 This example demonstrates:
 
 - Calling a specific upstream model (`openai/gpt-5.5`) through OrcaRouter.
-- Using the `orcarouter/auto` adaptive router, which picks an upstream per request according to the workspace-level strategy configured in the [routing console](https://www.orcarouter.ai/console/routing).
+- Using the `orcarouter:orcarouter/auto` adaptive router, which picks an upstream per request according to the workspace-level strategy configured in the [routing console](https://www.orcarouter.ai/console/routing).
 
 For the full model catalog, see [orcarouter.ai/models](https://www.orcarouter.ai/models). For provider docs, see the [OrcaRouter provider page](https://www.promptfoo.dev/docs/providers/orcarouter).

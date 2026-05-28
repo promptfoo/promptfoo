@@ -89,6 +89,29 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     return `API key is not set. Set the ${this.config.apiKeyEnvar || 'ORCAROUTER_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
   }
 
+  /**
+   * Extend the base class's OpenAI-only reasoning detection with the upstream
+   * reasoning families OrcaRouter routes to that also reject `temperature`.
+   * Without this, default `temperature: 0` is sent to Claude Opus / DeepSeek
+   * Reasoner and the upstream returns 400.
+   * Reference: https://docs.orcarouter.ai/advanced/reasoning
+   */
+  protected isReasoningModel(): boolean {
+    if (super.isReasoningModel()) {
+      return true;
+    }
+    const m = this.modelName;
+    // Anthropic Claude Opus 4+ (reasoning) — earlier Opus 2/3 took `temperature` fine.
+    if (/(^|\/)claude-opus-(?!2|3)\d/.test(m)) {
+      return true;
+    }
+    // DeepSeek Reasoner / R1 family.
+    if (/(^|\/)deepseek-(reasoner|r1)\b/.test(m)) {
+      return true;
+    }
+    return false;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -164,7 +187,10 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
+              // Only attach Authorization when a key resolved — when the user
+              // points OrcaRouter at an authless proxy with `apiKeyRequired: false`
+              // we mustn't send "Bearer undefined".
+              ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
               'HTTP-Referer': 'https://promptfoo.dev/',
               'X-Title': 'promptfoo',
               ...config.headers,
@@ -225,14 +251,18 @@ function extractOutput(message: any, showThinking: boolean): string | object {
   if (hasToolCalls) {
     return message.tool_calls;
   }
+  // OrcaRouter forwards upstream reasoning under either `reasoning` (OpenAI-style)
+  // or `reasoning_content` (e.g. DeepSeek/Qwen native shape).
+  // Reference: https://docs.orcarouter.ai/advanced/reasoning
+  const reasoning = message.reasoning ?? message.reasoning_content;
   if (message.content && message.content.trim()) {
-    if (message.reasoning && showThinking) {
-      return `Thinking: ${message.reasoning}\n\n${message.content}`;
+    if (reasoning && showThinking) {
+      return `Thinking: ${reasoning}\n\n${message.content}`;
     }
     return message.content;
   }
-  if (message.reasoning && showThinking) {
-    return message.reasoning;
+  if (reasoning && showThinking) {
+    return reasoning;
   }
   return '';
 }

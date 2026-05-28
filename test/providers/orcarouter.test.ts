@@ -146,6 +146,128 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('omits Authorization header when apiKeyRequired is false and no key is set', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: undefined });
+      try {
+        const p = new OrcaRouterProvider('openai/gpt-5.5', {
+          config: {
+            apiBaseUrl: 'https://authless-proxy.example.com/v1',
+            apiKeyRequired: false,
+          },
+        });
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const headers = (init as RequestInit | undefined)?.headers as Record<string, string>;
+        expect(headers).not.toHaveProperty('Authorization');
+        expect(headers).toMatchObject({
+          'HTTP-Referer': 'https://promptfoo.dev/',
+          'X-Title': 'promptfoo',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('omits temperature for Anthropic Claude Opus 4+ reasoning models', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).not.toHaveProperty('temperature');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('omits temperature for DeepSeek Reasoner', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('deepseek/deepseek-reasoner', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).not.toHaveProperty('temperature');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('still sends temperature for non-reasoning Anthropic models (e.g. claude-opus-3)', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-3', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).toHaveProperty('temperature');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('passes routing options (models / route) as top-level body fields', async () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       try {
@@ -301,6 +423,34 @@ describe('OrcaRouter', () => {
 
         const result = await p.callApi('Generate JSON');
         expect(result.output).toEqual({ name: 'Jane' });
+      });
+
+      it('surfaces reasoning_content (DeepSeek/Qwen-style) as thinking when reasoning is absent', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: 'The answer is 42.',
+                    reasoning_content: 'Working through this step by step.',
+                  },
+                },
+              ],
+              usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.output).toBe(
+          'Thinking: Working through this step by step.\n\nThe answer is 42.',
+        );
       });
 
       it('returns an API error on non-2xx status', async () => {
