@@ -203,6 +203,20 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
       delete body.temperature;
     }
 
+    // The base provider seeds top_p / presence_penalty / frequency_penalty from
+    // OPENAI_TOP_P / OPENAI_PRESENCE_PENALTY / OPENAI_FREQUENCY_PENALTY whenever
+    // those env vars are set, regardless of MiniMax config. Strip them so OpenAI
+    // sampling defaults configured for another provider don't leak into MiniMax.
+    if (config.top_p === undefined) {
+      delete body.top_p;
+    }
+    if (config.presence_penalty === undefined) {
+      delete body.presence_penalty;
+    }
+    if (config.frequency_penalty === undefined) {
+      delete body.frequency_penalty;
+    }
+
     return result;
   }
 

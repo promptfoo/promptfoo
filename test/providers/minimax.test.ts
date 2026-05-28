@@ -203,6 +203,9 @@ describe('MiniMaxProvider', () => {
       OPENAI_BASE_URL: undefined,
       OPENAI_TEMPERATURE: undefined,
       OPENAI_MAX_TOKENS: undefined,
+      OPENAI_TOP_P: undefined,
+      OPENAI_PRESENCE_PENALTY: undefined,
+      OPENAI_FREQUENCY_PENALTY: undefined,
     });
   });
 
@@ -316,6 +319,44 @@ describe('MiniMaxProvider', () => {
     expect(body.max_completion_tokens).toBe(512);
     expect(body.max_tokens).toBeUndefined();
     expect(body.temperature).toBe(0.7);
+  });
+
+  it('should not leak OpenAI sampling env defaults (OPENAI_TOP_P / OPENAI_PRESENCE_PENALTY / OPENAI_FREQUENCY_PENALTY) into MiniMax requests', async () => {
+    const restoreOpenAiSamplingEnv = mockProcessEnv({
+      OPENAI_TOP_P: '0.5',
+      OPENAI_PRESENCE_PENALTY: '0.7',
+      OPENAI_FREQUENCY_PENALTY: '0.9',
+    });
+    try {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7') as any;
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.top_p).toBeUndefined();
+      expect(body.presence_penalty).toBeUndefined();
+      expect(body.frequency_penalty).toBeUndefined();
+    } finally {
+      restoreOpenAiSamplingEnv();
+    }
+  });
+
+  it('should preserve explicit MiniMax sampling parameters even when OPENAI_* sampling envs are set', async () => {
+    const restoreOpenAiSamplingEnv = mockProcessEnv({
+      OPENAI_TOP_P: '0.5',
+      OPENAI_PRESENCE_PENALTY: '0.7',
+      OPENAI_FREQUENCY_PENALTY: '0.9',
+    });
+    try {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+        config: { config: { top_p: 0.95, presence_penalty: 0.1, frequency_penalty: 0.2 } },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.top_p).toBe(0.95);
+      expect(body.presence_penalty).toBe(0.1);
+      expect(body.frequency_penalty).toBe(0.2);
+    } finally {
+      restoreOpenAiSamplingEnv();
+    }
   });
 
   it('should call a configured MiniMax-compatible endpoint and charge prompt-cache reads', async () => {
