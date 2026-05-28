@@ -625,9 +625,6 @@ export default class EvalResult {
       const result = await db.insert(evalResultsTable).values(this).returning();
       this.id = result[0].id;
       this.persisted = true;
-      // A new row changes the eval's distinct/total result counts, so bust the
-      // cache like createFromEvaluateResult / createManyFromEvaluateResult do.
-      clearCountCache(this.evalId);
     }
   }
 
