@@ -35,7 +35,7 @@ import type { TestCase, VarValue } from '../types';
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 const PAGE_SIZE = 100;
-const TRACE_LIST_FIELDS = 'core,io';
+const TRACE_LIST_FIELDS = 'core,io,metrics';
 const LANGFUSE_TRACES_PREFIX = 'langfuse://traces';
 
 interface LangfuseTrace {

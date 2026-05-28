@@ -214,7 +214,7 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces?limit=10');
 
       expect(mockTraceList).toHaveBeenCalledWith({
-        fields: 'core,io',
+        fields: 'core,io,metrics',
         limit: 10,
         page: 1,
       });
@@ -229,6 +229,8 @@ describe('langfuseTraces', () => {
           __langfuse_user_id: 'user_123',
           __langfuse_session_id: 'session_456',
           __langfuse_tags: ['production', 'geography'],
+          __langfuse_latency: 0.5,
+          __langfuse_cost: 0.001,
           input: 'What is the capital of France?',
           output: 'Paris is the capital of France.',
         },
@@ -289,7 +291,7 @@ describe('langfuseTraces', () => {
       );
 
       expect(mockTraceList).toHaveBeenCalledWith({
-        fields: 'core,io',
+        fields: 'core,io,metrics',
         limit: 100,
         page: 1,
         userId: 'user_123',
@@ -338,12 +340,12 @@ describe('langfuseTraces', () => {
 
       expect(mockTraceList).toHaveBeenCalledTimes(2);
       expect(mockTraceList).toHaveBeenNthCalledWith(1, {
-        fields: 'core,io',
+        fields: 'core,io,metrics',
         limit: 100,
         page: 1,
       });
       expect(mockTraceList).toHaveBeenNthCalledWith(2, {
-        fields: 'core,io',
+        fields: 'core,io,metrics',
         limit: 100,
         page: 2,
       });
@@ -367,7 +369,7 @@ describe('langfuseTraces', () => {
 
       expect(mockTraceList).toHaveBeenCalledTimes(1);
       expect(mockTraceList).toHaveBeenCalledWith({
-        fields: 'core,io',
+        fields: 'core,io,metrics',
         limit: 50,
         page: 1,
       });
