@@ -53,6 +53,38 @@ vi.mock('../../src/providers', () => ({
 vi.mock('../../src/util/fetch/index.ts');
 
 const mockReadFileSync = vi.hoisted(() => vi.fn());
+const mockParseXlsxFileState = vi.hoisted(() => ({
+  implementation: undefined as ((filePath: string) => Promise<any[]>) | undefined,
+}));
+const mockMaybeLoadConfigFromExternalFileImpl = vi.hoisted(() => {
+  const implementation = (config: any): any => {
+    if (Array.isArray(config)) {
+      return config.map((item) => implementation(item));
+    }
+
+    if (typeof config === 'object' && config !== null) {
+      const result = { ...config };
+      for (const [key, value] of Object.entries(config)) {
+        if (typeof value === 'string' && value.startsWith('file://')) {
+          const filePath = value.slice('file://'.length);
+          const fileContent = mockReadFileSync(filePath, 'utf-8');
+          if (typeof fileContent === 'string') {
+            try {
+              result[key] = JSON.parse(fileContent);
+            } catch {
+              result[key] = fileContent;
+            }
+          }
+        }
+      }
+      return result;
+    }
+
+    return config;
+  };
+
+  return implementation;
+});
 
 vi.mock('fs', () => ({
   readFileSync: mockReadFileSync,
@@ -62,6 +94,15 @@ vi.mock('fs', () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
 }));
+
+vi.mock('../../src/util/xlsx', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/util/xlsx')>();
+  return {
+    ...actual,
+    parseXlsxFile: (filePath: string) =>
+      mockParseXlsxFileState.implementation?.(filePath) ?? actual.parseXlsxFile(filePath),
+  };
+});
 
 vi.mock('fs/promises', () => {
   const promisesFs = {
@@ -140,40 +181,7 @@ vi.mock('../../src/esm', () => ({
 }));
 
 vi.mock('../../src/util/file', () => ({
-  maybeLoadConfigFromExternalFile: vi.fn((config) => {
-    // Mock implementation that handles file:// references
-
-    // Handle arrays first to preserve their type
-    if (Array.isArray(config)) {
-      return config.map((item) => {
-        const mockFn = maybeLoadConfigFromExternalFile;
-        return mockFn(item);
-      });
-    }
-
-    // Handle objects (but not arrays)
-    if (typeof config === 'object' && config !== null) {
-      const result = { ...config };
-      for (const [key, value] of Object.entries(config)) {
-        if (typeof value === 'string' && value.startsWith('file://')) {
-          // Extract the file path from the file:// URL
-          const filePath = value.slice('file://'.length);
-          // Get the mocked file content using the extracted path
-          const fileContent = fs.readFileSync(filePath, 'utf-8');
-          if (typeof fileContent === 'string') {
-            try {
-              result[key] = JSON.parse(fileContent);
-            } catch {
-              result[key] = fileContent;
-            }
-          }
-        }
-      }
-      return result;
-    }
-
-    return config;
-  }),
+  maybeLoadConfigFromExternalFile: vi.fn(mockMaybeLoadConfigFromExternalFileImpl),
 }));
 
 // Helper to clear all mocks
@@ -192,6 +200,7 @@ const clearAllMocks = () => {
   vi.mocked(readAzureBlobText).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(importModule).mockReset();
+  mockParseXlsxFileState.implementation = undefined;
 };
 
 describe('readStandaloneTestsFile', () => {
@@ -200,37 +209,9 @@ describe('readStandaloneTestsFile', () => {
     // Reset getEnvString to default behavior
     vi.mocked(getEnvString).mockImplementation((_key, defaultValue) => defaultValue || '');
     // Restore maybeLoadConfigFromExternalFile mock
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
-      // Handle arrays first to preserve their type
-      if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
-      }
-
-      // Mock implementation that handles file:// references
-      if (typeof config === 'object' && config !== null) {
-        const result = { ...config };
-        for (const [key, value] of Object.entries(config)) {
-          if (typeof value === 'string' && value.startsWith('file://')) {
-            // Extract the file path from the file:// URL
-            const filePath = value.slice('file://'.length);
-            // Get the mocked file content using the extracted path
-            const fileContent = fs.readFileSync(filePath, 'utf-8');
-            if (typeof fileContent === 'string') {
-              try {
-                result[key] = JSON.parse(fileContent);
-              } catch {
-                result[key] = fileContent;
-              }
-            }
-          }
-        }
-        return result;
-      }
-      return config;
-    });
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      mockMaybeLoadConfigFromExternalFileImpl,
+    );
   });
 
   afterEach(() => {
@@ -636,37 +617,24 @@ describe('readStandaloneTestsFile', () => {
       { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ];
 
-    vi.doMock('../../src/util/xlsx', () => ({
-      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
-    }));
+    mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue(mockData);
 
-    vi.resetModules();
+    const result = await readStandaloneTestsFile('test.xlsx');
 
-    try {
-      const { readStandaloneTestsFile: freshReadStandaloneTestsFile } = await import(
-        '../../src/util/testCaseReader'
-      );
-
-      const result = await freshReadStandaloneTestsFile('test.xlsx');
-
-      expect(result).toEqual([
-        {
-          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
-          description: 'Row #1',
-          options: {},
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-        {
-          assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
-          description: 'Row #2',
-          options: {},
-          vars: { var1: 'value3', var2: 'value4' },
-        },
-      ]);
-    } finally {
-      vi.doUnmock('../../src/util/xlsx');
-      vi.resetModules();
-    }
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
   });
 
   // Note: parseXlsxFile error handling tests (module not installed, empty sheets, etc.)
@@ -676,19 +644,7 @@ describe('readStandaloneTestsFile', () => {
     // Integration test using the actual Excel file from examples
     const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
 
-    // Only run if read-excel-file is actually installed (in dev environment)
-    try {
-      await import('read-excel-file/node');
-    } catch {
-      // Skip test if read-excel-file is not installed
-      return;
-    }
-
     const actualFs = await vi.importActual<typeof import('fs')>('fs');
-    if (!actualFs.existsSync(exampleFile)) {
-      return;
-    }
-
     vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
 
     const result = await readStandaloneTestsFile(exampleFile);
@@ -760,13 +716,10 @@ describe('readStandaloneTestsFile', () => {
     vi.mocked(runPython).mockResolvedValue(pythonResult);
 
     // Mock maybeLoadConfigFromExternalFile to transform file:// references
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+    const transformExternalFileConfig = (config: any): any => {
       // Handle arrays first to preserve their type
       if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
+        return config.map((item) => transformExternalFileConfig(item));
       }
 
       if (typeof config === 'object' && config !== null) {
@@ -779,7 +732,8 @@ describe('readStandaloneTestsFile', () => {
         return result;
       }
       return config;
-    });
+    };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(transformExternalFileConfig);
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
@@ -836,38 +790,9 @@ describe('readTest', () => {
   beforeEach(() => {
     clearAllMocks();
     // Restore maybeLoadConfigFromExternalFile mock
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
-      // Handle arrays first to preserve their type
-      if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
-      }
-
-      // Mock implementation that handles file:// references
-      if (typeof config === 'object' && config !== null) {
-        const result = { ...config };
-        for (const [key, value] of Object.entries(config)) {
-          if (typeof value === 'string' && value.startsWith('file://')) {
-            // Extract the file path from the file:// URL
-            const filePath = value.slice('file://'.length);
-            // Get the mocked file content using the extracted path
-            const fileContent = fs.readFileSync(filePath, 'utf-8');
-            if (typeof fileContent === 'string') {
-              try {
-                result[key] = JSON.parse(fileContent);
-              } catch {
-                result[key] = fileContent;
-              }
-            }
-          }
-        }
-        return result;
-      }
-
-      return config;
-    });
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      mockMaybeLoadConfigFromExternalFileImpl,
+    );
   });
 
   afterEach(() => {
@@ -1092,37 +1017,9 @@ describe('readTests', () => {
     clearAllMocks();
     vi.mocked(globSync).mockReturnValue([]);
     // Restore maybeLoadConfigFromExternalFile mock for readTests tests
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
-      // Handle arrays first to preserve their type
-      if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
-      }
-
-      // Mock implementation that handles file:// references
-      if (typeof config === 'object' && config !== null) {
-        const result = { ...config };
-        for (const [key, value] of Object.entries(config)) {
-          if (typeof value === 'string' && value.startsWith('file://')) {
-            // Extract the file path from the file:// URL
-            const filePath = value.slice('file://'.length);
-            // Get the mocked file content using the extracted path
-            const fileContent = fs.readFileSync(filePath, 'utf-8');
-            if (typeof fileContent === 'string') {
-              try {
-                result[key] = JSON.parse(fileContent);
-              } catch {
-                result[key] = fileContent;
-              }
-            }
-          }
-        }
-        return result;
-      }
-      return config;
-    });
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      mockMaybeLoadConfigFromExternalFileImpl,
+    );
   });
 
   afterEach(() => {
@@ -1682,104 +1579,60 @@ describe('readTests', () => {
       { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ];
 
-    vi.doMock('../../src/util/xlsx', () => ({
-      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
-    }));
+    mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue(mockData);
 
-    vi.resetModules();
+    const result = await readTests(['test.xlsx']);
 
-    try {
-      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
-
-      const result = await freshReadTests(['test.xlsx']);
-
-      expect(result).toEqual([
-        {
-          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
-          description: 'Row #1',
-          options: {},
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-        {
-          assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
-          description: 'Row #2',
-          options: {},
-          vars: { var1: 'value3', var2: 'value4' },
-        },
-      ]);
-    } finally {
-      vi.doUnmock('../../src/util/xlsx');
-      vi.resetModules();
-    }
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
   });
 
   it('should handle xlsx files with sheet specifier in array format', async () => {
-    const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ name: 'test1', value: 'result1' }];
 
-    try {
-      await import('read-excel-file/node');
-    } catch {
-      return;
-    }
+    mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue(mockData);
 
-    const actualFs = await vi.importActual<typeof import('fs')>('fs');
-    if (!actualFs.existsSync(exampleFile)) {
-      return;
-    }
+    const result = await readTests(['test.xlsx#DataSheet']);
 
-    vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
-
-    const result = await readTests([`${exampleFile}#1`]);
-
-    expect(result).toHaveLength(4);
-    const frenchTest = result.find((test) => test.vars?.language === 'French');
-    expect(frenchTest?.vars?.body).toBe('Hello world');
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
   });
 
   it('should handle xls files in array format', async () => {
     // Mock parseXlsxFile to return processed CsvRow[] data
     const mockData = [{ col1: 'data1', col2: 'data2' }];
 
-    vi.doMock('../../src/util/xlsx', () => ({
-      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
-    }));
+    mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue(mockData);
 
-    vi.resetModules();
+    const result = await readTests(['legacy.xls']);
 
-    try {
-      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
-
-      const result = await freshReadTests(['legacy.xls']);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].vars).toEqual({ col1: 'data1', col2: 'data2' });
-    } finally {
-      vi.doUnmock('../../src/util/xlsx');
-      vi.resetModules();
-    }
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ col1: 'data1', col2: 'data2' });
   });
 
   it('should handle file:// prefix with xlsx files in array format', async () => {
     // Mock parseXlsxFile to return processed CsvRow[] data
     const mockData = [{ input: 'hello', expected: 'world' }];
 
-    vi.doMock('../../src/util/xlsx', () => ({
-      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
-    }));
+    mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue(mockData);
 
-    vi.resetModules();
+    const result = await readTests(['file://test.xlsx']);
 
-    try {
-      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
-
-      const result = await freshReadTests(['file://test.xlsx']);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
-    } finally {
-      vi.doUnmock('../../src/util/xlsx');
-      vi.resetModules();
-    }
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
   });
 });
 
@@ -1820,38 +1673,9 @@ describe('readVarsFiles', () => {
   beforeEach(() => {
     clearAllMocks();
     // Restore maybeLoadConfigFromExternalFile mock
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
-      // Handle arrays first to preserve their type
-      if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
-      }
-
-      // Handle objects (but not arrays)
-      if (typeof config === 'object' && config !== null) {
-        const result = { ...config };
-        for (const [key, value] of Object.entries(config)) {
-          if (typeof value === 'string' && value.startsWith('file://')) {
-            // Extract the file path from the file:// URL
-            const filePath = value.slice('file://'.length);
-            // Get the mocked file content using the extracted path
-            const fileContent = fs.readFileSync(filePath, 'utf-8');
-            if (typeof fileContent === 'string') {
-              try {
-                result[key] = JSON.parse(fileContent);
-              } catch {
-                result[key] = fileContent;
-              }
-            }
-          }
-        }
-        return result;
-      }
-
-      return config;
-    });
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+      mockMaybeLoadConfigFromExternalFileImpl,
+    );
   });
 
   afterEach(() => {
