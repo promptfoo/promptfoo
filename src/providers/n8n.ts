@@ -240,6 +240,32 @@ function stableStringify(value: unknown): string {
 }
 
 /**
+ * Header names whose values must be stripped before being mixed into the
+ * provider fingerprint. Per `src/providers/AGENTS.md` ("Never include secrets
+ * in cache keys"), bearer tokens / cookies / x-api-key headers are credentials
+ * — hashing them into `provider.id()` would (a) persist the live secret hash
+ * to disk and eval result metadata, and (b) flip the ID every time the user
+ * rotates the token, fragmenting historical eval result groupings. We mark
+ * presence (so two providers with vs. without auth still differ) but redact
+ * the value.
+ */
+const SENSITIVE_HEADER_PATTERN =
+  /^(authorization|cookie|proxy-authorization|x-?api-?key|x-?auth-?token|x-?access-?token|x-?secret|x-?signature|bearer)$/i;
+
+function redactHeadersForFingerprint(
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!headers) {
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(headers)) {
+    out[key] = SENSITIVE_HEADER_PATTERN.test(key.trim()) ? '[REDACTED]' : headers[key];
+  }
+  return out;
+}
+
+/**
  * Build a stable provider ID for an n8n webhook configuration.
  *
  * The fingerprint covers every config field that materially affects the
@@ -247,6 +273,12 @@ function stableStringify(value: unknown): string {
  * body / headers / transformResponse / session handling produce distinct IDs
  * — eval pipelines key per-test results by `provider.id()` (see
  * `src/evaluator.ts`), so a URL-only hash would silently collide results.
+ *
+ * Sensitive header values (Authorization, Cookie, X-Api-Key, …) are redacted
+ * before hashing so the live credential never ends up in `provider.id()` —
+ * which surfaces in result JSON, the web UI, debug logs, and progress output.
+ * Header NAMES still participate so two providers with vs. without auth still
+ * produce distinct IDs.
  *
  * `transformResponse` may be a function; functions can't be serialized
  * deterministically, so we substitute a sentinel based on `.toString()` —
@@ -257,9 +289,9 @@ function getSafeProviderId(url: string, config?: N8nProviderConfig): string {
   const transform = config?.transformResponse;
   const fingerprintInput = {
     url,
-    method: config?.method ?? 'POST',
+    method: (config?.method ?? 'POST').toUpperCase(),
     body: config?.body,
-    headers: config?.headers,
+    headers: redactHeadersForFingerprint(config?.headers),
     sessionField: config?.sessionField,
     sessionHeader: config?.sessionHeader,
     sessionParser: config?.sessionParser,
@@ -434,18 +466,22 @@ export class N8nProvider implements ApiProvider {
     return headers;
   }
 
-  private parseResponse(data: any, text: string): any {
-    // Custom transform response
+  private async parseResponse(data: any, text: string): Promise<any> {
+    // Custom transform response. We `await` the result so an async
+    // transformResponse function (e.g. one that calls another API or parses a
+    // streamed payload) returns its resolved value rather than leaking a
+    // pending Promise into ProviderResponse.output — which would assert as
+    // `[object Promise]` downstream and break serialization.
     if (this.config.transformResponse) {
       if (typeof this.config.transformResponse === 'function') {
-        return this.config.transformResponse(data, text);
+        return await this.config.transformResponse(data, text);
       }
 
       // String expression (e.g., 'json.output' or 'json.response.text')
       try {
         // eslint-disable-next-line no-new-func
         const fn = new Function('json', 'text', `return ${this.config.transformResponse}`);
-        return fn(data, text);
+        return await fn(data, text);
       } catch (err) {
         logger.warn(`[n8n] Failed to evaluate transformResponse: ${err}`);
       }
@@ -494,7 +530,11 @@ export class N8nProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const method = this.config.method || 'POST';
+    // Normalize method to upper-case so `method: get` (or `Post`) in YAML
+    // doesn't bypass the GET / non-idempotent branches downstream — both the
+    // GET-vs-body decision and the maxRetries policy depend on exact case
+    // matches against the standard verb spelling.
+    const method = (this.config.method || 'POST').toUpperCase();
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
     const body = this.buildRequestBody(prompt, context);
@@ -576,8 +616,9 @@ export class N8nProvider implements ApiProvider {
     // Return session IDs so each eval/strategy can scope subsequent turns itself.
     const sessionId = this.extractSessionId(data);
 
-    // Parse the response
-    const output = this.parseResponse(data, rawText);
+    // Parse the response (await: parseResponse is async to handle async
+    // transformResponse functions correctly).
+    const output = await this.parseResponse(data, rawText);
 
     // Extract tool calls if present
     const toolCalls = extractToolCalls(data);

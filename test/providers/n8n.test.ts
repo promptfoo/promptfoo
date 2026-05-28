@@ -782,4 +782,109 @@ describe('createN8nProvider', () => {
     });
     expect(ordering1.id()).toBe(ordering2.id());
   });
+
+  it('does not let sensitive header values change the provider ID across token rotations', () => {
+    // Authorization / Cookie / x-api-key values are redacted before they reach
+    // the fingerprint hash. Two providers identical except for a rotated bearer
+    // token must produce the same provider.id() — otherwise rotating
+    // N8N_API_KEY would fragment historical eval results, AND the live token
+    // would be hashed into provider.id() (which persists to disk and is shown
+    // in logs / web UI / result JSON), violating src/providers/AGENTS.md
+    // "Never include secrets in cache keys".
+    const beforeRotation = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: {
+        headers: {
+          Authorization: 'Bearer sk-old-token-12345',
+          'X-Workflow': 'agent-v2',
+        },
+      },
+    });
+    const afterRotation = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: {
+        headers: {
+          Authorization: 'Bearer sk-new-rotated-token-67890',
+          'X-Workflow': 'agent-v2',
+        },
+      },
+    });
+    expect(beforeRotation.id()).toBe(afterRotation.id());
+
+    // Same check for other auth-shaped header conventions.
+    const withApiKey = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { headers: { 'X-Api-Key': 'sk-secret-key-1' } },
+    });
+    const withRotatedApiKey = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { headers: { 'X-Api-Key': 'sk-secret-key-2' } },
+    });
+    expect(withApiKey.id()).toBe(withRotatedApiKey.id());
+
+    // Non-sensitive header values must still differentiate.
+    const workflowA = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { headers: { 'X-Workflow': 'agent-v2' } },
+    });
+    const workflowB = createN8nProvider('n8n:https://n8n.example.com/webhook/agent', {
+      config: { headers: { 'X-Workflow': 'agent-v3' } },
+    });
+    expect(workflowA.id()).not.toBe(workflowB.id());
+
+    // Auth header PRESENCE still differentiates from absence (so a provider
+    // with auth has a different ID than the same provider without).
+    const noAuth = createN8nProvider('n8n:https://n8n.example.com/webhook/agent');
+    expect(beforeRotation.id()).not.toBe(noAuth.id());
+  });
+
+  it('normalizes lowercase / mixed-case method strings before routing GET vs POST', async () => {
+    // YAML happily accepts `method: get` even though the TypeScript union
+    // declares uppercase verbs. Without normalization, `method === 'GET'`
+    // misses, buildGetUrl() is skipped, and the body is sent with a GET
+    // request — undici rejects with "Request with GET/HEAD method cannot
+    // have body". Normalizing also routes the request through the correct
+    // (idempotent vs non-idempotent) retry policy.
+    const mockResponse = createMockResponse({ output: 'ok' });
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const lowercaseGet = new N8nProvider('https://n8n.example.com/webhook/agent', {
+      config: { method: 'get' as 'GET', body: { message: '{{prompt}}' } },
+    });
+    await lowercaseGet.callApi('hello');
+
+    const [url, fetchOpts, , , , maxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect((fetchOpts as RequestInit).method).toBe('GET');
+    expect((fetchOpts as RequestInit).body).toBeUndefined();
+    expect(url).toContain('?');
+    expect(url).toContain('message=hello');
+    // GET is idempotent → default retry budget (undefined).
+    expect(maxRetries).toBeUndefined();
+
+    vi.mocked(fetchWithCache).mockClear();
+    const mixedCasePost = new N8nProvider('https://n8n.example.com/webhook/agent', {
+      config: { method: 'Post' as 'POST' },
+    });
+    await mixedCasePost.callApi('hello');
+    const [, , , , , postMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+    // POST is non-idempotent → maxRetries=0 to avoid double-delivery.
+    expect(postMaxRetries).toBe(0);
+  });
+
+  it('awaits async transformResponse functions instead of leaking a pending Promise into output', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'raw n8n payload' }));
+
+    const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+      config: {
+        transformResponse: async (json: any) => {
+          // Simulate an async transform (e.g. one that calls another API or
+          // parses a streamed payload). Without awaiting in parseResponse,
+          // ProviderResponse.output would be a pending Promise that
+          // downstream assertions would see as `[object Promise]`.
+          await Promise.resolve();
+          return `transformed:${json.output}`;
+        },
+      },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('transformed:raw n8n payload');
+    expect(result.output).not.toBeInstanceOf(Promise);
+  });
 });
