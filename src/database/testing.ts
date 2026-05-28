@@ -34,7 +34,7 @@ export async function resetTestDatabaseClient(client: TestDatabaseClient): Promi
       if (type !== 'TABLE' && type !== 'VIEW' && type !== 'TRIGGER') {
         continue;
       }
-      const name = String(row.name).replaceAll('"', '""');
+      const name = String(row.name).replace(/"/g, '""');
       await client.execute(`DROP ${type} IF EXISTS "${name}"`);
     }
   } finally {
