@@ -521,11 +521,11 @@ tests:
 
 Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
 
-- **Temperature is managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and does not accept `temperature`; promptfoo omits the field from every request. Passing `temperature` in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the value out of your eval.
-- **Adaptive thinking is the default.** Use `thinking: { type: 'adaptive' }` (or leave `thinking` unset) to let the model choose how much to reason per request. Manual budget-based thinking is rejected with a 400.
+- **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
+- **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model decide how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Manual budget-based thinking (`thinking: { type: 'enabled', budget_tokens: N }`) is rejected with a 400.
 - **`effort` defaults to `high` and `xhigh` is available.** Setting `effort: high` behaves the same as omitting it. Start with `xhigh` for coding and agentic work. See the [Effort Level](#effort-level) section.
 
-The same guidance applies when you reach Opus 4.8 through AWS Bedrock, GCP Vertex, or Azure AI Foundry — promptfoo suppresses `temperature` on each of those paths as well.
+The same suppression applies when you reach Opus 4.8 through AWS Bedrock, GCP Vertex, or Azure AI Foundry — promptfoo omits the unsupported sampling parameters on each of those paths too (silently; the one-time warning above is specific to the Anthropic Messages provider).
 
 ### Claude Opus 4.7 notes
 

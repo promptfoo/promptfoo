@@ -6,7 +6,7 @@ import {
   getTokenUsage,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
-  isTemperatureDeprecatedClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -1678,7 +1678,7 @@ describe('Anthropic utilities', () => {
     });
   });
 
-  describe('temperature-deprecated model detection', () => {
+  describe('sampling-params-deprecated model detection', () => {
     it('detects Claude Opus 4.8 across provider naming schemes', () => {
       for (const id of [
         'claude-opus-4-8',
@@ -1711,16 +1711,16 @@ describe('Anthropic utilities', () => {
     });
 
     it('treats both Opus 4.7 and 4.8 as temperature-deprecated', () => {
-      expect(isTemperatureDeprecatedClaudeModel('claude-opus-4-7')).toBe(true);
-      expect(isTemperatureDeprecatedClaudeModel('claude-opus-4-8')).toBe(true);
-      expect(isTemperatureDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
       // The 4.7-only predicate stays scoped to 4.7.
       expect(isClaudeOpus47Model('claude-opus-4-8')).toBe(false);
     });
 
     it('does not treat temperature-supporting models as deprecated', () => {
       for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
-        expect(isTemperatureDeprecatedClaudeModel(id)).toBe(false);
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
     });
   });

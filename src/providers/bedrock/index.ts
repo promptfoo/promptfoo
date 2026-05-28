@@ -6,7 +6,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
-  isTemperatureDeprecatedClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -1617,19 +1617,17 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      // Claude Opus 4.7 and 4.8 deprecate `temperature` at the model level —
-      // Bedrock relays the resulting 400 as a ValidationException. Drop the
-      // default regardless of which IAM-region prefix the user picked.
-      const temperatureDeprecated = modelName
-        ? isTemperatureDeprecatedClaudeModel(modelName)
+      // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+      // level — Bedrock relays the resulting 400 as a ValidationException. Drop
+      // `temperature` regardless of which IAM-region prefix the user picked.
+      // (This handler never emits top_p/top_k.) `params` is a shared model
+      // handler with no per-instance state to dedup a warning across requests,
+      // so we normalize silently here; the Anthropic Messages provider surfaces
+      // the one-time heads-up and the provider docs document the behavior.
+      const samplingParamsDeprecated = modelName
+        ? isSamplingParamsDeprecatedClaudeModel(modelName)
         : false;
-      if (temperatureDeprecated) {
-        if (config?.temperature != null || getEnvFloat('AWS_BEDROCK_TEMPERATURE') != null) {
-          logger.warn(
-            'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted. Remove temperature from your Bedrock config (or unset AWS_BEDROCK_TEMPERATURE) to silence this warning.',
-          );
-        }
-      } else {
+      if (!samplingParamsDeprecated) {
         addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
       }
       addConfigParam(

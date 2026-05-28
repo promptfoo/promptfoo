@@ -657,34 +657,25 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
-    it('warns when temperature is set on Claude Opus 4.8 (Bedrock invokeModel path)', async () => {
+    it('silently omits temperature on Claude Opus 4.8 invokeModel path (no per-request warning)', async () => {
+      // The shared CLAUDE_MESSAGES.params handler has no per-instance state to
+      // dedup a warning across requests, so it normalizes silently; the Anthropic
+      // Messages provider surfaces the one-time heads-up instead. This guards
+      // against re-introducing the per-request log spam that was flagged in review.
       const warnSpy = vi.spyOn(logger, 'warn');
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
         temperature: 0.5,
       };
-      await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
         undefined,
         'us.anthropic.claude-opus-4-8',
       );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('temperature is deprecated on Claude Opus 4.7 and 4.8'),
-      );
-    });
-
-    it('does not warn on Opus 4.8 when no temperature is configured', async () => {
-      const warnSpy = vi.spyOn(logger, 'warn');
-      const config: BedrockClaudeMessagesCompletionOptions = { region: 'us-east-1' };
-      await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        config,
-        'hi',
-        undefined,
-        'us.anthropic.claude-opus-4-8',
-      );
+      expect(params.temperature).toBeUndefined();
       const deprecationWarnings = warnSpy.mock.calls.filter((call) =>
-        String(call[0] ?? '').includes('temperature is deprecated'),
+        String(call[0] ?? '').includes('deprecated on Claude Opus'),
       );
       expect(deprecationWarnings).toHaveLength(0);
     });

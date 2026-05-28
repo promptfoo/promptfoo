@@ -174,13 +174,14 @@ export function isClaudeOpus48Model(modelId: string): boolean {
 }
 
 /**
- * Claude Opus 4.7 and 4.8 both deprecate `temperature` at the model level — the
- * API returns 400 `invalid_request_error` for any request that includes it
- * (including promptfoo's built-in default of 0). Centralizes the "omit
- * temperature" decision shared by the Anthropic, Bedrock, Vertex, and Azure
- * providers so support for future models lands in one place.
+ * Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model level
+ * — `temperature`, `top_p`, and `top_k` are adaptive, and a request that pins
+ * any of them returns 400 `invalid_request_error` (including promptfoo's
+ * built-in `temperature` default of 0). Centralizes the "omit sampling params"
+ * decision shared by the Anthropic, Bedrock, Vertex, and Azure providers so
+ * support for future models lands in one place.
  */
-export function isTemperatureDeprecatedClaudeModel(modelId: string): boolean {
+export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
   return isClaudeOpus47Model(modelId) || isClaudeOpus48Model(modelId);
 }
 

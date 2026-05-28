@@ -1715,12 +1715,13 @@ Third line`;
       mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
     });
 
-    it('omits temperature for Claude Opus 4.8 even when explicitly set', async () => {
+    it('omits temperature and topP for Claude Opus 4.8 even when explicitly set', async () => {
       const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-8', {
         config: {
           region: 'us-east-1',
           max_tokens: 1024,
           temperature: 0.5,
+          topP: 0.9,
         },
       });
 
@@ -1735,6 +1736,7 @@ Third line`;
         -1,
       )?.[0] as { inferenceConfig?: Record<string, unknown> };
       expect(call?.inferenceConfig?.temperature).toBeUndefined();
+      expect(call?.inferenceConfig?.topP).toBeUndefined();
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 

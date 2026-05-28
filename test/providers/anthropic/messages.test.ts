@@ -2923,6 +2923,35 @@ describe('AnthropicMessagesProvider', () => {
         expect.stringContaining('temperature is deprecated on Claude Opus 4.7 and 4.8'),
       );
     });
+
+    it('omits top_p and top_k for Opus 4.8 (rejected sampling params)', async () => {
+      const provider = createProvider('claude-opus-4-8', { config: { top_p: 0.9, top_k: 40 } });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7 and 4.8'),
+      );
+    });
+
+    it('still sends top_p and top_k on Opus 4.6 (regression)', async () => {
+      const provider = createProvider('claude-opus-4-6', { config: { top_p: 0.9, top_k: 40 } });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('top_p', 0.9);
+      expect(params).toHaveProperty('top_k', 40);
+    });
   });
 
   describe('refusal stop_details handling', () => {

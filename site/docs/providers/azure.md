@@ -850,7 +850,7 @@ Azure AI Foundry exposes Claude through two endpoint families. Pick the one that
 
 ### Option 1 (recommended): Anthropic Messages endpoint
 
-Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic Opus 4.7 and 4.8 `temperature` suppression, and consistent pricing across Anthropic/Bedrock/Vertex:
+Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic Opus 4.7 and 4.8 sampling-parameter suppression (`temperature`/`top_p`/`top_k`), and consistent pricing across Anthropic/Bedrock/Vertex:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -876,7 +876,7 @@ providers:
       max_tokens: 4096
 ```
 
-Opus 4.7 and 4.8 deployments automatically omit `temperature` from the request body on this path too.
+Opus 4.7 and 4.8 deployments automatically omit `temperature` and `top_p` from the request body on this path too.
 
 Available Claude deployments on Azure AI Foundry:
 

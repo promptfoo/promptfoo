@@ -26,7 +26,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { isTemperatureDeprecatedClaudeModel } from '../anthropic/util';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -1057,12 +1057,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    // Claude Opus 4.7 and 4.8 deprecate `temperature` at the model level — any
-    // request that includes it on Bedrock returns ValidationException. Drop the
-    // value regardless of where it came from (config or AWS_BEDROCK_TEMPERATURE).
-    const temperatureDeprecated = isTemperatureDeprecatedClaudeModel(this.modelName);
-    const temperature = reasoningEnabled || temperatureDeprecated ? undefined : temperatureValue;
-    const topP = reasoningEnabled ? undefined : topPValue;
+    // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+    // level — a request that pins `temperature` or `topP` on Bedrock returns
+    // ValidationException. Drop both regardless of where they came from (config
+    // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
+    const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
 
     // Only return config if at least one field is set
     if (

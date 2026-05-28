@@ -2542,9 +2542,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     expect(sentBody.max_tokens).toBe(32);
   });
 
-  it('omits temperature for Claude Opus 4.8 on Vertex', async () => {
+  it('omits temperature, top_p, and top_k for Claude Opus 4.8 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-8', {
-      config: { max_tokens: 32, temperature: 0.5 },
+      config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
     });
 
     const mockResponse = {
@@ -2578,6 +2578,8 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
     const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
     expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
     expect(sentBody.max_tokens).toBe(32);
   });
 

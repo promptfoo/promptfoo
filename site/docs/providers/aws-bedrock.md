@@ -804,7 +804,7 @@ config:
 
 For Claude models (e.g., `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits `temperature` for Opus 4.7 and 4.8 (deprecated at the model level).
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`) for Opus 4.7 and 4.8 (deprecated at the model level).
 
 ```yaml
 config:

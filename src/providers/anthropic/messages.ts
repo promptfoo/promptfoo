@@ -28,7 +28,7 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
-  isTemperatureDeprecatedClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -235,7 +235,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
-  private temperatureDeprecationWarned = false;
+  private samplingParamsDeprecationWarned = false;
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
@@ -612,28 +612,35 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Opus 4.7 and 4.8 deprecated `temperature` at the model level — the API
-    // returns 400 `invalid_request_error` for any request that includes it,
-    // including promptfoo's built-in default of 0. Suppress the parameter
-    // entirely and warn once per provider instance when the user supplied an
-    // explicit temperature via config or the ANTHROPIC_TEMPERATURE env var (the
-    // built-in default stays silent to avoid spamming every request).
-    const temperatureDeprecated = isTemperatureDeprecatedClaudeModel(this.modelName);
-    const explicitTemperature =
+    // Opus 4.7 and 4.8 deprecate manual sampling controls at the model level —
+    // `temperature`, `top_p`, and `top_k` are adaptive, and pinning any of them
+    // returns 400 `invalid_request_error` (including promptfoo's built-in
+    // `temperature` default of 0). Suppress all three and warn once per provider
+    // instance when the user supplied any of them via config or the
+    // ANTHROPIC_TEMPERATURE env var (the built-in default stays silent to avoid
+    // spamming every request).
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const explicitSamplingParam =
       config.temperature != null ||
+      config.top_p != null ||
+      config.top_k != null ||
       parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
       parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
-    if (temperatureDeprecated && explicitTemperature && !this.temperatureDeprecationWarned) {
+    if (
+      samplingParamsDeprecated &&
+      explicitSamplingParam &&
+      !this.samplingParamsDeprecationWarned
+    ) {
       logger.warn(
-        'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+        'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
       );
-      this.temperatureDeprecationWarned = true;
+      this.samplingParamsDeprecationWarned = true;
     }
 
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
-    // and on Opus 4.7/4.8 (deprecated at the model level). Collapse all three
-    // cases into one predicate so the params spread stays readable.
-    const omitTemperature = resolvedTopP != null || thinkingEnabled || temperatureDeprecated;
+    // and on Opus 4.7/4.8 (sampling controls deprecated at the model level).
+    // Collapse those cases into one predicate so the params spread stays readable.
+    const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
 
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
@@ -662,9 +669,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
               getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
           }),
-      ...(resolvedTopP == null ? {} : { top_p: resolvedTopP }),
-      // Anthropic docs: top_k is incompatible with extended thinking
-      ...(config.top_k == null || thinkingEnabled ? {} : { top_k: config.top_k }),
+      ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
+      // Anthropic docs: top_k is incompatible with extended thinking, and Opus
+      // 4.7/4.8 reject it entirely along with the other sampling controls.
+      ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
+        ? {}
+        : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),
