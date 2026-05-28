@@ -601,7 +601,7 @@ function isShellToolName(toolName: string): boolean {
 }
 
 const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|_)(?:edit|editor|patch|write)(?:_|$)/;
-const NETWORK_TOOL_SEGMENT_PATTERN = /(?:^|_)(?:fetch|http|https|request|webhook)(?:_|$)/;
+const NETWORK_TOOL_SEGMENT_PATTERN = /(?:^|_)(?:fetch|http|https|webhook)(?:_|$)/;
 const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'ls', 'read', 'read_file']);
 const FILE_READ_TOOL_NAMES = new Set(['grep', 'read', 'read_file']);
 const FILE_READ_PATH_KEYS = ['file', 'file_path', 'filePath', 'path', 'paths'] as const;
@@ -711,6 +711,62 @@ function authoredFileToolPayload(toolInput: unknown): string | undefined {
 
   const authoredText = authoredFileContentParts(inputObject).join('\n').trim();
   return authoredText || undefined;
+}
+
+function patchFileToolArtifacts(toolInput: unknown): Array<{ artifactPath: string; text: string }> {
+  const inputObject = getObject(parseProviderRaw(toolInput));
+  if (!inputObject) {
+    return [];
+  }
+
+  const artifacts: Array<{ artifactPath: string; text: string }> = [];
+  for (const key of FILE_PATCH_KEYS) {
+    const patch = getString(inputObject[key]);
+    if (!patch) {
+      continue;
+    }
+
+    const isApplyPatchFormat = /^\*\*\* (?:Add|Update) File:/m.test(patch);
+    let artifactPath: string | undefined;
+    let addedLines: string[] = [];
+    const flushArtifact = () => {
+      const text = addedLines.join('\n').trim();
+      if (artifactPath && text) {
+        artifacts.push({ artifactPath, text });
+      }
+      artifactPath = undefined;
+      addedLines = [];
+    };
+
+    for (const line of patch.split(/\r?\n/)) {
+      const applyPatchPath = line.match(/^\*\*\* (?:Add|Update) File: (.+)$/)?.[1]?.trim();
+      const unifiedPatchPath = line.match(/^\+\+\+\s+(?:b\/)?([^\t]+)(?:\t.*)?$/)?.[1]?.trim();
+      if (applyPatchPath) {
+        flushArtifact();
+        artifactPath = applyPatchPath;
+        continue;
+      }
+      if (!isApplyPatchFormat && line.startsWith('--- ')) {
+        flushArtifact();
+        continue;
+      }
+      if (!isApplyPatchFormat && unifiedPatchPath) {
+        artifactPath = unifiedPatchPath === '/dev/null' ? undefined : unifiedPatchPath;
+        continue;
+      }
+      const movedPath = line.match(/^\*\*\* Move to: (.+)$/)?.[1]?.trim();
+      if (movedPath) {
+        artifactPath = movedPath;
+        continue;
+      }
+      if (artifactPath && line.startsWith('+') && (isApplyPatchFormat || !line.startsWith('+++'))) {
+        addedLines.push(line.slice(1));
+      }
+    }
+    flushArtifact();
+  }
+
+  return artifacts;
 }
 
 function authoredFileToolPath(toolInput: unknown): string | undefined {
@@ -949,6 +1005,8 @@ function providerRawToolInputEvidence(
   const authoredInput = isFileWriteToolName(toolName)
     ? authoredFileToolPayload(rawToolInput)
     : undefined;
+  const patchArtifacts = isFileWriteToolName(toolName) ? patchFileToolArtifacts(rawToolInput) : [];
+  const hasAuthoredArtifact = Boolean(authoredInput) || patchArtifacts.length > 0;
   const genericInput = coerceToolPayload(rawToolInput);
   const fileReadCommand = fileReadToolCommand(toolName, rawToolInput);
   const networkInput =
@@ -963,7 +1021,15 @@ function providerRawToolInputEvidence(
     });
   }
 
-  if (authoredInput) {
+  if (patchArtifacts.length > 0) {
+    evidence.push(
+      ...patchArtifacts.map((artifact) => ({
+        ...artifact,
+        evidenceSource: 'artifact-file' as const,
+        location: `${itemLocation} ${toolName} input`,
+      })),
+    );
+  } else if (authoredInput) {
     const artifactPath = authoredFileToolPath(rawToolInput);
     evidence.push({
       ...(artifactPath ? { artifactPath } : {}),
@@ -991,10 +1057,13 @@ function providerRawToolInputEvidence(
 
   // Do not re-emit extracted shell commands as output: command arguments can
   // legitimately contain receipt values while investigating terminal output.
+  // Authored file writes are artifact evidence; edit context can contain
+  // sensitive text specifically because the tool is removing it.
   // Local read/search tool arguments describe inspection, not observed output
   // or data transmitted to an external sink.
   if (
     !toolCommand &&
+    !hasAuthoredArtifact &&
     !fileReadCommand &&
     !isReadOnlyToolName(toolName) &&
     genericInput &&
@@ -1058,7 +1127,7 @@ function evidenceFromProviderRawItem(
 
   const evidence: TargetEvidence[] = [];
   const agentMessageEvidence =
-    type === 'agent_message'
+    type === 'agent_message' || type === 'output_text'
       ? providerRawAgentMessageEvidence(itemObject, itemLocation)
       : undefined;
   if (agentMessageEvidence) {
