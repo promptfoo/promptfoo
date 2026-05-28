@@ -522,11 +522,10 @@ function getString(value: unknown): string | undefined {
 //
 // Strategy:
 //   - already a non-empty string: keep as-is.
-//   - array of content blocks (`{type, text}` or similar): join the text
-//     fields plus any leftover serialization, since that's what Anthropic
-//     and MCP tool results look like.
-//   - object: JSON.stringify so heuristic regexes can still match on the
-//     serialized form.
+//   - array of content blocks (`{type, text}` or similar): join their
+//     converted values.
+//   - text-only content block: retain its text directly.
+//   - other object: JSON.stringify so sibling evidence is not discarded.
 //   - anything else: undefined.
 function coerceToolPayload(value: unknown): string | undefined {
   if (value == null) {
@@ -550,7 +549,7 @@ function coerceToolPayload(value: unknown): string | undefined {
     const obj = value as Record<string, unknown>;
     // Common content-block shape: { type: 'text', text: '...' }.
     const inlineText = getString(obj.text);
-    if (inlineText) {
+    if (inlineText && Object.keys(obj).every((key) => key === 'type' || key === 'text')) {
       return inlineText;
     }
     try {
@@ -601,6 +600,7 @@ function isShellToolName(toolName: string): boolean {
 const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|[_:-])(?:edit|editor|patch|write)(?:[_:-]|$)/;
 const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'read', 'read_file']);
 const FILE_READ_TOOL_NAMES = new Set(['grep', 'read', 'read_file']);
+const FILE_READ_PATH_KEYS = ['file', 'file_path', 'filePath', 'path', 'paths'] as const;
 
 function isFileWriteToolName(toolName: string): boolean {
   return FILE_WRITE_TOOL_SEGMENT_PATTERN.test(normalizeToolName(toolName));
@@ -610,18 +610,30 @@ function isReadOnlyToolName(toolName: string): boolean {
   return READ_ONLY_TOOL_NAMES.has(normalizeToolName(toolName));
 }
 
+function fileReadPathPayload(toolInput: unknown, acceptStringInput: boolean): string | undefined {
+  const parsedInput = parseProviderRaw(toolInput);
+  const inputObject = getObject(parsedInput);
+  if (!inputObject) {
+    return acceptStringInput ? getString(parsedInput) : undefined;
+  }
+
+  return combineToolPayloads(...FILE_READ_PATH_KEYS.map((key) => inputObject[key]));
+}
+
 function fileReadToolCommand(toolName: string, toolInput: unknown): string | undefined {
   const normalizedToolName = normalizeToolName(toolName);
   if (!FILE_READ_TOOL_NAMES.has(normalizedToolName)) {
     return undefined;
   }
 
-  const input = coerceToolPayload(toolInput);
-  if (!input) {
+  // A bare Grep input is ambiguous: it may be a pattern rather than a file
+  // location. Only explicit path fields demonstrate a Grep read target.
+  const path = fileReadPathPayload(toolInput, normalizedToolName !== 'grep');
+  if (!path) {
     return undefined;
   }
 
-  return normalizedToolName === 'grep' ? `grep ${input}` : `readFile(${input})`;
+  return normalizedToolName === 'grep' ? `grep ${path}` : `readFile(${path})`;
 }
 
 const AUTHORED_FILE_CONTENT_KEYS = [
@@ -913,6 +925,8 @@ function providerRawToolInputEvidence(
     itemObject.input ??
     itemObject.arguments ??
     itemObject.args ??
+    itemObject.parameters ??
+    itemObject.params ??
     functionCall?.arguments ??
     functionCall?.input ??
     itemObject.content ??
