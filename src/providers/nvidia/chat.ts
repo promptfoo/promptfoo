@@ -1,16 +1,23 @@
+import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
+import type { EnvOverrides, EnvVarKey } from '../../types/env';
 import type { ApiProvider, ProviderOptions } from '../../types/providers';
 
 const NVIDIA_NIM_API_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 export class NvidiaProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
+    const explicitBaseUrl = providerOptions.config?.apiBaseUrl;
+    const envBaseUrl =
+      (providerOptions.env as Record<string, string | undefined> | undefined)
+        ?.NVIDIA_API_BASE_URL || getEnvString('NVIDIA_API_BASE_URL');
+
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || NVIDIA_NIM_API_BASE_URL,
+        apiBaseUrl: explicitBaseUrl || envBaseUrl || NVIDIA_NIM_API_BASE_URL,
         apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'NVIDIA_API_KEY',
       },
     });
@@ -22,6 +29,23 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
 
   toString(): string {
     return `[NVIDIA NIM Provider ${this.modelName}]`;
+  }
+
+  // Don't fall through to OPENAI_API_KEY: a misconfigured environment must
+  // fail loudly rather than silently send an OpenAI key to NVIDIA.
+  override getApiKey(): string | undefined {
+    const envar = this.config?.apiKeyEnvar || 'NVIDIA_API_KEY';
+    return (
+      this.config?.apiKey ||
+      (this.env as EnvOverrides | undefined)?.[envar as keyof EnvOverrides] ||
+      getEnvString(envar as EnvVarKey)
+    );
+  }
+
+  // OpenAI-Organization is OpenAI-specific; it must not leak onto requests
+  // sent to integrate.api.nvidia.com.
+  override getOrganization(): string | undefined {
+    return undefined;
   }
 
   toJSON() {

@@ -95,6 +95,57 @@ describe('NVIDIA NIM', () => {
         restoreEnv();
       }
     });
+
+    it('reads NVIDIA_API_BASE_URL from the environment', () => {
+      const restoreEnv = mockProcessEnv({
+        NVIDIA_API_BASE_URL: 'https://self-hosted.example.com/v1',
+      });
+      try {
+        const provider = new NvidiaProvider('meta/llama-3.3-70b-instruct', {});
+        expect(provider.config.apiBaseUrl).toBe('https://self-hosted.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('prefers an explicit apiBaseUrl over NVIDIA_API_BASE_URL', () => {
+      const restoreEnv = mockProcessEnv({
+        NVIDIA_API_BASE_URL: 'https://from-env.example.com/v1',
+      });
+      try {
+        const provider = new NvidiaProvider('meta/llama-3.3-70b-instruct', {
+          config: { apiBaseUrl: 'https://explicit.example.com/v1' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('https://explicit.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not fall back to OPENAI_API_KEY when NVIDIA_API_KEY is missing', () => {
+      const restoreEnv = mockProcessEnv({
+        NVIDIA_API_KEY: undefined,
+        OPENAI_API_KEY: 'sk-fake-openai-must-not-leak',
+      });
+      try {
+        const provider = new NvidiaProvider('meta/llama-3.3-70b-instruct', {});
+        expect(provider.getApiKey()).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not attach an OpenAI organization header for NVIDIA calls', () => {
+      const restoreEnv = mockProcessEnv({ OPENAI_ORGANIZATION: 'org-fake-leak' });
+      try {
+        const provider = new NvidiaProvider('meta/llama-3.3-70b-instruct', {
+          config: { organization: 'org-from-config' },
+        });
+        expect(provider.getOrganization()).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('createNvidiaProvider', () => {
