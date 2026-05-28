@@ -396,7 +396,8 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
       validateRagPoisoningAssertionValue(key, assertion);
       hasRagPoisoningAssertion = true;
     }
-    if (!getGraderById(graderType)) {
+    // Redteam grading dispatch currently supports only exact positive grader IDs.
+    if (assertionType !== graderType || !getGraderById(graderType)) {
       unsupportedAssertionTypes.add(assertionType);
     }
   }
