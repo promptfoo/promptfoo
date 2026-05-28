@@ -55,10 +55,10 @@ export async function storeBlob(
   const result = await provider.store(data, mimeType);
 
   // Track asset and reference in DB for dedup/auth/cascade
-  const db = getDb();
+  const db = await getDb();
   try {
-    db.transaction(() => {
-      const assetInsert = db
+    await db.transaction(async (tx) => {
+      await tx
         .insert(blobAssetsTable)
         .values({
           hash: result.ref.hash,
@@ -69,9 +69,8 @@ export async function storeBlob(
         .onConflictDoNothing()
         .run();
 
-      const refInsert =
-        refContext?.evalId &&
-        db
+      if (refContext?.evalId) {
+        await tx
           .insert(blobReferencesTable)
           .values({
             id: randomUUID(),
@@ -84,9 +83,7 @@ export async function storeBlob(
           })
           .onConflictDoNothing()
           .run();
-
-      // Return a non-undefined value to satisfy Drizzle's sync transaction semantics
-      return refInsert ?? assetInsert;
+      }
     });
   } catch (error) {
     // Roll back filesystem write if DB persistence fails
@@ -139,8 +136,8 @@ export async function recordBlobReference(
     return;
   }
 
-  const db = getDb();
-  const existing = db
+  const db = await getDb();
+  const existing = await db
     .select({ id: blobReferencesTable.id })
     .from(blobReferencesTable)
     .where(
@@ -155,7 +152,8 @@ export async function recordBlobReference(
     return;
   }
 
-  db.insert(blobReferencesTable)
+  await db
+    .insert(blobReferencesTable)
     .values({
       id: randomUUID(),
       blobHash: hash,

@@ -1089,7 +1089,8 @@ describe('ClaudeCodeSDKProvider', () => {
         type: 'assistant',
         message: createMockBetaMessage([{ type: 'text', text: 'hello' }]) as any,
         parent_tool_use_id: null,
-        uuid: (opts.uuid ?? '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
+        uuid: (opts.uuid ??
+          '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
         session_id: 'test-session-123',
         ...(error ? { error } : {}),
         ...(opts.request_id ? { request_id: opts.request_id } : {}),

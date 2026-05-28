@@ -342,6 +342,9 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // MiniMax
+  MINIMAX_API_KEY?: string;
+
   // n8n
   N8N_API_KEY?: string;
 
@@ -381,6 +384,9 @@ type EnvVars = {
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;
+
+  // OrcaRouter
+  ORCAROUTER_API_KEY?: string;
 
   // Portkey
   PORTKEY_API_BASE_URL?: string;

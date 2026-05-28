@@ -728,6 +728,14 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
   });
 
+  it('loadApiProvider with minimax', async () => {
+    const provider = await loadApiProvider('minimax:MiniMax-M2.7');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    expect(provider.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
+    expect(provider.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
+  });
+
   it('loadApiProvider with togetherai', async () => {
     const provider = await loadApiProvider(
       'togetherai:chat:meta/meta-llama/Meta-Llama-3-8B-Instruct',

@@ -110,7 +110,7 @@ describe('sanitizeObject', () => {
   });
 
   describe('function handling', () => {
-    it('should convert named functions to string representation', () => {
+    it('should lose named functions during JSON serialization', () => {
       function namedFunction() {
         return 'test';
       }
@@ -119,7 +119,7 @@ describe('sanitizeObject', () => {
       expect(result.func).toBeUndefined();
     });
 
-    it('should convert anonymous functions to string representation', () => {
+    it('should lose anonymous functions during JSON serialization', () => {
       const anonymousFunc = function () {
         return 'test';
       };
@@ -128,7 +128,7 @@ describe('sanitizeObject', () => {
       expect(result.func).toBeUndefined();
     });
 
-    it('should convert arrow functions to string representation', () => {
+    it('should lose arrow functions during JSON serialization', () => {
       const arrowFunc = () => 'test';
       const result = sanitizeObject({ func: arrowFunc });
       // Functions get lost during JSON.parse/stringify cycle
@@ -774,8 +774,10 @@ describe('sanitizeObject', () => {
     it('should handle BigInt values', () => {
       const input = { bigNum: BigInt(9007199254740991), password: 'secret' };
       const result = sanitizeObject(input);
-      // BigInt is not JSON serializable, safe-stringify returns a string
-      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
+      // BigInt is not JSON serializable; sanitizer should not expose original data.
+      expect(typeof result).toBe('string');
+      expect(result).not.toContain('9007199254740991');
+      expect(result).not.toContain('secret');
     });
   });
 
