@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import * as path from 'path';
 
@@ -14,6 +15,16 @@ import { getConfigDirectoryPath } from '../util/config/manage';
 type Client = import('@libsql/client/node').Client;
 type Drizzle = ReturnType<typeof import('drizzle-orm/libsql/node').drizzle>;
 
+const TEST_DATABASE_CLIENTS_KEY = '__promptfooTestDatabaseClients';
+type TestDatabaseGlobal = typeof globalThis & {
+  [TEST_DATABASE_CLIENTS_KEY]?: Set<Client>;
+};
+
+function getTestingDbClients(): Set<Client> {
+  const testGlobal = globalThis as TestDatabaseGlobal;
+  return (testGlobal[TEST_DATABASE_CLIENTS_KEY] ??= new Set<Client>());
+}
+
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
     if (getEnvBool('PROMPTFOO_ENABLE_DATABASE_LOGS', false)) {
@@ -25,6 +36,7 @@ export class DrizzleLogWriter implements LogWriter {
 let dbInstance: Drizzle | null = null;
 let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
+let testingDbUrl: string | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
@@ -32,6 +44,18 @@ export function getDbPath() {
 
 export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
+}
+
+function getTestingDbUrl(): string {
+  if (!testingDbUrl) {
+    // Isolated Vitest module graphs can run in the same worker process. A unique
+    // temporary file keeps their state independent while allowing libsql transaction
+    // connections to share one database.
+    testingDbUrl = pathToFileURL(
+      path.resolve(getConfigDirectoryPath(true), `promptfoo-test-${randomUUID()}.db`),
+    ).href;
+  }
+  return testingDbUrl;
 }
 
 async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
@@ -141,10 +165,13 @@ export async function getDb() {
       ]);
       const isTesting = getEnvBool('IS_TESTING');
       // libsql opens fresh connections for top-level transactions, so tests need a
-      // shared in-memory database rather than connection-local `:memory:`.
-      const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
+      // per-module shared database rather than connection-local `:memory:`.
+      const dbUrl = isTesting ? getTestingDbUrl() : pathToFileURL(getDbPath()).href;
       const client = createClient({ url: dbUrl });
       sqliteInstance = client;
+      if (isTesting) {
+        getTestingDbClients().add(client);
+      }
 
       await configureDatabase(client, isTesting);
 
@@ -152,10 +179,16 @@ export async function getDb() {
       dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }));
       return dbInstance;
     })().catch((error) => {
-      sqliteInstance?.close();
+      if (sqliteInstance) {
+        if (testingDbUrl) {
+          getTestingDbClients().delete(sqliteInstance);
+        }
+        sqliteInstance.close();
+      }
       sqliteInstance = null;
       dbInstance = null;
       dbPromise = null;
+      testingDbUrl = null;
       throw error;
     });
   }
@@ -183,6 +216,9 @@ export async function closeDb() {
 
       // libsql Client.close() is synchronous; the WAL checkpoint above already
       // awaited the I/O that needed to finish before the underlying connection drops.
+      if (testingDbUrl) {
+        getTestingDbClients().delete(sqliteInstance);
+      }
       sqliteInstance.close();
       logger.debug('Database connection closed successfully');
     } catch (err) {
@@ -193,7 +229,10 @@ export async function closeDb() {
       sqliteInstance = null;
       dbInstance = null;
       dbPromise = null;
+      testingDbUrl = null;
     }
+  } else {
+    testingDbUrl = null;
   }
 }
 

@@ -11,6 +11,10 @@ import { afterAll, afterEach, vi } from 'vitest';
 import { mockProcessEnv } from './test/util/utils';
 
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
+const TEST_DATABASE_CLIENTS_KEY = '__promptfooTestDatabaseClients';
+type TestDatabaseGlobal = typeof globalThis & {
+  [TEST_DATABASE_CLIENTS_KEY]?: Set<{ close: () => void }>;
+};
 
 mockProcessEnv({
   NODE_ENV: 'test',
@@ -49,6 +53,14 @@ afterEach(() => {
  * Cleanup after all tests in this worker complete.
  */
 afterAll(() => {
+  const testDatabaseClients = (globalThis as TestDatabaseGlobal)[TEST_DATABASE_CLIENTS_KEY];
+  if (testDatabaseClients) {
+    for (const client of testDatabaseClients) {
+      client.close();
+    }
+    testDatabaseClients.clear();
+  }
+
   // Reset all modules to clear any cached state
   vi.resetModules();
 

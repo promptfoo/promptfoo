@@ -75,7 +75,7 @@ describe('database', () => {
       expect(db).toBeDefined();
     });
 
-    it('should use an in-memory database when testing', async () => {
+    it('should not write the application database when testing', async () => {
       await getDb();
 
       expect(fs.existsSync(getDbPath())).toBe(false);
