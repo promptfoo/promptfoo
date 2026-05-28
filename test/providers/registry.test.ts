@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -233,6 +234,39 @@ describe('Provider Registry', () => {
         },
       });
       expect(wsProvider.id()).toBe('ws://example.com');
+    });
+
+    it('should handle n8n providers correctly', async () => {
+      const n8nOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const factory = providerMap.find((f) => f.test('n8n:https://example.com/webhook/agent'));
+      expect(factory).toBeDefined();
+      expect(factory).toBe(providerMap.find((f) => f.test('n8n')));
+
+      const providerFromPath = await factory!.create(
+        'n8n:https://example.com/webhook/agent',
+        n8nOptions,
+        mockContext,
+      );
+      expect(providerFromPath.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      const providerFromConfig = await factory!.create(
+        'n8n',
+        {
+          ...n8nOptions,
+          config: { url: 'https://example.com/webhook/config-agent' },
+        },
+        mockContext,
+      );
+      expect(providerFromConfig.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      await expect(factory!.create('n8n', n8nOptions, mockContext)).rejects.toThrow(
+        'n8n provider requires a webhook URL',
+      );
+      expect(isFoundationModelProvider('n8n:https://example.com/webhook/agent')).toBe(false);
     });
 
     it('dispatches a representative redteam path through getProviderFactories', async () => {

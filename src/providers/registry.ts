@@ -71,6 +71,7 @@ import { MCPProvider } from './mcp/index';
 import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
+import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
@@ -1350,6 +1351,16 @@ export const providerMap: ProviderFactory[] = [
       // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('n8n:') || providerPath === 'n8n',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return createN8nProvider(providerPath, providerOptions);
     },
   },
   {
