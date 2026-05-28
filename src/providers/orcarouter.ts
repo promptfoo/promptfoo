@@ -161,18 +161,16 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
-    // Strip body.temperature when ANY rendered candidate model is a reasoning
-    // family that rejects it. `supportsTemperature()` only inspects
-    // `this.modelName`, so the case where the primary model is non-reasoning
-    // but a fallback (config.models / prompt.config.models) is a reasoning
-    // family would otherwise still ship `temperature` upstream.
-    if ('temperature' in body && Array.isArray(body.models)) {
-      const anyFallbackRejectsTemperature = (body.models as unknown[]).some(
+    // Passthrough fields are applied by the base builder after its normal
+    // temperature omission, so sanitize the completed body for both the
+    // primary model and any rendered fallback model.
+    const anyFallbackRejectsTemperature =
+      Array.isArray(body.models) &&
+      (body.models as unknown[]).some(
         (m) => typeof m === 'string' && reasoningUpstreamRejectsTemperature(m),
       );
-      if (anyFallbackRejectsTemperature) {
-        delete body.temperature;
-      }
+    if ('temperature' in body && (!this.supportsTemperature() || anyFallbackRejectsTemperature)) {
+      delete body.temperature;
     }
 
     return result;

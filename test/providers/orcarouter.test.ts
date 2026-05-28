@@ -320,6 +320,36 @@ describe('OrcaRouter', () => {
       }
     });
 
+    it('omits temperature reintroduced via passthrough for unsupported reasoning models', async () => {
+      const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
+      try {
+        const p = new OrcaRouterProvider('anthropic/claude-opus-4.7', {
+          config: { passthrough: { temperature: 0.7 } },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        await p.callApi('Hi');
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body).not.toHaveProperty('temperature');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('still sends temperature for non-reasoning Anthropic models (e.g. claude-opus-3)', async () => {
       const restoreEnv = mockProcessEnv({ ORCAROUTER_API_KEY: 'test-key' });
       try {
