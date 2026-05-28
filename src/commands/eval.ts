@@ -52,7 +52,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
-import { collectKeyValueOption } from './options';
+import { collectKeyValueOption, normalizeTagOption } from './options';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
@@ -1280,10 +1280,9 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        const optsWithAliases = {
-          ...opts,
-          tags: (opts as EvalCommandOptions & { tag?: Record<string, string> }).tag ?? opts.tags,
-        };
+        const optsWithAliases = normalizeTagOption(
+          opts as EvalCommandOptions & { tag?: Record<string, string> },
+        );
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`

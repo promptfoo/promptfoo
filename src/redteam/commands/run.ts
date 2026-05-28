@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { collectKeyValueOption } from '../../commands/options';
+import { collectKeyValueOption, normalizeTagOption } from '../../commands/options';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import { EmailValidationError } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -17,7 +17,7 @@ import type { Command } from 'commander';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
-type RedteamRunCliOptions = RedteamRunOptions & { tag?: Record<string, string> };
+type RedteamRunCliOptions = Omit<RedteamRunOptions, 'tags'> & { tag?: Record<string, string> };
 
 export function redteamRunCommand(program: Command) {
   program
@@ -70,9 +70,7 @@ export function redteamRunCommand(program: Command) {
         collectKeyValueOption('--tag', value, previous),
     )
     .action(async (rawOpts: RedteamRunCliOptions) => {
-      const { tag, ...optionsWithoutTag } = rawOpts;
-      const opts: RedteamRunOptions =
-        tag === undefined ? optionsWithoutTag : { ...optionsWithoutTag, tags: tag };
+      const opts: RedteamRunOptions = normalizeTagOption(rawOpts);
 
       setupEnv(opts.envPath);
       telemetry.record('redteam run', {});

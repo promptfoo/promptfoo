@@ -385,6 +385,18 @@ describe('redteamRunCommand', () => {
       expect(options).not.toHaveProperty('tag');
     });
 
+    it('should not add a tags property when no --tag is provided', async () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      const options = vi.mocked(doRedteamRun).mock.calls[0][0];
+      // Avoid clobbering config-level tags with an undefined/empty runtime value.
+      expect(options).not.toHaveProperty('tags');
+      expect(options).not.toHaveProperty('tag');
+    });
+
     it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
       const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
       expect(runCommand).toBeDefined();

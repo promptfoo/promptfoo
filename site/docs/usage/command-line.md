@@ -893,22 +893,22 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                                             | Default              |
-| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
-| `--tag <key=value>`                                | Set a run-specific eval tag. May be specified multiple times.           |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
-| `--remote`                                         | Force remote inference wherever possible                                | false                |
-| `--force`                                          | Force generation even if no changes are detected                        | false                |
-| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
-| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
+| Option                                             | Description                                                                      | Default              |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                                       | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                          | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                                        |                      |
+| `--tag <key=value>`                                | Set an eval tag. Can be specified multiple times; CLI tags override config tags. |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                                       | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                           |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                          |                      |
+| `--remote`                                         | Force remote inference wherever possible                                         | false                |
+| `--force`                                          | Force generation even if no changes are detected                                 | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                                      |                      |
 
 Use `--tag` to attach CI/CD context to the evaluation result without changing the
 scan template or generated `redteam.yaml`. CLI tags override matching tags from the
