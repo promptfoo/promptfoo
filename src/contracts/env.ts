@@ -70,6 +70,8 @@ export const ProviderEnvOverridesSchema = z.object({
   MODELSLAB_API_KEY: z.string().optional(),
   NSCALE_SERVICE_TOKEN: z.string().optional(),
   NSCALE_API_KEY: z.string().optional(),
+  NVIDIA_API_BASE_URL: z.string().optional(),
+  NVIDIA_API_KEY: z.string().optional(),
   OLLAMA_API_KEY: z.string().optional(),
   OLLAMA_BASE_URL: z.string().optional(),
   OPENAI_API_BASE_URL: z.string().optional(),

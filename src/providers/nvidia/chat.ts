@@ -1,0 +1,64 @@
+import { OpenAiChatCompletionProvider } from '../openai/chat';
+
+import type { ApiProvider, ProviderOptions } from '../../types/providers';
+
+const NVIDIA_NIM_API_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+
+export class NvidiaProvider extends OpenAiChatCompletionProvider {
+  constructor(modelName: string, providerOptions: ProviderOptions) {
+    super(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || NVIDIA_NIM_API_BASE_URL,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'NVIDIA_API_KEY',
+      },
+    });
+  }
+
+  id(): string {
+    return `nvidia:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[NVIDIA NIM Provider ${this.modelName}]`;
+  }
+
+  toJSON() {
+    return {
+      provider: 'nvidia',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
+  }
+}
+
+export function createNvidiaProvider(
+  providerPath: string,
+  options: {
+    config?: ProviderOptions;
+    id?: string;
+    env?: Record<string, string | undefined>;
+  } = {},
+): ApiProvider {
+  const splits = providerPath.split(':');
+  const modelName = splits.slice(1).join(':');
+  if (!modelName) {
+    throw new Error(
+      `Invalid NVIDIA NIM provider path: "${providerPath}" — expected "nvidia:<model>"`,
+    );
+  }
+
+  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
+  if (options.env && !providerOptions.env) {
+    providerOptions.env = options.env as ProviderOptions['env'];
+  }
+  if (options.id && !providerOptions.id) {
+    providerOptions.id = options.id;
+  }
+
+  return new NvidiaProvider(modelName, providerOptions);
+}

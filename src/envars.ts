@@ -346,6 +346,10 @@ type EnvVars = {
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;
 
+  // NVIDIA NIM (hosted inference)
+  NVIDIA_API_BASE_URL?: string;
+  NVIDIA_API_KEY?: string;
+
   // Ollama
   OLLAMA_API_KEY?: string;
   OLLAMA_BASE_URL?: string;

@@ -374,6 +374,12 @@
         "NSCALE_API_KEY": {
           "type": "string"
         },
+        "NVIDIA_API_BASE_URL": {
+          "type": "string"
+        },
+        "NVIDIA_API_KEY": {
+          "type": "string"
+        },
         "OLLAMA_API_KEY": {
           "type": "string"
         },
@@ -1803,6 +1809,12 @@
                       "type": "string"
                     },
                     "NSCALE_API_KEY": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_KEY": {
                       "type": "string"
                     },
                     "OLLAMA_API_KEY": {
