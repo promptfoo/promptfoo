@@ -592,6 +592,7 @@ function normalizeToolName(toolName: string): string {
   return toolName
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[:.-]+/g, '_')
     .toLowerCase();
 }
 
@@ -599,8 +600,8 @@ function isShellToolName(toolName: string): boolean {
   return SHELL_TOOL_NAMES.has(normalizeToolName(toolName));
 }
 
-const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|[_:-])(?:edit|editor|patch|write)(?:[_:-]|$)/;
-const NETWORK_TOOL_SEGMENT_PATTERN = /(?:^|[_:.-])(?:fetch|http|https|request|webhook)(?:[_:.-]|$)/;
+const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|_)(?:edit|editor|patch|write)(?:_|$)/;
+const NETWORK_TOOL_SEGMENT_PATTERN = /(?:^|_)(?:fetch|http|https|request|webhook)(?:_|$)/;
 const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'ls', 'read', 'read_file']);
 const FILE_READ_TOOL_NAMES = new Set(['grep', 'read', 'read_file']);
 const FILE_READ_PATH_KEYS = ['file', 'file_path', 'filePath', 'path', 'paths'] as const;
@@ -1082,6 +1083,25 @@ function evidenceFromProviderRawItem(
   return evidence;
 }
 
+function evidenceFromOpenCodeToolParts(object: Record<string, unknown>): TargetEvidence[] {
+  const parts = Array.isArray(object.parts) ? object.parts : [];
+  return parts.flatMap((part, index) => {
+    const partObject = getObject(part);
+    const stateObject = getObject(partObject?.state);
+    if (getString(partObject?.type) !== 'tool' || !partObject || !stateObject) {
+      return [];
+    }
+
+    return providerRawToolInputEvidence(
+      {
+        input: stateObject.input,
+        tool: partObject.tool,
+      },
+      `provider raw part ${index + 1}`,
+    );
+  });
+}
+
 function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
   const parsed = parseProviderRaw(raw);
   const object = getObject(parsed);
@@ -1110,6 +1130,11 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
         evidence.push(...evidenceFromProviderRawItem(itemObject, `${prefix} ${index + 1}`));
       }
     });
+  }
+
+  const openCodeResponse = Array.isArray(object.parts) ? object : getObject(object.data);
+  if (openCodeResponse) {
+    evidence.push(...evidenceFromOpenCodeToolParts(openCodeResponse));
   }
 
   return evidence;
@@ -2438,7 +2463,10 @@ function matchNetworkEgressCommand(
   );
 
   for (const item of commands) {
-    const heuristicPattern = networkCommandPattern(item.text);
+    const heuristicPattern =
+      item.evidenceSource === 'network-request'
+        ? NETWORK_TOOL_SEGMENT_PATTERN
+        : networkCommandPattern(item.text);
     if (!heuristicPattern) {
       continue;
     }
