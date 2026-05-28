@@ -2952,6 +2952,41 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).toHaveProperty('top_p', 0.9);
       expect(params).toHaveProperty('top_k', 40);
     });
+
+    it('converts manual thinking to adaptive on Opus 4.8 (migrated config)', async () => {
+      const provider = createProvider('claude-opus-4-8', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as {
+        thinking?: { type?: string; budget_tokens?: number };
+      };
+      // Manual budget-based thinking 400s on Opus 4.8 — it must be rewritten to adaptive.
+      expect(params.thinking?.type).toBe('adaptive');
+      expect(params.thinking?.budget_tokens).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Manual extended thinking'));
+    });
+
+    it('preserves manual thinking on Opus 4.6 (regression)', async () => {
+      const provider = createProvider('claude-opus-4-6', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as {
+        thinking?: { type?: string; budget_tokens?: number };
+      };
+      expect(params.thinking?.type).toBe('enabled');
+      expect(params.thinking?.budget_tokens).toBe(5000);
+    });
   });
 
   describe('refusal stop_details handling', () => {

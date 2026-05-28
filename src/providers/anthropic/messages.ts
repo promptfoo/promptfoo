@@ -236,6 +236,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private samplingParamsDeprecationWarned = false;
+  private manualThinkingConversionWarned = false;
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
@@ -550,7 +551,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
-    const resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
+    // Opus 4.7/4.8 are adaptive-only — manual budget-based thinking
+    // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
+    // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
+    // controls reasoning depth on these models.
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
+    if (samplingParamsDeprecated && resolvedThinking?.type === 'enabled') {
+      if (!this.manualThinkingConversionWarned) {
+        logger.warn(
+          'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
+        );
+        this.manualThinkingConversionWarned = true;
+      }
+      resolvedThinking = { type: 'adaptive' };
+    }
     const thinkingEnabled = isThinkingEnabled(resolvedThinking);
 
     // Validate and warn about thinking-incompatible params
@@ -619,7 +634,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // instance when the user supplied any of them via config or the
     // ANTHROPIC_TEMPERATURE env var (the built-in default stays silent to avoid
     // spamming every request).
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const explicitSamplingParam =
       config.temperature != null ||
       config.top_p != null ||
