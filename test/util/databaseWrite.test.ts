@@ -2,7 +2,11 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { datasetsTable, evalsTable, promptsTable, tagsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
-import { writeResultsToDatabase } from '../../src/util/database';
+import {
+  clearStandaloneEvalCache,
+  getStandaloneEvals,
+  writeResultsToDatabase,
+} from '../../src/util/database';
 import { createEvaluateSummaryV2 } from '../factories/eval';
 
 describe('writeResultsToDatabase', () => {
@@ -20,6 +24,7 @@ describe('writeResultsToDatabase', () => {
     await db.run('DELETE FROM datasets');
     await db.run('DELETE FROM prompts');
     await db.run('DELETE FROM tags');
+    clearStandaloneEvalCache();
   });
 
   it('rolls back related rows when a dependent insert fails', async () => {
@@ -47,5 +52,25 @@ describe('writeResultsToDatabase', () => {
     await expect(db.select().from(promptsTable).all()).resolves.toHaveLength(0);
     await expect(db.select().from(datasetsTable).all()).resolves.toHaveLength(0);
     await expect(db.select().from(tagsTable).all()).resolves.toHaveLength(0);
+  });
+
+  it('includes imported evals after history has been cached', async () => {
+    const firstEvalId = await writeResultsToDatabase(
+      createEvaluateSummaryV2(),
+      {},
+      new Date('2024-01-01T00:00:00.000Z'),
+    );
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toContain(firstEvalId);
+
+    const secondEvalId = await writeResultsToDatabase(
+      createEvaluateSummaryV2(),
+      {},
+      new Date('2024-01-01T00:00:01.000Z'),
+    );
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(afterIds).toContain(firstEvalId);
+    expect(afterIds).toContain(secondEvalId);
   });
 });

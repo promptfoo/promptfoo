@@ -110,6 +110,18 @@ describe('getStandaloneEvals', () => {
     expect(afterIds).not.toContain(drop.id);
   });
 
+  it('includes newly created evals after history has been cached', async () => {
+    const first = await createEvalWithPrompts({});
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toContain(first.id);
+
+    const second = await createEvalWithPrompts({});
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(afterIds).toContain(first.id);
+    expect(afterIds).toContain(second.id);
+  });
+
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
     const eval_ = await createEvalWithPrompts({ redteam: null as any });
 
