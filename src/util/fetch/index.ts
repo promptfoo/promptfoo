@@ -549,7 +549,7 @@ export type { FetchOptions } from './types';
  * Strips basic-auth credentials and known sensitive query parameters (api_key,
  * token, password, signature, …) via {@link sanitizeUrl} so providers that
  * embed credentials in the URL (e.g. n8n webhooks, HTTP providers with
- * `?api_key=…`) do not leak them into debug logs / cache diagnostics.
+ * `?api_key=…`) do not leak them into retry diagnostics.
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
