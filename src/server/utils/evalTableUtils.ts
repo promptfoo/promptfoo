@@ -116,12 +116,35 @@ function formatNamedScoreValue(value: number | undefined): string {
   return typeof value === 'number' && !Number.isNaN(value) ? value.toFixed(2) : '';
 }
 
+/**
+ * Build a per-prompt list of `Metric: <name>` column names, deduplicated and
+ * sorted with `localeCompare`. Shared shell for both the row-scanning helper
+ * (WebUI path) and the aggregate-reading helper (streaming CLI path); see the
+ * two call sites below.
+ */
+function collectMetricNamesByPrompt<T>(
+  items: T[],
+  namesFor: (item: T, index: number) => Iterable<string>,
+): string[][] {
+  return items.map((item, index) =>
+    [...new Set(namesFor(item, index))].sort((a, b) => a.localeCompare(b)),
+  );
+}
+
+/**
+ * Collect per-row named metric names by scanning row outputs. Used by the
+ * non-streaming WebUI export, which has the full table in memory.
+ *
+ * Returns one sorted name list per prompt, aligned with `table.head.prompts`.
+ * Names whose only values are non-numeric or NaN are skipped so we don't emit
+ * blank columns for invalid data.
+ */
 function collectNamedScoreNamesByPrompt(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 }): string[][] {
-  return table.head.prompts.map((_, promptIndex) => {
-    const names = new Set<string>();
+  return collectMetricNamesByPrompt(table.head.prompts, (_, promptIndex) => {
+    const names: string[] = [];
     for (const row of table.body) {
       const namedScores = row.outputs[promptIndex]?.namedScores;
       if (!namedScores) {
@@ -129,11 +152,48 @@ function collectNamedScoreNamesByPrompt(table: {
       }
       for (const [name, value] of Object.entries(namedScores)) {
         if (typeof value === 'number' && !Number.isNaN(value)) {
-          names.add(name);
+          names.push(name);
         }
       }
     }
-    return [...names].sort((a, b) => a.localeCompare(b));
+    return names;
+  });
+}
+
+/**
+ * Collect per-row named metric names from prompt-level aggregate metrics, for
+ * use by the streaming CSV path which cannot scan rows up front.
+ *
+ * Prefers `namedScoresCount` because it is incremented only when a per-row
+ * result contributes a metric (`src/util/namedMetrics.ts`). Derived metrics
+ * write to `namedScores` but not `namedScoresCount` (`src/evaluator.ts`
+ * `updateDerivedMetrics`), so this keeps the streaming column set aligned
+ * with what `collectNamedScoreNamesByPrompt` would produce from row outputs.
+ *
+ * Falls back to `namedScores` keys for legacy evals persisted before
+ * `namedScoresCount` was populated, and for external imports via the v4
+ * `POST /api/eval` route that don't backfill the count.
+ */
+function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
+  return collectMetricNamesByPrompt(prompts, (prompt) => {
+    const metrics = (prompt as CompletedPrompt).metrics;
+    if (!metrics) {
+      return [];
+    }
+    const counts = metrics.namedScoresCount;
+    if (counts && Object.keys(counts).length > 0) {
+      return Object.keys(counts).filter((name) => (counts[name] ?? 0) > 0);
+    }
+    // Legacy / externally-imported eval: no count map, so we can't tell
+    // derived metrics from per-row ones. Emit columns for every numeric key
+    // in `namedScores` to preserve pre-PR behavior.
+    const namedScores = metrics.namedScores;
+    if (!namedScores) {
+      return [];
+    }
+    return Object.entries(namedScores)
+      .filter(([, value]) => typeof value === 'number' && !Number.isNaN(value))
+      .map(([name]) => name);
   });
 }
 
@@ -143,6 +203,10 @@ function collectNamedScoreNamesByPrompt(table: {
  * @param vars - Variable names from the table head
  * @param prompts - Prompt definitions from the table head
  * @param options - Export options
+ * @param options.namedScoreNamesByPrompt - Named metric names that should get
+ *   dedicated `Metric: <name>` columns, one sorted list per prompt (aligned
+ *   with `prompts`). Must match the value passed to `tableRowToCsvValues` so
+ *   header and row column counts stay in sync.
  * @returns Array of header strings
  */
 export function buildCsvHeaders(
@@ -186,7 +250,8 @@ export function buildCsvHeaders(
  * Convert a single table row to CSV row values.
  *
  * @param row - The table row to convert
- * @param options - Export options
+ * @param options - Export options (`namedScoreNamesByPrompt` must match the
+ *   array passed to `buildCsvHeaders`)
  * @returns Array of values for the CSV row
  */
 export function tableRowToCsvValues(
@@ -259,6 +324,10 @@ export function tableRowToCsvValues(
  * - Status: PASS | FAIL | ERROR
  * - Score: Numeric score (e.g., "1.00")
  * - Named Scores: JSON object with per-assertion scores (e.g., {"clarity": 0.90, "accuracy": 0.85})
+ * - Metric: <name>: One dedicated column per distinct per-row named score,
+ *   sorted alphabetically by name. Empty when a row has no value for that
+ *   metric. Derived metrics are intentionally omitted (they live on the
+ *   aggregate prompt metrics, not on individual rows).
  * - Grader Reason: Explanation from the grader
  * - Comment: Additional grader comment
  *
@@ -506,11 +575,10 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
-  const namedScoreNamesByPrompt = prompts.map((prompt) =>
-    Object.keys((prompt as CompletedPrompt).metrics?.namedScores || {}).sort((a, b) =>
-      a.localeCompare(b),
-    ),
-  );
+  // Derive metric column names from `namedScoresCount` (not `namedScores`) so
+  // derived/aggregate-only metrics don't introduce columns that the WebUI path
+  // would omit. See `collectNamedScoreNamesByPromptFromAggregate` for details.
+  const namedScoreNamesByPrompt = collectNamedScoreNamesByPromptFromAggregate(prompts);
 
   // Track whether we've written headers yet
   let headersWritten = false;

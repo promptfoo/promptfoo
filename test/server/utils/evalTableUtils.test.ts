@@ -1,3 +1,4 @@
+import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   evalTableToCsv,
@@ -8,7 +9,7 @@ import {
   streamEvalCsv,
 } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
-import { createCompletedPrompt } from '../../factories/eval';
+import { createCompletedPrompt, createPromptMetrics } from '../../factories/eval';
 
 import type Eval from '../../../src/models/eval';
 import type {
@@ -265,6 +266,43 @@ describe('evalTableUtils', () => {
         // Empty named scores should result in empty string, not '{}'
         expect(lines[1]).toContain('Output without named scores');
         expect(lines[1]).not.toContain('{}');
+      });
+
+      it('should leave dedicated metric cells empty for null outputs in a multi-prompt table', () => {
+        // When one output is null, the corresponding prompt block must still
+        // emit the right number of placeholder cells (label, status, score,
+        // namedScores, N metric columns, grader reason, comment). If the math
+        // is wrong, downstream columns (including the next prompt's label)
+        // shift and the CSV becomes unparseable.
+        const tableWithMixedOutputs = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                null,
+                {
+                  pass: true,
+                  text: 'Second output',
+                  score: 0.9,
+                  namedScores: { clarity: 0.9, accuracy: 0.8 },
+                } as unknown as EvaluateTableOutput,
+              ] as EvaluateTableOutput[],
+            },
+          ],
+        };
+
+        const [headerCols, rowCols] = parseCsv(evalTableToCsv(tableWithMixedOutputs)) as string[][];
+        expect(rowCols).toHaveLength(headerCols.length);
+
+        // The null prompt block has no metric columns (its row contributes no
+        // named scores). The populated prompt block has both metrics.
+        expect(headerCols).toContain('Metric: clarity');
+        expect(headerCols).toContain('Metric: accuracy');
+        const clarityIdx = headerCols.indexOf('Metric: clarity');
+        const accuracyIdx = headerCols.indexOf('Metric: accuracy');
+        expect(rowCols[clarityIdx]).toBe('0.90');
+        expect(rowCols[accuracyIdx]).toBe('0.80');
       });
 
       it('should handle null and undefined outputs', () => {
@@ -1225,65 +1263,243 @@ describe('evalTableUtils', () => {
       expect(secondIdx).toBeLessThan(thirdIdx);
     });
 
-    it('should include dedicated metric columns when streaming CSV', async () => {
-      const mockResults = [
+    async function runStreamEvalCsv({
+      vars,
+      prompts,
+      results,
+      isRedteam = false,
+    }: {
+      vars: string[];
+      prompts: CompletedPrompt[];
+      results: unknown[];
+      isRedteam?: boolean;
+    }): Promise<string> {
+      const chunks: string[] = [];
+      await streamEvalCsv(
         {
-          testIdx: 0,
-          promptIdx: 0,
-          testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
-          response: { output: 'First output' },
-          success: true,
-          score: 0.8,
-          namedScores: { accuracy: 0.7, relevance: 0.9 },
-          failureReason: ResultFailureReason.NONE,
-          gradingResult: null,
-          metadata: {},
-        },
+          vars,
+          prompts,
+          fetchResultsBatched: async function* () {
+            yield results;
+          },
+        } as unknown as Eval,
         {
-          testIdx: 1,
-          promptIdx: 0,
-          testCase: { vars: { name: 'Bob' }, description: 'Test 2' },
-          response: { output: 'Second output' },
-          success: true,
-          score: 0.6,
-          namedScores: { relevance: 0.5 },
-          failureReason: ResultFailureReason.NONE,
-          gradingResult: null,
-          metadata: {},
+          isRedteam,
+          write: (data: string) => {
+            chunks.push(data);
+          },
         },
-      ];
+      );
+      return chunks.join('');
+    }
 
-      const mockEval = {
+    it('should include dedicated metric columns when streaming CSV', async () => {
+      const csv = await runStreamEvalCsv({
         vars: ['name'],
         prompts: [
-          {
-            raw: 'Prompt 1',
-            label: 'Prompt 1',
-            metrics: {
+          createCompletedPrompt('Prompt 1', {
+            metrics: createPromptMetrics({
               namedScores: { accuracy: 0.7, relevance: 1.4 },
-            },
-          } as Prompt,
+              namedScoresCount: { accuracy: 1, relevance: 2 },
+            }),
+          }),
         ],
-        fetchResultsBatched: async function* () {
-          yield mockResults;
-        },
-      } as unknown as Eval;
-
-      const chunks: string[] = [];
-      await streamEvalCsv(mockEval, {
-        isRedteam: false,
-        write: (data: string) => {
-          chunks.push(data);
-        },
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
+            response: { output: 'First output' },
+            success: true,
+            score: 0.8,
+            namedScores: { accuracy: 0.7, relevance: 0.9 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: {},
+          },
+          {
+            testIdx: 1,
+            promptIdx: 0,
+            testCase: { vars: { name: 'Bob' }, description: 'Test 2' },
+            response: { output: 'Second output' },
+            success: true,
+            score: 0.6,
+            namedScores: { relevance: 0.5 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: {},
+          },
+        ],
       });
 
-      const csv = chunks.join('');
       const lines = csv.split('\n').filter((line) => line.trim());
-
       expect(lines[0]).toContain('Metric: accuracy');
       expect(lines[0]).toContain('Metric: relevance');
       expect(lines[1]).toContain('0.70,0.90');
       expect(lines[2]).toContain(',0.50');
+    });
+
+    it('should omit derived/aggregate-only metric columns when streaming', async () => {
+      // Derived metrics live on `metrics.namedScores` but not on
+      // `metrics.namedScoresCount`, and never appear on per-row outputs. The
+      // streaming CSV must skip them so it stays consistent with the WebUI path,
+      // which scans row outputs (see collectNamedScoreNamesByPrompt).
+      const csv = await runStreamEvalCsv({
+        vars: ['name'],
+        prompts: [
+          createCompletedPrompt('Prompt 1', {
+            metrics: createPromptMetrics({
+              namedScores: { accuracy: 0.8, derived_score: 1.6 },
+              namedScoresCount: { accuracy: 1 },
+            }),
+          }),
+        ],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { name: 'Alice' } },
+            response: { output: 'Alice output' },
+            success: true,
+            score: 0.8,
+            namedScores: { accuracy: 0.8 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: {},
+          },
+        ],
+      });
+
+      const header = csv.split('\n')[0];
+      expect(header).toContain('Metric: accuracy');
+      expect(header).not.toContain('Metric: derived_score');
+    });
+
+    it('should fall back to namedScores keys when namedScoresCount is missing (legacy evals)', async () => {
+      // Older eval rows persisted before `namedScoresCount` was reliably populated,
+      // and external v4 imports via POST /api/eval that don't backfill the count,
+      // still need their per-row metric columns to appear in CSV exports.
+      const csv = await runStreamEvalCsv({
+        vars: ['name'],
+        prompts: [
+          createCompletedPrompt('Prompt 1', {
+            metrics: createPromptMetrics({
+              namedScores: { accuracy: 0.8, fluency: 0.6 },
+              namedScoresCount: {},
+            }),
+          }),
+        ],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { name: 'Alice' } },
+            response: { output: 'Alice output' },
+            success: true,
+            score: 0.7,
+            namedScores: { accuracy: 0.8, fluency: 0.6 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: {},
+          },
+        ],
+      });
+
+      const header = csv.split('\n')[0];
+      expect(header).toContain('Metric: accuracy');
+      expect(header).toContain('Metric: fluency');
+    });
+
+    it('should produce headers consistent with evalTableToCsv for the same data', async () => {
+      // Locks the docstring invariant that streamEvalCsv (CLI) and evalTableToCsv
+      // (WebUI) produce the same column layout for the same eval data.
+      const sharedPrompt = createCompletedPrompt('Explain {{topic}}', {
+        provider: 'echo',
+        metrics: createPromptMetrics({
+          namedScores: { clarity: 0.9, accuracy: 0.8, derived_avg: 0.85 },
+          namedScoresCount: { clarity: 1, accuracy: 1 },
+        }),
+      });
+
+      const cliCsv = await runStreamEvalCsv({
+        vars: ['topic'],
+        prompts: [sharedPrompt],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { topic: 'gravity' } },
+            response: { output: 'gravity output' },
+            success: true,
+            score: 0.9,
+            namedScores: { clarity: 0.9, accuracy: 0.8 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: {},
+          },
+        ],
+      });
+
+      const webCsv = evalTableToCsv({
+        head: { vars: ['topic'], prompts: [sharedPrompt] },
+        body: [
+          {
+            test: { vars: { topic: 'gravity' } },
+            testIdx: 0,
+            vars: ['gravity'],
+            outputs: [
+              {
+                pass: true,
+                text: 'gravity output',
+                score: 0.9,
+                namedScores: { clarity: 0.9, accuracy: 0.8 },
+              } as unknown as EvaluateTableOutput,
+            ],
+          },
+        ],
+      });
+
+      expect(cliCsv.split('\n')[0]).toBe(webCsv.split('\n')[0]);
+    });
+
+    it('should keep redteam metadata columns aligned when metric columns are present', async () => {
+      const csv = await runStreamEvalCsv({
+        vars: ['name'],
+        prompts: [
+          createCompletedPrompt('Prompt 1', {
+            metrics: createPromptMetrics({
+              namedScores: { accuracy: 0.8, relevance: 0.7 },
+              namedScoresCount: { accuracy: 1, relevance: 1 },
+            }),
+          }),
+        ],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { name: 'Alice' } },
+            response: { output: 'Alice output' },
+            success: true,
+            score: 0.8,
+            namedScores: { accuracy: 0.8, relevance: 0.7 },
+            failureReason: ResultFailureReason.NONE,
+            gradingResult: null,
+            metadata: { pluginId: 'plg', strategyId: 'strat', sessionId: 'sess' },
+          },
+        ],
+        isRedteam: true,
+      });
+
+      const [headerCols, rowCols] = parseCsv(csv) as string[][];
+
+      // Header and row must have the same column count so redteam metadata
+      // columns (pluginId, strategyId, sessionId, …) line up with their headers.
+      expect(rowCols).toHaveLength(headerCols.length);
+      const pluginIdHeaderIdx = headerCols.indexOf('pluginId');
+      const strategyIdHeaderIdx = headerCols.indexOf('strategyId');
+      expect(pluginIdHeaderIdx).toBeGreaterThan(-1);
+      expect(rowCols[pluginIdHeaderIdx]).toBe('plg');
+      expect(rowCols[strategyIdHeaderIdx]).toBe('strat');
     });
 
     it('should handle multiple test cases with out-of-order results', async () => {
