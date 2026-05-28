@@ -35,6 +35,7 @@ import type { TestCase, VarValue } from '../types';
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 const PAGE_SIZE = 100;
+const TRACE_LIST_FIELDS = 'core,io';
 const LANGFUSE_TRACES_PREFIX = 'langfuse://traces';
 
 interface LangfuseTrace {
@@ -57,6 +58,7 @@ interface LangfuseTrace {
 type LangfuseTracesResponse = ApiTraces;
 
 interface FetchTracesQuery {
+  fields?: string;
   limit?: number;
   page?: number;
   userId?: string;
@@ -566,6 +568,7 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
       // Build the query for this page
       const fetchQuery: FetchTracesQuery = {
         ...query,
+        fields: TRACE_LIST_FIELDS,
         limit: pageLimit,
         page,
       };

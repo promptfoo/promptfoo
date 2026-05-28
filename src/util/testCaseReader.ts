@@ -439,7 +439,7 @@ export async function readTest(
     !testCase.options &&
     !testCase.metadata &&
     !testCase.provider &&
-    !testCase.providerOutput &&
+    testCase.providerOutput === undefined &&
     typeof testCase.threshold !== 'number'
   ) {
     // Validate the shape of the test case

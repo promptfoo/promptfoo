@@ -214,6 +214,7 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces?limit=10');
 
       expect(mockTraceList).toHaveBeenCalledWith({
+        fields: 'core,io',
         limit: 10,
         page: 1,
       });
@@ -288,6 +289,7 @@ describe('langfuseTraces', () => {
       );
 
       expect(mockTraceList).toHaveBeenCalledWith({
+        fields: 'core,io',
         limit: 100,
         page: 1,
         userId: 'user_123',
@@ -336,10 +338,12 @@ describe('langfuseTraces', () => {
 
       expect(mockTraceList).toHaveBeenCalledTimes(2);
       expect(mockTraceList).toHaveBeenNthCalledWith(1, {
+        fields: 'core,io',
         limit: 100,
         page: 1,
       });
       expect(mockTraceList).toHaveBeenNthCalledWith(2, {
+        fields: 'core,io',
         limit: 100,
         page: 2,
       });
@@ -363,6 +367,7 @@ describe('langfuseTraces', () => {
 
       expect(mockTraceList).toHaveBeenCalledTimes(1);
       expect(mockTraceList).toHaveBeenCalledWith({
+        fields: 'core,io',
         limit: 50,
         page: 1,
       });

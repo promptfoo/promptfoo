@@ -834,6 +834,12 @@ describe('readTest', () => {
     );
   });
 
+  it('should accept an empty stored provider output as a valid test field', async () => {
+    const input: TestCase = { providerOutput: '' };
+
+    await expect(readTest(input)).resolves.toEqual(input);
+  });
+
   it('readTest with TestCase that contains a vars glob input', async () => {
     const input: TestCaseWithVarsFile = {
       description: 'Test 1',
