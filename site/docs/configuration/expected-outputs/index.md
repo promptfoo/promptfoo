@@ -27,6 +27,8 @@ In machine learning, "Accuracy" is a metric that measures the proportion of corr
 
 To use assertions in your test cases, add an `assert` property to the test case with an array of assertion objects. Each assertion object should have a `type` property indicating the assertion type and any additional properties required for that assertion type.
 
+For a quick reference to available checks, jump to [Assertion types](#assertion-types).
+
 Example:
 
 ```yaml
@@ -45,11 +47,11 @@ tests:
 | ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                                                                                  |
 | value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                                                  |
-| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                                                                            |
+| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`, `ruby`                                                                                                                                                                                                                                    |
 | weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                                                                                |
 | provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                                                                               |
 | rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                                                                            |
-| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                                                                                                                                                                                                                                                      |
+| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python/ruby assertions                                                                                                                                                                                                                                                 |
 | transform        | string \| Function | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
 | metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
 | contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
@@ -133,6 +135,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
+| [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
@@ -326,9 +329,10 @@ type AssertionValueFunctionContext = {
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  metadata?: ProviderResponse['metadata']; // Shortcut to providerResponse?.metadata
 };
 type AssertionResponse = string | boolean | number | GradingResult;
-type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertResponse;
+type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertionResponse;
 ```
 
 See [GradingResult definition](/docs/configuration/reference#gradingresult).
@@ -440,7 +444,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-5.5
   - localai:chat:vicuna
 tests:
   - vars:

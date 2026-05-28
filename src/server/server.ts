@@ -31,6 +31,7 @@ import {
   getTestCases,
   readResult,
 } from '../util/database';
+import { redactAzureBlobSasTokens } from '../util/sanitizer';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
@@ -205,7 +206,14 @@ export function createApp() {
       res.status(404).json({ error: 'Result not found' });
       return;
     }
-    res.json(ServerSchemas.Result.Response.parse({ data: file.result }));
+    res.json(
+      ServerSchemas.Result.Response.parse({
+        data: {
+          ...file.result,
+          config: redactAzureBlobSasTokens(file.result.config),
+        },
+      }),
+    );
   });
 
   app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
@@ -242,7 +250,11 @@ export function createApp() {
   });
 
   app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
-    res.json(ServerSchemas.Datasets.Response.parse({ data: await getTestCases() }));
+    res.json(
+      ServerSchemas.Datasets.Response.parse({
+        data: redactAzureBlobSasTokens(await getTestCases()),
+      }),
+    );
   });
 
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {

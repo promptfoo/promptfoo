@@ -140,14 +140,7 @@ vi.mock('../../../src/util/file', async () => {
 });
 
 vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test, _basePath, isDefaultTest) => {
-    // For defaultTest, just return the test as-is since it doesn't need validation
-    if (isDefaultTest) {
-      return test;
-    }
-    // For regular tests, just return the test
-    return test;
-  }),
+  readTest: vi.fn().mockImplementation(async (test) => test),
   readTests: vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
       return [];
@@ -299,19 +292,6 @@ describe('combineConfigs', () => {
     };
 
     vi.mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ) => {
-          if (typeof path === 'string' && path === 'config1.json') {
-            return JSON.stringify(config1);
-          } else if (typeof path === 'string' && path === 'config2.json') {
-            return JSON.stringify(config2);
-          }
-          return Buffer.from('');
-        },
-      )
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValueOnce(JSON.stringify(config1))
@@ -438,6 +418,23 @@ describe('combineConfigs', () => {
       sharing: false,
       tracing: undefined,
     });
+  });
+
+  it('preserves whether scenarios were omitted', async () => {
+    const baseConfig = {
+      prompts: ['prompt'],
+      providers: ['provider'],
+    };
+
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(baseConfig))
+      .mockReturnValueOnce(JSON.stringify({ ...baseConfig, scenarios: [] }));
+
+    const configWithoutScenarios = await combineConfigs(['without-scenarios.json']);
+    const configWithEmptyScenarios = await combineConfigs(['with-empty-scenarios.json']);
+
+    expect(configWithoutScenarios.scenarios).toBeUndefined();
+    expect(configWithEmptyScenarios.scenarios).toEqual([]);
   });
 
   it('combines configs with provider-specific prompts', async () => {
@@ -1182,6 +1179,150 @@ describe('combineConfigs', () => {
     // When no defaultTest is provided, combineConfigs returns undefined
     expect(result.defaultTest).toBeUndefined();
   });
+
+  it('preserves all CallApiFunction providers without deduping them', async () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/9383:
+    // JSON.stringify(fn) returns undefined, so dedupe used to collapse function providers.
+    const providerA = async (prompt: string) => ({ output: `a: ${prompt}` });
+    const providerB = async (prompt: string) => ({ output: `b: ${prompt}` });
+    const providerC = async (prompt: string) => ({ output: `c: ${prompt}` });
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [providerA, providerB, providerC],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([providerA, providerB, providerC]);
+  });
+
+  it('dedupes string providers consistently across array and string forms', async () => {
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify({ providers: 'openai:gpt-4', prompts: ['p'] }))
+      .mockReturnValueOnce(JSON.stringify({ providers: ['openai:gpt-4'], prompts: ['p'] }));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.providers).toEqual(['openai:gpt-4']);
+  });
+
+  it('does not dedupe provider objects that contain function fields', async () => {
+    const transformA = (output: string) => `${output}-a`;
+    const transformB = (output: string) => `${output}-b`;
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [
+        { id: 'openai:gpt-4', transform: transformA },
+        { id: 'openai:gpt-4', transform: transformB },
+      ],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toHaveLength(2);
+  });
+
+  it('does not dedupe provider objects that contain nested function fields', async () => {
+    const transformA = (output: string) => `${output}-a`;
+    const transformB = (output: string) => `${output}-b`;
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [
+        { id: 'openai:gpt-4', config: { transform: transformA } },
+        { id: 'openai:gpt-4', config: { transform: transformB } },
+      ],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toHaveLength(2);
+  });
+
+  it('dedupes the same provider object with function fields when repeated', async () => {
+    const provider = { id: 'openai:gpt-4', transform: (output: string) => `${output}-a` };
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [provider, provider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([provider]);
+  });
+
+  it('does not dedupe ApiProvider instances with prototype methods', async () => {
+    class TestProvider {
+      constructor(private readonly label: string) {}
+
+      id() {
+        return `test-provider-${this.label}`;
+      }
+
+      async callApi(prompt: string) {
+        return { output: `${this.label}: ${prompt}` };
+      }
+    }
+
+    const providerA = new TestProvider('a');
+    const providerB = new TestProvider('b');
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [providerA, providerB],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([providerA, providerB]);
+  });
+
+  it('dedupes the same ApiProvider instance when repeated', async () => {
+    class TestProvider {
+      id() {
+        return 'test-provider';
+      }
+
+      async callApi(prompt: string) {
+        return { output: prompt };
+      }
+    }
+
+    const provider = new TestProvider();
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [provider, provider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([provider]);
+  });
+
+  it('dedupes the same CallApiFunction instance when it appears multiple times', async () => {
+    // Behavior carried over from #9402: same function reference twice → one entry.
+    const sharedProvider = async (prompt: string) => ({ output: `shared: ${prompt}` });
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [sharedProvider, sharedProvider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([sharedProvider]);
+  });
 });
 
 describe('dereferenceConfig', () => {
@@ -1361,7 +1502,7 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
-  it('should preserve handle string functions/tools when dereferencing', async () => {
+  it('should preserve string functions/tools when dereferencing', async () => {
     const rawConfig = {
       description: 'Test config with function parameters',
       prompts: [],
