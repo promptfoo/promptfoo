@@ -176,6 +176,23 @@ describe('fetchDataset', () => {
     ]);
   });
 
+  it('caps expanded fetches for large requested samples', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+      { vars: { text: 'safe prompt', text_type: 'user_message', labels_0: 'safe' } },
+      {
+        vars: {
+          text: 'unsafe prompt',
+          text_type: 'user_message',
+          labels_0: 'Violence',
+        },
+      },
+    ]);
+
+    await fetchDataset(2_000, true);
+
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 100_000);
+  });
+
   it('classifies Aegis records using all available annotator labels', async () => {
     vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
       {

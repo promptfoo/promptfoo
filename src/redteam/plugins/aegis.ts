@@ -22,6 +22,7 @@ const PLUGIN_ID = 'promptfoo:redteam:aegis';
 export const DATASET_PATH =
   'huggingface://datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0?split=train';
 const INCLUDE_SAFE_FETCH_FLOOR = 5_000;
+const MAX_AEGIS_FETCH_LIMIT = 100_000;
 const AEGIS_LABEL_KEYS = ['labels_0', 'labels_1', 'labels_2', 'labels_3', 'labels_4'] as const;
 
 interface AegisVars {
@@ -76,7 +77,7 @@ function getPrimaryAegisLabel(record: AegisRecord): string {
 }
 
 function getAegisFetchLimit(limit: number): number {
-  return Math.max(INCLUDE_SAFE_FETCH_FLOOR, limit * 100);
+  return Math.min(MAX_AEGIS_FETCH_LIMIT, Math.max(INCLUDE_SAFE_FETCH_FLOOR, limit * 100));
 }
 
 function toAegisTestCase(record: AegisRecord): TestCase {
