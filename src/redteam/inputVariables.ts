@@ -1,5 +1,6 @@
 import logger from '../logger';
 import {
+  BaseTokenUsageSchema,
   buildInputPromptDescription,
   DocumentMediaInjectionPlacementSchema,
   type DocxInjectionPlacement,
@@ -49,6 +50,15 @@ export type MaterializedInputVariablesResult = {
   tokenUsage?: TokenUsage;
   vars: Record<string, string>;
 };
+
+function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
+}
 
 type DocxRenderPlan = {
   bodyText: string;
@@ -739,6 +749,7 @@ export async function materializeInputValueWithMetadata(
     tokenUsage = createEmptyTokenUsage();
     accumulateResponseTokenUsage(tokenUsage, response);
   } catch (error) {
+    tokenUsage = getErrorTokenUsage(error);
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,
       inputPurpose: normalizedInput.config?.inputPurpose,
@@ -752,6 +763,7 @@ export async function materializeInputValueWithMetadata(
         inputPurpose: normalizedInput.config?.inputPurpose,
         wrapperSummary: renderPlan.wrapperSummary,
       },
+      ...(tokenUsage ? { tokenUsage } : {}),
       value: toDataUri(DOCX_MIME_TYPE, buildDocxDataFromRenderPlan(renderPlan)),
     };
   }

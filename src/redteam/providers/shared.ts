@@ -24,6 +24,7 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
@@ -41,6 +42,15 @@ export class RedteamProviderError extends Error {
     super(message);
     this.name = 'RedteamProviderError';
   }
+}
+
+function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -747,7 +757,8 @@ export async function tryUnblocking({
       throw error;
     }
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
-    return { success: false };
+    const tokenUsage = getErrorTokenUsage(error);
+    return { success: false, ...(tokenUsage ? { tokenUsage } : {}) };
   }
 }
 

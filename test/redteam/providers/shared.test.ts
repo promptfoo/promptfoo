@@ -1123,6 +1123,30 @@ describe('shared redteam provider utilities', () => {
       });
       callApiSpy.mockRestore();
     });
+
+    it('preserves billed token usage when unblocking analysis rejects', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      const error = Object.assign(new Error('analysis request failed'), {
+        tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+      });
+      const callApiSpy = vi
+        .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+        .mockRejectedValue(error);
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'Can you confirm this request?',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result).toEqual({
+        success: false,
+        tokenUsage: error.tokenUsage,
+      });
+      callApiSpy.mockRestore();
+    });
   });
 
   describe('grader assertion helpers', () => {

@@ -176,6 +176,38 @@ describe('inputVariables', () => {
     );
   });
 
+  it('preserves billed DOCX wrapper usage when provider failure uses fallback rendering', async () => {
+    const error = Object.assign(new Error('wrapper generation failed'), {
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+    const provider = {
+      callApi: async () => {
+        throw error;
+      },
+      id: () => 'test-provider',
+    } as any;
+
+    const result = await materializeInputVariablesWithMetadata(
+      { document: 'Summarize the checklist.' },
+      {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+          config: {
+            inputPurpose: 'An internal planning memo.',
+            injectionPlacements: ['comment'],
+          },
+        },
+      },
+      { provider },
+    );
+
+    expect(result.vars.document).toMatch(
+      /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+    );
+    expect(result.tokenUsage).toMatchObject(error.tokenUsage);
+  });
+
   it('rotates DOCX injection placement from the materialization index instead of provider output', async () => {
     const wrapperPrompts: string[] = [];
     const provider = {
