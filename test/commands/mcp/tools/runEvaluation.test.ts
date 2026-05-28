@@ -284,6 +284,7 @@ describe('runEvaluation tool', () => {
       const { doEval } = await import('../../../../src/commands/eval');
       let observedConfigProviders: unknown;
       let observedExecutableProviders: unknown;
+      let observedPermissionProviders: unknown;
 
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
@@ -298,6 +299,9 @@ describe('runEvaluation tool', () => {
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           observedConfigProviders = config.providers;
           observedExecutableProviders = testSuite.providers;
+          observedPermissionProviders = customization?.getCloudPermissionConfig?.(
+            config as any,
+          )?.providers;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -325,12 +329,14 @@ describe('runEvaluation tool', () => {
         { id: 'blocked-provider' },
       ]);
       expect(observedExecutableProviders).toEqual([{ id: 'allowed-provider' }]);
+      expect(observedPermissionProviders).toEqual([{ id: 'allowed-provider' }]);
     });
 
     it('should not persist expanded file provider contents after filtering a resolved provider', async () => {
       const { doEval } = await import('../../../../src/commands/eval');
       let observedConfigProviders: unknown;
       let observedExecutableProviders: unknown;
+      let observedPermissionProviders: unknown;
 
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
@@ -349,6 +355,9 @@ describe('runEvaluation tool', () => {
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           observedConfigProviders = config.providers;
           observedExecutableProviders = testSuite.providers;
+          observedPermissionProviders = customization?.getCloudPermissionConfig?.(
+            config as any,
+          )?.providers;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -375,6 +384,7 @@ describe('runEvaluation tool', () => {
       expect(observedExecutableProviders).toEqual([
         expect.objectContaining({ label: 'resolved-target' }),
       ]);
+      expect(observedPermissionProviders).toEqual(['file://providers-with-secrets.yaml']);
     });
 
     it('should return the same suite metadata shape for unfiltered evals', async () => {

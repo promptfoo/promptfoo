@@ -6,12 +6,13 @@ import { parseFilterRange } from '../../../util/filterRange';
 import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
 import { filterPrompts } from '../../eval/filterPrompts';
+import { getProviderIdAndLabel } from '../../eval/filterProviders';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, TestSuite } from '../../../types/index';
+import type { CommandLineOptions, TestSuite, UnifiedConfig } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
 interface EvaluationFilterSummary {
@@ -73,6 +74,26 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
   }
 
   testSuite.providers = filteredProviders;
+}
+
+function getProviderPermissionConfig(
+  config: Partial<UnifiedConfig>,
+  providerFilter?: string | string[],
+): Partial<UnifiedConfig> {
+  if (!hasStringFilters(providerFilter) || !Array.isArray(config.providers)) {
+    return config;
+  }
+
+  const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
+  const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+  const filteredProviders = config.providers.filter((provider, index) => {
+    const { id, label } = getProviderIdAndLabel(provider, index);
+    return filterPattern.test(label || '') || filterPattern.test(id);
+  });
+
+  // If a match exists only after resolving an external provider file, keep the
+  // original permission scope instead of expanding file content into the payload.
+  return filteredProviders.length > 0 ? { ...config, providers: filteredProviders } : config;
 }
 
 function applyPromptFilter(testSuite: TestSuite, promptFilter?: string | string[]): void {
@@ -223,8 +244,7 @@ function applyMcpEvaluationFilters(
   };
 
   // The resolved suite is the executable surface. Keep config.providers in its
-  // original form so file-backed providers are not expanded into persisted or
-  // permission-check payloads; authorization remains conservative over the source config.
+  // original form for persistence; permission checking receives a separate safe projection.
   applyProviderFilter(testSuite, providerFilter);
   applyPromptFilter(testSuite, promptFilter);
   applyTestCaseFilter(testSuite, testCaseIndices);
@@ -509,6 +529,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               deferredFilterRange,
             );
           },
+          getCloudPermissionConfig: (config) => getProviderPermissionConfig(config, providerFilter),
           evaluateOptionOverrides,
           allowConfigFilterRange: testCaseIndices === undefined,
           disablePromptSuggestions: hasFilters,

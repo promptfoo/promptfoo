@@ -1344,7 +1344,7 @@ describe('checkCloudPermissions', () => {
     expect(evaluate).toHaveBeenCalled();
   });
 
-  it('should check cloud permissions against the customized effective config', async () => {
+  it('should check cloud permissions against a permission-only config without mutating evaluation config', async () => {
     vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
       return true;
     });
@@ -1376,9 +1376,10 @@ describe('checkCloudPermissions', () => {
       defaultConfigPath,
       { eventSource: 'mcp' },
       {
-        beforeFilterTestSuite: (_testSuite, effectiveConfig) => {
-          effectiveConfig.providers = ['allowed-provider'];
-        },
+        getCloudPermissionConfig: (effectiveConfig: Partial<UnifiedConfig>) => ({
+          ...effectiveConfig,
+          providers: ['allowed-provider'],
+        }),
       },
     );
 
@@ -1387,6 +1388,7 @@ describe('checkCloudPermissions', () => {
         providers: ['allowed-provider'],
       }),
     );
+    expect(config.providers).toEqual(['allowed-provider', 'blocked-provider']);
   });
 
   it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {

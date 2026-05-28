@@ -87,6 +87,7 @@ export type PostFilterTestSuiteTransform = (
 export interface EvalRunCustomization {
   beforeFilterTestSuite?: TestSuiteTransform;
   afterFilterTestSuite?: PostFilterTestSuiteTransform;
+  getCloudPermissionConfig?: (config: Partial<UnifiedConfig>) => Partial<UnifiedConfig>;
   evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
   allowConfigFilterRange?: boolean;
   disablePromptSuggestions?: boolean;
@@ -675,7 +676,10 @@ export async function doEval(
       });
     }
 
-    await checkCloudPermissions(config as UnifiedConfig);
+    const cloudPermissionConfig = customization.getCloudPermissionConfig
+      ? customization.getCloudPermissionConfig(config)
+      : config;
+    await checkCloudPermissions(cloudPermissionConfig as UnifiedConfig);
 
     const options: InternalEvaluateOptions = {
       ...evaluateOptions,
