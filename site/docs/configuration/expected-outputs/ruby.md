@@ -93,6 +93,9 @@ A `context` object is available in the Ruby method. Here is its type definition:
   # The complete provider response
   'providerResponse' => Object | nil,  # ProviderResponse type
 
+  # Optional shortcut to providerResponse metadata
+  'metadata' => Hash | nil,
+
   # OpenTelemetry trace data (when tracing is enabled)
   'trace' => TraceData | nil
 }
@@ -107,7 +110,7 @@ tests:
       example: 'Example text'
     assert:
       - type: ruby
-        value: 'context["vars"]["example"] in output'
+        value: 'output.include?(context["vars"]["example"])'
 ```
 
 ## External .rb
