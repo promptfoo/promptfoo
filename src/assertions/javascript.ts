@@ -380,6 +380,12 @@ function toWorkerValue(value: unknown): unknown {
     return value;
   }
 
+  try {
+    return structuredClone(value);
+  } catch {
+    // Assertion contexts can contain functions; preserve the existing lossy fallback for them.
+  }
+
   const serialized = safeJsonStringify(value);
   if (!serialized) {
     return undefined;

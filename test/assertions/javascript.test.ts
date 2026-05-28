@@ -1687,6 +1687,33 @@ return s >= 0.5 && s <= 0.75;`,
       expect(result.reason).not.toContain('timed out');
     });
 
+    it('should preserve structured-cloneable output values in the worker', async () => {
+      const output = {
+        createdAt: new Date('2026-02-18T00:00:00.000Z'),
+        labels: new Map([['ready', true]]),
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'javascript',
+          value: [
+            'output.createdAt instanceof Date',
+            'output.labels instanceof Map',
+            'context.providerResponse.output.createdAt instanceof Date',
+            'context.providerResponse.output.labels instanceof Map',
+          ].join(' && '),
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).not.toContain('threw error');
+    });
+
     it('should pass function assertions with closures when timeout is set', async () => {
       const cutoff = 0.5;
       const assertion: Assertion = {
