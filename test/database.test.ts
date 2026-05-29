@@ -180,4 +180,16 @@ describe('database WAL mode', () => {
     // NORMAL = 1 in SQLite
     expect(synchronous.synchronous).toBe(1);
   });
+
+  it('applies a busy timeout so contended writes wait instead of failing immediately', async () => {
+    const database = await import('../src/database');
+    const db = await database.getDb();
+
+    const busyTimeout = (await db.get(sql`PRAGMA busy_timeout;`)) as unknown as {
+      timeout: number;
+    };
+    // libsql defaults to 0 (immediate SQLITE_BUSY); we restore better-sqlite3's
+    // historical 5s default.
+    expect(busyTimeout.timeout).toBe(5000);
+  });
 });
