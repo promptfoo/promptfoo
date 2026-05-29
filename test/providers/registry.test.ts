@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -233,6 +234,39 @@ describe('Provider Registry', () => {
         },
       });
       expect(wsProvider.id()).toBe('ws://example.com');
+    });
+
+    it('should handle n8n providers correctly', async () => {
+      const n8nOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const factory = providerMap.find((f) => f.test('n8n:https://example.com/webhook/agent'));
+      expect(factory).toBeDefined();
+      expect(factory).toBe(providerMap.find((f) => f.test('n8n')));
+
+      const providerFromPath = await factory!.create(
+        'n8n:https://example.com/webhook/agent',
+        n8nOptions,
+        mockContext,
+      );
+      expect(providerFromPath.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      const providerFromConfig = await factory!.create(
+        'n8n',
+        {
+          ...n8nOptions,
+          config: { url: 'https://example.com/webhook/config-agent' },
+        },
+        mockContext,
+      );
+      expect(providerFromConfig.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      await expect(factory!.create('n8n', n8nOptions, mockContext)).rejects.toThrow(
+        'n8n provider requires a webhook URL',
+      );
+      expect(isFoundationModelProvider('n8n:https://example.com/webhook/agent')).toBe(false);
     });
 
     it('dispatches a representative redteam path through getProviderFactories', async () => {
@@ -699,6 +733,97 @@ describe('Provider Registry', () => {
       await expect(factory!.create('groq:responses:', groqOptions, mockContext)).rejects.toThrow(
         'Invalid groq:responses provider path',
       );
+    });
+
+    it('should handle nvidia provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('nvidia:meta/llama-3.3-70b-instruct'));
+      expect(factory).toBeDefined();
+
+      const nvidiaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create(
+        'nvidia:meta/llama-3.3-70b-instruct',
+        nvidiaOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe('nvidia:meta/llama-3.3-70b-instruct');
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('nvidia:', nvidiaOptions, mockContext)).rejects.toThrow(
+        /expected "nvidia:<model>"/,
+      );
+      await expect(
+        factory!.create('nvidia:embedding:nvidia/nv-embed-v1', nvidiaOptions, mockContext),
+      ).rejects.toThrow(/Unsupported NVIDIA NIM provider subtype "embedding"/);
+    });
+
+    it('should route novita sub-types and reject unknown ones', async () => {
+      const factory = providerMap.find((f) => f.test('novita:meta/llama-3.1-8b-instruct'));
+      expect(factory).toBeDefined();
+
+      const novitaOptions = { ...mockProviderOptions, id: undefined };
+
+      // Shorthand `novita:<model>` resolves to chat.
+      const shorthand = await factory!.create(
+        'novita:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(shorthand.id()).toBe('novita:chat:meta/llama-3.1-8b-instruct');
+
+      // Explicit sub-types resolve to their respective providers.
+      const chat = await factory!.create(
+        'novita:chat:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(chat.id()).toBe('novita:chat:meta/llama-3.1-8b-instruct');
+
+      const completion = await factory!.create(
+        'novita:completion:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(completion.id()).toBe('novita:completion:meta/llama-3.1-8b-instruct');
+
+      const embedding = await factory!.create(
+        'novita:embedding:baai/bge-m3',
+        novitaOptions,
+        mockContext,
+      );
+      expect(embedding.id()).toBe('novita:embedding:baai/bge-m3');
+
+      // Unknown sub-types (image, moderation, typos) fail-fast instead of silently
+      // routing to chat — a routing regression flagged in `src/providers/AGENTS.md`.
+      await expect(factory!.create('novita:image:foo', novitaOptions, mockContext)).rejects.toThrow(
+        /Unknown Novita provider sub-type "image"/,
+      );
+      await expect(
+        factory!.create('novita:moderation:bar', novitaOptions, mockContext),
+      ).rejects.toThrow(/Unknown Novita provider sub-type "moderation"/);
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('novita:', novitaOptions, mockContext)).rejects.toThrow(
+        /Novita model name is required/,
+      );
+    });
+
+    it('should handle orcarouter provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('orcarouter:openai/gpt-4o'));
+      expect(factory).toBeDefined();
+
+      const orcaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, {
+        ...mockContext,
+        options: orcaOptions,
+      });
+      expect(provider.id()).toBe('orcarouter:openai/gpt-4o');
+
+      const autoProvider = await factory!.create(
+        'orcarouter:orcarouter/auto',
+        orcaOptions,
+        mockContext,
+      );
+      expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
     });
   });
 

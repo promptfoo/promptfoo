@@ -4,6 +4,9 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isClaudeOpus47Model,
+  isClaudeOpus48Model,
+  isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -89,6 +92,28 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
       const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate default cost for Claude Opus 4.8 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-8', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should apply cache pricing for Claude Opus 4.8 with cache tokens', () => {
+      // Opus 4.8: $5/MTok input, $25/MTok output
+      // 100 uncached input, 50 cache_read, 30 cache_write, 200 output
+      const cost = calculateAnthropicCost('claude-opus-4-8', {}, 100, 200, 50, 30);
+      const expected =
+        100 * (5 / 1e6) + 50 * (5 / 1e6) * 0.1 + 30 * (5 / 1e6) * 1.25 + 200 * (25 / 1e6);
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('should return undefined for claude-opus-4-8-latest (alias does not exist)', () => {
+      // Opus 4.8's documented Claude API alias is the canonical ID itself
+      // (`claude-opus-4-8`); there is no separate `-latest` pointer. Guards
+      // against someone re-adding a `-latest` variant that the API rejects.
+      const cost = calculateAnthropicCost('claude-opus-4-8-latest', {}, 100, 200);
+      expect(cost).toBeUndefined();
     });
 
     it('should calculate default cost for Claude Opus 4.7 model', () => {
@@ -408,6 +433,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -435,6 +461,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -465,6 +492,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -507,6 +535,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -546,6 +575,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -591,6 +621,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -626,6 +657,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -663,6 +695,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -697,6 +730,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -731,6 +765,7 @@ describe('Anthropic utilities', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
+          output_tokens_details: null,
         },
       };
 
@@ -1676,6 +1711,53 @@ describe('Anthropic utilities', () => {
       // cache creation: 100 * 25/1e6 * 1.25 = 0.003125
       // output: 500 * 125/1e6 = 0.0625
       expect(cost).toBeCloseTo(0.025 + 0.0005 + 0.003125 + 0.0625, 6);
+    });
+  });
+
+  describe('sampling-params-deprecated model detection', () => {
+    it('detects Claude Opus 4.8 across provider naming schemes', () => {
+      for (const id of [
+        'claude-opus-4-8',
+        'anthropic:messages:claude-opus-4-8',
+        'anthropic.claude-opus-4-8',
+        'us.anthropic.claude-opus-4-8',
+        'eu.anthropic.claude-opus-4-8',
+        'jp.anthropic.claude-opus-4-8',
+        'global.anthropic.claude-opus-4-8',
+      ]) {
+        expect(isClaudeOpus48Model(id)).toBe(true);
+      }
+    });
+
+    it('does not treat other models as Opus 4.8', () => {
+      for (const id of [
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-sonnet-4-6',
+        // Boundary: a hypothetical higher-numbered "4.80" must not match "4.8".
+        'claude-opus-4-80',
+      ]) {
+        expect(isClaudeOpus48Model(id)).toBe(false);
+      }
+    });
+
+    it('still detects dated Opus 4.8 snapshots', () => {
+      // A trailing date/region suffix is a real, supported form and must match.
+      expect(isClaudeOpus48Model('claude-opus-4-8-20260528')).toBe(true);
+    });
+
+    it('treats both Opus 4.7 and 4.8 as temperature-deprecated', () => {
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
+      // The 4.7-only predicate stays scoped to 4.7.
+      expect(isClaudeOpus47Model('claude-opus-4-8')).toBe(false);
+    });
+
+    it('does not treat temperature-supporting models as deprecated', () => {
+      for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
     });
   });
 });

@@ -1203,6 +1203,24 @@ describe('AwsBedrockConverseProvider', () => {
 
       expect(result.cost).toBe(20);
     });
+
+    it('should calculate cost for Claude Opus 4.8 models', async () => {
+      // The 'anthropic.claude-opus-4-8' price entry is matched via substring and
+      // must win over the broader 'anthropic.claude-opus-4' ($15/$75) entry —
+      // this asserts both the $5/$25 price and the newest-first lookup ordering.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: { region: 'us-east-1' },
+      });
+
+      // Use default usage values (100 input, 50 output)
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      const result = await provider.callApi('Test');
+
+      // Claude Opus 4.8: $5/MTok input, $25/MTok output
+      // Default usage: (100/1M * 5) + (50/1M * 25) = 0.0005 + 0.00125 = 0.00175
+      expect(result.cost).toBeCloseTo(0.00175, 6);
+    });
   });
 
   describe('MCP helper functions (via Converse command input)', () => {
@@ -1736,6 +1754,53 @@ Third line`;
       mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
     });
 
+    it('omits temperature and topP for Claude Opus 4.8 even when explicitly set', async () => {
+      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          max_tokens: 1024,
+          temperature: 0.5,
+          topP: 0.9,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+      expect(call?.inferenceConfig?.topP).toBeUndefined();
+      expect(call?.inferenceConfig?.maxTokens).toBe(1024);
+    });
+
+    it('omits temperature for Opus 4.8 via AWS_BEDROCK_TEMPERATURE env fallback', async () => {
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.7' });
+
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-4-8', {
+        config: { region: 'us-east-1', max_tokens: 1024 },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+    });
+
     it('still forwards temperature for Opus 4.6 on Bedrock (regression)', async () => {
       const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-6-v1', {
         config: { region: 'us-east-1', max_tokens: 1024, temperature: 0 },
@@ -1879,6 +1944,128 @@ Third line`;
             thinking: {
               type: 'enabled',
               budget_tokens: 16000,
+            },
+          },
+        }),
+      );
+    });
+
+    it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 16000,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'adaptive',
+            },
+          },
+        }),
+      );
+    });
+
+    it('should keep manual thinking enabled for non-deprecated Claude models', async () => {
+      // claude-3-5-sonnet is not in the sampling-params-deprecated set, so an
+      // explicit budget_tokens thinking config must pass through untouched
+      // rather than being downgraded to adaptive.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 12000,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 12000,
+            },
+          },
+        }),
+      );
+    });
+
+    it('should pass through disabled thinking unchanged for Claude Opus 4.8', async () => {
+      // Only type: 'enabled' is rewritten to adaptive for deprecated Opus
+      // models; a disabled thinking block must be forwarded as-is.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'disabled',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'disabled',
+            },
+          },
+        }),
+      );
+    });
+
+    it('should pass through adaptive thinking unchanged for Claude Opus 4.8', async () => {
+      // An already-adaptive thinking block must not be touched by the
+      // enabled->adaptive conversion for deprecated Opus models.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'adaptive',
             },
           },
         }),

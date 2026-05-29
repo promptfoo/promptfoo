@@ -3,6 +3,7 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
+import logger from '../../../src/logger';
 import {
   AwsBedrockGenericProvider,
   createBedrockCacheKeyHash,
@@ -709,6 +710,100 @@ describe('AwsBedrockGenericProvider', () => {
         'us.anthropic.claude-opus-4-7',
       );
       expect(params.temperature).toBeUndefined();
+    });
+
+    it('omits temperature for Claude Opus 4.8 on Bedrock invokeModel path', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0.5,
+      };
+      // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'enabled', budget_tokens: 5000 },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+    });
+
+    it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'enabled', budget_tokens: 5000 },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+    });
+
+    it('keeps disabled thinking unchanged for Claude Opus 4.8 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'disabled' },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.thinking).toEqual({ type: 'disabled' });
+    });
+
+    it('keeps adaptive thinking unchanged for Claude Opus 4.8 on Bedrock invokeModel', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        thinking: { type: 'adaptive' },
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+    });
+
+    it('silently omits temperature on Claude Opus 4.8 invokeModel path (no per-request warning)', async () => {
+      // The shared CLAUDE_MESSAGES.params handler has no per-instance state to
+      // dedup a warning across requests, so it normalizes silently; the Anthropic
+      // Messages provider surfaces the one-time heads-up instead. This guards
+      // against re-introducing the per-request log spam that was flagged in review.
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0.5,
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-8',
+      );
+      expect(params.temperature).toBeUndefined();
+      const deprecationWarnings = warnSpy.mock.calls.filter((call) =>
+        String(call[0] ?? '').includes('deprecated on Claude Opus'),
+      );
+      expect(deprecationWarnings).toHaveLength(0);
     });
 
     it('still forwards temperature for Claude Opus 4.6 on Bedrock invokeModel (regression)', async () => {
@@ -3157,6 +3252,23 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Sanity check: the -v1 suffix variant (which Anthropic/AWS docs do not publish) is NOT
     // registered. Regressing this would silently route requests through the generic fallback.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7-v1']).toBeUndefined();
+  });
+
+  it('should map Claude Opus 4.8 models correctly', async () => {
+    // Base model ID (no -v1 suffix, mirroring Opus 4.7).
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+
+    // Cross-region inference profiles mirror the Opus 4.7 set (`us.`/`eu.`/`jp.`/`global.`,
+    // no older `apac.` prefix).
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-8']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+
+    // Sanity check: the -v1 suffix variant is NOT registered.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-8-v1']).toBeUndefined();
   });
 
   it('should map Nova 2 models correctly', async () => {
