@@ -481,19 +481,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions, resolved),
+      () => this.callApiInternal(context, resolved),
       resultExtractor,
     );
   }
 
   private async callApiInternal(
-    prompt: string,
     context: CallApiContextParams | undefined,
-    callApiOptions: CallApiOptionsParams | undefined,
-    prepared?: { body: any; config: any },
+    // `callApi` always resolves the body once (so spanContext reflects what we
+    // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
+    // is already baked into `prepared.body`, so it is not needed here.
+    prepared: { body: any; config: any },
   ): Promise<ProviderResponse> {
-    const { body, config } =
-      prepared ?? (await this.getOpenAiBody(prompt, context, callApiOptions));
+    const { body, config } = prepared;
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');
