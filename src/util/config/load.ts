@@ -911,8 +911,7 @@ export async function resolveConfigs(
           pattern: cmdObj.filterPattern,
           failing: cmdObj.filterFailing,
           sample: filterSample,
-          sampleSeed:
-            filterSampleSeed === undefined ? undefined : `${filterSampleSeed}:${scenarioIndex}`,
+          sampleSeed: filterSampleSeed === undefined ? undefined : filterSampleSeed + scenarioIndex,
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');

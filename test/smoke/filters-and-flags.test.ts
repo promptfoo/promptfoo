@@ -215,7 +215,7 @@ describe('Count-Based Filter Tests', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const firstOutputPath = path.join(OUTPUT_DIR, 'sample-seeded-first-output.json');
     const secondOutputPath = path.join(OUTPUT_DIR, 'sample-seeded-second-output.json');
-    const sampleArgs = ['--no-cache', '--filter-sample', '3', '--filter-sample-seed', 'smoke-run'];
+    const sampleArgs = ['--no-cache', '--filter-sample', '3', '--filter-sample-seed', '42'];
 
     const first = runCli(['eval', '-c', configPath, '-o', firstOutputPath, ...sampleArgs], {
       cwd: CONFIGS_DIR,

@@ -1639,7 +1639,7 @@ describe('resolveConfigs', () => {
       providers: ['echo'],
       commandLineOptions: {
         filterSample: 2,
-        filterSampleSeed: 'stable-run',
+        filterSampleSeed: 0,
       },
       scenarios: ['A', 'B'].map((group) => ({
         config: [{}],

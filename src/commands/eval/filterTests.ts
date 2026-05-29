@@ -58,12 +58,12 @@ export interface FilterOptions {
   /** Number of random tests to sample */
   sample?: number | string;
   /** Seed used to make random sampling repeatable */
-  sampleSeed?: number | string;
+  sampleSeed?: number;
 }
 
 type Tests = NonNullable<TestSuite['tests']>;
 
-function createSeededRandom(seed: number | string): () => number {
+function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
   let state = 2166136261;
   for (let i = 0; i < stringSeed.length; i++) {

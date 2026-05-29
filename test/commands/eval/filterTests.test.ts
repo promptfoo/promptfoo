@@ -590,8 +590,8 @@ describe('filterTests', () => {
         throw new Error('seeded sampling should not use Math.random');
       });
       try {
-        const first = await filterTests(mockTestSuite, { sample: 2, sampleSeed: 'stable-run' });
-        const second = await filterTests(mockTestSuite, { sample: 2, sampleSeed: 'stable-run' });
+        const first = await filterTests(mockTestSuite, { sample: 2, sampleSeed: 42 });
+        const second = await filterTests(mockTestSuite, { sample: 2, sampleSeed: 42 });
 
         expect(first.map((test) => test.vars?.var1)).toEqual(second.map((test) => test.vars?.var1));
         expect(randomSpy).not.toHaveBeenCalled();

@@ -586,7 +586,7 @@ describe('evaluateOptions behavior', () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-sample-seed.yaml', {
         commandLineOptions: {
           filterSample: 2,
-          filterSampleSeed: 'config-seed',
+          filterSampleSeed: 42,
         },
         providers: ['echo'],
         prompts: ['Hello {{input}}'],

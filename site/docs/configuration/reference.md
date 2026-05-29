@@ -201,7 +201,7 @@ Set default values for command-line options. These defaults will be used unless 
 | filterFirstN             | number             | Only run the first N test cases                                                                                                                                                                     |
 | filterRange              | string             | Run test cases in a zero-based `start:end` range. The end index is exclusive                                                                                                                        |
 | filterSample             | number             | Run a random sample of N test cases                                                                                                                                                                 |
-| filterSampleSeed         | string \| number   | Seed used to make `filterSample` select the same test cases on repeated runs                                                                                                                        |
+| filterSampleSeed         | number             | Numeric seed used to make `filterSample` select the same test cases on repeated runs                                                                                                                |
 | filterMetadata           | string \| string[] | Only run tests matching metadata filters in `key=value` format. Multiple filters are combined with AND logic.                                                                                       |
 | filterErrorsOnly         | string             | Only run tests that resulted in errors from a previous output path or eval ID                                                                                                                       |
 | filterFailing            | string             | Only run non-passing tests (assertion failures and errors) from a previous output path or eval ID                                                                                                   |
@@ -254,7 +254,7 @@ commandLineOptions:
   filterProviders: 'openai.*' # Only test OpenAI providers
   filterRange: '0:100' # Run tests 0 through 99
   filterSample: 50 # Random sample of 50 tests
-  filterSampleSeed: benchmark-v1 # Repeat the same random sample
+  filterSampleSeed: 42 # Repeat the same random sample
 
   # Prompt modifications
   promptPrefix: 'You are a helpful assistant. '

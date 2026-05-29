@@ -1220,7 +1220,7 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
-    .option('--filter-sample-seed <seed>', 'Seed used to make --filter-sample repeatable')
+    .option('--filter-sample-seed <number>', 'Numeric seed used to make --filter-sample repeatable')
     .option(
       '--filter-failing <path or id>',
       'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
