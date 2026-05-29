@@ -1,7 +1,8 @@
 ---
 title: Role Confusion Plugin
 sidebar_label: Role Confusion
-description: Test whether AI systems accept ungranted roles, authority, credentials, or capabilities while remaining helpful within their stated purpose.
+description: Test whether AI systems accept ungranted roles, authority, credentials, or capabilities while staying helpful within stated purpose and access boundaries.
+sidebar_position: 54
 ---
 
 # Role Confusion
