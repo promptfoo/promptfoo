@@ -281,50 +281,37 @@ function resolveSequenceMatcherGroups(steps: TrajectorySequenceValue['steps']): 
   return { groups, hasGroups };
 }
 
-// Group tool calls into "turns". Two calls are the same turn when they ran concurrently
-// (their spans overlap in time) under the same parent span — i.e. the model issued them
-// together and they executed in parallel. We bucket by parent span first (so calls from
-// different generations never merge, even if their spans happen to overlap), then split
-// each bucket wherever calls stop overlapping (a gap means a new, sequential turn). This
-// is robust to single-root traces (sequential calls under one parent split by their gaps)
-// and to turns whose spans interleave in time with another turn's. Calls that touch at a
-// boundary or have no duration (point-in-time spans, identical start) count as one turn.
+// The reliable "same LLM turn" signal is the `gen_ai.turn.index` attribute that turn-aware
+// providers tag onto each tool span (see #9475 / docs: Turn marker spans). Tools sharing a
+// turn index were issued by the same model round-trip, so they form one (parallel) turn.
+// A tool with no turn index can't be proven to share a turn, so it stands alone. Steps are
+// already time-ordered, so consecutive same-index tools belong to the same turn.
+function getToolTurnIndex(step: TrajectoryStep): number | undefined {
+  const raw = step.attributes['gen_ai.turn.index'];
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw))) {
+    return Number(raw);
+  }
+  return undefined;
+}
+
 function groupToolStepsByTurn(toolSteps: TrajectoryStep[]): TrajectoryStep[][] {
-  const byParent = new Map<string | undefined, TrajectoryStep[]>();
-  for (const step of toolSteps) {
-    const bucket = byParent.get(step.parentSpanId);
-    if (bucket) {
-      bucket.push(step);
-    } else {
-      byParent.set(step.parentSpanId, [step]);
-    }
-  }
-
   const turns: TrajectoryStep[][] = [];
-  for (const bucket of byParent.values()) {
-    let currentTurn: TrajectoryStep[] | undefined;
-    let currentEnd = Number.NEGATIVE_INFINITY;
-    for (const step of bucket) {
-      const stepEnd = step.endTime ?? step.startTime;
-      if (currentTurn && step.startTime <= currentEnd) {
-        currentTurn.push(step);
-        currentEnd = Math.max(currentEnd, stepEnd);
-      } else {
-        currentTurn = [step];
-        turns.push(currentTurn);
-        currentEnd = stepEnd;
-      }
+  let currentTurn: TrajectoryStep[] | undefined;
+  let currentTurnIndex: number | undefined;
+  for (const step of toolSteps) {
+    const turnIndex = getToolTurnIndex(step);
+    if (currentTurn && turnIndex !== undefined && turnIndex === currentTurnIndex) {
+      currentTurn.push(step);
+    } else {
+      currentTurn = [step];
+      currentTurnIndex = turnIndex;
+      turns.push(currentTurn);
     }
   }
-
-  // Order turns by their timeline. Tie-break by end time then span id so equal-start turns
-  // from different parents have a deterministic order independent of span arrival order.
-  return turns.sort(
-    (a, b) =>
-      a[0].startTime - b[0].startTime ||
-      (a[0].endTime ?? a[0].startTime) - (b[0].endTime ?? b[0].startTime) ||
-      a[0].spanId.localeCompare(b[0].spanId),
-  );
+  return turns;
 }
 
 // Tools requested together have no meaningful order, so a turn matches a group when every

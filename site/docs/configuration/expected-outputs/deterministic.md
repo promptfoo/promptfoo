@@ -870,6 +870,25 @@ Do not use this batching inference with `openai:codex-sdk` or `openai:codex-app-
 
 For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans, and cached responses emit none. See the [batching caveats](/docs/tracing#per-llm-turn-spans) for how to filter subagent turns (`gen_ai.turn.is_subagent`) and handle cache hits.
 
+##### Asserting the exact turn shape {#trajectory-tool-sequence-parallel}
+
+The `trace-span-count` form above answers "were these tools all in one turn?" To assert _which_ tools share _each_ turn — for example "search these two in parallel, then reply" — nest the tools for a turn in an array. Promptfoo groups tool calls by the same [`gen_ai.turn.index`](/docs/tracing#per-llm-turn-spans) the turn-marker providers tag onto each tool span, so tools emitted by one model round form one turn.
+
+```yaml
+- type: trajectory:tool-sequence
+  value:
+    mode: exact
+    steps:
+      - [search_orders, search_inventory] # one turn: both called in parallel
+      - compose_reply # a later turn with a single tool
+```
+
+- A **flat** list (`steps: [a, b]`) is turn-agnostic and behaves exactly as before — nesting is fully opt-in, so existing sequences are unaffected.
+- A **nested** entry (`steps: [[a, b]]`) requires those tools to share a turn. Order _within_ a turn does not matter (parallel calls have no inherent order), so `[a, b]` also matches a turn observed as `b, a`.
+- Once any entry is nested, **every** entry describes a full turn — a plain entry like `compose_reply` means "a turn containing only that tool." Use a flat sequence for loose ordering.
+- Nesting works in both `exact` and `in_order` modes.
+- Turns come from `gen_ai.turn.index`: a tool span without that attribute can't be proven to share a turn, so it stands alone. Assert turn shape only on traces from a provider that emits turn markers.
+
 ### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.

@@ -22,7 +22,6 @@ export interface TrajectoryStep {
   attributes: TrajectoryAttributes;
   endTime?: number;
   name: string;
-  parentSpanId?: string;
   spanId: string;
   spanName: string;
   startTime: number;
@@ -361,7 +360,6 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         attributes: span.attributes || {},
         endTime: span.endTime,
         name,
-        parentSpanId: span.parentSpanId,
         spanId: span.spanId,
         spanName: span.name,
         startTime: span.startTime,

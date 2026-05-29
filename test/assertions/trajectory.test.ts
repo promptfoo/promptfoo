@@ -925,19 +925,17 @@ describe('trajectory assertions', () => {
     });
 
     describe('parallel turns (nested step groups)', () => {
-      const seqSpan = (
-        name: string,
-        spanId: string,
-        startTime: number,
-        endTime: number,
-        parentSpanId?: string,
-      ) => ({
+      // A tool span's turn is read from its gen_ai.turn.index attribute (emitted by
+      // turn-aware providers, see #9475). startTime only controls step ordering.
+      const seqSpan = (name: string, spanId: string, startTime: number, turnIndex?: number) => ({
         spanId,
-        ...(parentSpanId ? { parentSpanId } : {}),
         name: 'tool.call',
         startTime,
-        endTime,
-        attributes: { 'tool.name': name },
+        endTime: startTime + 100,
+        attributes: {
+          'tool.name': name,
+          ...(turnIndex === undefined ? {} : { 'gen_ai.turn.index': turnIndex }),
+        },
       });
 
       const makeSeqParams = (
@@ -957,12 +955,12 @@ describe('trajectory assertions', () => {
           renderedValue: value,
         }) as AssertionParams;
 
-      it('passes when nested tools share a parent span (same turn / parallel)', () => {
+      it('passes when nested tools share a turn index (parallel)', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('search_orders', 'tool-1', 1100, 1250, 'turn-1'),
-              seqSpan('search_orders', 'tool-2', 1110, 1260, 'turn-1'),
+              seqSpan('search_orders', 'tool-1', 1000, 1),
+              seqSpan('search_orders', 'tool-2', 1010, 1),
             ],
             { mode: 'exact', steps: [['search_orders', 'search_orders']] },
           ),
@@ -975,12 +973,12 @@ describe('trajectory assertions', () => {
         });
       });
 
-      it('fails when nested (parallel) tools actually run in separate turns', () => {
+      it('fails when nested (parallel) tools have different turn indices', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('search_orders', 'tool-1', 1100, 1200, 'turn-1'),
-              seqSpan('search_orders', 'tool-2', 1500, 1600, 'turn-2'),
+              seqSpan('search_orders', 'tool-1', 1000, 1),
+              seqSpan('search_orders', 'tool-2', 1100, 2),
             ],
             { mode: 'exact', steps: [['search_orders', 'search_orders']] },
           ),
@@ -991,13 +989,12 @@ describe('trajectory assertions', () => {
         );
       });
 
-      it('preserves legacy flat exact behavior for parallel calls (no breaking change)', () => {
-        // A flat sequence stays turn-agnostic: this PASSED before nested groups existed.
+      it('preserves legacy flat exact behavior regardless of turn index (no breaking change)', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('search_orders', 'tool-1', 1100, 1250, 'turn-1'),
-              seqSpan('search_orders', 'tool-2', 1110, 1260, 'turn-1'),
+              seqSpan('search_orders', 'tool-1', 1000, 1),
+              seqSpan('search_orders', 'tool-2', 1010, 1),
             ],
             { mode: 'exact', steps: ['search_orders', 'search_orders'] },
           ),
@@ -1005,15 +1002,12 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(true);
       });
 
-      it('matches a parallel turn regardless of within-turn start order', () => {
+      it('matches a turn regardless of within-turn order', () => {
         const result = handleTrajectoryToolSequence(
-          makeSeqParams(
-            [
-              seqSpan('beta', 'tool-1', 1100, 1260, 'turn-1'),
-              seqSpan('alpha', 'tool-2', 1110, 1250, 'turn-1'),
-            ],
-            { mode: 'exact', steps: [['alpha', 'beta']] },
-          ),
+          makeSeqParams([seqSpan('beta', 'tool-1', 1000, 1), seqSpan('alpha', 'tool-2', 1010, 1)], {
+            mode: 'exact',
+            steps: [['alpha', 'beta']],
+          }),
         );
         expect(result.pass).toBe(true);
       });
@@ -1022,9 +1016,9 @@ describe('trajectory assertions', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('plan', 'tool-0', 1000, 1050, 'turn-0'),
-              seqSpan('search_a', 'tool-1', 1100, 1250, 'turn-1'),
-              seqSpan('search_b', 'tool-2', 1110, 1260, 'turn-1'),
+              seqSpan('plan', 'tool-0', 1000, 1),
+              seqSpan('search_a', 'tool-1', 1100, 2),
+              seqSpan('search_b', 'tool-2', 1110, 2),
             ],
             { steps: [['search_a', 'search_b']] },
           ),
@@ -1035,33 +1029,41 @@ describe('trajectory assertions', () => {
       it('enforces turn order for nested groups in in_order mode', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
-            [
-              seqSpan('second', 'tool-1', 1100, 1200, 'turn-1'),
-              seqSpan('first', 'tool-2', 1300, 1400, 'turn-2'),
-            ],
+            [seqSpan('second', 'tool-1', 1000, 1), seqSpan('first', 'tool-2', 1100, 2)],
             { steps: [['first'], ['second']] },
           ),
         );
         expect(result.pass).toBe(false);
       });
 
-      it('treats tools without a parent span as separate turns (cannot prove parallel)', () => {
+      it('treats tool calls without a turn index as separate turns', () => {
+        // No gen_ai.turn.index -> cannot prove the calls were batched into one round.
         const result = handleTrajectoryToolSequence(
-          makeSeqParams(
-            [seqSpan('a', 'tool-1', 1100, 1200), seqSpan('b', 'tool-2', 1300, 1400)],
-            { mode: 'exact', steps: [['a', 'b']] },
-          ),
+          makeSeqParams([seqSpan('a', 'tool-1', 1000), seqSpan('b', 'tool-2', 1100)], {
+            mode: 'exact',
+            steps: [['a', 'b']],
+          }),
         );
         expect(result.pass).toBe(false);
       });
 
-      it('matches a mix of parallel and single-tool turns', () => {
+      it('still matches a flat sequence when tools have no turn index (legacy)', () => {
+        const result = handleTrajectoryToolSequence(
+          makeSeqParams([seqSpan('a', 'tool-1', 1000), seqSpan('b', 'tool-2', 1100)], {
+            mode: 'exact',
+            steps: ['a', 'b'],
+          }),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('matches a mix of a parallel turn and a single-tool turn', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('a', 'tool-1', 1100, 1200, 'turn-1'),
-              seqSpan('b', 'tool-2', 1110, 1210, 'turn-1'),
-              seqSpan('c', 'tool-3', 1300, 1400, 'turn-2'),
+              seqSpan('a', 'tool-1', 1000, 1),
+              seqSpan('b', 'tool-2', 1010, 1),
+              seqSpan('c', 'tool-3', 1100, 2),
             ],
             { mode: 'exact', steps: [['a', 'b'], 'c'] },
           ),
@@ -1069,13 +1071,13 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(true);
       });
 
-      it('fails when a single-tool turn is expected but the tool ran in the parallel turn', () => {
+      it('fails when a single-tool turn is expected but the tool shared the parallel turn', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('a', 'tool-1', 1100, 1200, 'turn-1'),
-              seqSpan('b', 'tool-2', 1110, 1210, 'turn-1'),
-              seqSpan('c', 'tool-3', 1120, 1220, 'turn-1'),
+              seqSpan('a', 'tool-1', 1000, 1),
+              seqSpan('b', 'tool-2', 1010, 1),
+              seqSpan('c', 'tool-3', 1020, 1),
             ],
             { mode: 'exact', steps: [['a', 'b'], 'c'] },
           ),
@@ -1083,14 +1085,43 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(false);
       });
 
-      it('matches tools within a turn by pattern', () => {
+      it('groups three tools sharing one turn index', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
-              seqSpan('search_orders', 'tool-1', 1100, 1250, 'turn-1'),
-              seqSpan('search_users', 'tool-2', 1110, 1260, 'turn-1'),
+              seqSpan('a', 'tool-1', 1000, 1),
+              seqSpan('b', 'tool-2', 1010, 1),
+              seqSpan('c', 'tool-3', 1020, 1),
             ],
-            { mode: 'exact', steps: [['search_*', 'search_*']] },
+            { mode: 'exact', steps: [['c', 'a', 'b']] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('matches tools within a turn by pattern (requires backtracking)', () => {
+        const result = handleTrajectoryToolSequence(
+          makeSeqParams(
+            [
+              seqSpan('search_orders', 'tool-1', 1000, 1),
+              seqSpan('search_users', 'tool-2', 1010, 1),
+            ],
+            { mode: 'exact', steps: [['search_*', 'search_orders']] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('matches multiple nested groups as an ordered subsequence with noise turns between', () => {
+        const result = handleTrajectoryToolSequence(
+          makeSeqParams(
+            [
+              seqSpan('a', 'tool-1', 1000, 1),
+              seqSpan('noise', 'tool-2', 1100, 2),
+              seqSpan('b', 'tool-3', 1200, 3),
+              seqSpan('c', 'tool-4', 1210, 3),
+            ],
+            { steps: [['a'], ['b', 'c']] },
           ),
         );
         expect(result.pass).toBe(true);
@@ -1099,10 +1130,7 @@ describe('trajectory assertions', () => {
       it('inverts a nested-group match', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
-            [
-              seqSpan('a', 'tool-1', 1100, 1250, 'turn-1'),
-              seqSpan('a', 'tool-2', 1110, 1260, 'turn-1'),
-            ],
+            [seqSpan('a', 'tool-1', 1000, 1), seqSpan('a', 'tool-2', 1010, 1)],
             { mode: 'exact', steps: [['a', 'a']] },
             true,
           ),
@@ -1110,108 +1138,34 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(false);
       });
 
-      it('splits sequential calls that share one root parent into separate turns', () => {
-        // Common single-root tracing: every tool is parented to one agent span. Calls that
-        // do not overlap in time must still be distinct (sequential) turns.
+      it('reads a string-valued gen_ai.turn.index attribute', () => {
+        // OTLP transports may serialize numeric attributes as strings.
         const spans = [
-          seqSpan('a', 'tool-1', 1000, 1100, 'root'),
-          seqSpan('b', 'tool-2', 1200, 1300, 'root'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['a'], ['b']] }),
-          ).pass,
-        ).toBe(true);
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }),
-          ).pass,
-        ).toBe(false);
-      });
-
-      it('treats overlapping calls under one root parent as the same turn', () => {
-        const spans = [
-          seqSpan('a', 'tool-1', 1000, 1200, 'root'),
-          seqSpan('b', 'tool-2', 1010, 1210, 'root'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }),
-          ).pass,
-        ).toBe(true);
-      });
-
-      it('keeps a parallel turn intact when another turn interleaves in time', () => {
-        // turn-1 runs a + a in parallel; turn-2's b starts between them by timestamp.
-        const spans = [
-          seqSpan('a', 'tool-1', 1000, 1200, 'turn-1'),
-          seqSpan('b', 'tool-2', 1010, 1050, 'turn-2'),
-          seqSpan('a', 'tool-3', 1030, 1220, 'turn-1'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'a'], 'b'] }),
-          ).pass,
-        ).toBe(true);
-      });
-
-      it('treats point-in-time (zero-duration) calls with the same start as one turn', () => {
-        // Some tracers record tool calls as instants (endTime === startTime). Parallel calls
-        // issued together under one parent must still group, not split into sequential turns.
-        const spans = [
-          seqSpan('a', 'tool-1', 1000, 1000, 'turn-1'),
-          seqSpan('b', 'tool-2', 1000, 1000, 'turn-1'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }),
-          ).pass,
-        ).toBe(true);
-      });
-
-      it('matches a turn by pattern even when a wildcard competes with a specific name', () => {
-        // Requires real backtracking: greedily binding search_* to search_orders first would
-        // strand the literal search_orders matcher against search_users.
-        const spans = [
-          seqSpan('search_orders', 'tool-1', 1100, 1250, 'turn-1'),
-          seqSpan('search_users', 'tool-2', 1110, 1260, 'turn-1'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['search_*', 'search_orders']] }),
-          ).pass,
-        ).toBe(true);
-      });
-
-      it('matches a three-tool parallel turn', () => {
-        const spans = [
-          seqSpan('a', 'tool-1', 1100, 1300, 'turn-1'),
-          seqSpan('b', 'tool-2', 1110, 1290, 'turn-1'),
-          seqSpan('c', 'tool-3', 1120, 1280, 'turn-1'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(
-            makeSeqParams(spans, { mode: 'exact', steps: [['c', 'a', 'b']] }),
-          ).pass,
-        ).toBe(true);
-      });
-
-      it('matches multiple nested groups as an ordered subsequence with noise turns between', () => {
-        const spans = [
-          seqSpan('a', 'tool-1', 1000, 1100, 'turn-1'),
-          seqSpan('noise', 'tool-2', 1200, 1300, 'turn-2'),
-          seqSpan('b', 'tool-3', 1400, 1550, 'turn-3'),
-          seqSpan('c', 'tool-4', 1410, 1560, 'turn-3'),
-        ];
-        expect(
-          handleTrajectoryToolSequence(makeSeqParams(spans, { steps: [['a'], ['b', 'c']] })).pass,
-        ).toBe(true);
+          {
+            spanId: 't1',
+            name: 'tool.call',
+            startTime: 1000,
+            endTime: 1100,
+            attributes: { 'tool.name': 'a', 'gen_ai.turn.index': '1' },
+          },
+          {
+            spanId: 't2',
+            name: 'tool.call',
+            startTime: 1010,
+            endTime: 1110,
+            attributes: { 'tool.name': 'b', 'gen_ai.turn.index': '1' },
+          },
+        ] as unknown as ReturnType<typeof seqSpan>[];
+        const result = handleTrajectoryToolSequence(
+          makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }),
+        );
+        expect(result.pass).toBe(true);
       });
 
       it('rejects a malformed (null) step entry with a clear error', () => {
         expect(() =>
           handleTrajectoryToolSequence(
-            makeSeqParams([seqSpan('a', 'tool-1', 1000, 1100, 'turn-1')], {
+            makeSeqParams([seqSpan('a', 'tool-1', 1000, 1)], {
               mode: 'exact',
               steps: [null as unknown as string],
             }),
@@ -1224,10 +1178,7 @@ describe('trajectory assertions', () => {
       it('rejects an empty step group with a clear error', () => {
         expect(() =>
           handleTrajectoryToolSequence(
-            makeSeqParams([seqSpan('a', 'tool-1', 1100, 1200, 'turn-1')], {
-              mode: 'exact',
-              steps: [[]],
-            }),
+            makeSeqParams([seqSpan('a', 'tool-1', 1000, 1)], { mode: 'exact', steps: [[]] }),
           ),
         ).toThrow('trajectory:tool-sequence assertion step group 1 must contain at least one tool');
       });
