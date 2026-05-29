@@ -64,7 +64,7 @@ describe('writeOutput', () => {
     );
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -85,7 +85,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -1066,7 +1066,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -1094,7 +1094,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),

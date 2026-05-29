@@ -42,6 +42,7 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -142,7 +143,7 @@ export function combineFilterConditions(
 
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
-    const db = getDb();
+    const db = await getDb();
 
     // Handle empty array case to avoid SQL syntax error
     if (evals.length === 0) {
@@ -176,7 +177,7 @@ export class EvalQueries {
   }
 
   static async getVarsFromEval(evalId: string) {
-    const db = getDb();
+    const db = await getDb();
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
@@ -196,9 +197,9 @@ export class EvalQueries {
   }
 
   static async setVars(evalId: string, vars: string[]) {
-    const db = getDb();
+    const db = await getDb();
     try {
-      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -208,7 +209,7 @@ export class EvalQueries {
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    const db = getDb();
+    const db = await getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
       const allEvalIds = [evalId, ...comparisonEvalIds];
@@ -243,8 +244,8 @@ export class EvalQueries {
    * @param key - The key of the metadata to get the values from.
    * @returns An array of unique metadata values.
    */
-  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
-    const db = getDb();
+  static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
+    const db = await getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
       return [];
@@ -266,7 +267,7 @@ export class EvalQueries {
         LIMIT 1000
       `;
 
-      const rows = db.all<{ value: string }>(query);
+      const rows = await db.all<{ value: string }>(query);
       const values = rows
         .map(({ value }) => String(value).trim())
         .filter((value) => value.length > 0);
@@ -312,7 +313,7 @@ export default class Eval {
   shareableUrl?: string;
 
   static async latest() {
-    const db = getDb();
+    const db = await getDb();
     const db_results = await db
       .select({
         id: evalsTable.id,
@@ -329,15 +330,15 @@ export default class Eval {
   }
 
   static async findById(id: string) {
-    const db = getDb();
+    const db = await getDb();
 
-    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = db
+    const datasetResults = await db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
@@ -395,9 +396,16 @@ export default class Eval {
   }
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
-    const db = getDb();
+    const db = await getDb();
     const evals = await db
-      .select()
+      .select({
+        id: evalsTable.id,
+        createdAt: evalsTable.createdAt,
+        author: evalsTable.author,
+        description: evalsTable.description,
+        config: evalsTable.config,
+        prompts: evalsTable.prompts,
+      })
       .from(evalsTable)
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
@@ -438,7 +446,7 @@ export default class Eval {
     // pass it explicitly — honor that value. Only fall back to the global
     // resolution chain when the caller did not provide one at all.
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
-    const db = getDb();
+    const db = await getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
@@ -452,8 +460,9 @@ export default class Eval {
       }),
     };
 
-    db.transaction(() => {
-      db.insert(evalsTable)
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -472,7 +481,8 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        db.insert(promptsTable)
+        await tx
+          .insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -480,7 +490,8 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        db.insert(evalsToPromptsTable)
+        await tx
+          .insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -492,14 +503,15 @@ export default class Eval {
       }
 
       if (opts?.results && opts.results.length > 0) {
-        const res = db
+        const res = await tx
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
-        logger.debug(`Inserted ${res.changes} eval results`);
+        logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      db.insert(datasetsTable)
+      await tx
+        .insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -507,7 +519,8 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      db.insert(evalsToDatasetsTable)
+      await tx
+        .insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -521,7 +534,8 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          db.insert(tagsTable)
+          await tx
+            .insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -530,7 +544,8 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          db.insert(evalsToTagsTable)
+          await tx
+            .insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -542,6 +557,8 @@ export default class Eval {
         }
       }
     });
+
+    clearStandaloneEvalCache();
 
     return new Eval(config, {
       id: evalId,
@@ -608,7 +625,7 @@ export default class Eval {
   }
 
   async save() {
-    const db = getDb();
+    const db = await getDb();
     const updateObj: Record<string, unknown> = {
       config: this.config,
       isRedteam: this.config.redteam !== undefined,
@@ -643,7 +660,8 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    clearStandaloneEvalCache();
     this.persisted = true;
   }
 
@@ -749,11 +767,11 @@ export default class Eval {
 
     // For persisted evals, use efficient database query
     try {
-      const db = getDb();
+      const db = await getDb();
 
       // Query for any result with a non-transient HTTP status
       // Uses json_extract to access nested metadata.http.status field
-      const result = db
+      const result = await db
         .select({
           httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
         })
@@ -843,30 +861,62 @@ export default class Eval {
             return;
           }
 
-          const jsonPath = buildSafeJsonPath(metricKey);
-
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
-            condition = sql`json_extract(named_scores, ${jsonPath}) IS NOT NULL`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(named_scores)
+              WHERE json_each.key = ${metricKey}
+            )`;
           }
           // For the numeric operators, validate that the value is a number
           else if (Number.isFinite(numericValue)) {
             if (operator === 'eq') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) = ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) = ${numericValue}
+              )`;
             } else if (operator === 'neq') {
-              condition = sql`(json_extract(named_scores, ${jsonPath}) IS NOT NULL AND CAST(json_extract(named_scores, ${jsonPath}) AS REAL) != ${numericValue})`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) != ${numericValue}
+              )`;
             } else if (operator === 'gt') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) > ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) > ${numericValue}
+              )`;
             } else if (operator === 'gte') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) >= ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) >= ${numericValue}
+              )`;
             } else if (operator === 'lt') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) < ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) < ${numericValue}
+              )`;
             } else if (operator === 'lte') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) <= ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) <= ${numericValue}
+              )`;
             }
           } else {
             // Invalid numeric value (NaN, Infinity, etc.)
@@ -879,17 +929,35 @@ export default class Eval {
             return;
           }
         } else if (type === 'metadata' && field) {
-          const jsonPath = buildSafeJsonPath(field);
-
           if (operator === 'equals') {
-            condition = sql`json_extract(metadata, ${jsonPath}) = ${value}`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND json_each.value = ${value}
+            )`;
           } else if (operator === 'contains') {
-            condition = sql`json_extract(metadata, ${jsonPath}) LIKE ${`%${value}%`}`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND json_each.value LIKE ${`%${value}%`}
+            )`;
           } else if (operator === 'not_contains') {
-            condition = sql`(json_extract(metadata, ${jsonPath}) IS NULL OR json_extract(metadata, ${jsonPath}) NOT LIKE ${`%${value}%`})`;
+            condition = sql`NOT EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND json_each.value LIKE ${`%${value}%`}
+            )`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty
-            condition = sql`LENGTH(TRIM(COALESCE(json_extract(metadata, ${jsonPath}), ''))) > 0`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(metadata)
+              WHERE json_each.key = ${field}
+                AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
+            )`;
           }
         } else if (type === 'plugin') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
@@ -995,7 +1063,7 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
+    const db = await getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
@@ -1188,19 +1256,24 @@ export default class Eval {
   async addPrompts(prompts: CompletedPrompt[]) {
     this.prompts = prompts;
     if (this.persisted) {
-      const db = getDb();
-      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      const db = await getDb();
+      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       updateSignalFile(this.id);
+      clearStandaloneEvalCache();
     }
   }
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    if (this.persisted) {
-      const db = getDb();
-      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+    if (this.persisted && results.length > 0) {
+      const db = await getDb();
+      await db
+        .insert(evalResultsTable)
+        .values(results.map((r) => ({ ...r, evalId: this.id })))
+        .run();
+      clearStandaloneEvalCache();
     }
     this._resultsLoaded = true;
   }
@@ -1345,14 +1418,14 @@ export default class Eval {
   }
 
   async delete() {
-    const db = getDb();
-    db.transaction(() => {
-      deleteTraceRecordsForEvals(db, [this.id]);
-      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
-      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
-      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+    const db = await getDb();
+    await db.transaction(async (tx) => {
+      await deleteTraceRecordsForEvals(tx, [this.id]);
+      await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
+      await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
+      await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
+      await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+      await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
 
@@ -1383,13 +1456,14 @@ export default class Eval {
     const newVars = this.vars ? structuredClone(this.vars) : [];
     const author = getAuthor();
 
-    const db = getDb();
+    const db = await getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
     let copiedCount = 0;
-    db.transaction(() => {
+    await db.transaction(async (tx) => {
       // Create the new eval record first
-      db.insert(evalsTable)
+      await tx
+        .insert(evalsTable)
         .values({
           id: newEvalId,
           createdAt: Date.now(),
@@ -1407,14 +1481,15 @@ export default class Eval {
       // Copy prompts relationships
       // Note: prompts already exist in promptsTable from when the source eval was created
       // We just need to create new relationships pointing to those same prompts
-      const promptRels = db
+      const promptRels = await tx
         .select()
         .from(evalsToPromptsTable)
         .where(eq(evalsToPromptsTable.evalId, this.id))
         .all();
 
       if (promptRels.length > 0) {
-        db.insert(evalsToPromptsTable)
+        await tx
+          .insert(evalsToPromptsTable)
           .values(
             promptRels.map((rel) => ({
               evalId: newEvalId,
@@ -1430,7 +1505,8 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          db.insert(tagsTable)
+          await tx
+            .insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -1439,7 +1515,8 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          db.insert(evalsToTagsTable)
+          await tx
+            .insert(evalsToTagsTable)
             .values({
               evalId: newEvalId,
               tagId,
@@ -1450,7 +1527,7 @@ export default class Eval {
       }
 
       // Copy dataset relationship
-      const datasetRel = db
+      const datasetRel = await tx
         .select()
         .from(evalsToDatasetsTable)
         .where(eq(evalsToDatasetsTable.evalId, this.id))
@@ -1458,7 +1535,8 @@ export default class Eval {
         .all();
 
       if (datasetRel.length > 0) {
-        db.insert(evalsToDatasetsTable)
+        await tx
+          .insert(evalsToDatasetsTable)
           .values({
             evalId: newEvalId,
             datasetId: datasetRel[0].datasetId,
@@ -1473,7 +1551,7 @@ export default class Eval {
 
       while (true) {
         // Fetch batch from source eval
-        const batch = db
+        const batch = await tx
           .select()
           .from(evalResultsTable)
           .where(eq(evalResultsTable.evalId, this.id))
@@ -1497,7 +1575,7 @@ export default class Eval {
         }));
 
         // Insert batch
-        db.insert(evalResultsTable).values(copiedResults).run();
+        await tx.insert(evalResultsTable).values(copiedResults).run();
 
         copiedCount += batch.length;
         offset += BATCH_SIZE;
@@ -1511,6 +1589,8 @@ export default class Eval {
         });
       }
     });
+
+    clearStandaloneEvalCache();
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,
@@ -1544,7 +1624,7 @@ export async function getEvalSummaries(
   type?: 'redteam' | 'eval',
   includeProviders: boolean = false,
 ): Promise<EvalSummary[]> {
-  const db = getDb();
+  const db = await getDb();
 
   const whereClauses = [];
 
@@ -1560,7 +1640,7 @@ export async function getEvalSummaries(
     }
   }
 
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
