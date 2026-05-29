@@ -296,9 +296,6 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Generate JSON Schema
-        run: npm run jsonSchema:generate
-
       - name: Install ModelAudit schema dependencies
         run: |
           python3 -m pip install --disable-pip-version-check --no-deps \
@@ -309,8 +306,10 @@ jobs:
             typing-extensions==4.15.0 \
             typing-inspection==0.4.2
 
-      - name: Check ModelAudit JSON Schema
-        run: npm run modelAuditSchema:check
+      - name: Generate JSON Schemas
+        run: |
+          npm run jsonSchema:generate
+          npm run modelAuditSchema:generate
 
       - name: Check for changes
         run: |
