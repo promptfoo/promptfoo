@@ -2765,6 +2765,7 @@ interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
   evaluationTimeoutState?: EvaluationTimeoutState;
+  finalizingIndices: Set<number>;
   numComplete: number;
   options: InternalEvaluateOptions;
   processedIndices: Set<number>;
@@ -2917,29 +2918,6 @@ function createEvalStepTimeoutResult(
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
     promptId: evalStep.prompt.id || '',
-  };
-}
-
-function createTimeoutMetrics(timeoutMs: number): PromptMetrics {
-  return {
-    score: 0,
-    testPassCount: 0,
-    testFailCount: 0,
-    testErrorCount: 1,
-    assertPassCount: 0,
-    assertFailCount: 0,
-    totalLatencyMs: timeoutMs,
-    tokenUsage: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-    },
-    namedScores: {},
-    namedScoresCount: {},
-    namedScoreWeights: {},
-    cost: 0,
   };
 }
 
@@ -3439,10 +3417,9 @@ class Evaluator {
     }
   }
 
-  private async persistEvalRow(row: EvaluateResult, onResultStored?: () => void): Promise<void> {
+  private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
       await this.evalRecord.addResult(row);
-      onResultStored?.();
     } catch (error) {
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
@@ -3479,10 +3456,6 @@ class Evaluator {
       });
     }
 
-    if (derivedMetrics) {
-      await updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
-    }
-
     updatePromptResultCounts(metrics, row);
     metrics.assertPassCount +=
       row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
@@ -3496,6 +3469,10 @@ class Evaluator {
     }
 
     metrics.cost += row.cost || 0;
+
+    if (derivedMetrics) {
+      await updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
+    }
   }
 
   private async processEvalStep(
@@ -3570,14 +3547,6 @@ class Evaluator {
         return;
       }
 
-      // NOTE: trackCompletedRow runs before afterEach hooks intentionally. It only
-      // reads success/failureReason/tokenUsage — not namedScores or metadata — so
-      // the hook's mutations don't need to be applied first. If future changes add
-      // namedScores tracking here, move afterEach above this call.
-      this.trackCompletedRow(evalStep, row, context);
-      context.numComplete++;
-      const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
-
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
       if (context.testSuite.extensions?.length) {
@@ -3608,14 +3577,47 @@ class Evaluator {
         }
       }
 
-      await this.persistEvalRow(row, () => context.processedIndices.add(index));
-
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
+      if (shouldSkipStaleRows?.()) {
+        return;
       }
 
+      const completed = await this.finalizeEvalRow({
+        context,
+        evalStep,
+        index,
+        row,
+      });
+      if (completed && this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
+    }
+  }
+
+  private async finalizeEvalRow({
+    context,
+    evalStep,
+    index,
+    notifyProgress = true,
+    row,
+  }: {
+    context: EvalProcessingContext;
+    evalStep: RunEvalOptions;
+    index: number;
+    notifyProgress?: boolean;
+    row: EvaluateResult;
+  }): Promise<boolean> {
+    if (context.processedIndices.has(index) || context.finalizingIndices.has(index)) {
+      return false;
+    }
+
+    context.finalizingIndices.add(index);
+    try {
+      this.trackCompletedRow(evalStep, row, context);
+      context.numComplete++;
+      const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
+
       await this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
@@ -3624,13 +3626,21 @@ class Evaluator {
         row,
       });
 
-      context.options.progressCallback?.(
-        context.numComplete,
-        context.runEvalOptionsLength,
-        index,
-        evalStep,
-        metrics,
-      );
+      await this.persistEvalRow(row);
+      context.processedIndices.add(index);
+
+      if (notifyProgress) {
+        context.options.progressCallback?.(
+          context.numComplete,
+          context.runEvalOptionsLength,
+          index,
+          evalStep,
+          metrics,
+        );
+      }
+      return true;
+    } finally {
+      context.finalizingIndices.delete(index);
     }
   }
 
@@ -3770,23 +3780,12 @@ class Evaluator {
       timeoutMs,
       error,
     );
-    await this.evalRecord.addResult(timeoutResult);
-    this.stats.errors++;
-
-    const { metrics } = context.prompts[evalStep.promptIdx];
-    if (metrics) {
-      metrics.testErrorCount += 1;
-      metrics.totalLatencyMs += timeoutMs;
-    }
-
-    context.numComplete++;
-    context.options.progressCallback?.(
-      context.numComplete,
-      context.runEvalOptionsLength,
-      index,
+    await this.finalizeEvalRow({
+      context,
       evalStep,
-      metrics || createTimeoutMetrics(timeoutMs),
-    );
+      index,
+      row: timeoutResult,
+    });
   }
 
   private async executeEvalSteps({
@@ -3800,7 +3799,6 @@ class Evaluator {
     isWebUI,
     maxEvalTimeMs,
     processingContext,
-    processedIndices,
     progressBarManager,
     prompts,
     serialRunEvalOptions,
@@ -3817,7 +3815,6 @@ class Evaluator {
     isWebUI: boolean;
     maxEvalTimeMs: number;
     processingContext: EvalProcessingContext;
-    processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
@@ -3834,7 +3831,6 @@ class Evaluator {
               groupedRunEvalOptions,
               isWebUI,
               processingContext,
-              processedIndices,
               prompts,
             });
           } else {
@@ -3843,7 +3839,6 @@ class Evaluator {
               evalStepIndexMap,
               isWebUI,
               processingContext,
-              processedIndices,
               prompts,
               serialRunEvalOptions,
             });
@@ -3852,7 +3847,6 @@ class Evaluator {
               concurrentRunEvalOptions,
               evalStepIndexMap,
               processingContext,
-              processedIndices,
               prompts,
             });
           }
@@ -3893,7 +3887,6 @@ class Evaluator {
     groupedRunEvalOptions,
     isWebUI,
     processingContext,
-    processedIndices,
     prompts,
   }: {
     checkAbort: () => void;
@@ -3901,7 +3894,6 @@ class Evaluator {
     groupedRunEvalOptions: RunEvalOptions[];
     isWebUI: boolean;
     processingContext: EvalProcessingContext;
-    processedIndices: Set<number>;
     prompts: CompletedPrompt[];
   }): Promise<void> {
     const providerCallQueue = new ProviderGroupedCallQueue();
@@ -3927,7 +3919,6 @@ class Evaluator {
         },
         processingContext,
       );
-      processedIndices.add(index);
       await flushPromptMetrics();
     };
     const flushGroupedRows = () =>
@@ -3956,7 +3947,6 @@ class Evaluator {
             groupedRows,
             idx,
             processGroupedRows,
-            processedIndices,
             flushPromptMetrics,
             rows,
             shouldDeferEvalStepGrading,
@@ -3994,7 +3984,6 @@ class Evaluator {
     groupedRows,
     idx,
     processGroupedRows,
-    processedIndices,
     flushPromptMetrics,
     rows,
     shouldDeferEvalStepGrading,
@@ -4004,19 +3993,16 @@ class Evaluator {
     groupedRows: GroupedRows[];
     idx: number;
     processGroupedRows: (entry: GroupedRows) => Promise<void>;
-    processedIndices: Set<number>;
     flushPromptMetrics: () => Promise<void>;
     rows: EvaluateResult[];
     shouldDeferEvalStepGrading: boolean;
     processingContext: EvalProcessingContext;
   }) {
     if (!shouldDeferEvalStepGrading) {
-      processedIndices.add(idx);
       await flushPromptMetrics();
       return processingContext.targetUnavailable;
     }
     if (rows.length === 0) {
-      processedIndices.add(idx);
       return false;
     }
     if (rows.some((row) => deferredGradingPromises.has(row))) {
@@ -4033,7 +4019,6 @@ class Evaluator {
     evalStepIndexMap,
     isWebUI,
     processingContext,
-    processedIndices,
     prompts,
     serialRunEvalOptions,
   }: {
@@ -4041,7 +4026,6 @@ class Evaluator {
     evalStepIndexMap: Map<RunEvalOptions, number>;
     isWebUI: boolean;
     processingContext: EvalProcessingContext;
-    processedIndices: Set<number>;
     prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
   }) {
@@ -4051,7 +4035,6 @@ class Evaluator {
       logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
       await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-      processedIndices.add(idx);
       const now = Date.now();
       if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
         lastPromptsFlush = now;
@@ -4065,14 +4048,12 @@ class Evaluator {
     concurrentRunEvalOptions,
     evalStepIndexMap,
     processingContext,
-    processedIndices,
     prompts,
   }: {
     checkAbort: () => void;
     concurrentRunEvalOptions: RunEvalOptions[];
     evalStepIndexMap: Map<RunEvalOptions, number>;
     processingContext: EvalProcessingContext;
-    processedIndices: Set<number>;
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
@@ -4083,7 +4064,6 @@ class Evaluator {
         checkAbort();
         const idx = evalStepIndexMap.get(evalStep)!;
         await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-        processedIndices.add(idx);
         const now = Date.now();
         if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
           lastPromptsFlush = now;
@@ -4597,7 +4577,7 @@ class Evaluator {
     evalTimedOut,
     maxEvalTimeMs,
     options,
-    processedIndices,
+    processingContext,
     progressBarManager,
     prompts,
     runEvalOptions,
@@ -4615,7 +4595,7 @@ class Evaluator {
     evalTimedOut: boolean;
     maxEvalTimeMs: number;
     options: InternalEvaluateOptions;
-    processedIndices: Set<number>;
+    processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     runEvalOptions: RunEvalOptions[];
@@ -4646,7 +4626,7 @@ class Evaluator {
     if (reachedMaxDuration) {
       await this.addMaxDurationTimeoutResults({
         maxEvalTimeMs,
-        processedIndices,
+        processingContext,
         prompts,
         runEvalOptions,
         startTime,
@@ -4675,29 +4655,45 @@ class Evaluator {
 
   private async addMaxDurationTimeoutResults({
     maxEvalTimeMs,
+    processingContext,
     processedIndices,
     prompts,
     runEvalOptions,
     startTime,
   }: {
     maxEvalTimeMs: number;
-    processedIndices: Set<number>;
+    processingContext?: EvalProcessingContext;
+    processedIndices?: Set<number>;
     prompts: CompletedPrompt[];
     runEvalOptions: RunEvalOptions[];
     startTime: number;
   }) {
+    const completedIndices =
+      processingContext?.processedIndices ?? processedIndices ?? new Set<number>();
     for (let i = 0; i < runEvalOptions.length; i++) {
-      if (processedIndices.has(i)) {
+      if (completedIndices.has(i) || processingContext?.finalizingIndices.has(i)) {
         continue;
       }
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
-      await this.evalRecord.addResult(timeoutResult);
-      this.stats.errors++;
-      const { metrics } = prompts[evalStep.promptIdx];
-      if (metrics) {
-        metrics.testErrorCount += 1;
-        metrics.totalLatencyMs += timeoutResult.latencyMs;
+
+      if (processingContext) {
+        await this.finalizeEvalRow({
+          context: processingContext,
+          evalStep,
+          index: i,
+          notifyProgress: false,
+          row: timeoutResult,
+        });
+      } else {
+        await this.persistEvalRow(timeoutResult);
+        completedIndices.add(i);
+        this.stats.errors++;
+        const { metrics } = prompts[evalStep.promptIdx];
+        if (metrics) {
+          metrics.testErrorCount += 1;
+          metrics.totalLatencyMs += timeoutResult.latencyMs;
+        }
       }
     }
   }
@@ -5104,6 +5100,7 @@ class Evaluator {
           assertionTypes,
           concurrency,
           evaluationTimeoutState: timeoutState,
+          finalizingIndices: new Set<number>(),
           numComplete: 0,
           options,
           processedIndices,
@@ -5219,7 +5216,6 @@ class Evaluator {
           isWebUI,
           maxEvalTimeMs,
           processingContext,
-          processedIndices,
           progressBarManager,
           prompts,
           serialRunEvalOptions,
@@ -5270,7 +5266,7 @@ class Evaluator {
           evalTimedOut: timeoutConfig.isEvalTimedOut(),
           maxEvalTimeMs,
           options,
-          processedIndices,
+          processingContext,
           progressBarManager,
           prompts,
           runEvalOptions,

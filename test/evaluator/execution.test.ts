@@ -1,6 +1,7 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
+import fs from 'fs';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { __resetPromptConversationCacheForTests, evaluate, runEval } from '../../src/evaluator';
@@ -820,6 +821,48 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('writes per-test timeout rows to jsonl output', async () => {
+    vi.useFakeTimers();
+    const outputPath = `/tmp/pr6344-per-test-timeout-${randomUUID()}.jsonl`;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('hanging-provider'),
+      callApi: vi.fn(
+        () =>
+          new Promise<ProviderResponse>(() => {
+            // Keep the provider pending so the per-test timeout path writes the row.
+          }),
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({ outputPath }, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 0,
+        timeoutMs: 50,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0])).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+      vi.useRealTimers();
+    }
+  });
+
   it('should honor timeoutMs: 0 when the default eval timeout is configured', async () => {
     vi.useFakeTimers();
     const restoreEnv = mockProcessEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '5' });
@@ -1123,6 +1166,62 @@ describeEvaluator('evaluator execution control', () => {
           success: true,
         }),
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not persist rows whose afterEach hook finishes after maxEvalTimeMs', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve(context), 100);
+        });
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Late afterEach output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://slow-after-each.js:afterEach'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.runOnlyPendingTimersAsync();
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 1, failures: 0, successes: 0 }),
+      );
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+      expect(summary.results[0].response?.output).not.toBe('Late afterEach output');
     } finally {
       vi.useRealTimers();
     }
@@ -1444,6 +1543,43 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('writes max-duration timeout rows to jsonl output', async () => {
+    vi.useFakeTimers();
+    const outputPath = `/tmp/pr6344-max-duration-timeout-${randomUUID()}.jsonl`;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('non-cooperative-provider'),
+      callApi: vi.fn(() => new Promise<ProviderResponse>(() => {})),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({ outputPath }, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0])).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+      vi.useRealTimers();
+    }
+  });
+
   it('does not append a max-duration row after the completed result is already persisted', async () => {
     vi.useFakeTimers();
     const provider: ApiProvider = {
@@ -1488,6 +1624,9 @@ describeEvaluator('evaluator execution control', () => {
 
       const summary = await evalRecord.toEvaluateSummary();
       expect(summary.results).toHaveLength(1);
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 0, failures: 0, successes: 1 }),
+      );
       expect(summary.results[0]).toEqual(
         expect.objectContaining({
           response: expect.objectContaining({ output: 'Completed output' }),

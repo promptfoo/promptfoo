@@ -553,7 +553,7 @@ describe('envars', () => {
       // batchCount = ceil(10/4) = 3
       // expectedTime = 3 * 60,000 = 180,000
       // safeMaxTime = 180,000 * 3 + 60,000 = 600,000
-      // worstCase = 3 * 1,500,000 = 4,500,000
+      // worstCase = 3 * 1,500,000 + 60,000 = 4,560,000
       // Minimum active batch = 1,560,000, to avoid preempting one allowed test timeout.
       const result = calculateDefaultMaxEvalTimeMs(10, 4, 1_500_000, false);
       expect(result).toBe(1_560_000);
@@ -564,8 +564,8 @@ describe('envars', () => {
       // batchCount = ceil(100/10) = 10
       // expectedTime = 10 * 60,000 = 600,000
       // safeMaxTime = 600,000 * 3 + 60,000 = 1,860,000
-      // worstCase = 10 * 1,500,000 = 15,000,000
-      // min(1,860,000, 15,000,000) = 1,860,000
+      // worstCase = 10 * 1,500,000 + 60,000 = 15,060,000
+      // min(1,860,000, 15,060,000) = 1,860,000
       const result = calculateDefaultMaxEvalTimeMs(100, 10, 1_500_000, false);
       expect(result).toBe(1_860_000);
     });
@@ -575,8 +575,8 @@ describe('envars', () => {
       // batchCount = ceil(10/4) = 3
       // expectedTime = 3 * 300,000 = 900,000
       // safeMaxTime = 900,000 * 2 + 60,000 = 1,860,000
-      // worstCase = 3 * 1,500,000 = 4,500,000
-      // min(1,860,000, 4,500,000) = 1,860,000
+      // worstCase = 3 * 1,500,000 + 60,000 = 4,560,000
+      // min(1,860,000, 4,560,000) = 1,860,000
       const result = calculateDefaultMaxEvalTimeMs(10, 4, 1_500_000, true);
       expect(result).toBe(1_860_000);
     });
