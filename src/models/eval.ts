@@ -2,7 +2,6 @@ import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
-import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalResultsTable,
@@ -42,9 +41,9 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
-import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
@@ -558,7 +557,7 @@ export default class Eval {
       }
     });
 
-    clearStandaloneEvalCache();
+    invalidateEvaluationCache();
 
     return new Eval(config, {
       id: evalId,
@@ -661,7 +660,7 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    clearStandaloneEvalCache();
+    invalidateEvaluationCache();
     this.persisted = true;
   }
 
@@ -717,7 +716,7 @@ export default class Eval {
     }
     if (this.persisted) {
       // Notify watchers that new results are available, passing the eval ID
-      updateSignalFile(this.id);
+      notifyEvaluationChanged(this.id);
     }
   }
 
@@ -1260,8 +1259,7 @@ export default class Eval {
       await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
-      updateSignalFile(this.id);
-      clearStandaloneEvalCache();
+      notifyEvaluationChanged(this.id);
     }
   }
 
@@ -1273,7 +1271,7 @@ export default class Eval {
         .insert(evalResultsTable)
         .values(results.map((r) => ({ ...r, evalId: this.id })))
         .run();
-      clearStandaloneEvalCache();
+      invalidateEvaluationCache();
     }
     this._resultsLoaded = true;
   }
@@ -1590,7 +1588,7 @@ export default class Eval {
       }
     });
 
-    clearStandaloneEvalCache();
+    invalidateEvaluationCache();
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,

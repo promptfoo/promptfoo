@@ -216,6 +216,36 @@ describe('getStandaloneEvals', () => {
     expect(afterRow?.pluginFailCount['plugin-a']).toBe(1);
   });
 
+  it('includes incrementally added results after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.pluginFailCount['plugin-add']).toBeUndefined();
+    expectStandaloneHistoryCached();
+
+    await eval_.addResult({
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: {}, metadata: { pluginId: 'plugin-add' } },
+      promptId: 'prompt-add',
+      provider: { id: 'test-provider' },
+      prompt: renderedPrompts[0],
+      vars: {},
+      response: { output: 'bad' },
+      error: null,
+      failureReason: ResultFailureReason.ASSERT,
+      success: false,
+      score: 0,
+      latencyMs: 1,
+      gradingResult: null,
+      namedScores: {},
+      cost: 0,
+      metadata: {},
+    });
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.pluginFailCount['plugin-add']).toBe(1);
+  });
+
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
     const eval_ = await createEvalWithPrompts({ redteam: null as any });
 

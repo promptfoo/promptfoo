@@ -16,11 +16,11 @@ import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
-import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
+import { notifyEvaluationChanged } from './models/evalMutation';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -3771,7 +3771,7 @@ class Evaluator {
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
+    notifyEvaluationChanged(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -3798,7 +3798,7 @@ class Evaluator {
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
+    notifyEvaluationChanged(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -4216,7 +4216,7 @@ class Evaluator {
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
     }
-    updateSignalFile(this.evalRecord.id);
+    notifyEvaluationChanged(this.evalRecord.id);
   }
 
   private async addMaxDurationTimeoutResults({
