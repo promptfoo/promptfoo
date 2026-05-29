@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
+import { eq } from 'drizzle-orm';
 import { BLOB_MAX_SIZE, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
@@ -250,6 +251,18 @@ async function replaceExistingEval(
   return importId;
 }
 
+async function evalExists(id: string): Promise<boolean> {
+  const db = await getDb();
+  const matches = await db
+    .select({ id: evalsTable.id })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, id))
+    .limit(1)
+    .all();
+
+  return matches.length > 0;
+}
+
 function isImportableTrace(trace: unknown): trace is TraceData {
   const candidate = trace as Partial<TraceData>;
   return (
@@ -400,17 +413,14 @@ export function importCommand(program: Command) {
         let existingEval: Eval | undefined;
 
         if (importId && !cmdObj.newId) {
-          const existing = await Eval.findById(importId);
-          if (existing) {
-            if (cmdObj.force) {
-              existingEval = existing;
-            } else {
-              logger.error(
-                `Eval ${importId} already exists. Use --new-id to import with a new ID, or --force to replace it.`,
-              );
-              process.exitCode = 1;
-              return;
-            }
+          if (cmdObj.force) {
+            existingEval = await Eval.findById(importId);
+          } else if (await evalExists(importId)) {
+            logger.error(
+              `Eval ${importId} already exists. Use --new-id to import with a new ID, or --force to replace it.`,
+            );
+            process.exitCode = 1;
+            return;
           }
         }
 
