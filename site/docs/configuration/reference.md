@@ -844,8 +844,17 @@ interface ProviderResponse {
   };
   video?: { id?: string; blobRef?: BlobRef; url?: string; model?: string; [key: string]: any };
   images?: ImageOutput[];
+  streamingMetrics?: {
+    timeToFirstToken?: number;
+    totalStreamTime?: number;
+    completionChars?: number;
+    tokensPerSecond?: number;
+    multiChunkDelivery?: boolean;
+  };
 }
 ```
+
+See [TTFT streaming metrics](/docs/configuration/expected-outputs/deterministic#what-the-underlying-streaming-metrics-measure) for field definitions.
 
 ### ProviderEmbeddingResponse
 

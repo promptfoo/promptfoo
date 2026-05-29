@@ -1,10 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: HTTP provider streaming with TTFT measurement
 
-# Demonstrates Time to First Token (TTFT) measurement. Uses gpt-4o-mini
-# rather than a reasoning model (gpt-5, o-series) because reasoning models
-# do not emit tokens until internal reasoning is complete, making TTFT
-# approximately equal to total latency and defeating the comparison.
+# Demonstrates Time to First Token (TTFT) measurement. Uses gpt-5.4-mini
+# with reasoning disabled so TTFT reflects streamed text delivery rather than
+# internal deliberation time.
 
 prompts:
   - 'Write a haiku about {{topic}}'
@@ -18,7 +17,8 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-4o-mini'
+        model: 'gpt-5.4-mini'
+        reasoning_effort: 'none'
         messages:
           - role: 'user'
             content: '{{prompt}}'

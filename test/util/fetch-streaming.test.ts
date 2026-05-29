@@ -13,6 +13,7 @@ async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -168,8 +169,8 @@ describe('processStreamingResponse', () => {
       //   data: {"choices":[{"delta":{"role":"assistant"}}]}
       // which carries no content but is non-whitespace. TTFT fires on it.
       // The delay between this frame and the first content delta is usually
-      // sub-millisecond; callers needing strict "first content token" should
-      // parse the stream in transformResponse.
+      // sub-millisecond; callers needing strict "first content token" TTFT
+      // should configure streamFormat or streamFirstTokenPattern.
       const requestStartTime = Date.now();
 
       const chunks = [

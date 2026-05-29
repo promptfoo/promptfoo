@@ -937,7 +937,8 @@ providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
       body:
-        model: gpt-4o-mini
+        model: gpt-5.4-mini
+        reasoning_effort: none
         stream: true
         messages: [{ role: user, content: '{{prompt}}' }]
       streamFormat: openai-chat # or: openai-responses, anthropic-messages

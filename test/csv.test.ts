@@ -518,6 +518,29 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(1000);
   });
 
+  it('should create a TTFT assertion', () => {
+    const expected = 'ttft(1000)';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('ttft');
+    expect(result.threshold).toBe(1000);
+  });
+
+  it('should create a not-TTFT assertion', () => {
+    const expected = 'not-ttft(1000)';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('not-ttft');
+    expect(result.threshold).toBe(1000);
+  });
+
+  it('should not default a TTFT assertion threshold', () => {
+    const result: Assertion = assertionFromString('ttft');
+
+    expect(result.type).toBe('ttft');
+    expect(result.threshold).toBeUndefined();
+  });
+
   it('should create a perplexity assertion', () => {
     const expected = 'perplexity(1.5)';
 

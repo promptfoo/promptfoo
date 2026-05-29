@@ -1,6 +1,6 @@
 # provider-http/streaming (HTTP Provider Streaming Example)
 
-This example demonstrates text streaming response handling with **Time to First Token (TTFT)** measurement using promptfoo's HTTP provider.
+This example demonstrates text streaming response handling with **Time to First Token (TTFT)** measurement using Promptfoo's HTTP provider.
 
 Initialize this example with:
 
@@ -11,7 +11,7 @@ cd provider-http/streaming
 
 ## Why Stream?
 
-While promptfoo waits for complete responses before scoring, streaming unlocks additional performance insights:
+While Promptfoo waits for complete responses before scoring, streaming unlocks additional performance insights:
 
 - **TTFT Measurement**: Track how quickly models start responding
 - **User-Perceived Performance**: Measure streaming responsiveness
@@ -59,6 +59,8 @@ providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
       body:
+        model: gpt-5.4-mini
+        reasoning_effort: none
         stream: true # Enable streaming (required for TTFT)
       streamFormat: openai-chat # Canonical "first content token" TTFT
 ```
@@ -79,7 +81,7 @@ Inspect the measured TTFT and total latency from your own environment. Both depe
 
 ## Reasoning Models
 
-Reasoning models (OpenAI `gpt-5`/`gpt-5-mini`/`o1`/`o3`, DeepSeek R1, etc.) do not emit output tokens until internal reasoning completes. For these, TTFT ≈ total latency and the metric loses its signal. Prefer non-reasoning models (`gpt-4o-mini`, `gpt-4o`, Claude Haiku/Sonnet) when comparing streaming performance.
+Reasoning-enabled models can delay output tokens until internal reasoning completes. This example uses `gpt-5.4-mini` with `reasoning_effort: none` so TTFT reflects streamed text delivery rather than internal deliberation time.
 
 ## Caching Behavior
 

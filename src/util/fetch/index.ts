@@ -730,7 +730,8 @@ export interface StreamingMetrics {
   timeToFirstToken?: number;
   /**
    * Milliseconds from first response-body chunk arrival to last chunk arrival.
-   * Excludes the TTFT window and any idle tail before close.
+   * Excludes request processing before body bytes arrive and any idle tail before close.
+   * May include protocol framing that arrives before the detected content token.
    * Populated by `processStreamingResponse`.
    */
   totalStreamTime?: number;

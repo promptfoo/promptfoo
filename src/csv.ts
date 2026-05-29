@@ -106,13 +106,21 @@ export function assertionFromString(expected: string): Assertion {
       type === 'perplexity' ||
       type === 'rouge-n' ||
       type === 'similar' ||
-      type === 'starts-with'
+      type === 'starts-with' ||
+      type === 'ttft'
     ) {
-      const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
+      const defaultThreshold =
+        type === 'similar'
+          ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
+          : type === 'ttft'
+            ? undefined
+            : 0.75;
       return {
         type: fullType as AssertionType,
         value: value?.trim?.(),
-        threshold: threshold ?? defaultThreshold,
+        ...(threshold === undefined && defaultThreshold === undefined
+          ? {}
+          : { threshold: threshold ?? defaultThreshold }),
       };
     } else {
       return {
