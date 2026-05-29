@@ -843,24 +843,32 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
-#### Parallel tool calls {#trajectory-tool-sequence-parallel}
+#### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
 
-To assert that tools were called **together in the same turn** (in parallel) rather than across separate turns, nest them in an array.
+`tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential) by pairing it with [`trace-span-count`](#trace-span-count). See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider name table and the providers whose markers represent model generations.
 
 ```yaml
-- type: trajectory:tool-sequence
-  value:
-    mode: exact
-    steps:
-      - [search_orders, search_inventory] # one turn: both called in parallel
-      - compose_reply # a later turn with a single tool
+tests:
+  - assert:
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_orders
+            - search_orders
+      - type: trace-span-count
+        value:
+          # Claude Agent SDK and Azure Foundry use this per-generation pattern.
+          # Use `generation *` for openai:agents, `call_llm` for Google ADK, etc.
+          pattern: 'gen_ai.turn *'
+          max: 1
 ```
 
-- A **flat** list (`steps: [a, b]`) is turn-agnostic and behaves exactly as before — use it when you only care about order. Nesting is fully opt-in, so existing sequences are unaffected.
-- A **nested** entry (`steps: [[a, b]]`) requires those tools to occur in the same turn. The order _within_ a turn does not matter (parallel calls have no inherent order), so `[a, b]` also matches a turn observed as `b, a`.
-- Once any entry is nested, **every** entry describes a full turn — a plain entry like `compose_reply` means "a turn containing only that tool." If a tool you list plainly might be batched with others, either nest it with them or use a flat sequence for loose ordering.
-- Nesting works in both `exact` (the turn structure must match exactly) and `in_order` (the turns must appear in order, with other turns allowed between them) modes.
-- **What counts as one turn:** tool calls are grouped into a turn when they ran **concurrently** — their trace spans overlap in time — under the **same parent span**. So two calls the model batched into one generation and ran in parallel land in one turn, while calls separated by a gap (the model waited for a result before calling again) become separate turns, even when every tool shares one root span. A group matches a turn of the same size, so use a flat sequence when you only want loose ordering.
+This passes only when both tool calls were emitted by a single LLM generation — a structural test that bounds both latency and prompt-token cost.
+
+Do not use this batching inference with `openai:codex-sdk` or `openai:codex-app-server`: their `gen_ai.turn *` spans represent an SDK or protocol turn that can contain multiple hidden model generations.
+
+For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans, and cached responses emit none. See the [batching caveats](/docs/tracing#per-llm-turn-spans) for how to filter subagent turns (`gen_ai.turn.is_subagent`) and handle cache hits.
 
 ### trajectory:step-count {#trajectorystep-count}
 

@@ -2,6 +2,11 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
@@ -424,7 +429,46 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    // Resolve the effective request config first so spanContext reflects what
+    // we actually send (merged config from getOpenAiBody, not raw this.config).
+    // The Responses API uses `max_output_tokens` rather than `max_tokens`.
+    const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const effectiveConfig = resolved.config;
+    const effectiveBody = resolved.body as Record<string, any>;
+    const effectiveMaxOutputTokens =
+      typeof effectiveBody.max_output_tokens === 'number'
+        ? effectiveBody.max_output_tokens
+        : undefined;
+
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.modelName,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: {
+        maxTokens: effectiveMaxOutputTokens,
+        temperature: effectiveConfig.temperature,
+        topP: effectiveConfig.top_p,
+        stopSequences: effectiveConfig.stop,
+      },
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(context, resolved),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    context: CallApiContextParams | undefined,
+    // `callApi` always resolves the body once (so spanContext reflects what we
+    // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
+    // is already baked into `prepared.body`, so it is not needed here.
+    prepared: { body: any; config: any },
+  ): Promise<ProviderResponse> {
+    const { body, config } = prepared;
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');

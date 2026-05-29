@@ -1,3 +1,4 @@
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -84,6 +85,43 @@ function createFunctionCallResponse() {
       total_tokens: 30,
     },
   } as any;
+}
+
+interface RecordedSpan {
+  name: string;
+  attributes: Record<string, unknown>;
+  status?: { code: number; message?: string };
+}
+
+function installSpanRecorder(): RecordedSpan[] {
+  const spans: RecordedSpan[] = [];
+  const createSpan = (name: string, attributes: Record<string, unknown> = {}) => {
+    const entry: RecordedSpan = { name, attributes: { ...attributes } };
+    spans.push(entry);
+    return {
+      end: vi.fn(),
+      recordException: vi.fn(),
+      setAttribute: vi.fn((key: string, value: unknown) => {
+        entry.attributes[key] = value;
+      }),
+      setStatus: vi.fn((status: { code: number; message?: string }) => {
+        entry.status = status;
+      }),
+    };
+  };
+
+  vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startSpan: (name: string, options?: { attributes?: Record<string, unknown> }) =>
+      createSpan(name, options?.attributes),
+    startActiveSpan: (
+      name: string,
+      options: { attributes?: Record<string, unknown> },
+      _parentContext: unknown,
+      callback: (span: unknown) => unknown,
+    ) => callback(createSpan(name, options?.attributes)),
+  } as any);
+
+  return spans;
 }
 
 describe('AzureFoundryAgentProvider', () => {
@@ -335,6 +373,93 @@ describe('AzureFoundryAgentProvider', () => {
         },
       );
       expect(result.output).toBe('Tool finished');
+    });
+
+    it('should emit a gen_ai.turn span for each model request in a function loop', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockResolvedValueOnce(createMessageResponse('Tool finished'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          functionToolCallbacks: {
+            get_weather: vi.fn().mockResolvedValue({ forecast: 'sunny' }),
+          },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const turnSpans = spans.filter((span) => span.name.startsWith('gen_ai.turn '));
+      expect(turnSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'gen_ai.turn 2']);
+      expect(turnSpans.map((span) => span.attributes['gen_ai.turn.index'])).toEqual([1, 2]);
+      expect(turnSpans.every((span) => span.status?.code === SpanStatusCode.OK)).toBe(true);
+    });
+
+    it('should mark a failed model request turn as errored', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockRejectedValue(new Error('model request failed'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('model request failed');
+      const turnSpan = spans.find((span) => span.name === 'gen_ai.turn 1');
+      expect(turnSpan?.status).toEqual({
+        code: SpanStatusCode.ERROR,
+        message: 'model request failed',
+      });
+    });
+
+    it('wraps each call in a chat <model> span', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce(createMessageResponse('Hello'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      await provider.callApi('test prompt');
+
+      const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
+      expect(chatSpan).toBeDefined();
+      expect(chatSpan?.attributes).toMatchObject({
+        'gen_ai.system': 'azure',
+        'gen_ai.operation.name': 'chat',
+      });
+    });
+
+    it('emits a chat span but no gen_ai.turn spans on a cache hit', async () => {
+      const spans = installSpanRecorder();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue({ output: 'cached response' }),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('weather in Paris');
+
+      // A cache hit performs no LLM round, so no gen_ai.turn marker is emitted,
+      // but the request is still wrapped in a chat span (with cache_hit set).
+      expect(result.cached).toBe(true);
+      expect(mockResponsesCreate).not.toHaveBeenCalled();
+      expect(spans.filter((span) => span.name.startsWith('gen_ai.turn '))).toHaveLength(0);
+      const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
+      expect(chatSpan).toBeDefined();
+      expect(chatSpan?.attributes['promptfoo.cache_hit']).toBe(true);
     });
 
     it('should return unresolved function calls when callbacks are missing', async () => {

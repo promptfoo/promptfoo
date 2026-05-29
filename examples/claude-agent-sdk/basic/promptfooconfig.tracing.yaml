@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK: count LLM turns via gen_ai.turn marker spans'
+
+prompts:
+  - '{{task}}'
+
+providers:
+  - id: anthropic:claude-agent-sdk
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '127.0.0.1'
+      acceptFormats: ['json']
+
+# Turn counts are model-dependent, so the bounds below are deliberately loose.
+# A single-tool task is typically ~2 rounds (emit the tool, summarize the
+# result) but a model may add a clarification round; a dependent multi-step
+# task takes more. Tighten these only against a pinned model + cached run.
+tests:
+  # Single tool call: a couple of LLM turns (emit the tool, summarize the result).
+  - vars:
+      task: 'Run `pwd` and report the result. Use only one tool call.'
+    metadata:
+      tracingEnabled: true
+    assert:
+      - type: trace-span-count
+        value:
+          pattern: 'gen_ai.turn *'
+          min: 1
+          max: 3
+
+  # Multi-step plan: more turns because each tool call depends on the previous.
+  - vars:
+      task: 'First run `pwd`. Then based on the result, list files in that directory.'
+    metadata:
+      tracingEnabled: true
+    assert:
+      - type: trace-span-count
+        value:
+          pattern: 'gen_ai.turn *'
+          min: 2

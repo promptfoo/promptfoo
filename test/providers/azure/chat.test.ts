@@ -788,6 +788,93 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 
+    it('omits sampling params for a custom Claude deployment when configured explicitly', async () => {
+      const provider = new AzureChatCompletionProvider('prod-claude-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          isClaudeOpus47OrLater: true,
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('keeps temperature and top_p for a custom Claude deployment without isClaudeOpus47OrLater', async () => {
+      // Regression guard: an existing custom-named Claude deployment that has
+      // not opted in via isClaudeOpus47OrLater must keep its sampling params.
+      const provider = new AzureChatCompletionProvider('prod-claude-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).toHaveProperty('temperature', 0.5);
+      expect(body).toHaveProperty('top_p', 0.9);
+    });
+
+    it('omits sampling params for an opus-4-7-named deployment even without the flag', async () => {
+      // Baseline name-match path: deployment name matches opus-4-7, so sampling
+      // params are stripped without setting isClaudeOpus47OrLater.
+      const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('omits sampling params for an opus-4-8-named deployment even without the flag', async () => {
+      // Baseline name-match path for the 4.8 variant.
+      const provider = new AzureChatCompletionProvider('claude-opus-4-8', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('keeps temperature and top_p for a plain non-Claude deployment', async () => {
+      // Non-Claude deployments (e.g. gpt-4o) must be unaffected by the Opus path.
+      const provider = new AzureChatCompletionProvider('gpt-4o', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).toHaveProperty('temperature', 0.5);
+      expect(body).toHaveProperty('top_p', 0.9);
+    });
+
     it('should use max_completion_tokens for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
