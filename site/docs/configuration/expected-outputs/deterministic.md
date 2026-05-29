@@ -868,6 +868,8 @@ This passes only when both tool calls were emitted by a single LLM generation â€
 
 Do not use this batching inference with `openai:codex-sdk` or `openai:codex-app-server`: their `gen_ai.turn *` spans represent an SDK or protocol turn that can contain multiple hidden model generations.
 
+For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans, and cached responses emit none. See the [batching caveats](/docs/tracing#per-llm-turn-spans) for how to filter subagent turns (`gen_ai.turn.is_subagent`) and handle cache hits.
+
 ### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.

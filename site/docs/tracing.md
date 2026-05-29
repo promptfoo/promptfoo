@@ -241,8 +241,8 @@ Several first-party providers expose turn marker spans to trace assertions. Some
 
 | Provider                         | Turn span name pattern                     | What a counted span represents                                                                                                          |
 | -------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round                                                                      |
-| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round                                                           |
+| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round (includes subagent rounds — see the caveat below)                    |
+| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round (cache hits emit no turn span — see the caveat below)     |
 | `openai:agents` (TypeScript)     | `response *` (preferred) or `generation *` | `openai-agents-js` emits `response <id>` per LLM round; `generation *` is also produced when the SDK includes a `generation`-typed span |
 | `openai-agents` Python (example) | `turn *` (preferred) or `response *`       | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                       |
 | Google ADK (via `google.adk`)    | `call_llm`                                 | Emitted by ADK's built-in OpenTelemetry instrumentation                                                                                 |
@@ -264,6 +264,24 @@ assert:
 ```
 
 Codex SDK and app-server turn markers are still useful for correlating item spans and token usage to a provider turn, but they cannot distinguish batched from sequential tool calls within that turn because those APIs do not expose internal model-generation boundaries.
+
+:::note Caveats for the batching assertion
+
+- **Subagents inflate the count.** For `anthropic:claude-agent-sdk`, every `assistant` message — including those produced by subagents — emits a `gen_ai.turn` span on the same counter, so a single main-agent round that spawns a subagent shows more than one span. Subagent turns are tagged with `gen_ai.turn.is_subagent: true` (plus `gen_ai.turn.parent_tool_use_id` and `gen_ai.turn.subagent_type`). To count only main-agent rounds, use a JavaScript assertion that filters them out:
+
+  ```yaml
+  assert:
+    - type: javascript
+      value: |
+        const mainTurns = context.trace.spans.filter(
+          (s) => s.name.startsWith('gen_ai.turn ') && !s.attributes['gen_ai.turn.is_subagent'],
+        );
+        return mainTurns.length === 1;
+  ```
+
+- **Cache hits emit no turn span.** A cached response (e.g. `azure:foundry-agent` with caching enabled) still emits the parent `chat <model>` span, but performs no LLM round and therefore emits zero `gen_ai.turn` spans. Run with `--no-cache`, or scope `min`/`max` assertions to fresh responses, when counting turns.
+
+:::
 
 For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the exposed turn that emitted them.
 
