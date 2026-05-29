@@ -92,6 +92,34 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
   });
 
+  it('keeps the contracts subpath extension-safe for emitted ESM', () => {
+    const contractsDir = path.join(process.cwd(), 'src', 'contracts');
+    const files = [
+      path.join(process.cwd(), 'src', 'contracts.ts'),
+      ...collectSourceFiles(contractsDir, new Set()),
+    ];
+    const extensionlessRelativeImportPattern =
+      /(?:\bfrom|export\s+\*\s+from)\s+['"](\.[^'"]*(?<!\.js))['"]/g;
+    const offenders = files.flatMap((file) => {
+      const contents = fs.readFileSync(file, 'utf8');
+      return [...contents.matchAll(extensionlessRelativeImportPattern)].map(
+        ([, importPath]) => `${path.relative(process.cwd(), file)}: ${importPath}`,
+      );
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps TypeScript from emitting into bundler-owned dist', () => {
+    const tsconfig = readPackageJson<{
+      compilerOptions?: {
+        noEmit?: boolean;
+      };
+    }>('tsconfig.json');
+
+    expect(tsconfig.compilerOptions?.noEmit).toBe(true);
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;
