@@ -238,6 +238,7 @@ jobs:
           pip install modelaudit[all]
 
       - name: Comprehensive model scan
+        id: scan
         continue-on-error: true
         run: |
           promptfoo scan-model models/ \
@@ -300,6 +301,10 @@ jobs:
           path: |
             scan_results.json
             sbom.json
+
+      - name: Fail if scan found issues or errors
+        if: steps.scan.outcome == 'failure'
+        run: exit 1
 ```
 
 ### Strict Mode for Production

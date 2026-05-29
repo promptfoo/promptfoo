@@ -1,4 +1,6 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://promptfoo.dev/schemas/modelaudit/v0.2.45/modelaudit-scan-result.schema.json",
   "$defs": {
     "AssetModel": {
       "description": "Model for scanned assets",
@@ -76,10 +78,7 @@
           "title": "Contents"
         }
       },
-      "required": [
-        "path",
-        "type"
-      ],
+      "required": ["path", "type"],
       "title": "AssetModel",
       "type": "object"
     },
@@ -164,21 +163,13 @@
           "type": "number"
         }
       },
-      "required": [
-        "name",
-        "status",
-        "message"
-      ],
+      "required": ["name", "status", "message"],
       "title": "Check",
       "type": "object"
     },
     "CheckStatus": {
       "description": "Enum for check status",
-      "enum": [
-        "passed",
-        "failed",
-        "skipped"
-      ],
+      "enum": ["passed", "failed", "skipped"],
       "title": "CheckStatus",
       "type": "string"
     },
@@ -225,9 +216,7 @@
           "type": "number"
         }
       },
-      "required": [
-        "holder"
-      ],
+      "required": ["holder"],
       "title": "CopyrightNoticeModel",
       "type": "object"
     },
@@ -536,20 +525,13 @@
           "title": "Rule Code"
         }
       },
-      "required": [
-        "message"
-      ],
+      "required": ["message"],
       "title": "Issue",
       "type": "object"
     },
     "IssueSeverity": {
       "description": "Enum for issue severity levels",
-      "enum": [
-        "debug",
-        "info",
-        "warning",
-        "critical"
-      ],
+      "enum": ["debug", "info", "warning", "critical"],
       "title": "IssueSeverity",
       "type": "string"
     },
@@ -937,7 +919,7 @@
       "type": "array"
     },
     "has_errors": {
-      "description": "Whether any critical issues were found",
+      "description": "Whether operational errors occurred during scanning",
       "title": "Has Errors",
       "type": "boolean"
     },
