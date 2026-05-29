@@ -19,6 +19,7 @@ export type ErrorCategory =
  * Uses word boundaries to avoid false positives (e.g., "401k" shouldn't match auth errors).
  */
 const HTTP_STATUS_PATTERNS = {
+  timeout: /\b(?:408|504)\b/,
   rate_limit: /\b429\b/,
   auth: /\b40[13]\b/, // 401 or 403
   server_error: /\b50[0-3]\b/, // 500, 501, 502, 503
@@ -50,6 +51,10 @@ export function categorizeError(errorMessage: string): ErrorCategory {
 
   // Check timeout first (highest priority for user-facing issues)
   if (ERROR_KEYWORDS.timeout.some((kw) => errorLower.includes(kw))) {
+    return 'timeout';
+  }
+
+  if (HTTP_STATUS_PATTERNS.timeout.test(errorMessage)) {
     return 'timeout';
   }
 

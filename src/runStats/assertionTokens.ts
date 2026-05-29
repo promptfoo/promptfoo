@@ -1,4 +1,5 @@
 import { createEmptyAssertions } from '../util/tokenUsageUtils';
+import { getCountableAssertionComponents } from './assertionComponents';
 
 import type { EvaluateStats } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -50,7 +51,7 @@ function accumulateAssertionTokens(
 }
 
 function getComponentAssertionRequestCount(result: StatableResult): number {
-  return (result.gradingResult?.componentResults || []).reduce(
+  return getCountableAssertionComponents(result).reduce(
     (count, componentResult) => count + (componentResult.tokensUsed?.numRequests ?? 0),
     0,
   );
@@ -84,7 +85,7 @@ export function accumulateResultAssertionTokenUsage(
   }
 
   let foundTokenUsage = false;
-  for (const componentResult of result.gradingResult?.componentResults || []) {
+  for (const componentResult of getCountableAssertionComponents(result)) {
     if (componentResult.tokensUsed) {
       accumulateAssertionTokens(target, componentResult.tokensUsed);
       foundTokenUsage = true;

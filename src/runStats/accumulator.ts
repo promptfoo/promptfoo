@@ -1,5 +1,6 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/constants';
 import { type ApiProvider, type AssertionType, type EvaluateStats } from '../types/index';
+import { getCountableAssertionComponents } from './assertionComponents';
 import {
   accumulateResultAssertionTokenUsage,
   createAssertionTokenAccumulator,
@@ -8,7 +9,7 @@ import {
 } from './assertionTokens';
 import { categorizeError, type ErrorCategory, isOperationalError } from './errors';
 import { getPercentile } from './latency';
-import { computeModelInfo } from './providers';
+import { computeModelInfo, computeModelInfoFromIds } from './providers';
 
 import type {
   AssertionTypeStats,
@@ -59,6 +60,7 @@ export class RunStatsAccumulator {
   private readonly assertions = new Map<string, AssertionAccumulator>();
   private readonly assertionTokenUsage = createAssertionTokenAccumulator();
   private readonly assertionTypes = new Set<string>();
+  private readonly modelProviderIds = new Set<string>();
   private cacheHits = 0;
   private cacheMisses = 0;
   private errorCount = 0;
@@ -93,6 +95,11 @@ export class RunStatsAccumulator {
       ? this.assertionTokenUsage
       : getStatsAssertionTokenUsage(stats);
 
+    const modelInfo =
+      this.modelProviderIds.size > 0
+        ? computeModelInfoFromIds(Array.from(this.modelProviderIds))
+        : computeModelInfo(providers);
+
     return {
       latency: {
         avgMs: sortedLatencies.length > 0 ? Math.round(totalLatency / sortedLatencies.length) : 0,
@@ -121,7 +128,7 @@ export class RunStatsAccumulator {
         breakdown: this.getAssertionBreakdown(),
         tokenUsage: toAssertionTokenUsage(assertionTokenUsage),
       },
-      models: computeModelInfo(providers),
+      models: modelInfo,
     };
   }
 
@@ -152,6 +159,7 @@ export class RunStatsAccumulator {
       this.foundAssertionTokenUsage;
 
     const providerId = result.provider?.id || 'unknown';
+    this.modelProviderIds.add(providerId);
     const provider = this.providers.get(providerId) ?? {
       requests: 0,
       successes: 0,
@@ -175,7 +183,7 @@ export class RunStatsAccumulator {
     provider.completionTokens += result.response?.tokenUsage?.completion || 0;
     provider.cachedTokens += result.response?.tokenUsage?.cached || 0;
 
-    for (const componentResult of result.gradingResult?.componentResults || []) {
+    for (const componentResult of getCountableAssertionComponents(result)) {
       this.assertionCount++;
       if (componentResult.pass) {
         this.assertionPassCount++;
@@ -237,7 +245,7 @@ export class RunStatsAccumulator {
           passRate: total > 0 ? accumulated.pass / total : 0,
         };
       })
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type))
       .slice(0, 20);
   }
 }

@@ -153,6 +153,20 @@ describe('computeRunStats', () => {
     expect(runStats.models.ids).toEqual(['anthropic:claude-3', 'openai:gpt-4']);
   });
 
+  it('should derive model information from result providers when available', () => {
+    const runStats = computeRunStats({
+      results: [{ success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } }],
+      stats: createStats(),
+      providers: [createProvider('anthropic:claude-3'), createProvider('openai:gpt-4')],
+    });
+
+    expect(runStats.models).toEqual({
+      ids: ['openai:gpt-4'],
+      isComparison: false,
+      hasCustom: false,
+    });
+  });
+
   it('should handle results with all errors', () => {
     const results: StatableResult[] = [
       { success: false, latencyMs: 100, error: 'Timeout error', provider: { id: 'openai:gpt-4' } },
@@ -395,6 +409,78 @@ describe('computeRunStats', () => {
       cachedTokens: 0,
       numRequests: 1,
       reasoningTokens: 0,
+    });
+  });
+
+  it('should ignore flattened assert-set aggregate parents in aggregate assertion stats', () => {
+    const equalsResult = {
+      pass: true,
+      score: 1,
+      reason: '',
+      assertion: { type: 'equals' as const },
+      tokensUsed: {
+        total: 10,
+        prompt: 7,
+        completion: 3,
+        numRequests: 1,
+      },
+    };
+    const containsResult = {
+      pass: false,
+      score: 0,
+      reason: '',
+      assertion: { type: 'contains' as const },
+      tokensUsed: {
+        total: 12,
+        prompt: 8,
+        completion: 4,
+        numRequests: 1,
+      },
+    };
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: false,
+          latencyMs: 100,
+          gradingResult: {
+            componentResults: [
+              {
+                pass: false,
+                score: 0.5,
+                reason: 'Aggregate failed',
+                tokensUsed: {
+                  total: 22,
+                  prompt: 15,
+                  completion: 7,
+                  numRequests: 2,
+                },
+                componentResults: [equalsResult, containsResult],
+              },
+              equalsResult,
+              containsResult,
+            ],
+          },
+        },
+      ],
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.assertions).toMatchObject({
+      total: 2,
+      passed: 1,
+      breakdown: [
+        { type: 'contains', pass: 0, fail: 1, total: 1, passRate: 0 },
+        { type: 'equals', pass: 1, fail: 0, total: 1, passRate: 1 },
+      ],
+      tokenUsage: {
+        totalTokens: 22,
+        promptTokens: 15,
+        completionTokens: 7,
+        cachedTokens: 0,
+        numRequests: 2,
+        reasoningTokens: 0,
+      },
     });
   });
 

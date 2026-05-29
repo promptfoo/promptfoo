@@ -98,12 +98,19 @@ export function computeModelInfo(providers: ApiProvider[]): {
   isComparison: boolean;
   hasCustom: boolean;
 } {
-  const providerIds = providers.map((provider) => provider.id());
+  return computeModelInfoFromIds(providers.map((provider) => provider.id()));
+}
+
+export function computeModelInfoFromIds(providerIds: string[]): {
+  ids: string[];
+  isComparison: boolean;
+  hasCustom: boolean;
+} {
   const uniqueIds = new Set(providerIds);
   const ids = Array.from(uniqueIds).sort();
 
   // It's a comparison if there are multiple providers with different IDs
-  const isComparison = providers.length > 1 && uniqueIds.size > 1;
+  const isComparison = uniqueIds.size > 1;
 
   const hasCustom = providerIds.some(isCustomTelemetryProviderIdentifier);
 

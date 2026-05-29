@@ -61,6 +61,23 @@ describe('computeAssertionBreakdown', () => {
     expect(breakdown.map((b) => b.type)).toEqual(['regex', 'contains', 'equals']);
   });
 
+  it('should sort equal-volume assertion types by type for deterministic output', () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 100,
+        gradingResult: {
+          componentResults: [
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'contains' } },
+          ],
+        },
+      },
+    ];
+    const breakdown = computeAssertionBreakdown(results);
+    expect(breakdown.map((b) => b.type)).toEqual(['contains', 'equals']);
+  });
+
   it('should limit to maxTypes', () => {
     const results: StatableResult[] = [
       {
@@ -94,6 +111,44 @@ describe('computeAssertionBreakdown', () => {
     ];
     const breakdown = computeAssertionBreakdown(results);
     expect(breakdown).toEqual([{ type: 'unknown', pass: 1, fail: 1, total: 2, passRate: 0.5 }]);
+  });
+
+  it('should skip flattened assert-set aggregate parents', () => {
+    const equalsResult = {
+      pass: true,
+      score: 1,
+      reason: '',
+      assertion: { type: 'equals' as const },
+    };
+    const containsResult = {
+      pass: false,
+      score: 0,
+      reason: '',
+      assertion: { type: 'contains' as const },
+    };
+    const results: StatableResult[] = [
+      {
+        success: false,
+        latencyMs: 100,
+        gradingResult: {
+          componentResults: [
+            {
+              pass: false,
+              score: 0.5,
+              reason: 'Aggregate failed',
+              componentResults: [equalsResult, containsResult],
+            },
+            equalsResult,
+            containsResult,
+          ],
+        },
+      },
+    ];
+
+    expect(computeAssertionBreakdown(results)).toEqual([
+      { type: 'contains', pass: 0, fail: 1, total: 1, passRate: 0 },
+      { type: 'equals', pass: 1, fail: 0, total: 1, passRate: 1 },
+    ]);
   });
 
   it('should aggregate across multiple results', () => {
@@ -194,6 +249,45 @@ describe('computeAssertionStats', () => {
     expect(stats.total).toBe(3);
     expect(stats.passed).toBe(2);
     expect(stats.passRate).toBeCloseTo(2 / 3);
+  });
+
+  it('should not count flattened assert-set aggregate parents', () => {
+    const equalsResult = {
+      pass: true,
+      score: 1,
+      reason: '',
+      assertion: { type: 'equals' as const },
+    };
+    const containsResult = {
+      pass: false,
+      score: 0,
+      reason: '',
+      assertion: { type: 'contains' as const },
+    };
+    const results: StatableResult[] = [
+      {
+        success: false,
+        latencyMs: 100,
+        gradingResult: {
+          componentResults: [
+            {
+              pass: false,
+              score: 0.5,
+              reason: 'Aggregate failed',
+              componentResults: [equalsResult, containsResult],
+            },
+            equalsResult,
+            containsResult,
+          ],
+        },
+      },
+    ];
+
+    const stats = computeAssertionStats(results, createStats());
+
+    expect(stats.total).toBe(2);
+    expect(stats.passed).toBe(1);
+    expect(stats.breakdown.map((item) => item.type)).toEqual(['contains', 'equals']);
   });
 
   it('should count unique model-graded assertion types', () => {

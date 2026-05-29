@@ -1,4 +1,5 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/constants';
+import { getCountableAssertionComponents } from './assertionComponents';
 import {
   accumulateResultAssertionTokenUsage,
   createAssertionTokenAccumulator,
@@ -31,9 +32,7 @@ export function computeAssertionBreakdown(
   const accumulators = new Map<string, AssertionAccumulator>();
 
   for (const result of results) {
-    const componentResults = result.gradingResult?.componentResults || [];
-
-    for (const cr of componentResults) {
+    for (const cr of getCountableAssertionComponents(result)) {
       const type = cr.assertion?.type || 'unknown';
 
       const accumulator = accumulators.get(type) ?? { pass: 0, fail: 0 };
@@ -58,7 +57,7 @@ export function computeAssertionBreakdown(
         passRate: total > 0 ? acc.pass / total : 0,
       };
     })
-    .sort((a, b) => b.total - a.total)
+    .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type))
     .slice(0, maxTypes);
 }
 
@@ -86,9 +85,7 @@ export function computeAssertionStats(
 
   // Count all assertions and collect unique types
   for (const result of results) {
-    const componentResults = result.gradingResult?.componentResults || [];
-
-    for (const cr of componentResults) {
+    for (const cr of getCountableAssertionComponents(result)) {
       total++;
       if (cr.pass) {
         passed++;

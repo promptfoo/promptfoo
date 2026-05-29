@@ -120,6 +120,106 @@ describeEvaluator('evaluator metrics and scoring', () => {
     );
   });
 
+  it('redacts user-owned OpenAI resource identifiers in outbound telemetry', async () => {
+    const chatkitProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('openai:chatkit:wf_private_workflow'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const assistantProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('openai:asst_private'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const publicModelProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('openai:gpt-4o'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const recordSpy = vi.spyOn(telemetry, 'record');
+    const testSuite: TestSuite = {
+      providers: [chatkitProvider, assistantProvider, publicModelProvider],
+      prompts: [toPrompt('Telemetry OpenAI resource classification')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
+    expect(properties?.models).toEqual(['openai:custom', 'openai:gpt-4o']);
+    expect(properties?.providerBreakdown).not.toContain('wf_private_workflow');
+    expect(properties?.providerBreakdown).not.toContain('asst_private');
+    expect(JSON.parse(String(properties?.providerBreakdown))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: 'openai:custom', requests: 2 }),
+        expect.objectContaining({ provider: 'openai:gpt-4o', requests: 1 }),
+      ]),
+    );
+  });
+
+  it('emits parseable sanitized run-stat telemetry breakdowns', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('python:/Users/acme/private/grader.py:default'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const recordSpy = vi.spyOn(telemetry, 'record');
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Telemetry breakdown contracts')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Test' },
+            { type: 'contains', value: 'missing' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
+    expect(properties).toBeDefined();
+    const providerBreakdown = JSON.parse(String(properties?.providerBreakdown));
+    const assertionBreakdown = JSON.parse(String(properties?.assertionBreakdown));
+    const errorBreakdown = JSON.parse(String(properties?.errorBreakdown));
+    const assertionTokenUsage = JSON.parse(String(properties?.assertionTokenUsage));
+
+    expect(JSON.stringify(providerBreakdown)).not.toContain('/Users/acme/private');
+    expect(providerBreakdown).toEqual([
+      expect.objectContaining({
+        provider: 'python:custom',
+        requests: 1,
+        successes: 1,
+        failures: 0,
+      }),
+    ]);
+    expect(assertionBreakdown).toEqual([
+      expect.objectContaining({
+        type: 'contains',
+        pass: 1,
+        fail: 1,
+        total: 2,
+      }),
+    ]);
+    expect(errorBreakdown).toEqual({
+      timeout: 0,
+      rate_limit: 0,
+      auth: 0,
+      server_error: 0,
+      network: 0,
+      other: 0,
+    });
+    expect(assertionTokenUsage).toEqual(
+      expect.objectContaining({
+        totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        cachedTokens: 0,
+        numRequests: 0,
+      }),
+    );
+  });
+
   it('excludes stale retry-error rows from persisted run statistics', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -193,6 +293,50 @@ describeEvaluator('evaluator metrics and scoring', () => {
         expect.objectContaining({ provider: 'historic-provider', requests: 1 }),
         expect.objectContaining({ provider: 'test-provider', requests: 1 }),
       ]),
+    );
+  });
+
+  it('scopes resumed eval model telemetry to providers used in this invocation', async () => {
+    const historicProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('anthropic:claude-3'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const resumedProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('openai:gpt-4o'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [historicProvider, resumedProvider],
+      prompts: [toPrompt('Resume model scope')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await EvalResult.createFromEvaluateResult(
+      evalRecord.id,
+      createEvaluateResult({
+        prompt: testSuite.prompts[0],
+        provider: { id: 'anthropic:claude-3' },
+        testCase: testSuite.tests![0],
+        testIdx: 0,
+        promptIdx: 0,
+        latencyMs: 900,
+        response: { output: 'Test output', cached: true },
+      }),
+    );
+    const recordSpy = vi.spyOn(telemetry, 'record');
+    cliState.resume = true;
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(historicProvider.callApi).not.toHaveBeenCalled();
+    expect(resumedProvider.callApi).toHaveBeenCalledOnce();
+    const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
+    expect(properties).toEqual(
+      expect.objectContaining({
+        models: ['openai:gpt-4o'],
+        isModelComparison: false,
+        hasCustomProvider: false,
+      }),
     );
   });
 

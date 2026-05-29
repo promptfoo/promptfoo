@@ -119,6 +119,22 @@ describe('sanitizeTelemetryIdentifier', () => {
     expect(sanitizeTelemetryProviderIdentifier('openai:ft:gpt-4o-mini:acme:billing:job-id')).toBe(
       'openai:custom',
     );
+    expect(sanitizeTelemetryProviderIdentifier('openai:chatkit:wf_private_workflow')).toBe(
+      'openai:custom',
+    );
+    expect(sanitizeTelemetryProviderIdentifier('openai:assistant:asst_private')).toBe(
+      'openai:custom',
+    );
+    expect(sanitizeTelemetryProviderIdentifier('openai:asst_private')).toBe('openai:custom');
+    expect(sanitizeTelemetryProviderIdentifier('openai:agents:customer-support-prod')).toBe(
+      'openai:custom',
+    );
+    expect(
+      sanitizeTelemetryProviderIdentifier('openai:moderation:omni-moderation-latest:hash'),
+    ).toBe('openai:custom');
+    expect(sanitizeTelemetryProviderIdentifier('openai:codex-sdk:instance:hash')).toBe(
+      'openai:custom',
+    );
     expect(sanitizeTelemetryProviderIdentifier('python:custom')).toBe('python:custom');
     expect(sanitizeTelemetryProviderIdentifier('file:custom')).toBe('file:custom');
   });

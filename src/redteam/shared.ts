@@ -240,7 +240,11 @@ function isSampleTarget(target: unknown): boolean {
   const { id, config } = target as { id?: string; config?: { url?: string } };
   const url = config?.url || '';
   return (
-    id?.includes('promptfoo:') || url.includes('promptfoo.app') || url.includes('promptfoo.dev')
+    id?.includes('promptfoo:') ||
+    id?.includes('promptfoo.app') ||
+    id?.includes('promptfoo.dev') ||
+    url.includes('promptfoo.app') ||
+    url.includes('promptfoo.dev')
   );
 }
 

@@ -130,7 +130,7 @@ export interface AssertionTokenUsage {
 /**
  * Complete evaluation run statistics.
  *
- * This is the main interface exposed to users via Eval.runStats.
+ * This is the main interface exposed on the in-process Eval.runStats field.
  * Contains operational data about the evaluation run - performance,
  * cache effectiveness, errors, and per-provider breakdowns.
  */

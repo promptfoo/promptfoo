@@ -315,8 +315,8 @@ export default class Eval {
 
   /**
    * Evaluation run statistics.
-   * Computed once after evaluation completes, available for user inspection.
-   * Not persisted to database (yet).
+   * Computed once after evaluation completes and available on the returned Eval instance.
+   * Not persisted to database.
    */
   runStats?: EvalRunStats;
 

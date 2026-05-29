@@ -10,6 +10,8 @@ describe('categorizeError', () => {
     expect(categorizeError('Connection timed out')).toBe('timeout');
     expect(categorizeError('TIMEOUT: Operation took too long')).toBe('timeout');
     expect(categorizeError('ETIMEDOUT: Connection timed out')).toBe('timeout');
+    expect(categorizeError('HTTP 408')).toBe('timeout');
+    expect(categorizeError('HTTP 504')).toBe('timeout');
   });
 
   it('should categorize rate limit errors', () => {

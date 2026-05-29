@@ -72,6 +72,16 @@ const PUBLIC_MODEL_IDENTIFIER_PREFIXES = new Set([
 ]);
 
 const PUBLIC_SLASH_MODEL_IDENTIFIER_PREFIXES = new Set(['huggingface', 'openrouter', 'replicate']);
+const REDACTED_OPENAI_IDENTIFIER_TYPES = new Set([
+  'agents',
+  'assistant',
+  'chatkit',
+  'codex',
+  'codex-app-server',
+  'codex-desktop',
+  'codex-sdk',
+  'moderation',
+]);
 
 function containsPrivateIdentifierData(
   prefix: string,
@@ -86,8 +96,15 @@ function containsPrivateIdentifierData(
     return true;
   }
 
-  if (prefix === 'openai' && /(?:^|:)ft:/i.test(suffix)) {
-    return true;
+  if (prefix === 'openai') {
+    const [identifierType] = suffix.toLowerCase().split(':');
+    if (
+      REDACTED_OPENAI_IDENTIFIER_TYPES.has(identifierType) ||
+      /(?:^|:)ft:/i.test(suffix) ||
+      /^asst_/i.test(suffix)
+    ) {
+      return true;
+    }
   }
 
   return (
