@@ -194,6 +194,68 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('restores nested array SAS tokens when unrelated object fields are edited', () => {
+      const stored = {
+        tests: [
+          {
+            description: 'old description',
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+          {
+            description: 'second test',
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+        ],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            {
+              description: 'edited description',
+              vars: {
+                suite: 'b',
+                file: 'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+            {
+              description: 'old description',
+              vars: {
+                suite: 'a',
+                file: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          {
+            description: 'edited description',
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+          {
+            description: 'old description',
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+        ],
+      });
+    });
+
     it('does not restore an entry the user edited to point at a different blob', () => {
       const stored = {
         tests: ['az://account/container/a.yaml?sp=r&sig=secret-a'],
