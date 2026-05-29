@@ -125,7 +125,7 @@ describe('AzureChatCompletionProvider', () => {
 
     it('should handle undefined prompt config', async () => {
       const context = {
-        prompt: { label: 'test prompt', raw: 'test prompt' },
+        prompt: { config: undefined, label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
       const { body } = await (provider as any).getOpenAiBody('test prompt', context);
@@ -480,15 +480,16 @@ describe('AzureChatCompletionProvider', () => {
         'Another-Header': 'another-value',
       };
 
-      const provider = new AzureChatCompletionProvider('test-deployment', {
+      const customProvider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           apiHost: 'test.azure.com',
           apiKey: 'test-key',
           headers: customHeaders,
         },
       });
+      setAuthHeaders(customProvider);
 
-      await provider.callApi('test prompt');
+      await customProvider.callApi('test prompt');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),

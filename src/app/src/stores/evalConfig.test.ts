@@ -1223,6 +1223,36 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('map-secret');
     });
 
+    it('redacts credentials in object-shaped providers within test filters', () => {
+      const provider = {
+        id: 'http',
+        config: {
+          apiKey: 'object-provider-secret',
+          headers: {
+            Authorization: 'Bearer object-provider-token',
+            'x-request-id': 'visible-id',
+          },
+          endpoint: 'https://example.com',
+        },
+      };
+      useStore.getState().setConfig({
+        defaultTest: { providers: [provider] },
+        tests: [{ providers: [provider] }],
+        scenarios: [{ tests: [{ providers: [provider] }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const expectedConfig = {
+        headers: { 'x-request-id': 'visible-id' },
+        endpoint: 'https://example.com',
+      };
+      expect(persisted.defaultTest.providers[0].config).toEqual(expectedConfig);
+      expect(persisted.tests[0].providers[0].config).toEqual(expectedConfig);
+      expect(persisted.scenarios[0].tests[0].providers[0].config).toEqual(expectedConfig);
+      expect(JSON.stringify(persisted)).not.toContain('object-provider-secret');
+      expect(JSON.stringify(persisted)).not.toContain('object-provider-token');
+    });
+
     it('redacts provider identifiers in raw editor providerPromptMap fields', () => {
       const provider =
         'https://router-user:router-password@api.example.com/v1?token=routing-secret&region=us';

@@ -492,6 +492,12 @@ const omitOpaqueToolCredentials = (tool: unknown, templatePaths?: Set<string>): 
   };
 };
 
+/**
+ * Redacts credentials while cloning one persisted configuration subtree.
+ *
+ * `inHttpBody` broadens credential-name matching for request payloads.
+ * `credentialEnvSelectors` identifies env values declared as provider credentials.
+ */
 const walkValue = (
   value: unknown,
   parentKey: string | undefined,
@@ -800,7 +806,7 @@ const omitTestCaseProviderCredentials = (
           providers: testCase.providers.map((provider) =>
             typeof provider === 'string'
               ? scrubProviderIdentifier(provider, templatePaths)
-              : provider,
+              : omitProviderCredentials(provider, undefined, templatePaths),
           ),
         }
       : {}),
