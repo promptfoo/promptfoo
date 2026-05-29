@@ -88,7 +88,7 @@ describe('Provider Registry', () => {
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
         // on the hot path regresses loudly instead of silently doubling the
-        // per-lookup allocation for every non-redteam provider call.
+        // per-lookup allocation for every non-family provider call.
         const factories = await getProviderFactories('openai:gpt-4');
         expect(factories).toBe(providerMap);
       });
@@ -135,6 +135,37 @@ describe('Provider Registry', () => {
         expect(aCres).toBe(bCres);
         expect(bCres).toBe(cCres);
         expect(a.filter((f) => f.test('promptfoo:redteam:crescendo')).length).toBe(1);
+      });
+
+      it.each([
+        'bedrock:completion:anthropic.claude-v2',
+        'bedrock-agent:agent-id',
+        'sagemaker:endpoint-name',
+      ])('appends AWS factories without mutating providerMap for %s', async (path) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      });
+
+      it('resolves the same AWS factory under concurrent lookups', async () => {
+        const path = 'bedrock:completion:anthropic.claude-v2';
+        const [a, b, c] = await Promise.all([
+          getProviderFactories(path),
+          getProviderFactories(path),
+          getProviderFactories(path),
+        ]);
+        const aBedrock = a.find((factory) => factory.test(path));
+        const bBedrock = b.find((factory) => factory.test(path));
+        const cBedrock = c.find((factory) => factory.test(path));
+
+        expect(aBedrock).toBeDefined();
+        expect(aBedrock).toBe(bBedrock);
+        expect(bBedrock).toBe(cBedrock);
+        expect(a.filter((factory) => factory.test(path)).length).toBe(1);
       });
     });
 
@@ -423,7 +454,8 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock providers correctly', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:completion:anthropic.claude-v2'));
+      const factories = await getProviderFactories('bedrock:completion:anthropic.claude-v2');
+      const factory = factories.find((f) => f.test('bedrock:completion:anthropic.claude-v2'));
       expect(factory).toBeDefined();
 
       const completionProvider = await factory!.create(
@@ -450,7 +482,8 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock Luma Ray video provider with model version', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:luma.ray-v2:0'));
+      const factories = await getProviderFactories('bedrock:luma.ray-v2:0');
+      const factory = factories.find((f) => f.test('bedrock:luma.ray-v2:0'));
       expect(factory).toBeDefined();
 
       // Don't pass id in options so the provider uses its default id
@@ -461,7 +494,8 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock:video:luma.ray format correctly', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
+      const factories = await getProviderFactories('bedrock:video:luma.ray-v2:0');
+      const factory = factories.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
       expect(factory).toBeDefined();
 
       // bedrock:video:luma.ray-v2:0 should route to Luma Ray, not Nova Reel
@@ -477,7 +511,8 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock Nova Reel video provider', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
+      const factories = await getProviderFactories('bedrock:video:amazon.nova-reel-v1:1');
+      const factory = factories.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
       expect(factory).toBeDefined();
 
       // Don't pass id in options so the provider uses its default id
