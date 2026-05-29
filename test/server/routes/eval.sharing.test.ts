@@ -69,6 +69,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const postJob = (body: Record<string, unknown>) => api.post('/api/eval/job').send(body);
@@ -259,5 +260,275 @@ describe('Eval Routes - Sharing behavior', () => {
 
     const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
+  });
+
+  it('rejects executable prompt sources from web job creation', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['exec:/bin/echo PROMPTFOO_EXEC_SENTINEL'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources from web job creation', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['prompts/runner'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources that contain spaces', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['prompts/my runner.txt'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources with spaces before the first separator', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my prompts/template.txt'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources with single-character path prefixes', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['a/prompt.py:run'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources with non-word path segments', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my+prompts/runner.py:run'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources with punctuation-only path prefixes', async () => {
+    const underscoredResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['_/runner'],
+    });
+    const dashedResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['--/tool'],
+    });
+
+    expect(underscoredResponse.status).toBe(400);
+    expect(underscoredResponse.body.error).toContain('Server-side prompt sources are disabled');
+    expect(dashedResponse.status).toBe(400);
+    expect(dashedResponse.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects extensionless local paths with non-word path segments', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my+prompts/runner'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects extensionless local prompt file sources with spaces', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my prompts/my runner'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects glob prompt sources that contain spaces', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['prompts/my *.txt'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file names that contain spaces', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my prompt.txt'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local executable prompt files that contain spaces', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my script.py:run'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local executable prompt files with non-word file names', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my+script.py:run'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects URI-like prompt strings that resolve through the local prompt loader', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['foo://../../../../bin/sh'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects colon-separated prompt file references', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['label:path/to/filename.py:functionName'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects executable prompt files from web job creation', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['runner.sh'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects executable prompt files with generic file extensions', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['payload.bin'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects executable prompt files with non-letter extensions', async () => {
+    const numericExtensionResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['payload.42'],
+    });
+    const mixedExtensionResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['tool.1a'],
+    });
+
+    expect(numericExtensionResponse.status).toBe(400);
+    expect(numericExtensionResponse.body.error).toContain(
+      'Server-side prompt sources are disabled',
+    );
+    expect(mixedExtensionResponse.status).toBe(400);
+    expect(mixedExtensionResponse.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('allows object prompt sources from web job creation', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: [{ raw: 'exec:/bin/echo PROMPTFOO_EXEC_SENTINEL', label: 'unsafe' }],
+    });
+
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+  });
+
+  it('allows object prompt id sources when raw is omitted', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: [{ id: 'prompts/runner', label: 'unsafe' }],
+    });
+
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+  });
+
+  it('allows inline templated and JSON-like prompt strings', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: [
+        '{{prompt}}',
+        '{"role":"user","content":"hello"}',
+        '["hello","world"]',
+        'Explain A/B testing and calculate 2 * 2.',
+        'Discuss C++/CLI interop.',
+        'Contact foo@example.com for support.',
+        'Use version 1.2 in the answer.',
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+  });
+
+  it('allows server-side prompt sources when explicitly enabled', async () => {
+    vi.stubEnv('PROMPTFOO_ALLOW_SERVER_PROMPT_SOURCES', 'true');
+
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['exec:/bin/echo trusted-local'],
+    });
+
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
   });
 });

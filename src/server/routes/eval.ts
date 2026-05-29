@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import { VALID_FILE_EXTENSIONS } from '../../prompts/constants';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -43,6 +45,152 @@ export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+const SERVER_PROMPT_SOURCE_OPT_IN = 'PROMPTFOO_ALLOW_SERVER_PROMPT_SOURCES';
+const SERVER_PROMPT_SOURCE_EXECUTABLE_EXTENSIONS = [
+  '.bash',
+  '.bat',
+  '.cmd',
+  '.exe',
+  '.pl',
+  '.ps1',
+  '.rb',
+  '.sh',
+];
+
+function isPathLikeSegment(value: string): boolean {
+  return value.length > 1 && /^[\w.-]+$/.test(value) && /[a-z0-9]/i.test(value);
+}
+
+function hasTrailingFileLikeExtension(value: string): boolean {
+  return /\.[a-z0-9]{1,8}(?::[a-z_$][\w$]*)?$/i.test(value.trim());
+}
+
+function hasKnownPromptFileExtension(value: string): boolean {
+  const lower = value.toLowerCase();
+  return [...VALID_FILE_EXTENSIONS, ...SERVER_PROMPT_SOURCE_EXECUTABLE_EXTENSIONS].some(
+    (extension) => lower.endsWith(extension),
+  );
+}
+
+function hasPathLikeSeparator(value: string): boolean {
+  const separatorIndex = value.search(/[/\\]/);
+  if (separatorIndex < 0) {
+    return false;
+  }
+
+  const firstSegment = value.slice(0, separatorIndex);
+  const afterSeparator = value.slice(separatorIndex + 1);
+  if (!firstSegment.trim() || !afterSeparator.trim()) {
+    return false;
+  }
+
+  if (/\s/.test(firstSegment)) {
+    const pathToken = firstSegment.trimEnd().split(/\s+/).at(-1) ?? '';
+    if (!isPathLikeSegment(pathToken)) {
+      return false;
+    }
+    return true;
+  }
+
+  return (
+    !/\s/.test(afterSeparator) || firstSegment.length > 1 || hasTrailingFileLikeExtension(value)
+  );
+}
+
+function hasFileLikeExtension(value: string): boolean {
+  let pathOrFunctionToken = value.trim();
+  if (!pathOrFunctionToken || /[\n{}[\]]/.test(pathOrFunctionToken)) {
+    return false;
+  }
+
+  const lastColonIndex = pathOrFunctionToken.lastIndexOf(':');
+  if (lastColonIndex > 1) {
+    const pathWithoutFunction = pathOrFunctionToken.slice(0, lastColonIndex);
+    if (hasKnownPromptFileExtension(pathWithoutFunction)) {
+      pathOrFunctionToken = pathWithoutFunction;
+    }
+  }
+
+  const candidate = pathOrFunctionToken.split(/\s+/).at(-1) ?? '';
+  if (!/[a-z0-9]/i.test(candidate)) {
+    return false;
+  }
+
+  if (hasKnownPromptFileExtension(candidate)) {
+    return true;
+  }
+
+  return (
+    candidate.charAt(candidate.length - 3) === '.' || candidate.charAt(candidate.length - 4) === '.'
+  );
+}
+
+function hasGlobLikeWildcard(value: string): boolean {
+  if (!/[*?[\]]/.test(value)) {
+    return false;
+  }
+
+  if (hasPathLikeSeparator(value) || hasTrailingFileLikeExtension(value)) {
+    return true;
+  }
+
+  return value.includes('*') && !/\s/.test(value);
+}
+
+function isServerPromptSourceReference(prompt: string): boolean {
+  const trimmed = prompt.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const lower = trimmed.toLowerCase();
+
+  if (lower.startsWith('exec:') || lower.startsWith('file://')) {
+    return true;
+  }
+
+  if (/^(?:~[/\\]|\.{1,2}[/\\]|[/\\]|[a-z]:[/\\])/i.test(trimmed)) {
+    return true;
+  }
+
+  if (/^(?:portkey|langfuse|helicone):\/\//i.test(trimmed)) {
+    return false;
+  }
+
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return true;
+  }
+
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    return false;
+  }
+
+  const pathOrFunctionToken = trimmed.split(':')[0].toLowerCase();
+  return (
+    hasPathLikeSeparator(trimmed) ||
+    hasGlobLikeWildcard(trimmed) ||
+    hasFileLikeExtension(trimmed) ||
+    SERVER_PROMPT_SOURCE_EXECUTABLE_EXTENSIONS.some((extension) =>
+      pathOrFunctionToken.endsWith(extension),
+    )
+  );
+}
+
+function validateWebEvalPrompts(prompts: (string | Record<string, unknown>)[]): string | undefined {
+  if (getEnvBool(SERVER_PROMPT_SOURCE_OPT_IN, false)) {
+    return undefined;
+  }
+
+  if (
+    prompts.some((prompt) => typeof prompt === 'string' && isServerPromptSourceReference(prompt))
+  ) {
+    return `Server-side prompt sources are disabled for web eval jobs. Set ${SERVER_PROMPT_SOURCE_OPT_IN}=true to allow trusted local usage.`;
+  }
+}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -136,6 +284,12 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: z.prettifyError(result.error) });
+    return;
+  }
+
+  const promptValidationError = validateWebEvalPrompts(result.data.prompts);
+  if (promptValidationError) {
+    res.status(400).json({ error: promptValidationError });
     return;
   }
 
