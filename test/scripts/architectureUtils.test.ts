@@ -5,7 +5,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   extractModuleSpecifiers,
+  findUnclassifiedFiles,
   findViolations,
+  getSourceFiles,
   type LayerConfig,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
@@ -101,10 +103,26 @@ describe('resolveInternalModule', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', './missing')).toBeUndefined();
     });
 
+    it('returns undefined for non-source relative imports', () => {
+      write('package.json', '{}');
+      expect(resolveInternalModule(repoRoot, 'src/app/vite.config.ts', '../../package.json')).toBe(
+        undefined,
+      );
+    });
+
     it('returns undefined for external (non-relative, non-src) specifiers', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', 'zod')).toBeUndefined();
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', '@scoped/pkg')).toBeUndefined();
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', 'node:fs')).toBeUndefined();
+    });
+
+    it('resolves configured source aliases', () => {
+      write('src/core/util.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo/core/util', {
+          '@promptfoo/': 'src/',
+        }),
+      ).toBe('src/core/util.ts');
     });
 
     it('prefers a file over a directory when both could match', () => {
@@ -112,6 +130,32 @@ describe('resolveInternalModule', () => {
       write('src/index/index.ts', '// directory');
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', '../src/index')).toBe('src/index.ts');
     });
+  });
+});
+
+describe('getSourceFiles', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'getsourcefiles-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function write(relativePath: string, contents = ''): void {
+    const absolute = path.join(repoRoot, relativePath);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, contents);
+  }
+
+  it('ignores nested node_modules and configured roots', () => {
+    write('src/core/a.ts');
+    write('src/app/node_modules/pkg/index.ts');
+    write('src/__mocks__/database.ts');
+
+    expect(getSourceFiles(repoRoot, true, ['src/__mocks__'])).toEqual(['src/core/a.ts']);
   });
 });
 
@@ -140,6 +184,27 @@ describe('findViolations', () => {
         { name: 'facade', roots: ['src/index.ts'] },
         { name: 'leaf', roots: ['src/leaf'] },
         { name: 'core', roots: ['src/core'] },
+      ],
+    };
+  }
+
+  function configWithLayerRules(): LayerConfig {
+    return {
+      publicFacade: 'src/index.ts',
+      aliases: {
+        '@promptfoo/': 'src/',
+      },
+      ignoredRoots: ['src/__mocks__'],
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'] },
+        {
+          name: 'app',
+          roots: ['src/app'],
+          allowedDependencies: ['shared'],
+          allowedImportPaths: ['src/shared/allowed.ts'],
+        },
+        { name: 'core', roots: ['src/core'], allowedDependencies: [] },
+        { name: 'shared', roots: ['src/shared'] },
       ],
     };
   }
@@ -221,5 +286,54 @@ describe('findViolations', () => {
     write('src/core/util.ts', 'export const x = 1;');
 
     expect(findViolations(repoRoot, configWithLeaf())).toEqual([]);
+  });
+
+  it('flags dependencies that are not explicitly allowed by the importing layer', () => {
+    write('src/index.ts');
+    write('src/shared/util.ts', 'export const x = 1;');
+    write('src/core/a.ts', "import { x } from '../shared/util';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'layer',
+        importer: 'src/core/a.ts',
+        importerLayer: 'core',
+        imported: 'src/shared/util.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('allows explicitly configured layer dependencies', () => {
+    write('src/index.ts');
+    write('src/shared/allowed.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/allowed';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toEqual([]);
+  });
+
+  it('flags new imports outside a restricted layer path allowlist', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/not-allowed';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        imported: 'src/shared/not-allowed.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('reports unclassified source files outside configured ignored roots', () => {
+    write('src/index.ts');
+    write('src/core/a.ts');
+    write('src/missing/a.ts');
+    write('src/__mocks__/database.ts');
+
+    expect(findUnclassifiedFiles(repoRoot, configWithLayerRules())).toEqual(['src/missing/a.ts']);
   });
 });
