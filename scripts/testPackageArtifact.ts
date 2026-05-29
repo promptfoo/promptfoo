@@ -124,6 +124,34 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-contracts.ts'),
+    [
+      "import { PromptSchema, isTransformFunction } from 'promptfoo/contracts';",
+      "import type { Prompt, TransformFunction } from 'promptfoo/contracts';",
+      '',
+      "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
+      'const transform: TransformFunction<string, string> = (output) => output;',
+      '',
+      'PromptSchema.parse(prompt);',
+      'if (!isTransformFunction(transform)) {',
+      "  throw new Error('Missing expected TypeScript contracts export');",
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        noEmit: true,
+        strict: true,
+      },
+      include: ['import-contracts.ts'],
+    }),
+  );
 }
 
 function main(): void {
@@ -187,6 +215,11 @@ function main(): void {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
+    run(
+      process.execPath,
+      [path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'), '--project', 'tsconfig.json'],
+      consumerDir,
+    );
 
     const binPath = path.join(
       consumerDir,
