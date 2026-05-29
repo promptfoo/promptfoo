@@ -96,6 +96,34 @@ describe('OpenAiResponsesProvider tracing', () => {
     expect(chatSpan?.status?.code).toBe(1);
   });
 
+  it('emits reasoning token usage (completionDetails) on the chat span', async () => {
+    const spans = installTracerSpy();
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        ...successResponse,
+        usage: {
+          total_tokens: 50,
+          prompt_tokens: 10,
+          completion_tokens: 40,
+          completion_tokens_details: { reasoning_tokens: 32 },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3', { config: { apiKey: 'test-key' } });
+    await provider.callApi('Test prompt');
+
+    const chatSpan = spans.find((span) => span.name === 'chat o3');
+    expect(chatSpan).toBeDefined();
+    // The reasoning-token detail must survive extractProviderResponseAttributes
+    // and reach the span (it previously dropped tokenUsage.completionDetails).
+    expect(chatSpan?.attributes['gen_ai.usage.reasoning_tokens']).toBe(32);
+    expect(chatSpan?.attributes['gen_ai.usage.output_tokens']).toBe(40);
+  });
+
   it('marks the chat span ERROR when the API returns an error', async () => {
     const spans = installTracerSpy();
     vi.mocked(cache.fetchWithCache).mockResolvedValue({

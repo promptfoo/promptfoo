@@ -539,12 +539,10 @@ export function buildChatSpanContext(args: {
 export function extractProviderResponseAttributes(response: ProviderResponse): GenAISpanResult {
   const result: GenAISpanResult = {};
   if (response.tokenUsage) {
-    result.tokenUsage = {
-      prompt: response.tokenUsage.prompt,
-      completion: response.tokenUsage.completion,
-      total: response.tokenUsage.total,
-      cached: response.tokenUsage.cached,
-    };
+    // Preserve the full usage object (including completionDetails) so
+    // setGenAIResponseAttributes can emit reasoning / prediction / cache-detail
+    // token counts for reasoning models, not just the four top-level totals.
+    result.tokenUsage = { ...response.tokenUsage };
   }
   if (response.finishReason) {
     result.finishReasons = [response.finishReason];
@@ -601,18 +599,23 @@ export function openTurnSpan(
     }
     state.activeTurnSpan = undefined;
   }
-  state.turnCount += 1;
-  state.activeTurnIndex = state.turnCount;
+  // Only advance the turn counter / active index once the span actually opens,
+  // so a (practically impossible) startSpan failure can't leave item spans
+  // tagged with a turn index that has no corresponding gen_ai.turn span.
+  const index = state.turnCount + 1;
   try {
-    state.activeTurnSpan = opts.tracer.startSpan(`gen_ai.turn ${state.turnCount}`, {
+    const span = opts.tracer.startSpan(`gen_ai.turn ${index}`, {
       kind: SpanKind.INTERNAL,
       startTime: opts.eventTime,
       attributes: {
-        'gen_ai.turn.index': state.turnCount,
+        'gen_ai.turn.index': index,
         'gen_ai.system': opts.system,
         ...opts.attributes,
       },
     });
+    state.turnCount = index;
+    state.activeTurnIndex = index;
+    state.activeTurnSpan = span;
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to start turn span: ${err}`);
     state.activeTurnSpan = undefined;
