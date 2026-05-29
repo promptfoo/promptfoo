@@ -351,7 +351,7 @@ When running evals, you may encounter timeout errors, especially when using loca
 - Handle custom providers or providers that get stuck
 - Prevent runaway costs from long-running evaluations
 
-### Default timeout behavior
+### Quick fixes
 
 Promptfoo provides layered timeout protection by default:
 
@@ -374,8 +374,6 @@ Promptfoo provides layered timeout protection by default:
 Per-test timeout enforcement disables grouped local-judge grading, since queued grading work cannot
 honor an end-to-end timeout per row. Set `PROMPTFOO_EVAL_TIMEOUT_MS=0` only when you intentionally
 prefer grouped grading and have another bound on runtime.
-
-### Customizing timeouts
 
 **Override the defaults for stricter limits:**
 
