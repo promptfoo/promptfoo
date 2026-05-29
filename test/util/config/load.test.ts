@@ -1568,6 +1568,7 @@ describe('resolveConfigs', () => {
       { vars: { testPrompt: 'What services do you offer?' } },
       { vars: { testPrompt: 'How can I confirm an order?' } },
     ];
+    const resolvedScenarios = [{ description: 'Scenario', tests: externalTests }];
 
     const prompt =
       'You are a helpful assistant. You are given a prompt and you must answer it. {{testPrompt}}';
@@ -1621,7 +1622,7 @@ describe('resolveConfigs', () => {
           modelName: 'gpt-4',
         }),
       ],
-      scenarios,
+      scenarios: resolvedScenarios,
       tests: externalTests,
       defaultTest: expect.objectContaining({
         metadata: {},
@@ -1630,7 +1631,8 @@ describe('resolveConfigs', () => {
 
     expect(testSuite.prompts[0].raw).toBe(prompt);
     expect(testSuite.tests).toEqual(externalTests);
-    expect(testSuite.scenarios).toEqual(scenarios);
+    expect(testSuite.scenarios).toEqual(resolvedScenarios);
+    expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://tests.yaml' }]);
   });
 
   it('should apply configured seeded sampling independently to default config scenarios', async () => {
@@ -1667,6 +1669,41 @@ describe('resolveConfigs', () => {
     expect(firstPositions).toEqual(selectedPositions(second));
     expect(firstPositions?.every((positions) => positions.length === 2)).toBe(true);
     expect(firstPositions?.[0]).not.toEqual(firstPositions?.[1]);
+  });
+
+  it('should not mutate reused default config scenarios when sampling', async () => {
+    const originalPositions = ['0', '1', '2', '3'];
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{position}}'],
+      providers: ['echo'],
+      scenarios: [
+        {
+          config: [{}],
+          tests: originalPositions.map((position) => ({
+            vars: { position },
+          })),
+        },
+      ],
+    };
+    const selectedPositions = (config: Awaited<ReturnType<typeof resolveConfigs>>) =>
+      config.testSuite.scenarios?.[0].tests.map((test) => test.vars?.position);
+    const defaultPositions = () =>
+      defaultConfig.scenarios?.[0].tests.map((test) => test.vars?.position);
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{position}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const first = await resolveConfigs({ filterSample: 2, filterSampleSeed: 0 }, defaultConfig);
+    expect(selectedPositions(first)).toHaveLength(2);
+    expect(defaultPositions()).toEqual(originalPositions);
+
+    const second = await resolveConfigs({ filterSample: 4, filterSampleSeed: 1 }, defaultConfig);
+    expect([...(selectedPositions(second) ?? [])].sort()).toEqual(originalPositions);
+    expect(defaultPositions()).toEqual(originalPositions);
   });
 
   it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
