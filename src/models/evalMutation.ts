@@ -1,11 +1,13 @@
 import { updateSignalFile } from '../database/signal';
 import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
+import { clearCountCache } from './evalPerformance';
 
-export function invalidateEvaluationCache(): void {
+export function invalidateEvaluationCache(evalId?: string): void {
   clearStandaloneEvalCache();
+  clearCountCache(evalId);
 }
 
 export function notifyEvaluationChanged(evalId?: string): void {
-  invalidateEvaluationCache();
+  invalidateEvaluationCache(evalId);
   updateSignalFile(evalId);
 }

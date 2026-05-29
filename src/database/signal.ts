@@ -13,8 +13,10 @@ export function updateSignalFile(evalId?: string): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date();
-    // Format: evalId:timestamp (evalId is optional)
-    const content = evalId ? `${evalId}:${now.toISOString()}` : now.toISOString();
+    const content = JSON.stringify({
+      ...(evalId && { evalId }),
+      timestamp: now.toISOString(),
+    });
     fs.writeFileSync(filePath, content);
   } catch (err) {
     logger.warn(`Failed to write database signal file: ${err}`);
@@ -29,21 +31,23 @@ export function readSignalEvalId(): string | undefined {
   const filePath = getDbSignalPath();
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
-    // Format: evalId:timestamp or just timestamp
-    // ISO timestamps look like: 2024-01-01T00:00:00.000Z
-    // With evalId: evalId:2024-01-01T00:00:00.000Z
-    // We need to distinguish between timestamp-only and evalId:timestamp
-    // Timestamps start with a 4-digit year, eval IDs typically don't
+    try {
+      const payload = JSON.parse(content);
+      return typeof payload.evalId === 'string' && payload.evalId.length > 8
+        ? payload.evalId
+        : undefined;
+    } catch {
+      // Read signal files written by older Promptfoo versions.
+    }
+
     if (/^\d{4}-\d{2}-\d{2}T/.test(content)) {
-      // Content starts with ISO date format - no eval ID present
       return undefined;
     }
-    if (content.includes(':')) {
-      const evalId = content.split(':')[0];
-      // Basic validation: eval IDs are typically UUIDs or formatted IDs
-      if (evalId && evalId.length > 8) {
-        return evalId;
-      }
+
+    const legacyScopedSignal = content.match(/^(.*):\d{4}-\d{2}-\d{2}T/);
+    const evalId = legacyScopedSignal?.[1];
+    if (evalId && evalId.length > 8) {
+      return evalId;
     }
     return undefined;
   } catch {

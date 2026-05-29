@@ -53,20 +53,23 @@ describe('signal', () => {
       updateSignalFile();
 
       expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
-      expect(mockWriteFileSync).toHaveBeenCalledWith(
-        '/mock/path/signal.txt',
-        expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
-      );
+      const [, content] = mockWriteFileSync.mock.calls[0];
+      expect(mockWriteFileSync).toHaveBeenCalledWith('/mock/path/signal.txt', expect.any(String));
+      expect(JSON.parse(content)).toEqual({
+        timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
+      });
     });
 
-    it('should write evalId:timestamp when evalId is provided', () => {
+    it('should write evalId and timestamp when evalId is provided', () => {
       updateSignalFile('eval-123-abc');
 
       expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
-      expect(mockWriteFileSync).toHaveBeenCalledWith(
-        '/mock/path/signal.txt',
-        expect.stringMatching(/^eval-123-abc:\d{4}-\d{2}-\d{2}T/),
-      );
+      const [, content] = mockWriteFileSync.mock.calls[0];
+      expect(mockWriteFileSync).toHaveBeenCalledWith('/mock/path/signal.txt', expect.any(String));
+      expect(JSON.parse(content)).toEqual({
+        evalId: 'eval-123-abc',
+        timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      });
     });
 
     it('should log warning when write fails', () => {
@@ -83,12 +86,33 @@ describe('signal', () => {
   });
 
   describe('readSignalEvalId', () => {
+    it('should return a full generated eval ID from a JSON signal payload', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          evalId: 'eval-abc-2026-05-29T22:43:41',
+          timestamp: '2026-05-29T22:43:42.000Z',
+        }),
+      );
+
+      const result = readSignalEvalId();
+
+      expect(result).toBe('eval-abc-2026-05-29T22:43:41');
+    });
+
     it('should return evalId when signal file contains evalId:timestamp format', () => {
       mockReadFileSync.mockReturnValue('eval-12345-abcdef:2024-01-01T00:00:00.000Z');
 
       const result = readSignalEvalId();
 
       expect(result).toBe('eval-12345-abcdef');
+    });
+
+    it('should preserve colons in eval IDs from legacy signal files', () => {
+      mockReadFileSync.mockReturnValue('eval-abc-2026-05-29T22:43:41:2026-05-29T22:43:42.000Z');
+
+      const result = readSignalEvalId();
+
+      expect(result).toBe('eval-abc-2026-05-29T22:43:41');
     });
 
     it('should return undefined when signal file contains only timestamp', () => {

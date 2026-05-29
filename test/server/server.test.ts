@@ -249,7 +249,7 @@ describe('server', () => {
       const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
       onSignalChange();
 
-      expect(invalidateEvaluationCache).toHaveBeenCalledOnce();
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith(undefined);
 
       await new Promise((resolve) => setImmediate(resolve));
 

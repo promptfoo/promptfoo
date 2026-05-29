@@ -384,13 +384,12 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(() => {
-    // Mutations can happen in a separate CLI process, so clear this server's
-    // process-local caches before serving the next request.
-    invalidateEvaluationCache();
-
     const handleSignalUpdate = async () => {
       // Try to get the specific eval that was updated from the signal file
       const signalEvalId = readSignalEvalId();
+      // Mutations can happen in a separate CLI process, so clear this server's
+      // process-local caches before serving the next request.
+      invalidateEvaluationCache(signalEvalId);
       const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
       const results = await updatedEval?.getResultsCount();
 

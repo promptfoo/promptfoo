@@ -189,7 +189,7 @@ describe('retry command', () => {
 
       expect(remaining).toHaveLength(1);
       expect(remaining[0].id).toBe(`${evalRecord.id}-del-2`);
-      expect(updateSignalFile).toHaveBeenCalledWith(undefined);
+      expect(updateSignalFile).toHaveBeenCalledWith(evalRecord.id);
     });
 
     it('should invalidate the cached total row count after deleting results', async () => {
