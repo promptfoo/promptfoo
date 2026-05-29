@@ -107,6 +107,51 @@ describe('sanitizeObject', () => {
         tests: 'az://account/container/edited.yaml?sp=r&sig=%5BREDACTED%5D',
       });
     });
+
+    it('restores array SAS tokens by value when entries are reordered or inserted', () => {
+      const stored = {
+        tests: [
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+          'az://account/container/b.yaml?sp=r&sig=secret-b',
+        ],
+      };
+
+      // The user reordered the entries and inserted a new (non-Azure) one before
+      // re-running, so positions no longer line up with the stored array.
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            'inline test case',
+            'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+            'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          'inline test case',
+          'az://account/container/b.yaml?sp=r&sig=secret-b',
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+        ],
+      });
+    });
+
+    it('does not restore an entry the user edited to point at a different blob', () => {
+      const stored = {
+        tests: ['az://account/container/a.yaml?sp=r&sig=secret-a'],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        { tests: ['az://account/container/changed.yaml?sp=r&sig=%5BREDACTED%5D'] },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: ['az://account/container/changed.yaml?sp=r&sig=%5BREDACTED%5D'],
+      });
+    });
   });
 
   describe('function handling', () => {
