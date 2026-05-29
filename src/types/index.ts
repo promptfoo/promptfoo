@@ -749,6 +749,8 @@ export interface AssertionValueFunctionContext {
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
   trace?: TraceData;
+  /** Shortcut to providerResponse?.metadata for convenience */
+  metadata?: ProviderResponse['metadata'];
 }
 
 export type AssertionValueFunction = (
@@ -1356,6 +1358,8 @@ export interface ResultsFile {
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
+  /** Persisted display order for table variable columns. */
+  vars?: string[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }

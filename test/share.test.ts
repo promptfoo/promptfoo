@@ -634,6 +634,59 @@ describe('createShareableUrl', () => {
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
     });
 
+    it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.config = {
+        tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: mockEval.id }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.config.tests).toBe(
+        'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+      );
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
+    });
+
+    it('includes eval tags in the shared config payload', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.config = {
+        tags: {
+          'ci.run-id': '123',
+          'git.sha': 'abc123',
+        },
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: mockEval.id }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.config.tags).toEqual({
+        'ci.run-id': '123',
+        'git.sha': 'abc123',
+      });
+    });
+
     it('sends eval with trace data when traces are available', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
