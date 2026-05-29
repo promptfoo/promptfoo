@@ -356,18 +356,25 @@ function turnMatchesGroup(
   return assign(0);
 }
 
+function formatMatcherLabel(matcher: TrajectoryStepMatcher): string {
+  return matcher.pattern || matcher.name || '*';
+}
+
+// Render one turn's labels: bracketed when it has multiple (parallel) tools, bare otherwise.
+function bracketTurnLabels(labels: string[]): string {
+  return labels.length > 1 ? `[${labels.join(' + ')}]` : labels[0];
+}
+
 function formatExpectedGroup(group: TrajectoryStepMatcher[]): string {
-  const labels = group.map((matcher) => matcher.pattern || matcher.name || '*');
-  return group.length > 1 ? `[${labels.join(' + ')}]` : labels[0];
+  return bracketTurnLabels(group.map(formatMatcherLabel));
 }
 
 function formatActualTurn(turn: TrajectoryStep[]): string {
-  const labels = turn.map(formatTrajectoryStep);
-  return turn.length > 1 ? `[${labels.join(' + ')}]` : labels[0];
+  return bracketTurnLabels(turn.map(formatTrajectoryStep));
 }
 
 function formatTurnList(turns: TrajectoryStep[][]): string {
-  return turns.length > 0 ? turns.map(formatActualTurn).join(', ') : '(none)';
+  return formatStepList(turns.map(formatActualTurn));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -612,7 +619,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
       reason = `Observed exact tool sequence: ${formatStepList(actualTools)}`;
     } else {
       reason = `Expected exact tool sequence of ${expectedMatchers
-        .map((matcher) => matcher.pattern || matcher.name || '*')
+        .map(formatMatcherLabel)
         .join(', ')}, but actual tools were ${formatStepList(actualTools)}`;
     }
   } else {
@@ -636,8 +643,9 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
     if (basePass) {
       reason = `Observed tool sequence in order: ${matchedSteps.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
     } else {
-      const nextExpected =
-        expectedMatchers[expectedIndex]?.pattern || expectedMatchers[expectedIndex]?.name || '*';
+      const nextExpected = expectedMatchers[expectedIndex]
+        ? formatMatcherLabel(expectedMatchers[expectedIndex])
+        : '*';
       reason = `Expected tool "${nextExpected}" was not observed in order. Actual tools: ${formatStepList(actualTools)}`;
     }
   }
