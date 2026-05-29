@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { updateSignalFile } from '../../src/database/signal';
 import { invalidateEvaluationCache, notifyEvaluationChanged } from '../../src/models/evalMutation';
 import { clearStandaloneEvalCache } from '../../src/util/standaloneEvalCache';
@@ -12,7 +12,7 @@ vi.mock('../../src/util/standaloneEvalCache', () => ({
 }));
 
 describe('eval mutation invalidation', () => {
-  beforeEach(() => {
+  afterEach(() => {
     vi.resetAllMocks();
   });
 

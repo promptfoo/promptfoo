@@ -12,10 +12,16 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
 import { type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -126,9 +132,12 @@ describe('evaluator', () => {
         failureReason: ResultFailureReason.NONE,
       });
 
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
       await eval_.setResults([result]);
 
       const persistedResults = await EvalResult.findManyByEvalId(eval_.id);
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
       expect(persistedResults).toHaveLength(1);
       expect(persistedResults[0]).toEqual(
         expect.objectContaining({
@@ -359,14 +368,19 @@ describe('evaluator', () => {
   describe('delete', () => {
     it('should delete an evaluation', async () => {
       const eval1 = await EvalFactory.create();
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       const eval_ = await Eval.findById(eval1.id);
       expect(eval_).toBeDefined();
+      expect(getCachedStandaloneEvals(cacheKey)).toBeDefined();
 
       await eval1.delete();
 
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+      expect(updateSignalFile).toHaveBeenCalledWith(undefined);
     });
 
     it('should delete traces and spans for an evaluation', async () => {

@@ -3771,7 +3771,9 @@ class Evaluator {
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    notifyEvaluationChanged(this.evalRecord.id);
+    if (!this.evalRecord.persisted) {
+      notifyEvaluationChanged(this.evalRecord.id);
+    }
     return this.evalRecord;
   }
 
@@ -3798,7 +3800,9 @@ class Evaluator {
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    notifyEvaluationChanged(this.evalRecord.id);
+    if (!this.evalRecord.persisted) {
+      notifyEvaluationChanged(this.evalRecord.id);
+    }
     return this.evalRecord;
   }
 

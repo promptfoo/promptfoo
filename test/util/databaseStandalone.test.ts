@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
 import { evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -16,6 +17,14 @@ import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
 
 const completedPrompt: CompletedPrompt = {
   raw: 'hello',
@@ -75,6 +84,10 @@ describe('getStandaloneEvals', () => {
   });
 
   beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
 
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
     const redteamEval = await createEvalWithPrompts({ redteam: {} as any });
@@ -150,6 +163,7 @@ describe('getStandaloneEvals', () => {
     const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
     expect(afterIds).toContain(source.id);
     expect(afterIds).toContain(copy.id);
+    expect(updateSignalFile).toHaveBeenCalledWith(copy.id);
   });
 
   it('includes direct eval saves after history has been cached', async () => {
@@ -165,6 +179,7 @@ describe('getStandaloneEvals', () => {
 
     const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
     expect(afterRow?.description).toBe('updated description');
+    expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
   });
 
   it('includes prompt changes after history has been cached', async () => {

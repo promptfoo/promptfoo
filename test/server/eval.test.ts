@@ -10,6 +10,14 @@ import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtil
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
+
 describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
@@ -53,6 +61,7 @@ describe('eval routes', () => {
     // Wait for all cleanups to complete
     await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
+    vi.resetAllMocks();
   });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {

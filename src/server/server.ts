@@ -17,6 +17,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
+import { invalidateEvaluationCache } from '../models/evalMutation';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
@@ -383,6 +384,10 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(() => {
+    // Mutations can happen in a separate CLI process, so clear this server's
+    // process-local caches before serving the next request.
+    invalidateEvaluationCache();
+
     const handleSignalUpdate = async () => {
       // Try to get the specific eval that was updated from the signal file
       const signalEvalId = readSignalEvalId();

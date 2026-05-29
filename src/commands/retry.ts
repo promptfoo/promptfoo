@@ -7,6 +7,7 @@ import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { notifyEvaluationChanged } from '../models/evalMutation';
 import { clearCountCache } from '../models/evalPerformance';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
@@ -78,6 +79,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   for (const { evalId } of affectedEvals) {
     clearCountCache(evalId);
   }
+  notifyEvaluationChanged();
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
 }

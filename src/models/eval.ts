@@ -45,6 +45,7 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import {
+  clearCountCache,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -660,7 +661,7 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    invalidateEvaluationCache();
+    notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
 
@@ -1271,7 +1272,8 @@ export default class Eval {
         .insert(evalResultsTable)
         .values(results.map((r) => ({ ...r, evalId: this.id })))
         .run();
-      invalidateEvaluationCache();
+      clearCountCache(this.id);
+      notifyEvaluationChanged(this.id);
     }
     this._resultsLoaded = true;
   }
@@ -1425,6 +1427,7 @@ export default class Eval {
       await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+    notifyEvaluationChanged();
   }
 
   /**
@@ -1588,7 +1591,7 @@ export default class Eval {
       }
     });
 
-    invalidateEvaluationCache();
+    notifyEvaluationChanged(newEvalId);
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,

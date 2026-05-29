@@ -10,6 +10,11 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
@@ -812,12 +817,15 @@ describe('EvalResult', () => {
 
     it('should update existing results', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       result.score = 0.5;
       await result.save();
 
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
     });
   });
 

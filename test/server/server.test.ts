@@ -9,10 +9,15 @@ vi.mock('../../src/migrate', () => ({
 }));
 
 vi.mock('../../src/database/signal', () => ({
+  readSignalEvalId: vi.fn().mockReturnValue(undefined),
   setupSignalWatcher: vi.fn().mockReturnValue({
     close: vi.fn(),
     on: vi.fn(),
   }),
+}));
+
+vi.mock('../../src/models/evalMutation', () => ({
+  invalidateEvaluationCache: vi.fn(),
 }));
 
 vi.mock('../../src/util/server', () => ({
@@ -39,6 +44,7 @@ vi.mock('../../src/models/eval', () => ({
 
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+import { invalidateEvaluationCache } from '../../src/models/evalMutation';
 // Import after mocks are set up
 import { ServerError } from '../../src/server/errors';
 import { handleServerError, startServer } from '../../src/server/server';
@@ -233,6 +239,22 @@ describe('server', () => {
       await serverPromise;
 
       expect(mockWatcher.close).toHaveBeenCalled();
+    });
+
+    it('should invalidate process-local evaluation caches when the signal file changes', async () => {
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      expect(invalidateEvaluationCache).toHaveBeenCalledOnce();
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
     });
 
     it('should not deadlock the shutdown promise if watcher.close throws', async () => {

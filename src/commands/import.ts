@@ -8,6 +8,7 @@ import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { notifyEvaluationChanged } from '../models/evalMutation';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
@@ -448,6 +449,7 @@ export function importCommand(program: Command) {
         evalId = importV3
           ? await createImportedV3Eval(evalData, traces, blobAssets, context)
           : await createImportedV2Eval(evalData, context);
+        notifyEvaluationChanged(evalId);
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
 
