@@ -69,6 +69,12 @@ export OPENAI_API_KEY=your_api_key_here
 
 Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible evals, prefer API-key-backed runs or set `cli_env.CODEX_HOME` to a fixture home directory that already contains the intended Codex login state.
 
+### Computer Use Plugin Eval
+
+The [`computer-use` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-app-server/computer-use) stages an isolated Codex home and runs a real macOS Computer Use plugin against a native UI-only chatbot. Use it as a bounded dogfood fixture when the target has no chat API endpoint.
+
+The example references an explicit installed plugin directory, installs the plugin into a disposable Codex home, verifies the MCP inventory, compiles a disposable AppKit target, and starts it from a unique generated `.app` path before running the eval. The target opens no listening socket. The eval accepts MCP elicitations for that isolated run and asserts that the exported trajectory never enumerates apps or leaves the generated app path. It does not copy personal Codex auth or proprietary plugin payloads into the repository. It intentionally covers macOS only: Codex Desktop has additional host bootstrap behavior, and Windows Computer Use uses a separate native-pipe path.
+
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
