@@ -2763,6 +2763,247 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toContain('Codex stream error: Stream transport failed');
       });
+
+      it('emits a gen_ai.turn span even when the stream omits turn.started', async () => {
+        // Mirrors `should handle item.updated events` shape — the SDK can send
+        // `item.*` events followed directly by `turn.completed`. The lazy-open
+        // logic should still produce one `gen_ai.turn` span and tag the item
+        // span with `gen_ai.turn.index`.
+        const opentelemetry = await import('@opentelemetry/api');
+        const emitted: Array<{ name: string; attrs: Record<string, any> }> = [];
+        const tracerSpy = vi.spyOn(opentelemetry.trace, 'getTracer').mockReturnValue({
+          startSpan: (name: string, options: any) => {
+            const attrs: Record<string, any> = { ...(options?.attributes ?? {}) };
+            const entry = { name, attrs };
+            emitted.push(entry);
+            return {
+              setAttribute: (k: string, v: unknown) => {
+                attrs[k] = v;
+              },
+              setAttributes: (a: Record<string, unknown>) => {
+                Object.assign(attrs, a);
+              },
+              setStatus: () => undefined,
+              end: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+              setAttributeIfMissing: () => undefined,
+            } as unknown as ReturnType<
+              ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
+            >;
+          },
+          startActiveSpan: (...args: any[]) => {
+            const fn = args[args.length - 1];
+            return fn({
+              end: () => undefined,
+              setAttribute: () => undefined,
+              setAttributes: () => undefined,
+              setStatus: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            });
+          },
+        } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
+
+        const mockEvents = async function* () {
+          yield {
+            type: 'item.started',
+            item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+          };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Hi' },
+          };
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toBeUndefined();
+
+        const turnSpans = emitted.filter((s) => s.name.startsWith('gen_ai.turn '));
+        expect(turnSpans.length).toBe(1);
+        expect(turnSpans[0].attrs['gen_ai.turn.index']).toBe(1);
+        // Turn span end-time hook records usage from `turn.completed`.
+        expect(turnSpans[0].attrs['gen_ai.usage.input_tokens']).toBe(10);
+        expect(turnSpans[0].attrs['gen_ai.usage.output_tokens']).toBe(20);
+
+        // Item spans inherit the turn index.
+        const itemSpans = emitted.filter((s) => s.attrs['codex.item.type']);
+        expect(itemSpans.length).toBeGreaterThan(0);
+        for (const s of itemSpans) {
+          expect(s.attrs['gen_ai.turn.index']).toBe(1);
+        }
+
+        tracerSpy.mockRestore();
+      });
+
+      // Records span name, attributes, and status so error/cleanup paths can be
+      // asserted (the SpanStatusCode.ERROR enum value is 2).
+      const installTurnSpanTracerSpy = async () => {
+        const opentelemetry = await import('@opentelemetry/api');
+        const emitted: Array<{ name: string; attrs: Record<string, any>; status?: any }> = [];
+        const spy = vi.spyOn(opentelemetry.trace, 'getTracer').mockReturnValue({
+          startSpan: (name: string, options: any) => {
+            const attrs: Record<string, any> = { ...(options?.attributes ?? {}) };
+            const entry: { name: string; attrs: Record<string, any>; status?: any } = {
+              name,
+              attrs,
+            };
+            emitted.push(entry);
+            return {
+              setAttribute: (k: string, v: unknown) => {
+                attrs[k] = v;
+              },
+              setAttributes: (a: Record<string, unknown>) => {
+                Object.assign(attrs, a);
+              },
+              setStatus: (s: unknown) => {
+                entry.status = s;
+              },
+              end: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            } as unknown as ReturnType<
+              ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
+            >;
+          },
+          startActiveSpan: (...args: any[]) => {
+            const fn = args[args.length - 1];
+            return fn({
+              end: () => undefined,
+              setAttribute: () => undefined,
+              setAttributes: () => undefined,
+              setStatus: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            });
+          },
+        } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
+        return { emitted, spy };
+      };
+
+      it('marks the turn span ERROR on turn.failed (lazy-open)', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.failed', error: { message: 'Model overloaded' } };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Codex turn failed: Model overloaded');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        expect(turnSpan?.status?.message).toContain('Model overloaded');
+        spy.mockRestore();
+      });
+
+      it('marks the turn span ERROR on a fatal stream error (lazy-open)', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'error', message: 'Stream transport failed' };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Codex stream error: Stream transport failed');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        spy.mockRestore();
+      });
+
+      it('marks a dangling turn span ERROR when the stream ends mid-turn', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        // turn.started + an unclosed item, then the stream ends with no
+        // turn.completed — the finally cleanup must close both with ERROR.
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.started' };
+            yield {
+              type: 'item.started',
+              item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+            };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        expect(turnSpan?.status?.message).toContain('not properly closed');
+        spy.mockRestore();
+      });
+
+      it('carries cached and reasoning token usage onto the turn span', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.started' };
+            yield {
+              type: 'turn.completed',
+              usage: {
+                input_tokens: 100,
+                output_tokens: 40,
+                cached_input_tokens: 25,
+                reasoning_output_tokens: 12,
+              },
+            };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
+        expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
+        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
+        spy.mockRestore();
+      });
     });
   });
 
