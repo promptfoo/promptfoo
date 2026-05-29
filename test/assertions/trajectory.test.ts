@@ -131,6 +131,60 @@ describe('trajectory utilities', () => {
     });
   });
 
+  it('does not classify a chat span carrying gen_ai.tool.definitions as a tool', () => {
+    // pydantic-ai (and other GenAI-convention tracers) put the list of *available* tools on
+    // each chat span as a JSON array under gen_ai.tool.definitions; that must not be read as
+    // a tool call. Real tool calls use gen_ai.tool.name. Regression for #9523.
+    const toolDefinitions = JSON.stringify([
+      { type: 'function', name: 'orders', description: 'List orders' },
+      { type: 'function', name: 'order_rows', description: 'List order rows' },
+    ]);
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'chat-1',
+          name: 'chat gpt-4o-mini',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'gen_ai.tool.definitions': toolDefinitions },
+        },
+        {
+          spanId: 'exec-1',
+          name: 'execute_tool',
+          startTime: 1200,
+          endTime: 1300,
+          attributes: { 'gen_ai.tool.name': 'order_rows' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'span', name: 'chat gpt-4o-mini' },
+      { type: 'tool', name: 'order_rows' },
+    ]);
+  });
+
+  it('still reads a plain string tool name from a generic tool attribute', () => {
+    // The structured-value guard must not break scalar tool-name fallbacks.
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'custom-tool',
+          name: 'invoke',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'app.tool': 'lookup_customer' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'tool', name: 'lookup_customer' },
+    ]);
+  });
+
   it('only treats a generic query attribute as search when the span looks search-like', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,
