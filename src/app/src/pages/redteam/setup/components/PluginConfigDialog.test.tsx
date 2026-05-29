@@ -354,6 +354,34 @@ describe('PluginConfigDialog - OSS', () => {
       expect(mockOnSave).toHaveBeenCalledWith('openai-guardrails', { includeSafe: true });
     });
 
+    it('does not carry stale config when switching from another plugin', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <PluginConfigDialog
+          open={true}
+          plugin="bola"
+          config={{ targetSystems: ['accounts-api'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      rerender(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('Include safe prompts to test for over-blocking'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('openai-guardrails', { includeSafe: true });
+    });
+
     it('should not call onSave if no changes were made to the config', async () => {
       const user = userEvent.setup();
       const initialConfig = { includeSafe: true };
