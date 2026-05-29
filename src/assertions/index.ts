@@ -423,7 +423,7 @@ export async function runAssertion({
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },
-      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
+      ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -435,6 +435,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+    ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
   // Add trace data if traceId is available

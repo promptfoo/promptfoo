@@ -42,6 +42,7 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -565,6 +566,8 @@ export default class Eval {
       }
     });
 
+    clearStandaloneEvalCache();
+
     return new Eval(config, {
       id: evalId,
       author,
@@ -666,6 +669,7 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    clearStandaloneEvalCache();
     this.persisted = true;
   }
 
@@ -1272,6 +1276,7 @@ export default class Eval {
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       updateSignalFile(this.id);
+      clearStandaloneEvalCache();
     }
   }
 
@@ -1283,6 +1288,7 @@ export default class Eval {
         .insert(evalResultsTable)
         .values(results.map((r) => ({ ...r, evalId: this.id })))
         .run();
+      clearStandaloneEvalCache();
     }
     this._resultsLoaded = true;
   }
@@ -1598,6 +1604,8 @@ export default class Eval {
         });
       }
     });
+
+    clearStandaloneEvalCache();
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,

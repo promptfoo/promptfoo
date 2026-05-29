@@ -350,6 +350,23 @@ describe('doRedteamRun', () => {
     );
   });
 
+  it('should apply runtime tags to the eval without adding them to generated test cases', async () => {
+    const tags = {
+      'ci.run-id': '123',
+      'git.sha': 'abc123',
+    };
+
+    await doRedteamRun({ tags });
+
+    expect(vi.mocked(doGenerateRedteam).mock.calls[0][0]).not.toHaveProperty('tags');
+    expect(doEval).toHaveBeenCalledWith(
+      expect.objectContaining({ tags }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   describe('liveRedteamConfig temporary file handling', () => {
     const mockConfig = {
       prompts: ['Test prompt'],
