@@ -272,7 +272,7 @@ export const shutdownGracefully = async (
     });
   }
 
-  closeDbIfOpen();
+  await closeDbIfOpen();
   clearAgentCache();
 
   try {

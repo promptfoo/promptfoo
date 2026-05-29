@@ -56,7 +56,7 @@ import { checkForUpdates, UPDATE_INSTRUCTIONS } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
-import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
+import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
 import type { UpdateObject } from './updates/updateCheck';
@@ -118,7 +118,7 @@ async function main(): Promise<PendingAutoUpdate | undefined> {
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   if (!updateCommandRequested) {
-    await runDbMigrations({ suppressNativeAddonLogging: true });
+    await runDbMigrations({ suppressBindingErrorLogging: true });
   }
 
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
@@ -226,7 +226,7 @@ try {
 
 if (isMain) {
   let mainError: unknown;
-  let nativeAddonVersionMismatchMessage: string | undefined;
+  let libsqlBindingErrorMessage: string | undefined;
   let pendingAutoUpdate: PendingAutoUpdate | undefined;
   try {
     pendingAutoUpdate = await main();
@@ -235,9 +235,9 @@ if (isMain) {
     if (error instanceof ConfigResolutionError) {
       logConfigResolutionError(error);
     }
-    nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
-    if (nativeAddonVersionMismatchMessage) {
-      logger.debug('better-sqlite3 ABI mismatch (original error follows)', {
+    libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
+    if (libsqlBindingErrorMessage) {
+      logger.debug('libsql platform binding missing (original error follows)', {
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       });
     }
@@ -280,8 +280,8 @@ if (isMain) {
       mainError instanceof EvalRunError
     ) {
       // User-facing message has already been rendered.
-    } else if (nativeAddonVersionMismatchMessage) {
-      console.error(nativeAddonVersionMismatchMessage);
+    } else if (libsqlBindingErrorMessage) {
+      console.error(libsqlBindingErrorMessage);
       // exit code preserved by process.exitCode = 1 above
     } else {
       throw mainError;

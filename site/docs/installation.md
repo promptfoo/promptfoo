@@ -93,7 +93,7 @@ To update promptfoo to the latest version, use the built-in update command:
 promptfoo update
 ```
 
-The update command automatically detects how you installed promptfoo and uses the appropriate update method:
+The update command automatically detects how you installed promptfoo and either runs a supported global package-manager update or prints the safest manual instructions:
 
 - **npm global**: Runs `npm install -g promptfoo@latest`
 - **Homebrew**: Instructs you to run `brew upgrade promptfoo`

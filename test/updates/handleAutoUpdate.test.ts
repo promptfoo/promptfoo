@@ -37,6 +37,7 @@ describe('handleAutoUpdate', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetInstallationInfo.mockReset();
     vi.useFakeTimers();
     originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });

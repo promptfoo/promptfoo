@@ -46,7 +46,7 @@ To disable update notifications, set:
 PROMPTFOO_DISABLE_UPDATE=1
 ```
 
-Note: This only disables the notification. You can still manually update using `promptfoo update` at any time.
+This disables startup update notifications and update-check network requests. To reinstall from the latest package tag while this is set, run `promptfoo update --force`.
 
 ## Automatic Updates
 

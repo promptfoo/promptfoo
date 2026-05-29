@@ -1,4 +1,5 @@
 import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 type PackageManagerExecutable = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
@@ -42,9 +43,15 @@ const UPDATE_ENV_KEYS = [
 
 function sanitizeExecutableSearchPath(pathValue: string): string {
   const delimiter = process.platform === 'win32' ? ';' : ':';
+  const pathApi = process.platform === 'win32' ? path.win32 : path.posix;
   return pathValue
     .split(delimiter)
-    .filter((entry) => !entry.replace(/\\/g, '/').toLowerCase().includes('/node_modules/.bin'))
+    .filter((entry) => {
+      if (!entry || !pathApi.isAbsolute(entry)) {
+        return false;
+      }
+      return !entry.replace(/\\/g, '/').toLowerCase().includes('/node_modules/.bin');
+    })
     .join(delimiter);
 }
 

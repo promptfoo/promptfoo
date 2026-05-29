@@ -191,6 +191,8 @@ targets one resolved prompt/provider pair at a time.
 
 When `--validation-split` is omitted, optimization uses the full eval set and
 may overfit to the configured cases.
+Validation splitting requires explicit `tests`; configs that use `scenarios`
+must be expanded into explicit test cases first.
 
 See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
 target selection details, and validation split recommendations.
@@ -249,7 +251,7 @@ Create a URL that can be shared online. If no ID is provided, promptfoo shares t
 
 ## `promptfoo update`
 
-Update promptfoo to the latest version. The command automatically detects how promptfoo was installed (npm, yarn, pnpm, bun, Homebrew, etc.) and uses the appropriate update method.
+Update promptfoo to the latest version. The command automatically detects how promptfoo was installed and either runs a supported global package-manager update or prints the safest manual instructions.
 
 | Option    | Description                                    |
 | --------- | ---------------------------------------------- |
@@ -272,11 +274,11 @@ promptfoo update --force
 The update command will:
 
 1. Detect your installation method (npm global, yarn global, Homebrew, etc.)
-2. Show you what it detected and which command it will run
-3. Execute the appropriate update command for your system
+2. Show you what it detected and, when supported, which command it will run
+3. Execute supported global npm, yarn, pnpm, and bun updates
 4. Provide manual instructions if automatic update is not possible
 
-For installations that cannot be safely identified for automatic updating (like `npx`, local project installations, or an unconfirmed npm path), the command will provide appropriate manual update instructions.
+For installations that cannot be safely updated by the CLI (including Homebrew, `npx`, local project installations, or an unconfirmed npm path), the command will provide appropriate manual update instructions.
 
 ## `promptfoo cache`
 
@@ -925,21 +927,30 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                                             | Default              |
-| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
-| `--remote`                                         | Force remote inference wherever possible                                | false                |
-| `--force`                                          | Force generation even if no changes are detected                        | false                |
-| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
-| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
+| Option                                             | Description                                                                      | Default              |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                                       | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                          | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                                        |                      |
+| `--tag <key=value>`                                | Set an eval tag. Can be specified multiple times; CLI tags override config tags. |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                                       | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                           |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                          |                      |
+| `--remote`                                         | Force remote inference wherever possible                                         | false                |
+| `--force`                                          | Force generation even if no changes are detected                                 | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                                      |                      |
+
+Use `--tag` to attach CI/CD context to the evaluation result without changing the
+scan template or generated `redteam.yaml`. CLI tags override matching tags from the
+configuration and are included when the eval is shared.
+
+```sh
+promptfoo redteam run --tag ci.run-id=$CI_RUN_ID --tag git.sha=$GIT_COMMIT
+```
 
 ## `promptfoo redteam discover`
 
@@ -1019,7 +1030,8 @@ Generate poisoned documents for RAG testing.
 
 ## `promptfoo redteam eval`
 
-Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `redteam.yaml`.
+Works the same as [`promptfoo eval`](#promptfoo-eval), including repeatable `--tag`
+options for run-specific labels, but defaults to loading `redteam.yaml`.
 
 ## `promptfoo redteam report`
 

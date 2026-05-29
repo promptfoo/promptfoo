@@ -1,8 +1,8 @@
 import semver from 'semver';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import { getLatestVersion } from '../updates';
 import { VERSION } from '../version';
+import { getLatestVersion } from './latestVersion';
 
 export interface UpdateInfo {
   current: string;

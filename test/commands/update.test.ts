@@ -80,6 +80,9 @@ describe('update command', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    mockCheckForUpdates.mockReset();
+    mockGetInstallationInfo.mockReset();
+    mockSpawn.mockReset();
     process.exitCode = undefined;
     originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });
@@ -96,10 +99,7 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({
-      throwOnError: true,
-      ignoreDisableUpdate: true,
-    });
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
     expect(telemetry.record).not.toHaveBeenCalled();
   });
 
@@ -109,10 +109,7 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({
-      throwOnError: true,
-      ignoreDisableUpdate: true,
-    });
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
     expect(mockGetInstallationInfo).not.toHaveBeenCalled();
     expect(mockSpawn).not.toHaveBeenCalled();
   });
@@ -130,25 +127,20 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({
-      throwOnError: true,
-      ignoreDisableUpdate: true,
-    });
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
     expect(logger.info).toHaveBeenCalledWith(UPDATE_INSTRUCTIONS);
   });
 
-  it('should allow explicit checks when update notifications are disabled', async () => {
+  it('should report a skipped check when update checks are disabled', async () => {
     vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
-    mockCheckForUpdates.mockResolvedValue(null);
 
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    expect(mockCheckForUpdates).toHaveBeenCalledWith({
-      throwOnError: true,
-      ignoreDisableUpdate: true,
-    });
-    expect(logger.info).toHaveBeenCalledWith('✓ You are running the latest version');
+    expect(mockCheckForUpdates).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      'Update check skipped because PROMPTFOO_DISABLE_UPDATE is enabled.',
+    );
   });
 
   it('should handle installation info and run update command', async () => {
@@ -260,6 +252,33 @@ describe('update command', () => {
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--force']);
 
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'promptfoo@latest'],
+      expect.objectContaining({
+        cwd: tmpdir(),
+        env: expect.any(Object),
+        stdio: 'inherit',
+        shell: false,
+      }),
+    );
+  });
+
+  it('should force reinstall with the latest package tag when update checks are disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
+    mockCheckForUpdates.mockResolvedValue(null);
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update', '--force']);
+
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
     expect(mockSpawn).toHaveBeenCalledWith(
       'npm',
       ['install', '-g', 'promptfoo@latest'],

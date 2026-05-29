@@ -24,6 +24,8 @@ const mockSemverGt = semver.gt as MockedFunction<typeof semver.gt>;
 describe('checkForUpdates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchWithTimeout.mockReset();
+    mockSemverGt.mockReset();
     vi.unstubAllEnvs();
   });
 

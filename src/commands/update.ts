@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
 import { Command } from 'commander';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getInstallationInfo } from '../updates/installationInfo';
 import { checkForUpdates, UPDATE_INSTRUCTIONS } from '../updates/updateCheck';
@@ -23,9 +24,15 @@ export function updateCommand(
       try {
         logger.info('Checking for updates...');
 
+        const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+        if (updateChecksDisabled && (options.check || !options.force)) {
+          logger.info('Update check skipped because PROMPTFOO_DISABLE_UPDATE is enabled.');
+          return;
+        }
+
         let updateInfo: Awaited<ReturnType<typeof checkForUpdates>>;
         try {
-          updateInfo = await checkForUpdates({ throwOnError: true, ignoreDisableUpdate: true });
+          updateInfo = await checkForUpdates({ throwOnError: true });
         } catch (error) {
           if (!options.force || options.check) {
             throw error;
