@@ -73,6 +73,18 @@ function getDependencyRange(
 }
 
 describe('package manifests', () => {
+  it('publishes the lightweight contracts subpath', () => {
+    const packageJson = readPackageJson<{
+      exports?: Record<string, unknown>;
+    }>('package.json');
+
+    expect(packageJson.exports?.['./contracts']).toEqual({
+      types: './dist/src/contracts.d.ts',
+      import: './dist/src/contracts.js',
+      require: './dist/src/contracts.cjs',
+    });
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;

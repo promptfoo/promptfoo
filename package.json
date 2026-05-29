@@ -14,6 +14,11 @@
     ".": {
       "import": "./dist/src/index.js",
       "require": "./dist/src/index.cjs"
+    },
+    "./contracts": {
+      "types": "./dist/src/contracts.d.ts",
+      "import": "./dist/src/contracts.js",
+      "require": "./dist/src/contracts.cjs"
     }
   },
   "workspaces": [

@@ -40,6 +40,12 @@ describeIfBuildExists('Library Exports', () => {
       expect(stats.size).toBeGreaterThan(100000); // Should be substantial
     });
 
+    it('should have lightweight contracts builds', () => {
+      expect(fs.existsSync(path.join(distDir, 'contracts.js'))).toBe(true);
+      expect(fs.existsSync(path.join(distDir, 'contracts.cjs'))).toBe(true);
+      expect(fs.existsSync(path.join(distDir, 'contracts.d.ts'))).toBe(true);
+    });
+
     it('should have ESM CLI build (main.js)', () => {
       const cliPath = path.join(distDir, 'main.js');
       expect(fs.existsSync(cliPath)).toBe(true);
@@ -88,6 +94,14 @@ describeIfBuildExists('Library Exports', () => {
     });
   });
 
+  describe('CJS contracts import', () => {
+    it('should export portable contract schemas', () => {
+      const contractsModule = require(path.join(distDir, 'contracts.cjs'));
+      expect(contractsModule.InputsSchema).toBeDefined();
+      expect(contractsModule.PromptSchema).toBeDefined();
+    });
+  });
+
   describe('ESM library import', () => {
     it('should be importable via dynamic import', async () => {
       const esmPath = `file://${path.join(distDir, 'index.js')}`;
@@ -121,6 +135,14 @@ describeIfBuildExists('Library Exports', () => {
         expect(filteredEsmKeys).toContain(key);
         expect(cjsKeys).toContain(key);
       }
+    });
+  });
+
+  describe('ESM contracts import', () => {
+    it('should export portable contract schemas', async () => {
+      const contractsModule = await import(`file://${path.join(distDir, 'contracts.js')}`);
+      expect(contractsModule.InputsSchema).toBeDefined();
+      expect(contractsModule.PromptSchema).toBeDefined();
     });
   });
 });
