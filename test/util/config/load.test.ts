@@ -10,7 +10,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type TestCase, type UnifiedConfig } from '../../../src/types/index';
+import { type Scenario, type TestCase, type UnifiedConfig } from '../../../src/types/index';
 import {
   ConfigResolutionError,
   combineConfigs,
@@ -1673,22 +1673,22 @@ describe('resolveConfigs', () => {
 
   it('should not mutate reused default config scenarios when sampling', async () => {
     const originalPositions = ['0', '1', '2', '3'];
+    const scenarios: Scenario[] = [
+      {
+        config: [{}],
+        tests: originalPositions.map((position) => ({
+          vars: { position },
+        })),
+      },
+    ];
     const defaultConfig: Partial<UnifiedConfig> = {
       prompts: ['Hello {{position}}'],
       providers: ['echo'],
-      scenarios: [
-        {
-          config: [{}],
-          tests: originalPositions.map((position) => ({
-            vars: { position },
-          })),
-        },
-      ],
+      scenarios,
     };
     const selectedPositions = (config: Awaited<ReturnType<typeof resolveConfigs>>) =>
       config.testSuite.scenarios?.[0].tests.map((test) => test.vars?.position);
-    const defaultPositions = () =>
-      defaultConfig.scenarios?.[0].tests.map((test) => test.vars?.position);
+    const defaultPositions = () => scenarios[0].tests.map((test) => test.vars?.position);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
     vi.mocked(readTests).mockImplementation(async (tests) =>

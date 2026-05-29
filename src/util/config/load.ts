@@ -880,10 +880,14 @@ export async function resolveConfigs(
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
     config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
-    config.scenarios = config.scenarios.flat().map((scenario) => ({
-      ...scenario,
-      tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
-    }));
+    config.scenarios = config.scenarios.flat().map((scenario) =>
+      typeof scenario === 'object'
+        ? {
+            ...scenario,
+            tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
+          }
+        : scenario,
+    );
   }
   if (Array.isArray(config.scenarios)) {
     const scenarioCommandLineOptions =
