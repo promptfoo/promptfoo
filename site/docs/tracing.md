@@ -249,7 +249,9 @@ Several first-party providers expose turn marker spans to trace assertions. Some
 | `openai:codex-sdk`               | `gen_ai.turn *`                            | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                              |
 | `openai:codex-app-server`        | `gen_ai.turn *`                            | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                          |
 
-For providers whose rows above identify an internal LLM round, counting these spans tells you how many model round-trips an agent took. Combined with [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence), this lets you assert that an agent batched its tool calls into a single generation rather than spreading them across sequential rounds:
+For providers whose rows above identify an internal LLM round, counting these spans tells you how many model round-trips an agent took. Note that a tool-using task normally spans **at least two** rounds — one generation emits the tool calls and a later generation folds the results into the answer — so a low total turn count alone does **not** prove the tools were batched.
+
+To assert that tools were **batched** into one generation (rather than issued across sequential rounds), check that the tool calls share a single `gen_ai.turn.index`. Every tool span for a `gen_ai.turn` provider carries that 1-based tag, so pair [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) with a JavaScript assertion:
 
 ```yaml
 assert:
@@ -257,33 +259,27 @@ assert:
     value:
       mode: exact
       steps: [search_orders, search_orders]
-  - type: trace-span-count
-    value:
-      pattern: 'gen_ai.turn *' # or `generation *`, `call_llm` per provider
-      max: 1
+  - type: javascript
+    value: |
+      // Both tool calls must have been emitted by the same LLM generation.
+      const turns = context.trace.spans
+        .filter((s) => s.attributes['tool.name'] && s.attributes['gen_ai.turn.index'] != null)
+        .map((s) => s.attributes['gen_ai.turn.index']);
+      return turns.length >= 2 && new Set(turns).size === 1;
 ```
+
+This is more robust than counting total `gen_ai.turn` spans: it stays correct regardless of how many follow-up answer rounds the agent takes, and (because subagent tool spans get the subagent turn's index) it does not conflate main-agent batching with subagent activity.
 
 Codex SDK and app-server turn markers are still useful for correlating item spans and token usage to a provider turn, but they cannot distinguish batched from sequential tool calls within that turn because those APIs do not expose internal model-generation boundaries.
 
-:::note Caveats for the batching assertion
+:::note Caveats
 
-- **Subagents inflate the count.** For `anthropic:claude-agent-sdk`, every `assistant` message — including those produced by subagents — emits a `gen_ai.turn` span on the same counter, so a single main-agent round that spawns a subagent shows more than one span. Subagent turns are tagged with `gen_ai.turn.is_subagent: true` (plus `gen_ai.turn.parent_tool_use_id` and `gen_ai.turn.subagent_type`). To count only main-agent rounds, use a JavaScript assertion that filters them out:
-
-  ```yaml
-  assert:
-    - type: javascript
-      value: |
-        const mainTurns = context.trace.spans.filter(
-          (s) => s.name.startsWith('gen_ai.turn ') && !s.attributes['gen_ai.turn.is_subagent'],
-        );
-        return mainTurns.length === 1;
-  ```
-
+- **Subagents emit their own turns.** For `anthropic:claude-agent-sdk`, every `assistant` message — including subagent rounds — emits a `gen_ai.turn` span and tags its tool spans with that subagent turn's index. Subagent turns carry `gen_ai.turn.is_subagent: true` (plus `gen_ai.turn.parent_tool_use_id` and `gen_ai.turn.subagent_type`); filter on those attributes when you need to reason about main-agent rounds only.
 - **Cache hits emit no turn span.** A cached response (e.g. `azure:foundry-agent` with caching enabled) still emits the parent `chat <model>` span, but performs no LLM round and therefore emits zero `gen_ai.turn` spans. Run with `--no-cache`, or scope `min`/`max` assertions to fresh responses, when counting turns.
 
 :::
 
-For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the exposed turn that emitted them.
+For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the generation that emitted them.
 
 External providers that wrap their own agent loops can adopt the same convention: emit one OpenTelemetry span per LLM round, with name starting `gen_ai.turn ` and the attribute `gen_ai.turn.index`.
 

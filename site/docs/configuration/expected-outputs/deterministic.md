@@ -845,7 +845,7 @@ tests:
 
 #### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
 
-`tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential) by pairing it with [`trace-span-count`](#trace-span-count). See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider name table and the providers whose markers represent model generations.
+`tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential). Assert this via the `gen_ai.turn.index` tag on the tool spans — both tool calls must carry the **same** index. See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider details.
 
 ```yaml
 tests:
@@ -856,19 +856,20 @@ tests:
           steps:
             - search_orders
             - search_orders
-      - type: trace-span-count
-        value:
-          # Claude Agent SDK and Azure Foundry use this per-generation pattern.
-          # Use `generation *` for openai:agents, `call_llm` for Google ADK, etc.
-          pattern: 'gen_ai.turn *'
-          max: 1
+      - type: javascript
+        value: |
+          // Both tool calls must have been emitted by the same LLM generation.
+          const turns = context.trace.spans
+            .filter((s) => s.attributes['tool.name'] && s.attributes['gen_ai.turn.index'] != null)
+            .map((s) => s.attributes['gen_ai.turn.index']);
+          return turns.length >= 2 && new Set(turns).size === 1;
 ```
 
-This passes only when both tool calls were emitted by a single LLM generation — a structural test that bounds both latency and prompt-token cost.
+Prefer this over counting total `gen_ai.turn` spans: a tool-using task normally takes at least two generations (one to emit the tool calls, one to fold the results into the answer), so `trace-span-count ... max: 1` would reject a correctly-batched run. The index check stays correct regardless of follow-up answer rounds.
 
 Do not use this batching inference with `openai:codex-sdk` or `openai:codex-app-server`: their `gen_ai.turn *` spans represent an SDK or protocol turn that can contain multiple hidden model generations.
 
-For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans, and cached responses emit none. See the [batching caveats](/docs/tracing#per-llm-turn-spans) for how to filter subagent turns (`gen_ai.turn.is_subagent`) and handle cache hits.
+For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans (and tag their tool spans with the subagent turn's index), and cached responses emit none. See the [batching caveats](/docs/tracing#per-llm-turn-spans) for the subagent attributes (`gen_ai.turn.is_subagent`) and cache-hit handling.
 
 ### trajectory:step-count {#trajectorystep-count}
 
