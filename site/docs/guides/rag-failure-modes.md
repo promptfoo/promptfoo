@@ -165,13 +165,14 @@ assert:
       const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
       const allowedUrls = new Set(['https://kb.example.com/benefits']);
       const files = Array.from(output.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
-      const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>,"']+/g), (m) =>
+      const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
         m[0].replace(/[.,;:!?]+$/, ''),
       );
       return (
         files.length + urls.length > 0 &&
         files.every((name) => allowedFiles.has(name)) &&
         urls.every((url) => allowedUrls.has(url))
+
       );
 ```
 
