@@ -232,8 +232,12 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const sequenceValue = value as Partial<TrajectorySequenceValue>;
+    const mode = sequenceValue.mode ?? 'in_order';
+    if (mode !== 'exact' && mode !== 'in_order') {
+      throw new Error('trajectory:tool-sequence assertion mode must be "exact" or "in_order"');
+    }
     return {
-      mode: sequenceValue.mode || 'in_order',
+      mode,
       steps: sequenceValue.steps || [],
     };
   }
@@ -285,14 +289,19 @@ function resolveSequenceMatcherGroups(steps: TrajectorySequenceValue['steps']): 
 // providers tag onto each tool span (see #9475 / docs: Turn marker spans). Tools sharing a
 // turn index were issued by the same model round-trip, so they form one (parallel) turn.
 // A tool with no turn index can't be proven to share a turn, so it stands alone. Steps are
-// already time-ordered, so consecutive same-index tools belong to the same turn.
+// time-ordered and turn indices are monotonic within one model run, so consecutive
+// same-index tools belong to the same turn. Indices are per run, so tools from a different
+// run or subagent (which may reuse an index) stay separate because they aren't adjacent.
 function getToolTurnIndex(step: TrajectoryStep): number | undefined {
   const raw = step.attributes['gen_ai.turn.index'];
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    return raw;
+  // Providers emit a non-negative integer turn index (and OTLP may serialize it as a
+  // string). Reject anything else — floats, negatives, hex/scientific or blank strings —
+  // so a malformed attribute degrades to "no index" rather than grouping tools by accident.
+  if (typeof raw === 'number') {
+    return Number.isInteger(raw) && raw >= 0 ? raw : undefined;
   }
-  if (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw))) {
-    return Number(raw);
+  if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) {
+    return Number(raw.trim());
   }
   return undefined;
 }
@@ -573,6 +582,14 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
   if (hasGroups) {
     // Turn-aware matching (opt-in via nested groups): compare turns, not flat steps.
     const actualTurns = groupToolStepsByTurn(toolSteps);
+    // Distinguish "the agent did not batch these" from "this trace has no turn data at all"
+    // so a nested-group assertion on a provider that emits no turn markers fails with an
+    // actionable reason instead of a misleading "not parallel" one.
+    const noTurnMarkers =
+      toolSteps.length > 0 && toolSteps.every((step) => getToolTurnIndex(step) === undefined);
+    const turnHint = noTurnMarkers
+      ? ' No tool spans carried a gen_ai.turn.index attribute, so turns cannot be determined; nested step groups require a provider that emits turn markers (see docs).'
+      : '';
 
     if (value.mode === 'exact') {
       basePass =
@@ -580,7 +597,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
         groups.every((group, index) => turnMatchesGroup(actualTurns[index], group));
       reason = basePass
         ? `Observed expected tool turns: ${formatTurnList(actualTurns)}`
-        : `Expected tool turns ${groups.map(formatExpectedGroup).join(', ')}, but observed ${formatTurnList(actualTurns)}`;
+        : `Expected tool turns ${groups.map(formatExpectedGroup).join(', ')}, but observed ${formatTurnList(actualTurns)}.${turnHint}`;
     } else {
       let expectedIndex = 0;
       for (const turn of actualTurns) {
@@ -594,7 +611,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
       basePass = expectedIndex === groups.length;
       reason = basePass
         ? `Observed tool turns in order: ${groups.map(formatExpectedGroup).join(', ')}. Actual turns: ${formatTurnList(actualTurns)}`
-        : `Expected tool turn ${formatExpectedGroup(groups[expectedIndex])} was not observed in order. Actual turns: ${formatTurnList(actualTurns)}`;
+        : `Expected tool turn ${formatExpectedGroup(groups[expectedIndex])} was not observed in order. Actual turns: ${formatTurnList(actualTurns)}.${turnHint}`;
     }
   } else if (value.mode === 'exact') {
     // Legacy flat exact matching (turn-agnostic) — unchanged for back-compat.

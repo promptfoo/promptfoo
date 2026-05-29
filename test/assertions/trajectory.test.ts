@@ -985,7 +985,7 @@ describe('trajectory assertions', () => {
         );
         expect(result.pass).toBe(false);
         expect(result.reason).toBe(
-          'Expected tool turns [search_orders + search_orders], but observed tool:search_orders, tool:search_orders',
+          'Expected tool turns [search_orders + search_orders], but observed tool:search_orders, tool:search_orders.',
         );
       });
 
@@ -1099,7 +1099,7 @@ describe('trajectory assertions', () => {
         expect(result.pass).toBe(true);
       });
 
-      it('matches tools within a turn by pattern (requires backtracking)', () => {
+      it('matches tools within a turn by pattern', () => {
         const result = handleTrajectoryToolSequence(
           makeSeqParams(
             [
@@ -1160,6 +1160,134 @@ describe('trajectory assertions', () => {
           makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }),
         );
         expect(result.pass).toBe(true);
+      });
+
+      it('splits a turn index that recurs non-consecutively (consecutive grouping, not group-by)', () => {
+        // a@1, b@2, c@1 -> three turns [a],[b],[c]; turn 1 is NOT merged across the gap.
+        const spans = [
+          seqSpan('a', 'tool-1', 1000, 1),
+          seqSpan('b', 'tool-2', 1100, 2),
+          seqSpan('c', 'tool-3', 1200, 1),
+        ];
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams(spans, { mode: 'exact', steps: [['a'], ['b'], ['c']] }),
+          ).pass,
+        ).toBe(true);
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'c'], ['b']] }),
+          ).pass,
+        ).toBe(false);
+      });
+
+      it('groups mixed indexed and non-indexed tools correctly', () => {
+        // a@1, b@1, c(no index), d@2 -> [[a,b],[c],[d]]
+        const spans = [
+          seqSpan('a', 'tool-1', 1000, 1),
+          seqSpan('b', 'tool-2', 1010, 1),
+          seqSpan('c', 'tool-3', 1100),
+          seqSpan('d', 'tool-4', 1200, 2),
+        ];
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b'], 'c', 'd'] }),
+          ).pass,
+        ).toBe(true);
+      });
+
+      it('treats turn index 0 as a valid turn (not falsy)', () => {
+        const spans = [seqSpan('a', 'tool-1', 1000, 0), seqSpan('b', 'tool-2', 1010, 0)];
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }),
+          ).pass,
+        ).toBe(true);
+      });
+
+      it('treats out-of-domain turn index values (blank string, float) as no index', () => {
+        const spans = [
+          {
+            spanId: 't1',
+            name: 'tool.call',
+            startTime: 1000,
+            endTime: 1100,
+            attributes: { 'tool.name': 'a', 'gen_ai.turn.index': '   ' },
+          },
+          {
+            spanId: 't2',
+            name: 'tool.call',
+            startTime: 1010,
+            endTime: 1110,
+            attributes: { 'tool.name': 'b', 'gen_ai.turn.index': 1.5 },
+          },
+        ] as unknown as ReturnType<typeof seqSpan>[];
+        expect(
+          handleTrajectoryToolSequence(makeSeqParams(spans, { mode: 'exact', steps: [['a', 'b']] }))
+            .pass,
+        ).toBe(false);
+      });
+
+      it('explains when a trace carries no turn markers at all', () => {
+        const result = handleTrajectoryToolSequence(
+          makeSeqParams([seqSpan('a', 'tool-1', 1000), seqSpan('b', 'tool-2', 1100)], {
+            mode: 'exact',
+            steps: [['a', 'b']],
+          }),
+        );
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('No tool spans carried a gen_ai.turn.index attribute');
+      });
+
+      it('requires a valid bijection for within-turn pattern matching', () => {
+        // pass: greedy '*'->a then 'a'->b fails, so backtracking reassigns '*'->b, 'a'->a
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams([seqSpan('a', 'tool-1', 1000, 1), seqSpan('b', 'tool-2', 1010, 1)], {
+              mode: 'exact',
+              steps: [['*', 'a']],
+            }),
+          ).pass,
+        ).toBe(true);
+        // fail: no assignment covers two 'a' tools with a compose_* matcher
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams([seqSpan('a', 'tool-1', 1000, 1), seqSpan('a', 'tool-2', 1010, 1)], {
+              mode: 'exact',
+              steps: [['search_*', 'compose_*']],
+            }),
+          ).pass,
+        ).toBe(false);
+      });
+
+      it('fails an exact nested assertion against an empty trace, and inverts', () => {
+        expect(
+          handleTrajectoryToolSequence(makeSeqParams([], { mode: 'exact', steps: [['a', 'b']] }))
+            .pass,
+        ).toBe(false);
+        expect(
+          handleTrajectoryToolSequence(
+            makeSeqParams([], { mode: 'exact', steps: [['a', 'b']] }, true),
+          ).pass,
+        ).toBe(true);
+      });
+
+      it('inverts a nested-group match in in_order mode', () => {
+        const spans = [seqSpan('a', 'tool-1', 1000, 1), seqSpan('b', 'tool-2', 1100, 2)];
+        expect(
+          handleTrajectoryToolSequence(makeSeqParams(spans, { steps: [['a'], ['b']] }, true)).pass,
+        ).toBe(false);
+      });
+
+      it('rejects an invalid mode with a clear error', () => {
+        expect(() =>
+          handleTrajectoryToolSequence(
+            makeSeqParams([seqSpan('a', 'tool-1', 1000, 1)], {
+              mode: 'parallel',
+              steps: [['a']],
+            }),
+          ),
+        ).toThrow('trajectory:tool-sequence assertion mode must be "exact" or "in_order"');
       });
 
       it('rejects a malformed (null) step entry with a clear error', () => {

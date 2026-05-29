@@ -872,7 +872,7 @@ For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans,
 
 ##### Asserting the exact turn shape {#trajectory-tool-sequence-parallel}
 
-The `trace-span-count` form above answers "were these tools all in one turn?" To assert _which_ tools share _each_ turn — for example "search these two in parallel, then reply" — nest the tools for a turn in an array. Promptfoo groups tool calls by the same [`gen_ai.turn.index`](/docs/tracing#per-llm-turn-spans) the turn-marker providers tag onto each tool span, so tools emitted by one model round form one turn.
+The `trace-span-count` form above answers "were these tools all in one turn?" To assert _which_ tools share _each_ turn — for example "search these two in parallel, then reply" — nest the tools for a turn in an array. Promptfoo groups each consecutive run of tool calls that share the same [`gen_ai.turn.index`](/docs/tracing#per-llm-turn-spans) (the value the turn-marker providers tag onto each tool span), so tools emitted by one model round form one turn.
 
 ```yaml
 - type: trajectory:tool-sequence
@@ -887,7 +887,8 @@ The `trace-span-count` form above answers "were these tools all in one turn?" To
 - A **nested** entry (`steps: [[a, b]]`) requires those tools to share a turn. Order _within_ a turn does not matter (parallel calls have no inherent order), so `[a, b]` also matches a turn observed as `b, a`.
 - Once any entry is nested, **every** entry describes a full turn — a plain entry like `compose_reply` means "a turn containing only that tool." Use a flat sequence for loose ordering.
 - Nesting works in both `exact` and `in_order` modes.
-- Turns come from `gen_ai.turn.index`: a tool span without that attribute can't be proven to share a turn, so it stands alone. Assert turn shape only on traces from a provider that emits turn markers.
+- Turns come from `gen_ai.turn.index`: a tool span without that attribute can't be proven to share a turn, so it stands alone (and two adjacent tools without the attribute are still separate turns). Assert turn shape only on traces from a provider that emits turn markers — otherwise the assertion fails with a note that no turn data was found.
+- Turn indices are scoped to a single model run. Use turn-shape assertions on single-agent traces; subagent tool calls (e.g. `anthropic:claude-agent-sdk`) appear as their own interleaved turns, so filtering them is not supported here — prefer the `trace-span-count` form above for those.
 
 ### trajectory:step-count {#trajectorystep-count}
 
