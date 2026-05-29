@@ -4,16 +4,18 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  closeTurnSpan,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
+  openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { renderVarsInObject } from '../../util/render';
@@ -3159,18 +3161,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     eventTime: number,
     clearPreviousUsage = false,
   ): void {
-    if (state.activeTurnSpan) {
-      try {
-        state.activeTurnSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: 'Turn span not properly closed before next turn started',
-        });
-        state.activeTurnSpan.end(eventTime);
-      } catch {
-        // ignore
-      }
-      state.activeTurnSpan = undefined;
-    }
     if (clearPreviousUsage && state.turnCount > 0) {
       // Usage is associated with the active protocol turn. Do not attribute the
       // previous turn's most recent update when an explicit later turn starts.
@@ -3183,23 +3173,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state.rawTokenUsage = undefined;
       state.tokenUsage = undefined;
     }
-    state.turnCount += 1;
-    state.activeTurnIndex = state.turnCount;
-    try {
-      state.activeTurnSpan = trace
-        .getTracer('promptfoo.codex-app-server')
-        .startSpan(`gen_ai.turn ${state.turnCount}`, {
-          kind: SpanKind.INTERNAL,
-          startTime: eventTime,
-          attributes: {
-            'gen_ai.turn.index': state.turnCount,
-            'gen_ai.system': 'openai',
-          },
-        });
-    } catch (err) {
-      logger.warn(`[CodexAppServer] Failed to start turn span: ${err}`);
-      state.activeTurnSpan = undefined;
-    }
+    openTurnSpan(state, {
+      tracer: trace.getTracer('promptfoo.codex-app-server'),
+      eventTime,
+      system: 'openai',
+      logLabel: 'CodexAppServer',
+    });
   }
 
   private endTurnSpan(
@@ -3207,34 +3186,21 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     eventTime: number,
     errorMessage?: string,
   ): void {
-    const span = state.activeTurnSpan;
-    if (!span) {
-      return;
-    }
-    try {
-      // Codex app-server typically delivers usage under `last`/`total`; reuse
-      // the shared resolver so we honor both nested and flat shapes.
-      const usage = this.resolveRawUsage(state.rawTokenUsage);
-      if (usage) {
-        span.setAttribute('gen_ai.usage.input_tokens', usage.input);
-        span.setAttribute('gen_ai.usage.output_tokens', usage.output);
-        if (usage.cached) {
-          span.setAttribute('gen_ai.usage.cached_tokens', usage.cached);
-        }
-        if (usage.reasoning) {
-          span.setAttribute('gen_ai.usage.reasoning_tokens', usage.reasoning);
-        }
+    // Codex app-server typically delivers usage under `last`/`total`; reuse
+    // the shared resolver so we honor both nested and flat shapes.
+    const usage = this.resolveRawUsage(state.rawTokenUsage);
+    const attributes: Attributes = {};
+    if (usage) {
+      attributes['gen_ai.usage.input_tokens'] = usage.input;
+      attributes['gen_ai.usage.output_tokens'] = usage.output;
+      if (usage.cached) {
+        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
       }
-      if (errorMessage) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-      } else {
-        span.setStatus({ code: SpanStatusCode.OK });
+      if (usage.reasoning) {
+        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
       }
-      span.end(eventTime);
-    } catch (err) {
-      logger.warn(`[CodexAppServer] Failed to end turn span: ${err}`);
     }
-    state.activeTurnSpan = undefined;
+    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });
   }
 
   private applyItemCompletionAttributes(
@@ -3264,16 +3230,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     state.itemStartTimes.clear();
     if (state.activeTurnSpan) {
       logger.warn('[CodexAppServer] Turn span not properly closed');
-      try {
-        state.activeTurnSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: 'Turn span not properly closed',
-        });
-        state.activeTurnSpan.end();
-      } catch {
-        // ignore
-      }
-      state.activeTurnSpan = undefined;
+      closeTurnSpan(state, {
+        errorMessage: 'Turn span not properly closed',
+        logLabel: 'CodexAppServer',
+      });
     }
   }
 

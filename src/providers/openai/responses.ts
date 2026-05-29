@@ -2,8 +2,8 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
-  type GenAISpanContext,
-  type GenAISpanResult,
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import {
@@ -440,49 +440,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? effectiveBody.max_output_tokens
         : undefined;
 
-    const spanContext: GenAISpanContext = {
+    const spanContext = buildChatSpanContext({
       system: 'openai',
-      operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      maxTokens: effectiveMaxOutputTokens,
-      temperature: effectiveConfig.temperature,
-      topP: effectiveConfig.top_p,
-      stopSequences: effectiveConfig.stop,
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      traceparent: context?.traceparent,
-      requestBody: prompt,
-    };
-
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-        };
-      }
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-      return result;
-    };
+      prompt,
+      context,
+      request: {
+        maxTokens: effectiveMaxOutputTokens,
+        temperature: effectiveConfig.temperature,
+        topP: effectiveConfig.top_p,
+        stopSequences: effectiveConfig.stop,
+      },
+    });
 
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(context, resolved),
-      resultExtractor,
+      extractProviderResponseAttributes,
     );
   }
 

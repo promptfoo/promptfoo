@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -10,9 +10,11 @@ import { getEnvString } from '../../envars';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
+  closeTurnSpan,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
+  openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { renderVarsInObject } from '../../util/render';
@@ -1232,36 +1234,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     tracer: ReturnType<typeof trace.getTracer>,
     eventTime: number,
   ): void {
-    if (state.activeTurnSpan) {
-      // Codex doesn't normally double-open turns, but if a `turn.started` arrives
-      // before the prior `turn.completed`, close the prior one to avoid a leak.
-      // Mark it ERROR so the never-completed turn is distinguishable from a clean one.
-      try {
-        state.activeTurnSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: 'Turn span not properly closed before next turn started',
-        });
-        state.activeTurnSpan.end(eventTime);
-      } catch {
-        // ignore
-      }
-      state.activeTurnSpan = undefined;
-    }
-    state.turnCount += 1;
-    state.activeTurnIndex = state.turnCount;
-    try {
-      state.activeTurnSpan = tracer.startSpan(`gen_ai.turn ${state.turnCount}`, {
-        kind: SpanKind.INTERNAL,
-        startTime: eventTime,
-        attributes: {
-          'gen_ai.turn.index': state.turnCount,
-          'gen_ai.system': 'openai',
-        },
-      });
-    } catch (err) {
-      logger.warn(`[CodexSDK] Failed to start turn span: ${err}`);
-      state.activeTurnSpan = undefined;
-    }
+    openTurnSpan(state, { tracer, eventTime, system: 'openai', logLabel: 'CodexSDK' });
   }
 
   private endTurnSpan(
@@ -1270,31 +1243,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     usage?: any,
     errorMessage?: string,
   ): void {
-    const span = state.activeTurnSpan;
-    if (!span) {
-      return;
-    }
-    try {
-      if (usage) {
-        const inputTokens = usage.input_tokens ?? usage.inputTokens;
-        const outputTokens = usage.output_tokens ?? usage.outputTokens;
-        if (typeof inputTokens === 'number') {
-          span.setAttribute('gen_ai.usage.input_tokens', inputTokens);
-        }
-        if (typeof outputTokens === 'number') {
-          span.setAttribute('gen_ai.usage.output_tokens', outputTokens);
-        }
+    const attributes: Attributes = {};
+    if (usage) {
+      const inputTokens = usage.input_tokens ?? usage.inputTokens;
+      const outputTokens = usage.output_tokens ?? usage.outputTokens;
+      if (typeof inputTokens === 'number') {
+        attributes['gen_ai.usage.input_tokens'] = inputTokens;
       }
-      if (errorMessage) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-      } else {
-        span.setStatus({ code: SpanStatusCode.OK });
+      if (typeof outputTokens === 'number') {
+        attributes['gen_ai.usage.output_tokens'] = outputTokens;
       }
-      span.end(eventTime);
-    } catch (err) {
-      logger.warn(`[CodexSDK] Failed to end turn span: ${err}`);
     }
-    state.activeTurnSpan = undefined;
+    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
   }
 
   private collectStreamingItemText(item: any, state: CodexStreamingState): void {
@@ -1404,18 +1364,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
-    if (state.activeTurnSpan) {
-      try {
-        state.activeTurnSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: 'Turn span not properly closed',
-        });
-        state.activeTurnSpan.end();
-      } catch {
-        // ignore
-      }
-      state.activeTurnSpan = undefined;
-    }
+    closeTurnSpan(state, {
+      errorMessage: 'Turn span not properly closed',
+      logLabel: 'CodexSDK',
+    });
   }
 
   private buildStreamingTurnResult(state: CodexStreamingState): {

@@ -10,6 +10,7 @@ import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
+  emitTurnMarkerSpan,
   getGenAITracer,
   getTraceparent,
   sanitizeBody,
@@ -1394,51 +1395,48 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const toolTurnIndex = new Map<string, number>();
           const emitTurnSpan = (msg: SDKAssistantMessage): number => {
             const index = turnCount + 1;
-            try {
-              turnCount = index;
-              const turnSpanTracer = getGenAITracer();
-              const attributes: Record<string, string | number | boolean> = {
-                'gen_ai.turn.index': index,
-                'gen_ai.system': 'anthropic',
-              };
-              if (msg.parent_tool_use_id) {
-                attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
-                attributes['gen_ai.turn.is_subagent'] = true;
-              }
-              if (msg.subagent_type) {
-                attributes['gen_ai.turn.subagent_type'] = msg.subagent_type;
-              }
-              if (msg.message?.model) {
-                attributes['gen_ai.response.model'] = msg.message.model;
-              }
-              const usage = msg.message?.usage;
-              if (usage) {
-                if (typeof usage.input_tokens === 'number') {
-                  attributes['gen_ai.usage.input_tokens'] = usage.input_tokens;
-                }
-                if (typeof usage.output_tokens === 'number') {
-                  attributes['gen_ai.usage.output_tokens'] = usage.output_tokens;
-                }
-              }
-              if (msg.error) {
-                // The SDK exposes discriminated codes like `model_not_found` /
-                // `rate_limit` on failed assistant messages. Surface them so
-                // trace assertions can spot failed rounds instead of silently
-                // reporting them as OK.
-                attributes['gen_ai.turn.error'] = msg.error;
-              }
-              const now = Date.now();
-              const span = turnSpanTracer.startSpan(`gen_ai.turn ${index}`, {
-                startTime: now,
-                attributes,
-              });
-              if (msg.error) {
-                span.setStatus({ code: SpanStatusCode.ERROR, message: msg.error });
-              }
-              span.end(now);
-            } catch (err) {
-              logger.warn(`[ClaudeAgentSDK] Failed to emit turn span: ${err}`);
+            turnCount = index;
+            const attributes: Record<string, string | number | boolean> = {
+              'gen_ai.turn.index': index,
+              'gen_ai.system': 'anthropic',
+            };
+            if (msg.parent_tool_use_id) {
+              attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
+              attributes['gen_ai.turn.is_subagent'] = true;
             }
+            if (msg.subagent_type) {
+              attributes['gen_ai.turn.subagent_type'] = msg.subagent_type;
+            }
+            if (msg.message?.model) {
+              attributes['gen_ai.response.model'] = msg.message.model;
+            }
+            const usage = msg.message?.usage;
+            if (usage) {
+              if (typeof usage.input_tokens === 'number') {
+                attributes['gen_ai.usage.input_tokens'] = usage.input_tokens;
+              }
+              if (typeof usage.output_tokens === 'number') {
+                attributes['gen_ai.usage.output_tokens'] = usage.output_tokens;
+              }
+            }
+            if (msg.error) {
+              // The SDK exposes discriminated codes like `model_not_found` /
+              // `rate_limit` on failed assistant messages. Surface them so
+              // trace assertions can spot failed rounds instead of silently
+              // reporting them as OK.
+              attributes['gen_ai.turn.error'] = msg.error;
+            }
+            // A turn marker is a point-in-time event, so start and end at the same instant.
+            const now = Date.now();
+            emitTurnMarkerSpan({
+              tracer: getGenAITracer(),
+              index,
+              startTime: now,
+              endTime: now,
+              attributes,
+              errorMessage: msg.error,
+              logLabel: 'ClaudeAgentSDK',
+            });
             return index;
           };
 

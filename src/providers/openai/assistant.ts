@@ -5,8 +5,8 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  type GenAISpanContext,
-  type GenAISpanResult,
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
@@ -222,39 +222,19 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const spanContext: GenAISpanContext = {
+    const spanContext = buildChatSpanContext({
       system: 'openai',
-      operationName: 'chat',
       model: this.assistantConfig.modelName || this.assistantId,
       providerId: this.id(),
-      temperature: this.assistantConfig.temperature ?? undefined,
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      traceparent: context?.traceparent,
-      requestBody: prompt,
-    };
-
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-      return result;
-    };
+      prompt,
+      context,
+      request: { temperature: this.assistantConfig.temperature ?? undefined },
+    });
 
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, callApiOptions),
-      resultExtractor,
+      extractProviderResponseAttributes,
     );
   }
 
