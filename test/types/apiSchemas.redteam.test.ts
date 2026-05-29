@@ -731,6 +731,12 @@ describe('API schema red-team coverage', () => {
           isEnterprise: false,
         }).success,
       ).toBe(true);
+      expect(
+        UserSchemas.CloudConfig.Response.safeParse({
+          appUrl: 'https://app.promptfoo.app',
+          isEnabled: true,
+        }).success,
+      ).toBe(false);
     });
 
     it('rejects empty config identifiers and preserves config payloads intentionally', () => {

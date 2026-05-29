@@ -8,6 +8,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export type CloudConfigData = CloudConfigResponse;
 
+// Older local servers did not include `isEnterprise`; keep the client tolerant
+// while the server/OpenAPI response contract remains strict.
+const LegacyCloudConfigResponseSchema = CloudConfigResponseSchema.extend({
+  isEnterprise: CloudConfigResponseSchema.shape.isEnterprise.optional(),
+});
+
 // Keyed on apiBaseUrl + signed-in email so a change to either invalidates
 // the cached config automatically — replaces the previous manual
 // event-bus + dual Zustand-subscription dance.
@@ -22,7 +28,7 @@ async function fetchCloudConfig(): Promise<CloudConfigData> {
   if (!response.ok) {
     throw new Error('Failed to fetch cloud config');
   }
-  const parsed = CloudConfigResponseSchema.safeParse(await response.json());
+  const parsed = LegacyCloudConfigResponseSchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new Error('Invalid cloud config response');
   }

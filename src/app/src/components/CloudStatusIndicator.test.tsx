@@ -491,7 +491,7 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
-  it('does not open a cached dashboard while refreshing and disables refresh', async () => {
+  it('does not open a cached dashboard during a background refresh and disables refresh', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
@@ -499,7 +499,8 @@ describe('CloudStatusIndicator', () => {
         appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
-      isLoading: true,
+      isLoading: false,
+      isFetching: true,
       isError: false,
       error: null,
       refetch: mockRefetch,

@@ -36,8 +36,8 @@ interface IndicatorState {
   // the API reported a configured cloud whose dashboard URL we can't trust.
   safeAppUrl: string | null;
   // Where the "connect" CTA in the dialog should send the user. For
-  // enterprise we point at the configured app host; otherwise the public
-  // signup page.
+  // enterprise we point at the configured app host when it is safe;
+  // otherwise the public signup page.
   connectDestination: { href: string; label: string };
 }
 
@@ -111,11 +111,12 @@ function statusLabel(state: IndicatorState): string {
 }
 
 export default function CloudStatusIndicator() {
-  const { data, isLoading, isError, refetch } = useCloudConfig();
+  const { data, isLoading, isFetching, isError, refetch } = useCloudConfig();
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
-  const state = deriveIndicatorState(data, isLoading, isError);
+  const isCheckingCloudConfig = isLoading || isFetching;
+  const state = deriveIndicatorState(data, isCheckingCloudConfig, isError);
   const canOpenDashboard = state.status === 'configured' && state.safeAppUrl !== null;
   const label = statusLabel(state);
 
@@ -261,13 +262,17 @@ export default function CloudStatusIndicator() {
               Learn More
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleRefreshClick} disabled={isLoading}>
-                {isLoading ? (
+              <Button
+                variant="outline"
+                onClick={handleRefreshClick}
+                disabled={isCheckingCloudConfig}
+              >
+                {isCheckingCloudConfig ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
                 ) : (
                   <RefreshCw className="mr-2 size-4" />
                 )}
-                {isLoading ? 'Checking...' : 'Refresh Configuration'}
+                {isCheckingCloudConfig ? 'Checking...' : 'Refresh Configuration'}
               </Button>
               <Button onClick={() => setShowDialog(false)}>Close</Button>
             </div>

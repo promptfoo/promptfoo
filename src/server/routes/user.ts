@@ -111,8 +111,8 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
-/** Returns an app URL only when it is safe to expose as a browser navigation target. */
-function getHttpAppUrl(url: string | null): string | null {
+/** Returns a URL only when it is safe to expose as a browser navigation target. */
+function getBrowserSafeHttpUrl(url: string | null): string | null {
   if (!url) {
     return null;
   }
@@ -234,8 +234,8 @@ userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<vo
   try {
     cloudConfig.reload();
     const isEnabled = cloudConfig.isEnabled();
-    const appUrl = getHttpAppUrl(cloudConfig.getAppUrl());
-    const apiHost = getHttpAppUrl(cloudConfig.getApiHost());
+    const appUrl = getBrowserSafeHttpUrl(cloudConfig.getAppUrl());
+    const apiHost = getBrowserSafeHttpUrl(cloudConfig.getApiHost());
     const hasEnterpriseAppUrl = isEnterprise(appUrl);
     const hasEnterpriseApiHost = isEnterprise(apiHost);
     const browserAppUrl = hasEnterpriseApiHost && !hasEnterpriseAppUrl ? null : appUrl;

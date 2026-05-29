@@ -133,7 +133,7 @@ const HttpUrlSchema = z.url().refine(
 export const CloudConfigResponseSchema = z.object({
   appUrl: HttpUrlSchema.nullable(),
   isEnabled: z.boolean(),
-  isEnterprise: z.boolean().optional(),
+  isEnterprise: z.boolean(),
 });
 
 export type CloudConfigResponse = z.infer<typeof CloudConfigResponseSchema>;

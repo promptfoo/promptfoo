@@ -10,10 +10,9 @@ export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
 
 // Hostnames served by hosted Promptfoo Cloud — both the app/dashboard and
-// the API. The CLI's `promptfoo auth login` flow writes the same host
-// (currently `www.promptfoo.app`) into both `appUrl` and `apiHost`, so
-// either kind of hostname must be recognized as hosted regardless of
-// which slot it lands in.
+// the API. Older or manually saved configs may put a hosted app hostname in
+// `apiHost`, so either kind of hostname must be recognized as hosted
+// regardless of which slot it lands in.
 export const HOSTED_CLOUD_HOSTNAMES = new Set([
   'promptfoo.app',
   'www.promptfoo.app',

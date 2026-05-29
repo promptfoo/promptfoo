@@ -255,12 +255,12 @@ describe('User Routes', () => {
       }
     });
 
-    it('should treat a hosted-app apiHost as hosted cloud (regression: CLI writes apiHost = appUrl)', async () => {
-      // The CLI's `promptfoo auth login` flow ends with apiHost and appUrl
-      // set to the same hosted-cloud value, e.g. both `https://www.promptfoo.app`.
-      // Previously HOSTED_CLOUD_API_HOSTNAMES only listed `api.promptfoo.app`,
-      // so the hosted-app apiHost looked like an enterprise API to the route,
-      // tripping the "mismatched app vs api" branch that nulls out appUrl.
+    it('should treat a hosted-app apiHost as hosted cloud', async () => {
+      // Older or manually saved configs may put a hosted app hostname in
+      // apiHost. Previously HOSTED_CLOUD_API_HOSTNAMES only listed
+      // `api.promptfoo.app`, so the hosted-app apiHost looked like an
+      // enterprise API to the route, tripping the "mismatched app vs api"
+      // branch that nulls out appUrl.
       // Result: a happy-path logged-in user saw `appUrl: null, isEnterprise: true`,
       // and the navbar indicator rendered the "dashboard URL unavailable" state.
       const hostedApiHosts = [
