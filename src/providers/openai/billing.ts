@@ -771,15 +771,23 @@ export function calculateOpenAIUsageCost(
 
   const cachedInput = splitCachedInputTokens(usage);
   const textCost = calculateTextCost(rates.text, usage, cachedInput.textInputTokens, config);
+  const audioInputCost =
+    getFiniteCostValue(config.audioInputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioInput);
+  const audioOutputCost =
+    getFiniteCostValue(config.audioOutputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioOutput);
   const audioCost = calculateModalCost(
     rates.audio,
     usage.audioInputTokens,
     cachedInput.audioInputTokens,
     usage.audioOutputTokens,
     {
-      input: config.audioInputCost ?? config.audioCost ?? objectCost?.audioInput,
-      cachedInput: config.audioInputCost ?? config.audioCost ?? objectCost?.audioInput,
-      output: config.audioOutputCost ?? config.audioCost ?? objectCost?.audioOutput,
+      input: audioInputCost,
+      cachedInput: audioInputCost,
+      output: audioOutputCost,
     },
   );
   const imageCost = calculateModalCost(

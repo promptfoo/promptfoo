@@ -195,12 +195,18 @@ providers:
     config:
       inputCost: 0.0000025
       outputCost: 0.00001
+  - id: anthropic:messages:claude-sonnet-4-5
+    config:
+      cost:
+        input: 0.000003
+        output: 0.000015
 ```
 
 Use `inputCost` and `outputCost` when a provider charges different prompt and completion
-rates. The legacy `cost` option remains a shared fallback that applies the same value to
-both directions. OpenAI audio-capable models also support `audioInputCost` and
-`audioOutputCost`, with `audioCost` as the shared fallback.
+rates. The `cost` option can be a single legacy fallback rate for both directions, or a
+structured `{ input, output }` object for providers that support separate prompt and
+completion overrides. OpenAI audio-capable models also support `audioInputCost` and
+`audioOutputCost`, with `audioCost` or `cost.audioInput` / `cost.audioOutput` as fallbacks.
 
 ## Custom Integrations
 

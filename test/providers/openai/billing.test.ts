@@ -260,6 +260,32 @@ describe('OpenAI billing helpers', () => {
     expect(cost).toBeCloseTo((21 * 0.15 + 9 * 10 + 16 * 0.6 + 7 * 20) / 1e6, 10);
   });
 
+  it('ignores non-finite legacy audio overrides before structured audio rates', () => {
+    const cost = calculateOpenAIUsageCost(
+      'gpt-4o-mini-audio-preview',
+      {
+        audioInputCost: Number.NaN,
+        audioOutputCost: Number.POSITIVE_INFINITY,
+        cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 },
+      },
+      {
+        prompt_tokens: 30,
+        completion_tokens: 23,
+        prompt_tokens_details: {
+          text_tokens: 21,
+          audio_tokens: 9,
+        },
+        completion_tokens_details: {
+          text_tokens: 16,
+          audio_tokens: 7,
+        },
+      },
+      {},
+    );
+
+    expect(cost).toBeCloseTo(0.369, 10);
+  });
+
   it('uses current gpt-realtime-mini multimodal and cached rates', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-realtime-mini',

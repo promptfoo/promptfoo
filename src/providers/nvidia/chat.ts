@@ -1,5 +1,6 @@
 import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { getTokenCostOverrides } from '../shared';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
@@ -30,14 +31,15 @@ export function calculateNvidiaCost(
   completionTokens?: number,
   cached = false,
 ): number | undefined {
-  const inputCost = config.inputCost ?? config.cost;
-  const outputCost = config.outputCost ?? config.cost;
+  const { inputCost, outputCost } = getTokenCostOverrides(config);
 
   if (
     inputCost === undefined ||
     outputCost === undefined ||
-    promptTokens === undefined ||
-    completionTokens === undefined
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
   ) {
     return undefined;
   }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type BedrockModelPricing,
   type BedrockPricingData,
@@ -40,6 +40,10 @@ const MockGetProductsCommand = vi.mocked(GetProductsCommand);
 const MockPricingClient = vi.mocked(PricingClient);
 
 describe('pricingFetcher', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     MockPricingClient.mockImplementation(
@@ -1021,10 +1025,10 @@ describe('pricingFetcher', () => {
       ]);
 
       expect(
-        MockPricingClient.mock.calls.map(
-          (call) =>
-            (call[0] as { credentials?: { accessKeyId?: string } }).credentials?.accessKeyId,
-        ),
+        MockPricingClient.mock.calls.map((call) => {
+          const options = call[0] as { credentials?: { accessKeyId?: string } } | undefined;
+          return options?.credentials?.accessKeyId;
+        }),
       ).toEqual(expect.arrayContaining(['invalid', 'valid']));
       expect(failedResult).toBeNull();
       expect(validResult).not.toBeNull();

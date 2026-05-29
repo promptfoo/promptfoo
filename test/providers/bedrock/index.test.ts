@@ -114,6 +114,10 @@ vi.mock('../../../src/providers/bedrock/pricingFetcher', async (importOriginal) 
 
 const mockGetPricingData = vi.mocked(getPricingData);
 
+afterEach(() => {
+  mockGetPricingData.mockReset();
+});
+
 class TestBedrockProvider extends AwsBedrockGenericProvider {
   modelName = 'test-model';
 
@@ -3640,6 +3644,64 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('should calculate InvokeModel cost for cached responses with explicit overrides', async () => {
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached response' }));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+          cost: { input: 0.01, output: 0.02 },
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeCloseTo(0.5);
+    expect(result.tokenUsage).toEqual({
+      prompt: 10,
+      completion: 20,
+      total: 30,
+      numRequests: 1,
+    });
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
+  it('should calculate InvokeModel cost for cached responses with fetched pricing', async () => {
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached response' }));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+    mockGetPricingData.mockResolvedValueOnce({
+      models: new Map([['Claude 3.7 Sonnet', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    });
+
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeCloseTo(0.05);
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockGetPricingData).toHaveBeenCalledWith('us-east-1', undefined);
   });
 
   it('should hash prompt and secret values in the cache key', async () => {

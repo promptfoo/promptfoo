@@ -257,12 +257,11 @@ export async function getPricingData(
 }
 
 /**
- * Fetches current Bedrock pricing from AWS Pricing API.
- * Internal function - use getPricingData() instead to reuse successful cached data.
+ * Sends one AWS Pricing API command with a short timeout.
  *
- * @param region - AWS region for Bedrock models (e.g., 'us-east-1')
- * @param credentials - AWS credentials for Pricing API access (identity or provider)
- * @returns Promise resolving to pricing data, or null if fetch fails
+ * @param pricingClient - AWS Pricing client instance
+ * @param command - GetProducts command to send
+ * @returns Promise resolving to the AWS Pricing command output
  */
 async function sendPricingCommandWithTimeout(
   pricingClient: PricingClient,

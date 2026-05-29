@@ -186,6 +186,10 @@ describe('NVIDIA NIM', () => {
     it('requires explicit input and output rates because NVIDIA has no built-in pricing', () => {
       expect(calculateNvidiaCost({ inputCost: 0.001 }, 10, 5)).toBeUndefined();
       expect(calculateNvidiaCost({ inputCost: 0.001, outputCost: 0.002 }, 10, 5)).toBe(0.02);
+      expect(calculateNvidiaCost({ cost: { input: 0.001, output: 0.002 } }, 10, 5)).toBe(0.02);
+      expect(
+        calculateNvidiaCost({ cost: { input: 0.001, output: Number.NaN } }, 10, 5),
+      ).toBeUndefined();
       expect(calculateNvidiaCost({ cost: 0.003 }, 10, 5, true)).toBe(0);
     });
   });
