@@ -4,7 +4,7 @@
   "include-v-in-tag": false,
   "include-v-in-release-name": false,
   "commit-batch-size": 1,
-  "last-release-sha": "40501990e8c988644401663360aa26714cee1718",
+  "last-release-sha": "4860e990c7e9a2f8f677173fb92cf9867b34d03f",
   "separate-pull-requests": true,
   "packages": {
     ".": {
