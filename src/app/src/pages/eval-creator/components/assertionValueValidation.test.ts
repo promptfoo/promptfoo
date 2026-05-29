@@ -1,3 +1,4 @@
+import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -5,6 +6,8 @@ import {
   getRunnableAssertionValueError,
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
+
+const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
 
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
@@ -375,6 +378,54 @@ describe('moderation', () => {
       getRunnableAssertionValueError(make({ type: 'not-moderation', value: '   ' })),
     ).toBeUndefined();
   });
+
+  it('rejects an empty array, which is truthy and crashes the runtime invariant', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'moderation', value: [] as any }))).toMatch(
+      /comma-separated list/,
+    );
+    expect(
+      getRunnableAssertionValueError(make({ type: 'not-moderation', value: [] as any })),
+    ).toMatch(/comma-separated list/);
+  });
+
+  it('accepts a non-empty string array of categories', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'moderation', value: ['harassment'] as any })),
+    ).toBeUndefined();
+  });
+});
+
+describe('named matcher assertions', () => {
+  it('requires an expected traced tool name for trajectory:tool-used', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trajectory:tool-used', value: '' })),
+    ).toMatch(/traced tool name/);
+    expect(
+      getRunnableAssertionValueError(make({ type: 'not-trajectory:tool-used', value: '' })),
+    ).toMatch(/traced tool name/);
+  });
+
+  it('accepts a tool name, a string array, or a name/pattern object', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trajectory:tool-used', value: 'search' })),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: ['search'] as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: { name: 'search' } as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('uses the skill wording for skill-used', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'skill-used', value: '' }))).toMatch(
+      /skill name/,
+    );
+  });
 });
 
 describe('perplexity-score threshold', () => {
@@ -472,5 +523,21 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
+  });
+});
+
+describe('supported assertion type coverage', () => {
+  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
+  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
+  // are valid — not that the list is complete. A base type added to the schema but
+  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
+  // valid assertion. This test fails if that ever happens.
+  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
+    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
+      UNSUPPORTED_TYPE_MESSAGE,
+    );
+    expect(
+      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
+    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

@@ -524,7 +524,11 @@ function getModerationValueError(assertion: Assertion): string | undefined {
     assertion.value !== undefined &&
     !(
       (typeof assertion.value === 'string' && assertion.value.trim() === '') ||
+      // An empty array is truthy, so the runtime handler's invariant
+      // (`!value || (Array.isArray(value) && typeof value[0] === 'string')`)
+      // throws on `[]`. Require a non-empty string array to match that.
       (Array.isArray(assertion.value) &&
+        assertion.value.length > 0 &&
         assertion.value.every((value) => typeof value === 'string'))
     )
   ) {
@@ -650,6 +654,9 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
   );
 }
 
+// Save-time entry point. Currently identical to the run-time check, but kept as a
+// distinct seam: the editor saves an assertion before it is runnable, and save-time
+// validation is expected to diverge (e.g. allow drafts) from run-time validation.
 export function getAssertionValueError(assertion: Assertion): string | undefined {
   return getRunnableAssertionValueError(assertion);
 }

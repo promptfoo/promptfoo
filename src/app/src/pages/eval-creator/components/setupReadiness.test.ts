@@ -721,7 +721,10 @@ describe('setupReadiness', () => {
         ],
       });
 
-      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+      // Two providers, one prompt → the fix is on the shorter (prompt) axis, step 2.
+      expect(readiness.issues).toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs', stepId: 2 }),
+      );
     });
 
     it('requires multiple outputs after applying default test provider and prompt filters', () => {
@@ -778,6 +781,40 @@ describe('setupReadiness', () => {
       expect(readiness.issues).not.toContainEqual(
         expect.objectContaining({ id: 'comparisonOutputs' }),
       );
+    });
+
+    it('warns when a test filters to one static prompt despite an unrelated dynamic prompt', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: [
+          { raw: 'Write a reply', label: 'Static prompt' },
+          { raw: 'file://other.txt', label: 'Dynamic prompt' },
+        ],
+        tests: [
+          {
+            prompts: ['Static prompt'],
+            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+          },
+        ],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+      expect(readiness.isReadyToRun).toBe(false);
+    });
+
+    it('warns when a test filters to one static provider despite an unrelated dynamic provider', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'file://providers.yaml'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            providers: ['openai:gpt-4.1'],
+            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+          },
+        ],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
     });
 
     it('routes select-best fixes to the axis the user can still grow', () => {
@@ -838,6 +875,45 @@ describe('setupReadiness', () => {
       });
     });
 
+    it('detects comparison assertions nested inside an assert-set', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+    });
+
+    it('does not count an assert-set wrapping only comparison assertions as a scoring assertion', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            assert: [
+              { type: 'max-score' },
+              {
+                type: 'assert-set',
+                assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonScoring' }));
+    });
+
     it('validates default max-score assertions for external and string-array tests', () => {
       const externalTests = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
@@ -892,6 +968,16 @@ describe('setupReadiness', () => {
       expect(readiness.isReadyToRun).toBe(true);
       expect(readiness.plannedBaseRequestCount).toBeUndefined();
     });
+
+    it('multiplies providers, prompts, and test cases for the base request count', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        prompts: ['Write a reply', 'Write a summary'],
+        tests: [{ vars: {} }, { vars: {} }, { vars: {} }],
+      });
+
+      expect(readiness.plannedBaseRequestCount).toBe(12);
+    });
   });
 
   describe('extractVariablesFromPrompts', () => {
@@ -918,6 +1004,23 @@ describe('setupReadiness', () => {
       expect(extractVariablesFromPrompts(['Use {{ env.OPENAI_API_KEY }} for {{ topic }}'])).toEqual(
         ['topic'],
       );
+    });
+
+    it('handles Nunjucks whitespace-control markers', () => {
+      expect(extractVariablesFromPrompts(['{{- topic -}}'])).toEqual(['topic']);
+      expect(
+        extractVariablesFromPrompts([
+          '{%- for item in items -%}{{- item -}}{%- endfor -%}Afterward: {{ item }}',
+        ]),
+      ).toEqual(['items', 'item']);
+    });
+
+    it('extracts from large unbalanced loop templates without catastrophic backtracking', () => {
+      const pathological = '{% for x in y %}'.repeat(2000);
+      const start = performance.now();
+      const variables = extractVariablesFromPrompts([pathological]);
+      expect(performance.now() - start).toBeLessThan(1000);
+      expect(variables).toEqual(['y']);
     });
 
     it('does not treat loop locals as required vars inside loops only', () => {
