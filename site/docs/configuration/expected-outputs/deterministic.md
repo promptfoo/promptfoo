@@ -742,7 +742,7 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
-- optional `redactArgsInFailures`, which hides traced argument payloads from failed assertion reasons
+- optional `redactArgsInFailures`, which hides traced argument payloads from assertion reasons (applies to both passing and failing reasons, so args never leak into reports or logs)
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 

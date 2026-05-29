@@ -86,14 +86,16 @@ export const handleTraceSpanDuration = ({
   }
 
   const { pattern = '*', max, percentile, method = 'nearest', requirePresence = false } = value;
-  if (method !== 'nearest' && method !== 'linear') {
-    throw new Error('trace-span-duration assertion method must be "nearest" or "linear"');
-  }
-  if (
-    percentile !== undefined &&
-    (!Number.isFinite(percentile) || percentile < 0 || percentile > 100)
-  ) {
-    throw new Error('trace-span-duration assertion percentile must be between 0 and 100');
+  // `method` and `percentile` only affect the percentile path, so validate them only when a
+  // percentile is requested (avoids rejecting a valid plain max-duration config over an
+  // unused method).
+  if (percentile !== undefined) {
+    if (!Number.isFinite(percentile) || percentile < 0 || percentile > 100) {
+      throw new Error('trace-span-duration assertion percentile must be between 0 and 100');
+    }
+    if (method !== 'nearest' && method !== 'linear') {
+      throw new Error('trace-span-duration assertion method must be "nearest" or "linear"');
+    }
   }
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
