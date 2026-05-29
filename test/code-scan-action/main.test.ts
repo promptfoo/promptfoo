@@ -696,6 +696,49 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
+    it('writes SARIF findings when the scanner also returns a skipReason', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [
+                    {
+                      file: 'src/handler.ts',
+                      line: 12,
+                      finding: 'User input reaches the model prompt without sanitization.',
+                      severity: 'high',
+                    },
+                  ],
+                  commentsPosted: true,
+                  skipReason: 'Unexpected mixed response.',
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalled();
+      });
+
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        'Scan response included both skipReason and findings; processing findings',
+      );
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+    });
+
     it('does not write SARIF when a setup PR is skipped', async () => {
       mocks.actionGithub.getPRFiles.mockResolvedValue([
         {

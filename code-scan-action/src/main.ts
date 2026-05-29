@@ -615,9 +615,13 @@ async function handleScanResponse(
 
   // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
   // existing Code Scanning findings or imply that authorization-gated work ran.
-  if (skipReason) {
+  if (skipReason && comments.length === 0) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
+  }
+
+  if (skipReason) {
+    core.warning('Scan response included both skipReason and findings; processing findings');
   }
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
