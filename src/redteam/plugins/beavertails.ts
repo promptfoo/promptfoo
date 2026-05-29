@@ -206,7 +206,7 @@ export async function fetchAllDatasets(
       logger.debug(`[beavertails] Filtering by subcategories: ${humanReadable.join(', ')}`);
     }
 
-    // When includeSafe is true, fetch more records to ensure good balance of safe/unsafe
+    // When includeSafe is true, fetch more unsafe rows to pair with curated safe controls.
     let fetchLimit = Math.min(
       MAX_FILTER_FETCH_LIMIT,
       Math.max(

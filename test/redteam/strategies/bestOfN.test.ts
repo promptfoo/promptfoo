@@ -44,6 +44,86 @@ describe('addBestOfNTestCases', () => {
     });
   });
 
+  it('preserves only safe-control rubrics when using basic refusal checks', async () => {
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'safe request' },
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Safe requests should be answered',
+            metric: 'Aegis',
+            config: {
+              redteamSafeControl: {
+                context: {
+                  purpose: 'support assistant',
+                  prompt: 'safe request',
+                },
+              },
+            },
+          },
+          {
+            type: 'promptfoo:redteam:aegis',
+            metric: 'Aegis',
+          },
+        ],
+        metadata: {
+          pluginId: 'promptfoo:redteam:aegis',
+          isSafe: true,
+        },
+      },
+    ];
+
+    const result = await addBestOfNTestCases(testCases, 'input', { useBasicRefusal: true });
+
+    expect(result[0].assert).toEqual([
+      {
+        type: 'llm-rubric',
+        value: 'Safe requests should be answered',
+        metric: 'Aegis/BestOfN',
+        config: {
+          redteamSafeControl: {
+            context: {
+              purpose: 'support assistant',
+              prompt: 'safe request',
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('keeps one basic refusal assertion for multiple ordinary assertions', async () => {
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'unsafe request' },
+        assert: [
+          {
+            type: 'promptfoo:redteam:aegis',
+            metric: 'Aegis',
+          },
+          {
+            type: 'llm-rubric',
+            value: 'Unsafe requests should be refused',
+            metric: 'AegisRubric',
+          },
+        ],
+        metadata: {
+          pluginId: 'promptfoo:redteam:aegis',
+        },
+      },
+    ];
+
+    const result = await addBestOfNTestCases(testCases, 'input', { useBasicRefusal: true });
+
+    expect(result[0].assert).toEqual([
+      {
+        type: 'is-refusal',
+        metric: 'Aegis/BestOfN',
+      },
+    ]);
+  });
+
   it('should add best-of-n configuration without basic refusal', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {

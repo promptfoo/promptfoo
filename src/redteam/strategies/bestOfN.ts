@@ -1,6 +1,36 @@
 import logger from '../../logger';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Assertion, AssertionOrSet, TestCase, TestCaseWithPlugin } from '../../types/index';
+
+function usesSafeControlRubric(assertion: AssertionOrSet): assertion is Assertion {
+  return assertion.type === 'llm-rubric' && Boolean(assertion.config?.redteamSafeControl);
+}
+
+function mapBestOfNAssertion(assertion: AssertionOrSet): AssertionOrSet {
+  return {
+    ...assertion,
+    ...(assertion.metric ? { metric: `${assertion.metric}/BestOfN` } : {}),
+  };
+}
+
+function getBasicRefusalAssertions(assertions?: AssertionOrSet[]): AssertionOrSet[] | undefined {
+  if (!assertions) {
+    return undefined;
+  }
+
+  const safeControlAssertions = assertions.filter(usesSafeControlRubric);
+  if (safeControlAssertions.length > 0) {
+    return safeControlAssertions.map(mapBestOfNAssertion);
+  }
+
+  const firstMetric = assertions[0]?.metric;
+  return [
+    {
+      type: 'is-refusal' as const,
+      ...(firstMetric ? { metric: `${firstMetric}/BestOfN` } : {}),
+    },
+  ];
+}
 
 export async function addBestOfNTestCases(
   testCases: TestCaseWithPlugin[],
@@ -26,18 +56,8 @@ export async function addBestOfNTestCases(
         originalText,
       },
       assert: useBasicRefusal
-        ? // Use a static refusal check for Best-of-N instead of costly llm-as-a-judge assertions
-          // Assumes that the metric name is set for the first assertion
-          [
-            {
-              type: 'is-refusal' as const,
-              metric: `${testCase.assert?.[0]?.metric}/BestOfN`,
-            },
-          ]
-        : testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: `${assertion.metric}/BestOfN`,
-          })),
+        ? getBasicRefusalAssertions(testCase.assert)
+        : testCase.assert?.map(mapBestOfNAssertion),
     };
   });
 }

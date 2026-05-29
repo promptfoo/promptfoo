@@ -305,7 +305,9 @@ export default function PluginConfigDialog({
                   setLocalConfig({ ...localConfig, includeSafe: checked === true })
                 }
               />
-              <Label htmlFor="include-safe">Include safe controls to test for over-blocking</Label>
+              <Label htmlFor="include-safe" inline>
+                Include safe controls to test for over-blocking
+              </Label>
             </div>
             <p className="text-xs text-muted-foreground">
               When enabled, tests include a balanced mix of safe and unsafe controls. Safe controls

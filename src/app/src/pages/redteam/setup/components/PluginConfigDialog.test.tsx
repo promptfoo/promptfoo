@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
@@ -22,11 +22,21 @@ describe('PluginConfigDialog - OSS', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockOnClose.mockReset();
+    mockOnSave.mockReset();
+    mockUpdatePlugins.mockReset();
+    mockUseRedTeamConfig.mockReset();
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultRedTeamConfig,
       updatePlugins: mockUpdatePlugins,
     });
+  });
+
+  afterEach(() => {
+    mockOnClose.mockReset();
+    mockOnSave.mockReset();
+    mockUpdatePlugins.mockReset();
+    mockUseRedTeamConfig.mockReset();
   });
 
   describe('Grading Guidance', () => {

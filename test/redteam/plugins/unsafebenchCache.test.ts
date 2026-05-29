@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 
@@ -9,6 +9,11 @@ const mockFetchHuggingFaceDataset = vi.mocked(fetchHuggingFaceDataset);
 describe('UnsafeBenchPlugin dataset cache', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchHuggingFaceDataset.mockReset();
+  });
+
+  afterEach(() => {
+    mockFetchHuggingFaceDataset.mockReset();
   });
 
   it('reloads the dataset when includeSafe changes', async () => {

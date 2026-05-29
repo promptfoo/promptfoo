@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
@@ -197,6 +197,8 @@ vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
 describe('UnsafeBenchPlugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchHuggingFaceDataset.mockReset();
+    mockMatchesLlmRubric.mockReset();
 
     // Default mock implementation for HF dataset API
     mockFetchHuggingFaceDataset.mockResolvedValue([
@@ -229,6 +231,11 @@ describe('UnsafeBenchPlugin', () => {
         },
       },
     ]);
+  });
+
+  afterEach(() => {
+    mockFetchHuggingFaceDataset.mockReset();
+    mockMatchesLlmRubric.mockReset();
   });
 
   it('should generate tests with the appropriate number of images', async () => {
