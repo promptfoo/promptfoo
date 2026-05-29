@@ -11,9 +11,14 @@ function createInitialJob(): Job {
   };
 }
 
+function cloneResult(result: NonNullable<Job['result']>): NonNullable<Job['result']> {
+  return JSON.parse(JSON.stringify(result));
+}
+
 function cloneJob(job: Job): Job {
   return {
     ...job,
+    result: job.result === null ? null : cloneResult(job.result),
     logs: [...job.logs],
   };
 }
@@ -42,16 +47,22 @@ export class EvalJobService {
   complete(id: string, result: Job['result'], evalId: string | null): boolean {
     return this.update(id, (job) => {
       job.status = 'complete';
-      job.result = result;
+      job.result = result === null ? null : cloneResult(result);
       job.evalId = evalId;
     });
   }
 
-  fail(id: string, logs: string[], append = false): boolean {
+  fail(
+    id: string,
+    logs: string[],
+    { append = false, resetResult = true }: { append?: boolean; resetResult?: boolean } = {},
+  ): boolean {
     return this.update(id, (job) => {
       job.status = 'error';
-      job.result = null;
-      job.evalId = null;
+      if (resetResult) {
+        job.result = null;
+        job.evalId = null;
+      }
       job.logs = append ? [...job.logs, ...logs] : [...logs];
     });
   }

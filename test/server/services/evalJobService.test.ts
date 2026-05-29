@@ -36,12 +36,37 @@ describe('EvalJobService', () => {
   it('returns defensive snapshots', () => {
     const service = new EvalJobService();
     service.create('job-1');
+    const result = { results: [{ output: { nested: 'original' } }] } as never;
+    service.complete('job-1', result, 'eval-1');
 
     const snapshot = service.get('job-1');
     expect(snapshot).toBeDefined();
     snapshot?.logs.push('mutated outside service');
+    (snapshot?.result as any).results[0].output.nested = 'mutated outside service';
+    (result as any).results[0].output.nested = 'mutated after completion';
 
     expect(service.get('job-1')?.logs).toEqual([]);
+    expect((service.get('job-1')?.result as any).results[0].output.nested).toBe('original');
+  });
+
+  it('stores JSON-safe snapshots for function-backed prompts', () => {
+    const service = new EvalJobService();
+    service.create('job-1');
+
+    expect(() =>
+      service.complete(
+        'job-1',
+        {
+          prompts: [{ function: () => 'generated prompt', label: 'dynamic prompt' }],
+          results: [],
+        } as never,
+        'eval-1',
+      ),
+    ).not.toThrow();
+    expect(service.get('job-1')?.result).toEqual({
+      prompts: [{ label: 'dynamic prompt' }],
+      results: [],
+    });
   });
 
   it('supports replacing and appending failure logs', () => {
@@ -52,12 +77,31 @@ describe('EvalJobService', () => {
     expect(service.fail('job-1', ['first failure'])).toBe(true);
     expect(service.get('job-1')?.logs).toEqual(['first failure']);
 
-    expect(service.fail('job-1', ['second failure'], true)).toBe(true);
+    expect(service.fail('job-1', ['second failure'], { append: true })).toBe(true);
     expect(service.get('job-1')).toMatchObject({
       evalId: null,
       status: 'error',
       result: null,
       logs: ['first failure', 'second failure'],
+    });
+  });
+
+  it('can preserve completed results when marking a job as failed', () => {
+    const service = new EvalJobService();
+    service.create('job-1');
+    service.complete('job-1', { results: [] } as never, 'eval-1');
+
+    expect(
+      service.fail('job-1', ['cancelled after completion'], {
+        append: true,
+        resetResult: false,
+      }),
+    ).toBe(true);
+    expect(service.get('job-1')).toMatchObject({
+      evalId: 'eval-1',
+      status: 'error',
+      result: { results: [] },
+      logs: ['cancelled after completion'],
     });
   });
 

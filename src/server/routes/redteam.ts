@@ -240,7 +240,10 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     if (currentAbortController) {
       currentAbortController.abort();
     }
-    evalJobService.fail(currentJobId, ['Job cancelled - new job started'], true);
+    evalJobService.fail(currentJobId, ['Job cancelled - new job started'], {
+      append: true,
+      resetResult: false,
+    });
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
@@ -284,7 +287,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         evalJobService.fail(
           id,
           [`Error: ${error.message}`, ...(error.stack ? [`Stack trace: ${error.stack}`] : [])],
-          true,
+          { append: true, resetResult: false },
         );
       }
       if (currentJobId === id) {
@@ -309,7 +312,10 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
     currentAbortController.abort();
   }
 
-  evalJobService.fail(jobId, ['Job cancelled by user'], true);
+  evalJobService.fail(jobId, ['Job cancelled by user'], {
+    append: true,
+    resetResult: false,
+  });
 
   // Clear state
   cliState.webUI = false;
