@@ -442,8 +442,10 @@ describe('shared redteam provider utilities', () => {
         mockedGetDefaultProviders.mockResolvedValue({
           redteamProvider: defaultRedteamProvider,
         });
+        const env = { ANTHROPIC_API_KEY: 'config-anthropic-key' };
 
         setCliStateConfig({
+          env,
           redteam: {
             provider: undefined,
           },
@@ -451,7 +453,7 @@ describe('shared redteam provider utilities', () => {
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(defaultRedteamProvider);
-        expect(mockedGetDefaultProviders).toHaveBeenCalledTimes(1);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledWith(env);
         expect(mockOpenAiInstances.length).toBe(0);
       });
 
@@ -507,8 +509,10 @@ describe('shared redteam provider utilities', () => {
         redteamProviderManager.clearProvider();
         mockOpenAiInstances.length = 0;
         mockedGetDefaultProviders.mockResolvedValue({});
+        const env = { PROMPTFOO_JAILBREAK_TEMPERATURE: '0.25' };
 
         setCliStateConfig({
+          env,
           redteam: {
             provider: undefined,
           },
@@ -518,6 +522,7 @@ describe('shared redteam provider utilities', () => {
         const got = await redteamProviderManager.getProvider({});
         expect(got.id()).toContain('openai:');
         expect(mockOpenAiInstances.length).toBe(1);
+        expect(mockOpenAiInstances[0].config.temperature).toBe(0.25);
       });
     });
 

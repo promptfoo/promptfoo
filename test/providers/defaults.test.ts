@@ -10,7 +10,7 @@ import {
 } from '../../src/providers/defaults';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
-import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -540,6 +540,21 @@ describe('Provider override tests', () => {
       expect(providers.redteamProvider?.id()).toContain('google:');
       expect(providers.redteamJsonProvider?.id()).toContain('google:');
       expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
+    });
+
+    it('should include JSON-capable redteam providers for Google Vertex defaults', async () => {
+      vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(true);
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+      expect(providers.redteamProvider).toBeInstanceOf(VertexChatProvider);
+      expect(providers.redteamProvider?.id()).toBe('vertex:gemini-2.5-pro');
+      expect(providers.redteamJsonProvider?.id()).toBe('vertex:gemini-2.5-pro');
+      expect(providers.redteamJsonProvider?.config?.generationConfig?.response_mime_type).toBe(
+        'application/json',
+      );
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
     });
 
     it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {

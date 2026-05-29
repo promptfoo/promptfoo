@@ -4,6 +4,7 @@ import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/ext
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
+import { getEnvOverrides } from '../../envOverrides';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -93,41 +94,40 @@ async function loadRedteamProvider({
   preferSmallModel?: boolean;
   purpose?: 'redteam' | 'grading';
 } = {}) {
-  let ret;
   const redteamProvider = provider || cliState.config?.redteam?.provider;
   if (isApiProvider(redteamProvider)) {
     logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
-    ret = redteamProvider;
-  } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
-    ret = (await redteamProviderLoader([redteamProvider]))[0];
-  } else {
-    const { getDefaultProviders } = await import('../../providers/defaults');
-    const defaults = await getDefaultProviders();
-    const configuredDefault = jsonOnly
-      ? (defaults.redteamJsonProvider ?? defaults.redteamProvider)
-      : defaults.redteamProvider;
-    if (configuredDefault) {
-      logger.debug(`Using default ${purpose} provider from defaults`, {
-        provider: configuredDefault.id(),
-        jsonOnly,
-        preferSmallModel,
-      });
-      ret = configuredDefault;
-    }
-
-    if (!ret) {
-      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-      logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
-      ret = new OpenAiChatCompletionProvider(defaultModel, {
-        config: {
-          temperature: getDefaultRedteamTemperature(),
-          response_format: jsonOnly ? { type: 'json_object' } : undefined,
-        },
-      });
-    }
+    return redteamProvider;
   }
-  return ret;
+
+  if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
+    logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
+    return (await redteamProviderLoader([redteamProvider]))[0];
+  }
+
+  const { getDefaultProviders } = await import('../../providers/defaults');
+  const env = getEnvOverrides();
+  const defaults = await getDefaultProviders(env);
+  const configuredDefault = jsonOnly
+    ? (defaults.redteamJsonProvider ?? defaults.redteamProvider)
+    : defaults.redteamProvider;
+  if (configuredDefault) {
+    logger.debug(`Using default ${purpose} provider from defaults`, {
+      provider: configuredDefault.id(),
+      jsonOnly,
+      preferSmallModel,
+    });
+    return configuredDefault;
+  }
+
+  const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+  logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
+  return new OpenAiChatCompletionProvider(defaultModel, {
+    config: {
+      temperature: getDefaultRedteamTemperature(env),
+      response_format: jsonOnly ? { type: 'json_object' } : undefined,
+    },
+  });
 }
 
 class RedteamProviderManager {
