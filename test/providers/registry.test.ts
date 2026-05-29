@@ -481,6 +481,77 @@ describe('Provider Registry', () => {
       expect(legacyProvider).toBeDefined();
     });
 
+    it('should handle bedrock converse providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:converse:anthropic.claude-v2');
+      const factory = factories.find((f) => f.test('bedrock:converse:anthropic.claude-v2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'bedrock:converse:anthropic.claude-v2',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe('test-provider');
+    });
+
+    it('should handle bedrock-agent providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock-agent:agent-id');
+      const factory = factories.find((f) => f.test('bedrock-agent:agent-id'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create('bedrock-agent:agent-id', { config: {} }, mockContext);
+      expect(provider.id()).toBe('bedrock-agent:agent-id');
+    });
+
+    it('should handle bedrock agents providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:agents:agent-id');
+      const factory = factories.find((f) => f.test('bedrock:agents:agent-id'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'bedrock:agents:agent-id',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider.id()).toBe('bedrock-agent:agent-id');
+    });
+
+    it('should handle bedrock knowledge base providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:kb:amazon.titan-text-express-v1');
+      const factory = factories.find((f) => f.test('bedrock:kb:amazon.titan-text-express-v1'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'bedrock:kb:amazon.titan-text-express-v1',
+        { config: { knowledgeBaseId: 'knowledge-base-id' } },
+        mockContext,
+      );
+      expect(provider.id()).toBe('bedrock:kb:knowledge-base-id');
+    });
+
+    it('should handle bedrock Nova Sonic providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:nova-sonic');
+      const factory = factories.find((f) => f.test('bedrock:nova-sonic'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create('bedrock:nova-sonic', { config: {} }, mockContext);
+      expect(provider).toBeDefined();
+    });
+
+    it.each([
+      ['sagemaker:embedding:endpoint-name', 'sagemaker:endpoint-name', {}],
+      ['sagemaker:endpoint-name', 'sagemaker:endpoint-name', { modelType: 'custom' }],
+      ['sagemaker:jumpstart:endpoint-name', 'sagemaker:endpoint-name', {}],
+      ['sagemaker:openai:endpoint-name', 'sagemaker:endpoint-name', {}],
+    ])('should handle %s providers correctly', async (path, expectedId, config) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(path, { config }, mockContext);
+      expect(provider.id()).toBe(expectedId);
+    });
+
     it('should handle bedrock Luma Ray video provider with model version', async () => {
       const factories = await getProviderFactories('bedrock:luma.ray-v2:0');
       const factory = factories.find((f) => f.test('bedrock:luma.ray-v2:0'));
