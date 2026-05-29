@@ -5310,6 +5310,78 @@ describe('ClaudeCodeSDKProvider', () => {
           // SpanStatusCode.ERROR === 2
           expect(turnSpan!.status?.code).toBe(2);
         });
+
+        it('tags batched tools emitted by a subagent turn with that turn index', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              // A subagent turn that emits two parallel (batched) tool_use blocks.
+              {
+                type: 'assistant',
+                parent_tool_use_id: 'task-tool-1',
+                subagent_type: 'researcher',
+                message: createMockBetaMessage([
+                  { type: 'tool_use', id: 'sub-tool-1', name: 'Read', input: { p: '/a' } },
+                  { type: 'tool_use', id: 'sub-tool-2', name: 'Grep', input: { q: 'x' } },
+                ]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'user',
+                parent_tool_use_id: 'task-tool-1',
+                message: {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'sub-tool-1',
+                      content: 'a',
+                      is_error: false,
+                    },
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'sub-tool-2',
+                      content: 'b',
+                      is_error: false,
+                    },
+                  ],
+                },
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          // The single subagent turn is marked as a subagent.
+          const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
+          expect(turnSpan).toBeDefined();
+          expect(turnSpan!.attrs['gen_ai.turn.is_subagent']).toBe(true);
+          expect(turnSpan!.attrs['gen_ai.turn.subagent_type']).toBe('researcher');
+
+          // Both batched tools inherit that subagent turn's index.
+          const toolSpans = emittedSpans.filter((s) => s.name.startsWith('tool '));
+          expect(toolSpans).toHaveLength(2);
+          expect(toolSpans.map((s) => s.attrs['gen_ai.turn.index'])).toEqual([1, 1]);
+        });
       });
     });
   });
