@@ -387,15 +387,13 @@ export async function startServer(
       // Try to get the specific eval that was updated from the signal file
       const signalEvalId = readSignalEvalId();
       const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
-      const results = await updatedEval?.getResultsCount();
 
-      if (results && results > 0) {
-        logger.debug(
-          `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
-        );
-        io.emit('update', { evalId: updatedEval?.id });
-        allPrompts = null;
-      }
+      // Prompt metadata can change before results are written, so invalidate on every eval signal.
+      allPrompts = null;
+      logger.debug(
+        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
+      );
+      io.emit('update', { evalId: updatedEval?.id });
     };
 
     void handleSignalUpdate();

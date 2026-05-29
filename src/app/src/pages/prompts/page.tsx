@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import { getSocketConfig } from '@app/utils/socket';
+import { io as SocketIOClient } from 'socket.io-client';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
@@ -11,30 +15,50 @@ interface PromptsPageProps {
 }
 
 function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
+  const { apiBaseUrl } = useApiConfig();
   const [prompts, setPrompts] = useState<ServerPromptWithMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchPrompts = async () => {
+  const fetchPrompts = useCallback(async (isBackgroundUpdate = false) => {
+    if (!isBackgroundUpdate) {
       setIsLoading(true);
-      setError(null);
-      try {
-        const response = await callApi('/prompts');
-        const data = await response.json();
-        if (data?.data) {
-          setPrompts(data.data);
-        }
-      } catch (error) {
-        setError('Failed to load prompts. Please try again.');
-        console.error('Failed to fetch prompts:', error);
-      } finally {
+    }
+    setError(null);
+    try {
+      const response = await callApi('/prompts');
+      const data = await response.json();
+      if (data?.data) {
+        setPrompts(data.data);
+      }
+    } catch (error) {
+      setError('Failed to load prompts. Please try again.');
+      console.error('Failed to fetch prompts:', error);
+    } finally {
+      if (!isBackgroundUpdate) {
         setIsLoading(false);
       }
-    };
-
-    fetchPrompts();
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPrompts();
+
+    // Subscribe to real-time updates when running locally
+    if (IS_RUNNING_LOCALLY) {
+      const { socketPath, socketUrl } = getSocketConfig(apiBaseUrl);
+      const socket = SocketIOClient(socketUrl, { path: socketPath });
+
+      socket.on('update', () => {
+        // Refetch prompts when any eval is updated
+        fetchPrompts(true);
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [apiBaseUrl, fetchPrompts]);
 
   return (
     <Prompts
