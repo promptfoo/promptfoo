@@ -89,6 +89,7 @@ describe('synthesize', () => {
     expect(mockProvider.config).toEqual({
       showThinking: false,
       passthrough: { thinking: { type: 'disabled' } },
+      max_tokens: 3000,
       maxTokens: 3000,
     });
   });

@@ -1,3 +1,4 @@
+import { getEnvString } from '../../envars';
 import { getEnvOverrides } from '../../envOverrides';
 import { AwsBedrockConverseProvider } from './converse';
 
@@ -9,8 +10,26 @@ import type { BedrockOptions } from './base';
 // No special agreement required (unlike Anthropic models on Bedrock)
 export const DEFAULT_BEDROCK_MODEL = 'amazon.nova-pro-v1:0';
 
+function hasOwnEnvValue(source: EnvOverrides | undefined, key: keyof EnvOverrides): boolean {
+  return source !== undefined && Object.prototype.hasOwnProperty.call(source, key);
+}
+
 function getConfiguredEnvValue(key: keyof EnvOverrides, env?: EnvOverrides): string | undefined {
-  return env?.[key] || getEnvOverrides()?.[key];
+  if (hasOwnEnvValue(env, key)) {
+    return env?.[key];
+  }
+  const configEnv = getEnvOverrides();
+  if (hasOwnEnvValue(configEnv, key)) {
+    return configEnv?.[key];
+  }
+  return undefined;
+}
+
+function getEffectiveEnvValue(key: keyof EnvOverrides, env?: EnvOverrides): string | undefined {
+  if (hasOwnEnvValue(env, key)) {
+    return env?.[key];
+  }
+  return getEnvString(key);
 }
 
 function getBedrockStaticCredentialConfig(env?: EnvOverrides): BedrockOptions | undefined {
@@ -27,18 +46,28 @@ function getBedrockStaticCredentialConfig(env?: EnvOverrides): BedrockOptions | 
   return undefined;
 }
 
-export function hasBedrockBearerToken(env?: EnvOverrides): boolean {
-  return Boolean(
-    getConfiguredEnvValue('AWS_BEARER_TOKEN_BEDROCK', env) || process.env.AWS_BEARER_TOKEN_BEDROCK,
+function hasOwnStaticCredentialValue(source: EnvOverrides | undefined): boolean {
+  return (
+    hasOwnEnvValue(source, 'AWS_ACCESS_KEY_ID') || hasOwnEnvValue(source, 'AWS_SECRET_ACCESS_KEY')
   );
+}
+
+function hasProcessStaticCredentialPair(env?: EnvOverrides): boolean {
+  if (hasOwnStaticCredentialValue(env) || hasOwnStaticCredentialValue(getEnvOverrides())) {
+    return false;
+  }
+  return Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+}
+
+export function hasBedrockBearerToken(env?: EnvOverrides): boolean {
+  return Boolean(getEffectiveEnvValue('AWS_BEARER_TOKEN_BEDROCK', env));
 }
 
 export function hasBedrockAmbientCredentials(env?: EnvOverrides): boolean {
   return Boolean(
     getBedrockStaticCredentialConfig(env) ||
-      (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
-      getConfiguredEnvValue('AWS_PROFILE', env) ||
-      process.env.AWS_PROFILE,
+      hasProcessStaticCredentialPair(env) ||
+      getEffectiveEnvValue('AWS_PROFILE', env),
   );
 }
 
@@ -76,17 +105,7 @@ export function getBedrockProviders(
 
   return {
     gradingProvider,
-    gradingJsonProvider: new AwsBedrockConverseProvider(DEFAULT_BEDROCK_MODEL, {
-      env,
-      config: {
-        ...credentialConfig,
-        additionalModelRequestFields: {
-          inferenceConfig: {
-            // Nova models support JSON output via system prompt, not response_format
-          },
-        },
-      },
-    }),
+    gradingJsonProvider: gradingProvider,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
   };

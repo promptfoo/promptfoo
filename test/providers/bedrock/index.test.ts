@@ -140,6 +140,10 @@ describe('AwsBedrockGenericProvider', () => {
     credentialProviderIniFactory.fromIni.mockReset();
     credentialProviderIniFactory.fromIni.mockReturnValue('ini-provider');
     mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
+    mockProcessEnv({ AWS_ACCESS_KEY_ID: undefined });
+    mockProcessEnv({ AWS_SECRET_ACCESS_KEY: undefined });
+    mockProcessEnv({ AWS_SESSION_TOKEN: undefined });
+    mockProcessEnv({ AWS_PROFILE: undefined });
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
@@ -155,6 +159,10 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    mockProcessEnv({ AWS_ACCESS_KEY_ID: undefined });
+    mockProcessEnv({ AWS_SECRET_ACCESS_KEY: undefined });
+    mockProcessEnv({ AWS_SESSION_TOKEN: undefined });
+    mockProcessEnv({ AWS_PROFILE: undefined });
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     if (ORIGINAL_HTTP_PROXY === undefined) {
       mockProcessEnv({ HTTP_PROXY: undefined });
@@ -3681,6 +3689,84 @@ describe('AwsBedrockCompletionProvider', () => {
         expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
         expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_A');
         expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_B');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should separate cache keys by ambient AWS credential env values', () => {
+    let restoreEnv = mockProcessEnv({
+      AWS_ACCESS_KEY_ID: undefined,
+      AWS_SECRET_ACCESS_KEY: undefined,
+      AWS_SESSION_TOKEN: undefined,
+      AWS_PROFILE: undefined,
+      AWS_BEARER_TOKEN_BEDROCK: undefined,
+    });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_ACCESS_KEY_ID: 'PFQA_BEDROCK_ENV_ACCESS_KEY_A',
+        AWS_SECRET_ACCESS_KEY: 'PFQA_BEDROCK_ENV_SECRET_KEY_A',
+        AWS_SESSION_TOKEN: 'PFQA_BEDROCK_ENV_SESSION_TOKEN_A',
+      });
+      const envCredentialsACacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_ACCESS_KEY_ID: 'PFQA_BEDROCK_ENV_ACCESS_KEY_B',
+        AWS_SECRET_ACCESS_KEY: 'PFQA_BEDROCK_ENV_SECRET_KEY_B',
+        AWS_SESSION_TOKEN: 'PFQA_BEDROCK_ENV_SESSION_TOKEN_B',
+      });
+      const envCredentialsBCacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      expect(envCredentialsACacheKey).not.toBe(envCredentialsBCacheKey);
+      for (const cacheKey of [envCredentialsACacheKey, envCredentialsBCacheKey]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_ACCESS_KEY');
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_SECRET_KEY');
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_SESSION_TOKEN');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should separate cache keys by ambient AWS profile env value', () => {
+    let restoreEnv = mockProcessEnv({
+      AWS_ACCESS_KEY_ID: undefined,
+      AWS_SECRET_ACCESS_KEY: undefined,
+      AWS_SESSION_TOKEN: undefined,
+      AWS_PROFILE: undefined,
+      AWS_BEARER_TOKEN_BEDROCK: undefined,
+    });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({ AWS_PROFILE: 'promptfoo-env-profile-a' });
+      const profileACacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({ AWS_PROFILE: 'promptfoo-env-profile-b' });
+      const profileBCacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      expect(profileACacheKey).not.toBe(profileBCacheKey);
+      for (const cacheKey of [profileACacheKey, profileBCacheKey]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('promptfoo-env-profile');
       }
     } finally {
       restoreEnv();

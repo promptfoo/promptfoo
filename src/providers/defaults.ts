@@ -14,21 +14,11 @@ import { getGitHubProviders } from './github/defaults';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
-import {
-  DefaultEmbeddingProvider as MistralEmbeddingProvider,
-  DefaultGradingJsonProvider as MistralGradingJsonProvider,
-  DefaultGradingProvider as MistralGradingProvider,
-  DefaultSuggestionsProvider as MistralSuggestionsProvider,
-  DefaultSynthesizeProvider as MistralSynthesizeProvider,
-} from './mistral/defaults';
+import { getMistralProviders } from './mistral/defaults';
 import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
 import {
-  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
-  DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
-  DefaultGradingProvider as OpenAiGradingProvider,
+  getOpenAiProviders,
   DefaultModerationProvider as OpenAiModerationProvider,
-  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
-  DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
 import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
@@ -53,6 +43,7 @@ interface CompletionProviderSetOptions {
   /** Falls back to gradingJson, then grading if not specified */
   synthesize?: ApiProvider;
   llmRubric?: ApiProvider;
+  moderation?: ApiProvider;
   webSearch?: ApiProvider;
 }
 
@@ -199,7 +190,7 @@ function createCompletionProviderSet(
     suggestionsProvider: options.suggestions ?? options.grading,
     synthesizeProvider: options.synthesize ?? options.gradingJson ?? options.grading,
     llmRubricProvider: options.llmRubric,
-    moderationProvider: OpenAiModerationProvider,
+    moderationProvider: options.moderation ?? OpenAiModerationProvider,
     webSearchProvider: options.webSearch,
   };
 }
@@ -208,12 +199,16 @@ function createCompletionProviderSet(
  * Create OpenAI completion provider set.
  * Note: Embedding is selected independently via EMBEDDING_PROVIDER_PRIORITY.
  */
-function createOpenAICompletionProviders(): Omit<DefaultProviders, 'embeddingProvider'> {
+function createOpenAICompletionProviders(
+  env?: EnvOverrides,
+): Omit<DefaultProviders, 'embeddingProvider'> {
+  const openai = getOpenAiProviders(env);
   return createCompletionProviderSet({
-    grading: OpenAiGradingProvider,
-    gradingJson: OpenAiGradingJsonProvider,
-    suggestions: OpenAiSuggestionsProvider,
-    webSearch: OpenAiWebSearchProvider,
+    grading: openai.gradingProvider,
+    gradingJson: openai.gradingJsonProvider,
+    moderation: openai.moderationProvider,
+    suggestions: openai.suggestionsProvider,
+    webSearch: openai.webSearchProvider,
   });
 }
 
@@ -278,7 +273,7 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   {
     name: 'OpenAI',
     check: (env) => hasCredential('OPENAI_API_KEY', env),
-    create: () => createOpenAICompletionProviders(),
+    create: (env) => createOpenAICompletionProviders(env),
   },
   {
     name: 'Anthropic',
@@ -344,13 +339,15 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   {
     name: 'Mistral',
     check: (env) => hasCredential('MISTRAL_API_KEY', env),
-    create: () =>
-      createCompletionProviderSet({
-        grading: MistralGradingProvider,
-        gradingJson: MistralGradingJsonProvider,
-        suggestions: MistralSuggestionsProvider,
-        synthesize: MistralSynthesizeProvider,
-      }),
+    create: (env) => {
+      const mistral = getMistralProviders(env);
+      return createCompletionProviderSet({
+        grading: mistral.gradingProvider,
+        gradingJson: mistral.gradingJsonProvider,
+        suggestions: mistral.suggestionsProvider,
+        synthesize: mistral.synthesizeProvider,
+      });
+    },
   },
   {
     name: 'AWS Bedrock API key',
@@ -428,7 +425,7 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   {
     name: 'OpenAI',
     check: (env) => hasCredential('OPENAI_API_KEY', env),
-    create: () => OpenAiEmbeddingProvider,
+    create: (env) => getOpenAiProviders(env).embeddingProvider,
   },
   {
     name: 'Azure OpenAI',
@@ -450,7 +447,7 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   {
     name: 'Mistral',
     check: (env) => hasCredential('MISTRAL_API_KEY', env),
-    create: () => MistralEmbeddingProvider,
+    create: (env) => getMistralProviders(env).embeddingProvider,
   },
   {
     name: 'Google Vertex',
@@ -545,7 +542,7 @@ async function selectCompletionProviders(
 
   // Fallback to OpenAI (may fail without key, but provides helpful error message)
   logger.debug('Using OpenAI completion providers (fallback)');
-  return createOpenAICompletionProviders();
+  return createOpenAICompletionProviders(env);
 }
 
 /**
@@ -570,7 +567,7 @@ async function selectEmbeddingProvider(
 
   // Fallback to OpenAI (may fail without key, but provides helpful error message)
   logger.debug('Using OpenAI embedding provider (fallback)');
-  return OpenAiEmbeddingProvider;
+  return getOpenAiProviders(env).embeddingProvider;
 }
 
 // =============================================================================

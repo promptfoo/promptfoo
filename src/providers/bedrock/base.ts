@@ -58,40 +58,90 @@ function getBedrockAuthCacheNamespace(authSource: string, values: (string | unde
   ]);
 }
 
-function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) {
+function selectBedrockAuthCacheSource(config: BedrockOptions): {
+  authSource: string;
+  hasExplicitCredentials: boolean;
+  hasSessionToken: boolean;
+  values?: (string | undefined)[];
+} {
   const bearerConfig = getNonEmptyString(config.apiKey);
   const bearerEnv = getNonEmptyString(getEnvString('AWS_BEARER_TOKEN_BEDROCK'));
   const accessKeyId = getNonEmptyString(config.accessKeyId);
   const secretAccessKey = getNonEmptyString(config.secretAccessKey);
   const sessionToken = getNonEmptyString(config.sessionToken);
   const profile = getNonEmptyString(config.profile || config.credentialProfile);
-  const hasExplicitCredentials = Boolean(accessKeyId && secretAccessKey);
-  const authSource = hasExplicitCredentials
-    ? 'explicit-credentials'
-    : bearerConfig
-      ? 'bearer-config'
-      : bearerEnv
-        ? 'bearer-env'
-        : profile
-          ? 'profile'
-          : 'default';
-  const credentialNamespace =
-    authSource === 'bearer-config'
-      ? getBedrockAuthCacheNamespace(authSource, [bearerConfig])
-      : authSource === 'bearer-env'
-        ? getBedrockAuthCacheNamespace(authSource, [bearerEnv])
-        : authSource === 'explicit-credentials'
-          ? getBedrockAuthCacheNamespace(authSource, [accessKeyId, secretAccessKey, sessionToken])
-          : authSource === 'profile'
-            ? getBedrockAuthCacheNamespace(authSource, [profile])
-            : undefined;
+  const envAccessKeyId = getNonEmptyString(process.env.AWS_ACCESS_KEY_ID);
+  const envSecretAccessKey = getNonEmptyString(process.env.AWS_SECRET_ACCESS_KEY);
+  const envSessionToken = getNonEmptyString(process.env.AWS_SESSION_TOKEN);
+  const envProfile = getNonEmptyString(process.env.AWS_PROFILE);
+
+  if (accessKeyId && secretAccessKey) {
+    return {
+      authSource: 'explicit-credentials',
+      hasExplicitCredentials: true,
+      hasSessionToken: Boolean(sessionToken),
+      values: [accessKeyId, secretAccessKey, sessionToken],
+    };
+  }
+  if (bearerConfig) {
+    return {
+      authSource: 'bearer-config',
+      hasExplicitCredentials: false,
+      hasSessionToken: false,
+      values: [bearerConfig],
+    };
+  }
+  if (bearerEnv) {
+    return {
+      authSource: 'bearer-env',
+      hasExplicitCredentials: false,
+      hasSessionToken: false,
+      values: [bearerEnv],
+    };
+  }
+  if (profile) {
+    return {
+      authSource: 'profile',
+      hasExplicitCredentials: false,
+      hasSessionToken: false,
+      values: [profile],
+    };
+  }
+  if (envAccessKeyId && envSecretAccessKey) {
+    return {
+      authSource: 'env-credentials',
+      hasExplicitCredentials: false,
+      hasSessionToken: false,
+      values: [envAccessKeyId, envSecretAccessKey, envSessionToken],
+    };
+  }
+  if (envProfile) {
+    return {
+      authSource: 'env-profile',
+      hasExplicitCredentials: false,
+      hasSessionToken: false,
+      values: [envProfile],
+    };
+  }
+  return {
+    authSource: 'default',
+    hasExplicitCredentials: false,
+    hasSessionToken: false,
+  };
+}
+
+function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) {
+  const auth = selectBedrockAuthCacheSource(config);
+  const credentialNamespace = auth.values
+    ? getBedrockAuthCacheNamespace(auth.authSource, auth.values)
+    : undefined;
 
   return {
-    authSource,
+    authSource: auth.authSource,
     credentialNamespace,
     endpoint: config.endpoint,
-    hasExplicitCredentials,
-    hasSessionToken: hasExplicitCredentials && Boolean(sessionToken),
+    hasExplicitCredentials: auth.hasExplicitCredentials,
+    hasSessionToken: auth.hasSessionToken,
   };
 }
 

@@ -26,20 +26,20 @@ This assertion will use a language model to grade the output based on the specif
 
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available, checked in priority order:
 
-| Priority | Provider         | Model                    | Environment Variable                                                                                  |
-| -------- | ---------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| 1        | OpenAI           | `gpt-5.5-2026-04-23`     | `OPENAI_API_KEY`                                                                                      |
-| 2        | Anthropic        | `claude-sonnet-4-6`      | `ANTHROPIC_API_KEY`                                                                                   |
-| 3        | Azure OpenAI     | Your deployment          | `AZURE_OPENAI_API_KEY` or `AZURE_API_KEY` + `AZURE_OPENAI_DEPLOYMENT_NAME` or `AZURE_DEPLOYMENT_NAME` |
-| 4        | Google AI Studio | `gemini-3.1-pro-preview` | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`                                                 |
-| 5        | xAI              | `grok-4.3`               | `XAI_API_KEY`                                                                                         |
-| 6        | DeepSeek         | `deepseek-v4-flash`      | `DEEPSEEK_API_KEY`                                                                                    |
-| 7        | Mistral          | `mistral-large-latest`   | `MISTRAL_API_KEY`                                                                                     |
-| 8        | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_BEARER_TOKEN_BEDROCK`                                                                            |
-| 9        | Codex SDK        | `openai:codex-sdk`       | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set       |
-| 10       | Google Vertex    | `gemini-3.1-pro-preview` | Google ADC (ambient credentials)                                                                      |
-| 11       | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (optionally `AWS_SESSION_TOKEN`), or `AWS_PROFILE`      |
-| 12       | GitHub Models    | `openai/gpt-5`           | `GITHUB_TOKEN` (ambient)                                                                              |
+| Priority | Provider         | Model                    | Environment Variable                                                                             |
+| -------- | ---------------- | ------------------------ | ------------------------------------------------------------------------------------------------ |
+| 1        | OpenAI           | `gpt-5.5-2026-04-23`     | `OPENAI_API_KEY`                                                                                 |
+| 2        | Anthropic        | `claude-sonnet-4-6`      | `ANTHROPIC_API_KEY`                                                                              |
+| 3        | Azure OpenAI     | Your deployment          | `AZURE_OPENAI_API_KEY`/`AZURE_API_KEY`, or Azure client credentials, plus a deployment env var   |
+| 4        | Google AI Studio | `gemini-3.1-pro-preview` | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`                                            |
+| 5        | xAI              | `grok-4.3`               | `XAI_API_KEY`                                                                                    |
+| 6        | DeepSeek         | `deepseek-v4-flash`      | `DEEPSEEK_API_KEY`                                                                               |
+| 7        | Mistral          | `mistral-large-latest`   | `MISTRAL_API_KEY`                                                                                |
+| 8        | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_BEARER_TOKEN_BEDROCK`                                                                       |
+| 9        | Codex SDK        | `openai:codex-sdk`       | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set  |
+| 10       | Google Vertex    | `gemini-3.1-pro-preview` | Google ADC (ambient credentials)                                                                 |
+| 11       | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (optionally `AWS_SESSION_TOKEN`), or `AWS_PROFILE` |
+| 12       | GitHub Models    | `openai/gpt-5`           | `GITHUB_TOKEN` (ambient)                                                                         |
 
 You can override this by setting the `provider` option (see below).
 
@@ -140,10 +140,12 @@ tests:
   - assert:
       - type: llm-rubric
         value: Is not apologetic and provides a clear, concise answer
+        // highlight-start
         provider:
           id: openai:gpt-5.4-mini
           config:
             temperature: 0
+        // highlight-end
 ```
 
 This works at every level where a grader can be set: per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).

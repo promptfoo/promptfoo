@@ -65,6 +65,10 @@ class MockProvider implements ApiProvider {
   }
 }
 
+interface ApiKeyProvider extends ApiProvider {
+  getApiKey(): string | undefined;
+}
+
 describe('Provider override tests', () => {
   const originalEnv = { ...process.env };
   const originalCliConfig = cliState.config;
@@ -246,6 +250,26 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider).toBe(OpenAiGradingJsonProvider);
   });
 
+  it('should pass OpenAI credentials supplied through env overrides to automatic providers', async () => {
+    const providers = await getDefaultProviders({ OPENAI_API_KEY: 'override-openai-key' });
+
+    expect((providers.gradingProvider as ApiKeyProvider).getApiKey()).toBe('override-openai-key');
+    expect((providers.gradingJsonProvider as ApiKeyProvider).getApiKey()).toBe(
+      'override-openai-key',
+    );
+    expect((providers.suggestionsProvider as ApiKeyProvider).getApiKey()).toBe(
+      'override-openai-key',
+    );
+    expect((providers.synthesizeProvider as ApiKeyProvider).getApiKey()).toBe(
+      'override-openai-key',
+    );
+    expect((providers.embeddingProvider as ApiKeyProvider).getApiKey()).toBe('override-openai-key');
+    expect((providers.moderationProvider as ApiKeyProvider).getApiKey()).toBe(
+      'override-openai-key',
+    );
+    expect((providers.webSearchProvider as ApiKeyProvider).getApiKey()).toBe('override-openai-key');
+  });
+
   it('should prefer Mistral defaults over Codex SDK defaults when MISTRAL_API_KEY exists', async () => {
     mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral-key' });
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
@@ -293,11 +317,16 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
-    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
-    expect(providers.gradingProvider).toBe(MistralGradingProvider);
-    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
-    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+    expect(providers.embeddingProvider.id()).toBe(MistralEmbeddingProvider.id());
+    expect(providers.gradingJsonProvider.id()).toBe(MistralGradingJsonProvider.id());
+    expect(providers.gradingProvider.id()).toBe(MistralGradingProvider.id());
+    expect(providers.suggestionsProvider.id()).toBe(MistralSuggestionsProvider.id());
+    expect(providers.synthesizeProvider.id()).toBe(MistralSynthesizeProvider.id());
+    expect((providers.embeddingProvider as ApiKeyProvider).getApiKey()).toBe('test-key');
+    expect((providers.gradingJsonProvider as ApiKeyProvider).getApiKey()).toBe('test-key');
+    expect((providers.gradingProvider as ApiKeyProvider).getApiKey()).toBe('test-key');
+    expect((providers.suggestionsProvider as ApiKeyProvider).getApiKey()).toBe('test-key');
+    expect((providers.synthesizeProvider as ApiKeyProvider).getApiKey()).toBe('test-key');
   });
 
   it('should not use Mistral providers when OpenAI credentials exist', async () => {
@@ -457,6 +486,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       expect(providers.gradingProvider.id()).toBe('bedrock:converse:amazon.nova-pro-v1:0');
+      expect(providers.gradingJsonProvider).toBe(providers.gradingProvider);
     });
 
     it('should use Bedrock providers when AWS_PROFILE is set', async () => {
@@ -479,6 +509,27 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       expect(providers.gradingProvider.id()).toBe('bedrock:converse:amazon.nova-pro-v1:0');
+    });
+
+    it('should respect config env masking for process Bedrock credentials', async () => {
+      mockProcessEnv({
+        AWS_ACCESS_KEY_ID: 'process-access',
+        AWS_SECRET_ACCESS_KEY: 'process-secret',
+        AWS_BEARER_TOKEN_BEDROCK: 'process-bearer',
+        AWS_PROFILE: 'process-profile',
+      });
+      cliState.config = {
+        env: {
+          AWS_ACCESS_KEY_ID: '',
+          AWS_SECRET_ACCESS_KEY: '',
+          AWS_BEARER_TOKEN_BEDROCK: '',
+          AWS_PROFILE: '',
+        },
+      };
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should prefer Bedrock bearer tokens over ambient credentials', async () => {

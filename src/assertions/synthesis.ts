@@ -487,6 +487,7 @@ export async function synthesize({
   // Determine which dimensions should be objectively answered with python. If so, generate the python.
   providerModel.config = {
     ...providerModel.config,
+    max_tokens: 3000,
     maxTokens: 3000,
   };
   const assertions = await Promise.all(
