@@ -875,8 +875,11 @@ describe('setupReadiness', () => {
       });
     });
 
-    it('detects comparison assertions nested inside an assert-set', () => {
-      const readiness = getSetupReadiness({
+    it('ignores comparison assertions nested in an assert-set, matching the runtime', () => {
+      // The runtime only runs select-best/max-score declared at the top level of
+      // test.assert and silently skips any nested in an assert-set, so a single
+      // output here is fine — readiness must not block on it.
+      const selectBest = getSetupReadiness({
         providers: ['openai:gpt-4.1'],
         prompts: ['Write a reply'],
         tests: [
@@ -890,28 +893,20 @@ describe('setupReadiness', () => {
           },
         ],
       });
+      expect(selectBest.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+      expect(selectBest.isReadyToRun).toBe(true);
 
-      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
-    });
-
-    it('does not count an assert-set wrapping only comparison assertions as a scoring assertion', () => {
-      const readiness = getSetupReadiness({
-        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+      const maxScore = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
         prompts: ['Write a reply'],
-        tests: [
-          {
-            assert: [
-              { type: 'max-score' },
-              {
-                type: 'assert-set',
-                assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
-              },
-            ],
-          },
-        ],
+        tests: [{ assert: [{ type: 'assert-set', assert: [{ type: 'max-score' }] }] }],
       });
-
-      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonScoring' }));
+      expect(maxScore.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonScoring' }),
+      );
+      expect(maxScore.isReadyToRun).toBe(true);
     });
 
     it('validates default max-score assertions for external and string-array tests', () => {
@@ -1021,6 +1016,12 @@ describe('setupReadiness', () => {
       const variables = extractVariablesFromPrompts([pathological]);
       expect(performance.now() - start).toBeLessThan(1000);
       expect(variables).toEqual(['y']);
+    });
+
+    it('closes a loop scope on an endfor tag with trailing content', () => {
+      expect(extractVariablesFromPrompts(['{% for x in items %}{% endfor junk %}{{ x }}'])).toEqual(
+        ['items', 'x'],
+      );
     });
 
     it('does not treat loop locals as required vars inside loops only', () => {

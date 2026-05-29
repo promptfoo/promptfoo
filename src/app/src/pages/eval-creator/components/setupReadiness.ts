@@ -122,28 +122,15 @@ function hasInvalidAssertionValue(testCase: unknown): boolean {
   return Boolean(getFirstRunnableAssertionValueError(testCase.assert));
 }
 
-// Unwrap one level of assert-set wrappers so the comparison checks (select-best /
-// max-score) and the "max-score needs another scoring assertion" check see
-// assertions nested in an assert-set, matching the runtime and the sibling
-// validators (assertionPrerequisites, assertionValueValidation), which both
-// descend into assert-sets.
-function flattenAssertSets(assertions: unknown[]): AssertionOrSet[] {
-  return assertions.flatMap((assertion) => {
-    if (!isRecord(assertion) || typeof assertion.type !== 'string') {
-      return [];
-    }
-    if (assertion.type === 'assert-set' && Array.isArray(assertion.assert)) {
-      return assertion.assert.filter(
-        (nested): nested is AssertionOrSet => isRecord(nested) && typeof nested.type === 'string',
-      );
-    }
-    return [assertion as AssertionOrSet];
-  });
-}
-
+// Deliberately shallow (top-level) — does NOT descend into assert-sets. The
+// runtime detects comparison assertions (select-best / max-score) only at the top
+// level of test.assert and silently skips any nested inside an assert-set, so the
+// readiness gate mirrors that to avoid falsely blocking a config the runtime runs.
 function getAssertions(testCase: unknown): AssertionOrSet[] {
   return isRecord(testCase) && Array.isArray(testCase.assert)
-    ? flattenAssertSets(testCase.assert)
+    ? (testCase.assert.filter(
+        (assertion) => isRecord(assertion) && typeof assertion.type === 'string',
+      ) as AssertionOrSet[])
     : [];
 }
 
@@ -504,7 +491,7 @@ function collectTemplateVariables(template: string, variables: Set<string>): voi
       scopeStack.push(new Set([...currentLocals, ...getLoopVariables(loopMatch[1])]));
       continue;
     }
-    if (blockExpression === 'endfor') {
+    if (/^endfor\b/.test(blockExpression)) {
       if (scopeStack.length > 1) {
         scopeStack.pop();
       }
