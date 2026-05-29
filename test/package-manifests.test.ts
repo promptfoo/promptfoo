@@ -76,13 +76,20 @@ describe('package manifests', () => {
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
       exports?: Record<string, unknown>;
+      typesVersions?: Record<string, Record<string, string[]>>;
     }>('package.json');
 
     expect(packageJson.exports?.['./contracts']).toEqual({
-      types: './dist/src/contracts.d.ts',
-      import: './dist/src/contracts.js',
-      require: './dist/src/contracts.cjs',
+      import: {
+        types: './dist/src/contracts.d.ts',
+        default: './dist/src/contracts.js',
+      },
+      require: {
+        types: './dist/src/contracts.d.cts',
+        default: './dist/src/contracts.cjs',
+      },
     });
+    expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
   });
 
   it('keeps sharp out of the root install path', () => {

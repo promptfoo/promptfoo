@@ -18,12 +18,14 @@ type PackResult = {
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const drizzleDir = path.join(ROOT, 'drizzle');
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
+  'dist/src/app/index.html',
   'dist/src/entrypoint.js',
   'dist/src/golang/wrapper.go',
   'dist/src/contracts.cjs',
+  'dist/src/contracts.d.cts',
   'dist/src/contracts.d.ts',
   'dist/src/contracts.js',
   'dist/src/index.cjs',
@@ -39,7 +41,24 @@ const requiredPackagedPaths = [
   'dist/src/server/python/persistent_wrapper.py',
   'dist/src/server/python/wrapper.py',
   'dist/src/server/ruby/wrapper.rb',
+  'dist/src/tableOutput.html',
+  'dist/src/tracing/proto/opentelemetry/proto/collector/trace/v1/trace_service.proto',
+  'dist/src/tracing/proto/opentelemetry/proto/common/v1/common.proto',
+  'dist/src/tracing/proto/opentelemetry/proto/resource/v1/resource.proto',
+  'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
 ];
+
+function listFiles(rootDir: string): string[] {
+  return fs.readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(rootDir, entry.name);
+
+    if (entry.isDirectory()) {
+      return listFiles(fullPath);
+    }
+
+    return [path.relative(ROOT, fullPath).split(path.sep).join('/')];
+  });
+}
 
 function run(
   command: string,
@@ -61,21 +80,41 @@ function run(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch (error) {
-    if (error instanceof Error && 'stderr' in error && typeof error.stderr === 'string') {
-      throw new Error(`${error.message}\n${error.stderr}`);
+    if (error instanceof Error && 'stdout' in error && 'stderr' in error) {
+      const stdout = typeof error.stdout === 'string' ? error.stdout : '';
+      const stderr = typeof error.stderr === 'string' ? error.stderr : '';
+      throw new Error(`${error.message}\n${stdout}\n${stderr}`);
     }
     throw error;
   }
 }
 
+function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
+  assert(process.env.npm_execpath, 'Expected npm_execpath when running package artifact test');
+  return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
+}
+
 function assertPackagedFiles(packResult: PackResult): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
+  const missingDrizzleFiles = listFiles(drizzleDir)
+    .filter((file) => !file.endsWith('.md') && !file.includes('AGENTS') && !file.includes('CLAUDE'))
+    .map((file) => `dist/${file}`)
+    .filter((file) => !packagedPaths.has(file));
+  const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
+    .filter((file) => !file.endsWith('.map'))
+    .filter((file) => !packagedPaths.has(file));
 
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
-  assert(
-    packResult.files.some((file) => /^dist\/drizzle\/[^/]+\.sql$/.test(file.path)),
-    'Expected packaged Drizzle migrations',
+  assert.deepEqual(
+    missingDrizzleFiles,
+    [],
+    `Missing packaged Drizzle files: ${missingDrizzleFiles.join(', ')}`,
+  );
+  assert.deepEqual(
+    missingWebAppFiles,
+    [],
+    `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
   );
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
@@ -90,9 +129,67 @@ function assertPackagedFiles(packResult: PackResult): void {
     'Compiled mocks should be excluded from the package',
   );
 
-  const entrypoint = packResult.files.find((file) => file.path === 'dist/src/entrypoint.js');
-  assert(entrypoint, 'Missing packaged CLI entrypoint');
-  assert(entrypoint.mode & 0o111, 'Packaged CLI entrypoint should be executable');
+  for (const executablePath of ['dist/src/entrypoint.js', 'dist/src/main.js']) {
+    const executable = packResult.files.find((file) => file.path === executablePath);
+    assert(executable, `Missing packaged CLI executable: ${executablePath}`);
+    assert(
+      executable.mode & 0o111,
+      `Packaged CLI executable should be executable: ${executablePath}`,
+    );
+  }
+}
+
+function assertInstalledWebApp(installedPackageDir: string): void {
+  const webAppDir = path.join(installedPackageDir, 'dist', 'src', 'app');
+  const indexHtml = fs.readFileSync(path.join(webAppDir, 'index.html'), 'utf8');
+  const localAssetPaths = [...indexHtml.matchAll(/\b(?:href|src)="\/([^"]+)"/g)].map(
+    ([, assetPath]) => assetPath.split(/[?#]/, 1)[0],
+  );
+
+  assert(localAssetPaths.length > 0, 'Expected packaged web app index to reference local assets');
+  assert(
+    localAssetPaths.some((assetPath) => assetPath.endsWith('.js')),
+    'Expected packaged web app index to reference a JavaScript entrypoint',
+  );
+  assert(
+    localAssetPaths.some((assetPath) => assetPath.endsWith('.css')),
+    'Expected packaged web app index to reference a stylesheet',
+  );
+
+  const missingAssets = localAssetPaths.filter(
+    (assetPath) => !fs.existsSync(path.join(webAppDir, assetPath)),
+  );
+  assert.deepEqual(
+    missingAssets,
+    [],
+    `Missing packaged web app assets: ${missingAssets.join(', ')}`,
+  );
+}
+
+function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
+  const binPath = path.join(
+    consumerDir,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? `${binName}.cmd` : binName,
+  );
+  assert(fs.existsSync(binPath), `Missing installed ${binName} bin: ${binPath}`);
+  const envOverrides = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+
+  if (process.platform === 'win32') {
+    return run(
+      process.env.ComSpec || 'cmd.exe',
+      ['/d', '/s', '/c', `"${binPath}" --version`],
+      consumerDir,
+      envOverrides,
+    );
+  }
+
+  return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
 function writeConsumerScripts(consumerDir: string): void {
@@ -152,21 +249,57 @@ function writeConsumerScripts(consumerDir: string): void {
       include: ['import-contracts.ts'],
     }),
   );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.legacy.json'),
+    JSON.stringify({
+      compilerOptions: {
+        ignoreDeprecations: '6.0',
+        module: 'CommonJS',
+        moduleResolution: 'node',
+        noEmit: true,
+        strict: true,
+      },
+      include: ['import-contracts.ts'],
+    }),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-contracts.cts'),
+    [
+      "import contracts = require('promptfoo/contracts');",
+      '',
+      "const prompt: contracts.Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
+      'contracts.PromptSchema.parse(prompt);',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.node16-cjs.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'Node16',
+        moduleResolution: 'Node16',
+        noEmit: true,
+        strict: true,
+      },
+      include: ['require-contracts.cts'],
+    }),
+  );
 }
 
 function main(): void {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
+  const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
 
   try {
     fs.mkdirSync(artifactsDir);
+    fs.mkdirSync(configDir);
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = run(
-      npmCommand,
+    const packOutput = runNpm(
       ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
       ROOT,
     );
@@ -188,8 +321,7 @@ function main(): void {
         type: 'module',
       }),
     );
-    run(
-      npmCommand,
+    runNpm(
       [
         'install',
         '--ignore-scripts',
@@ -200,10 +332,7 @@ function main(): void {
         tarballPath,
       ],
       consumerDir,
-      {
-        npm_config_engine_strict: 'false',
-        npm_config_userconfig: consumerNpmrc,
-      },
+      { npm_config_userconfig: consumerNpmrc },
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
@@ -220,21 +349,32 @@ function main(): void {
       [path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'), '--project', 'tsconfig.json'],
       consumerDir,
     );
-
-    const binPath = path.join(
-      consumerDir,
-      'node_modules',
-      '.bin',
-      process.platform === 'win32' ? 'promptfoo.cmd' : 'promptfoo',
-    );
-    assert(fs.existsSync(binPath), `Missing installed promptfoo bin: ${binPath}`);
-
-    const versionOutput = run(
+    run(
       process.execPath,
-      [path.join(installedPackageDir, 'dist', 'src', 'entrypoint.js'), '--version'],
+      [
+        path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'),
+        '--project',
+        'tsconfig.legacy.json',
+      ],
       consumerDir,
     );
-    assert.equal(versionOutput.trim(), packResult.version);
+    run(
+      process.execPath,
+      [
+        path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'),
+        '--project',
+        'tsconfig.node16-cjs.json',
+      ],
+      consumerDir,
+    );
+    assertInstalledWebApp(installedPackageDir);
+
+    for (const binName of ['promptfoo', 'pf']) {
+      assert.equal(
+        runInstalledBinVersion(consumerDir, configDir, binName).trim(),
+        packResult.version,
+      );
+    }
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

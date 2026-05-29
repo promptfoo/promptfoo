@@ -16,9 +16,14 @@
       "require": "./dist/src/index.cjs"
     },
     "./contracts": {
-      "types": "./dist/src/contracts.d.ts",
-      "import": "./dist/src/contracts.js",
-      "require": "./dist/src/contracts.cjs"
+      "import": {
+        "types": "./dist/src/contracts.d.ts",
+        "default": "./dist/src/contracts.js"
+      },
+      "require": {
+        "types": "./dist/src/contracts.d.cts",
+        "default": "./dist/src/contracts.cjs"
+      }
     }
   },
   "workspaces": [
@@ -27,6 +32,13 @@
   ],
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "contracts": [
+        "dist/src/contracts.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist",
     "!dist/test",
@@ -283,13 +295,13 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.100.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
-    "@inquirer/checkbox": "^5.1.0",
-    "@inquirer/confirm": "^6.0.8",
-    "@inquirer/core": "^11.1.5",
-    "@inquirer/editor": "^5.0.8",
-    "@inquirer/input": "^5.0.8",
-    "@inquirer/search": "^4.1.8",
-    "@inquirer/select": "^5.1.0",
+    "@inquirer/checkbox": ">=5.1.0 <5.2.0",
+    "@inquirer/confirm": ">=6.0.8 <6.1.0",
+    "@inquirer/core": ">=11.1.5 <11.2.0",
+    "@inquirer/editor": ">=5.0.8 <5.2.0",
+    "@inquirer/input": ">=5.0.8 <5.1.0",
+    "@inquirer/search": ">=4.1.8 <4.2.0",
+    "@inquirer/select": ">=5.1.0 <5.2.0",
     "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",

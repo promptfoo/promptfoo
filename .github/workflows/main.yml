@@ -205,6 +205,8 @@ jobs:
 
       - name: Test Package Artifact
         if: matrix.node == '20.20'
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact
 
   style-check:

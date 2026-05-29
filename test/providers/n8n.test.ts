@@ -484,6 +484,69 @@ describe('N8nProvider', () => {
       );
     });
 
+    it('should add an explicit session ID to a custom body using the configured field', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Hello!' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: { message: '{{prompt}}' },
+          sessionField: 'conversationId',
+        },
+      });
+
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'my-session-123' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: 'Hello',
+            conversationId: 'my-session-123',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        true,
+        0,
+      );
+    });
+
+    it('should preserve an explicit session field value in a custom body', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Hello!' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: {
+            message: '{{prompt}}',
+            conversationId: 'template-session',
+          },
+          sessionField: 'conversationId',
+        },
+      });
+
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'context-session' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: 'Hello',
+            conversationId: 'template-session',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        true,
+        0,
+      );
+    });
+
     it('should send an explicit session ID after a response exposes a different session', async () => {
       vi.mocked(fetchWithCache)
         .mockResolvedValueOnce(createMockResponse({ output: 'First', sessionId: 'server-session' }))
