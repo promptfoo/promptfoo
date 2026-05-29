@@ -43,6 +43,22 @@ Choose the provider by the runtime boundary you need to evaluate:
 
 Across the coding-agent providers, relative `working_dir` values resolve from the directory containing the config file. That keeps configs portable when you run the same eval from the example directory, the repo root, or CI.
 
+## Inspecting Codex Runs
+
+Both Codex providers record the current-turn prompt and emitted assistant responses in `metadata.messages`. In the eval results UI, open a row and select **Messages** to read the transcript.
+
+Use the additional evidence surfaces when the final answer is not enough:
+
+| Need to inspect                            | Provider/configuration                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Prompt and assistant responses             | `metadata.messages` from either Codex provider; visible in **Messages**                 |
+| Shell, file, MCP, search, and message work | `enable_streaming: true` plus tracing for `openai:codex-sdk`                            |
+| Rich app-server item and request events    | `openai:codex-app-server`; inspect `metadata.codexAppServer.items` and `serverRequests` |
+| Raw app-server notifications               | `include_raw_events: true` and optionally `experimental_raw_events: true`               |
+| Emitted app-server reasoning summaries     | `reasoning_summary: detailed`; inspect metadata/raw events or traces                    |
+
+Reasoning summaries and reasoning trajectory spans are emitted observability data. They do not reveal hidden model chain of thought.
+
 ## Examples
 
 ### Security audit with structured output

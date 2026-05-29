@@ -256,6 +256,12 @@ describe('OpenAICodexSDKProvider', () => {
             cached: 5,
           },
           cost: undefined,
+          metadata: {
+            messages: [
+              { role: 'user', content: 'Test prompt' },
+              { role: 'assistant', content: 'Test response' },
+            ],
+          },
           raw: expect.any(String),
           sessionId: 'test-thread-123',
         });
@@ -307,6 +313,10 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi(prompt);
 
         expect(result.output).toBe('Image-aware response');
+        expect(result.metadata?.messages).toEqual([
+          { role: 'user', content: 'Describe this screenshot\n[local_image: /tmp/screenshot.png]' },
+          { role: 'assistant', content: 'Image-aware response' },
+        ]);
         expect(mockRun).toHaveBeenCalledWith(
           [
             { type: 'text', text: 'Describe this screenshot' },
@@ -516,6 +526,7 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
+          messages: expect.any(Array),
           skillCalls: [
             {
               name: 'token-skill',
@@ -546,6 +557,7 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
+          messages: expect.any(Array),
           skillCalls: [
             {
               name: 'token-skill',
@@ -584,6 +596,7 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
+          messages: expect.any(Array),
           skillCalls: [
             {
               name: 'token-skill',
@@ -613,7 +626,11 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read all skills');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.messages).toEqual([
+          { role: 'user', content: 'Read all skills' },
+          { role: 'assistant', content: 'WILDCARD' },
+        ]);
+        expect(result.metadata).not.toHaveProperty('skillCalls');
       });
 
       it('should ignore absolute .agents skill paths outside the current repo root', async () => {
@@ -635,7 +652,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read another repo skill');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata).not.toHaveProperty('skillCalls');
       });
 
       it('should not infer skillCalls from directory listings without a direct SKILL.md command read', async () => {
@@ -658,7 +675,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('List the available files');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata).not.toHaveProperty('skillCalls');
       });
 
       it('should omit skillCalls when no skill files are read', async () => {
@@ -685,7 +702,11 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('What is 2 + 2?');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata?.messages).toEqual([
+          { role: 'user', content: 'What is 2 + 2?' },
+          { role: 'assistant', content: '4' },
+        ]);
+        expect(result.metadata).not.toHaveProperty('skillCalls');
       });
 
       it('should infer skillCalls from custom CODEX_HOME skill directories', async () => {
@@ -713,6 +734,7 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Use the home skill');
 
         expect(result.metadata).toEqual({
+          messages: expect.any(Array),
           skillCalls: [
             {
               name: 'home-skill',
@@ -749,6 +771,7 @@ describe('OpenAICodexSDKProvider', () => {
           const result = await provider.callApi('Use the profile skill');
 
           expect(result.metadata).toEqual({
+            messages: expect.any(Array),
             skillCalls: [
               {
                 name: 'profile-skill',
@@ -797,6 +820,7 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
+          messages: expect.any(Array),
           attemptedSkillCalls: [
             {
               name: 'token-skill',
@@ -827,7 +851,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read the unrelated SKILL file');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata).not.toHaveProperty('skillCalls');
       });
 
       it('should ignore arbitrary hidden .codex skill paths outside the configured home root', async () => {
@@ -850,7 +874,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
         const result = await provider.callApi('Read the unrelated hidden Codex skill file');
 
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata).not.toHaveProperty('skillCalls');
       });
     });
 
@@ -1676,6 +1700,11 @@ describe('OpenAICodexSDKProvider', () => {
             reasoning: 3,
           },
         });
+        expect(result.metadata?.messages).toEqual([
+          { role: 'user', content: 'Test prompt' },
+          { role: 'assistant', content: 'Part 1' },
+          { role: 'assistant', content: 'Part 2' },
+        ]);
       });
 
       it('should abort streaming on signal', async () => {

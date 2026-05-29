@@ -109,6 +109,11 @@ type CodexPromptInputItem =
 
 type CodexPromptInput = string | CodexPromptInputItem[];
 
+type CodexConversationMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 interface CodexStreamingState {
   items: any[];
   usage: any;
@@ -116,7 +121,7 @@ interface CodexStreamingState {
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
   reasoningTexts: string[];
-  conversationMessages: Array<{ role: string; content: string }>;
+  conversationMessages: CodexConversationMessage[];
 }
 
 const MINIMAL_CLI_ENV_KEYS = [
@@ -1997,7 +2002,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         skillRootPrefixes,
       );
 
-      return this.buildCodexProviderResponse(turn, sessionId, skillRootPrefixes, resolvedConfig);
+      return this.buildCodexProviderResponse(
+        turn,
+        sessionId,
+        promptInput,
+        skillRootPrefixes,
+        resolvedConfig,
+      );
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -2125,6 +2136,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private buildCodexProviderResponse(
     turn: any,
     sessionId: string,
+    promptInput: CodexPromptInput,
     skillRootPrefixes: readonly string[],
     resolvedConfig: OpenAICodexSDKConfig,
   ): ProviderResponse {
@@ -2136,27 +2148,50 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       output,
       tokenUsage,
       cost: this.calculateCodexResponseCost(tokenUsage, resolvedConfig.model),
-      metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
+      metadata: this.buildCodexResponseMetadata(promptInput, turn, skillRootPrefixes),
       raw: JSON.stringify(turn),
       sessionId,
     };
   }
 
   private buildCodexResponseMetadata(
-    items: any[],
+    promptInput: CodexPromptInput,
+    turn: any,
     skillRootPrefixes: readonly string[],
   ): ProviderResponse['metadata'] {
-    const skillMetadata = this.buildSkillMetadata(items, skillRootPrefixes);
-    if (!skillMetadata) {
-      return undefined;
-    }
+    const skillMetadata = this.buildSkillMetadata(turn.items, skillRootPrefixes);
 
     return {
-      ...(skillMetadata.skillCalls.length > 0 ? { skillCalls: skillMetadata.skillCalls } : {}),
-      ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
+      messages: this.buildConversationMessages(promptInput, turn),
+      ...(skillMetadata?.skillCalls.length ? { skillCalls: skillMetadata.skillCalls } : {}),
+      ...(skillMetadata &&
+      skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
         ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
         : {}),
     };
+  }
+
+  private buildConversationMessages(
+    promptInput: CodexPromptInput,
+    turn: any,
+  ): CodexConversationMessage[] {
+    const messages: CodexConversationMessage[] = [
+      { role: 'user', content: this.formatPromptInputForTrace(promptInput) },
+    ];
+    const assistantTexts: string[] = Array.isArray(turn.items)
+      ? turn.items
+          .filter((item: any) => item?.type === 'agent_message' && typeof item.text === 'string')
+          .map((item: any) => item.text as string)
+      : [];
+
+    messages.push(...assistantTexts.map((content) => ({ role: 'assistant' as const, content })));
+
+    const finalResponse = typeof turn.finalResponse === 'string' ? turn.finalResponse : '';
+    if (finalResponse && assistantTexts[assistantTexts.length - 1] !== finalResponse) {
+      messages.push({ role: 'assistant', content: finalResponse });
+    }
+
+    return messages;
   }
 
   private buildCodexTokenUsage(turnUsage: any): ProviderResponse['tokenUsage'] {

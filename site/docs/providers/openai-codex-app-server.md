@@ -39,6 +39,7 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Eval surface                                    | Supported? | Notes                                                                                            |
 | ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
 | Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                       |
+| Prompt/assistant transcript                     | Yes        | Successful rows include `metadata.messages`, rendered in the eval details **Messages** tab.      |
 | Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                             |
 | JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                          |
 | Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`; cost needs a known model id.               |
@@ -82,7 +83,7 @@ prompts:
   - 'Review this repository and summarize the highest-risk code paths.'
 ```
 
-The provider returns Codex's final assistant text as `output`. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
+The provider returns Codex's final assistant text as `output`. It stores the current-turn user/assistant exchange in `metadata.messages`, which appears in the eval details **Messages** tab. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
 
 For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
 
@@ -315,6 +316,7 @@ Supported input item types are `text`, `image`, `local_image`, `localImage`, `sk
 The provider records app-server details for assertions and debugging:
 
 ```js
+providerResponse.metadata.messages;
 providerResponse.metadata.codexAppServer.threadId;
 providerResponse.metadata.codexAppServer.turnId;
 providerResponse.metadata.codexAppServer.itemCounts;
@@ -323,6 +325,29 @@ providerResponse.metadata.codexAppServer.serverRequests;
 ```
 
 Command output, tool arguments, and approval metadata are sanitized before they are placed in metadata or tracing attributes.
+
+## Debugging Agent Behavior
+
+`metadata.messages` is the human-readable transcript for the current row: prompt input followed by emitted assistant messages. Reasoning, commands, file activity, MCP calls, and web searches remain available separately under `metadata.codexAppServer.items` so that a reasoning summary is not presented as an assistant answer.
+
+For maximum emitted evidence:
+
+```yaml
+providers:
+  - id: openai:codex-app-server:gpt-5.5
+    config:
+      sandbox_mode: read-only
+      approval_policy: never
+      model_reasoning_effort: high
+      reasoning_summary: detailed
+      experimental_raw_events: true
+      include_raw_events: true
+      deep_tracing: true
+```
+
+`reasoning_summary: detailed` requests richer reasoning summaries from app-server. `experimental_raw_events` asks Codex to emit raw Responses API items, while `include_raw_events` retains protocol notifications in `response.raw`. Use `deep_tracing` with Promptfoo tracing enabled when you want item-level activity in the **Traces** tab.
+
+These fields expose emitted summaries and runtime actions, not hidden model chain of thought.
 
 ## Tracing
 

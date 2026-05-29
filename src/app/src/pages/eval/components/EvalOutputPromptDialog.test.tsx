@@ -152,6 +152,44 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('testValue')).toBeInTheDocument();
   });
 
+  it('displays structured provider messages in the Messages tab', async () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        metadata={{
+          messages: [
+            { role: 'user', content: 'Inspect this file' },
+            { role: 'assistant', content: 'I inspected it.' },
+          ],
+        }}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    expect(screen.getByText('Inspect this file')).toBeInTheDocument();
+    expect(screen.getByText('I inspected it.')).toBeInTheDocument();
+  });
+
+  it('continues to display JSON-encoded provider messages in the Messages tab', async () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        metadata={{
+          messages: JSON.stringify([
+            { role: 'user', content: 'Serialized prompt' },
+            { role: 'assistant', content: 'Serialized response' },
+          ]),
+        }}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    expect(screen.getByText('Serialized prompt')).toBeInTheDocument();
+    expect(screen.getByText('Serialized response')).toBeInTheDocument();
+  });
+
   it('calls onClose when close button is clicked', async () => {
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
     await userEvent.click(screen.getByLabelText('close'));

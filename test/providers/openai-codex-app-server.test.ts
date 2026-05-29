@@ -360,6 +360,10 @@ describe('OpenAICodexAppServerProvider', () => {
       itemCounts: { agentMessage: 1 },
       notificationCount: 5,
     });
+    expect(result.metadata?.messages).toEqual([
+      { role: 'user', content: 'Summarize this repo' },
+      { role: 'assistant', content: 'Final response' },
+    ]);
     expect(JSON.parse(result.raw as string)).toMatchObject({
       output: 'Final response',
       tokenUsage: {
@@ -4000,6 +4004,10 @@ describe('OpenAICodexAppServerProvider', () => {
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
+    expect(result.metadata?.messages).toEqual([
+      { role: 'user', content: 'Inspect raw evidence' },
+      { role: 'assistant', content: 'Done' },
+    ]);
   });
 
   it('counts notifications without retaining raw notification payloads by default', async () => {
@@ -4060,7 +4068,7 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(result.output).toBe('Done');
   });
 
-  it('sanitizes sensitive command metadata', async () => {
+  it('sanitizes sensitive command and conversation metadata', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
@@ -4105,12 +4113,27 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
     server.send({
-      method: 'item/agentMessage/delta',
+      method: 'item/completed',
       params: {
         threadId: 'thr_sanitize',
         turnId: 'turn_sanitize',
-        itemId: 'msg_secret',
-        delta: 'Done',
+        item: {
+          type: 'agentMessage',
+          id: 'msg_secret',
+          text: 'Observed api_key=sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+        },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_sanitize',
+        turnId: 'turn_sanitize',
+        item: {
+          type: 'agentMessage',
+          id: 'msg_final',
+          text: 'Done',
+        },
       },
     });
     server.send({
@@ -4122,6 +4145,12 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     const result = await resultPromise;
+    expect(result.output).toBe('Done');
+    expect(result.metadata?.messages).toEqual([
+      { role: 'user', content: 'Inspect command output' },
+      { role: 'assistant', content: 'Observed api_key=[REDACTED]' },
+      { role: 'assistant', content: 'Done' },
+    ]);
     const metadataJson = JSON.stringify(result.metadata);
     expect(metadataJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
     expect(metadataJson).toContain('[REDACTED]');
