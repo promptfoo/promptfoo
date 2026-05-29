@@ -203,6 +203,10 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Test Package Artifact
+        if: matrix.node == '20.20'
+        run: npm run test:package-artifact
+
   style-check:
     name: Style Check
     timeout-minutes: 5
