@@ -30,6 +30,7 @@ export class DrizzleLogWriter implements LogWriter {
 let dbInstance: Drizzle | null = null;
 let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
+let sqliteInstanceIsTesting = false;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
@@ -156,6 +157,7 @@ export async function getDb() {
       const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
       const client = createClient({ url: dbUrl });
       sqliteInstance = client;
+      sqliteInstanceIsTesting = isTesting;
       if (isTesting) {
         await registerTestDatabaseClient(client);
       }
@@ -171,6 +173,7 @@ export async function getDb() {
         sqliteInstance.close();
       }
       sqliteInstance = null;
+      sqliteInstanceIsTesting = false;
       dbInstance = null;
       dbPromise = null;
       throw error;
@@ -188,9 +191,8 @@ export async function getDb() {
 export async function closeDb() {
   if (sqliteInstance) {
     try {
-      const isTesting = getEnvBool('IS_TESTING');
       // Attempt to checkpoint WAL file before closing
-      if (!isTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+      if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
           await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
           logger.debug('Successfully checkpointed WAL file before closing');
@@ -199,7 +201,7 @@ export async function closeDb() {
         }
       }
 
-      if (isTesting) {
+      if (sqliteInstanceIsTesting) {
         await closeTestDatabaseClient(sqliteInstance);
       } else {
         // libsql Client.close() is synchronous; the WAL checkpoint above already
@@ -214,6 +216,7 @@ export async function closeDb() {
       // to prevent reuse of a potentially corrupted connection
     } finally {
       sqliteInstance = null;
+      sqliteInstanceIsTesting = false;
       dbInstance = null;
       dbPromise = null;
     }

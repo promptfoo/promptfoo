@@ -5,6 +5,7 @@ import {
   registerTestDatabaseClient,
   resetTestDatabaseClient,
 } from '../../src/database/testing';
+import { mockProcessEnv } from '../util/utils';
 
 describe('database test isolation', () => {
   afterEach(async () => {
@@ -103,5 +104,24 @@ describe('database test isolation', () => {
     await closeTestDatabaseClient(secondClient);
     expect(firstClient.close).toHaveBeenCalledOnce();
     expect(secondClient.close).toHaveBeenCalledOnce();
+  });
+
+  it('uses the initialization mode when the environment changes before close', async () => {
+    const firstDatabaseModule = await import('../../src/database/index');
+    const firstDb = await firstDatabaseModule.getDb();
+    await firstDb.run('CREATE TABLE env_change_marker (id TEXT PRIMARY KEY)');
+
+    const restoreEnv = mockProcessEnv({ IS_TESTING: undefined });
+    try {
+      await firstDatabaseModule.closeDb();
+    } finally {
+      restoreEnv();
+    }
+
+    vi.resetModules();
+    const secondDatabaseModule = await import('../../src/database/index');
+    const secondDb = await secondDatabaseModule.getDb();
+
+    await expect(secondDb.all('SELECT id FROM env_change_marker')).rejects.toThrow();
   });
 });
