@@ -5,7 +5,12 @@ prompts:
   - '{{task}}'
 
 providers:
+  # Explicitly allow the tools the tasks below need (pwd via Bash, file listing
+  # via Glob/LS) so they run deterministically in the SDK's isolated temp dir,
+  # rather than relying on default tool availability.
   - id: anthropic:claude-agent-sdk
+    config:
+      custom_allowed_tools: ['Bash', 'Glob', 'LS']
 
 tracing:
   enabled: true

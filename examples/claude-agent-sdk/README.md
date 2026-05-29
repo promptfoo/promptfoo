@@ -44,7 +44,9 @@ per `assistant` message / LLM round) to assert how many rounds a task took. See
 for the per-provider table and the subagent/cache-hit caveats.
 
 ```bash
-(cd basic && promptfoo eval -c promptfooconfig.tracing.yaml)
+# Use --no-cache so the turn-marker spans are re-emitted on every run; a cached
+# response would short-circuit before the tracing code and fail the turn-count assertions.
+(cd basic && promptfoo eval -c promptfooconfig.tracing.yaml --no-cache)
 ```
 
 ### Working Directory
