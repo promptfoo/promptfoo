@@ -858,6 +858,7 @@ To assert that tools were called **together in the same turn** (in parallel) rat
 
 - A **flat** list (`steps: [a, b]`) is turn-agnostic and behaves exactly as before — use it when you only care about order. Nesting is fully opt-in, so existing sequences are unaffected.
 - A **nested** entry (`steps: [[a, b]]`) requires those tools to occur in the same turn. The order _within_ a turn does not matter (parallel calls have no inherent order), so `[a, b]` also matches a turn observed as `b, a`.
+- Once any entry is nested, **every** entry describes a full turn — a plain entry like `compose_reply` means "a turn containing only that tool." If a tool you list plainly might be batched with others, either nest it with them or use a flat sequence for loose ordering.
 - Nesting works in both `exact` (the turn structure must match exactly) and `in_order` (the turns must appear in order, with other turns allowed between them) modes.
 - **What counts as one turn:** tool calls are grouped into a turn when they ran **concurrently** — their trace spans overlap in time — under the **same parent span**. So two calls the model batched into one generation and ran in parallel land in one turn, while calls separated by a gap (the model waited for a result before calling again) become separate turns, even when every tool shares one root span. A group matches a turn of the same size, so use a flat sequence when you only want loose ordering.
 
