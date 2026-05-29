@@ -58,11 +58,11 @@ def read_response(process: subprocess.Popen[str], request_id: int, timeout: floa
     raise TimeoutError(f"timed out waiting for JSON-RPC response {request_id}")
 
 
-def find_plugin(result: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+def find_plugin(result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]] | None:
     for marketplace in result.get("marketplaces", []):
         for plugin in marketplace.get("plugins", []):
             if plugin.get("name") == PLUGIN_NAME:
-                return marketplace.get("name", "<unnamed>"), plugin
+                return marketplace, plugin
     return None
 
 
@@ -85,10 +85,17 @@ def main() -> None:
         stderr=subprocess.PIPE,
         text=True,
     )
+    next_request_id = 1
+
+    def call(method: str, params: object) -> dict[str, Any]:
+        nonlocal next_request_id
+        request_id = next_request_id
+        next_request_id += 1
+        request(process, request_id, method, params)
+        return read_response(process, request_id, args.timeout)
+
     try:
-        request(
-            process,
-            1,
+        call(
             "initialize",
             {
                 "clientInfo": {
@@ -99,13 +106,10 @@ def main() -> None:
                 "capabilities": {"experimentalApi": True},
             },
         )
-        read_response(process, 1, args.timeout)
         notify(process, "initialized", {})
-        request(process, 2, "config/read", {"includeLayers": False})
-        effective_config = read_response(process, 2, args.timeout).get("config", {})
+        effective_config = call("config/read", {"includeLayers": False}).get("config", {})
         configured_marketplaces = sorted(effective_config.get("marketplaces", {}).keys())
-        request(process, 3, "plugin/list", {"marketplaceKinds": ["local"]})
-        result = read_response(process, 3, args.timeout)
+        result = call("plugin/list", {"marketplaceKinds": ["local"]})
         match = find_plugin(result)
         if match is None:
             raise RuntimeError(
@@ -113,12 +117,8 @@ def main() -> None:
                 f"{configured_marketplaces!r}; plugin/list response: "
                 + json.dumps(result, indent=2, sort_keys=True)
             )
-        marketplace_name, plugin = match
-        marketplace = next(
-            marketplace
-            for marketplace in result.get("marketplaces", [])
-            if marketplace.get("name") == marketplace_name
-        )
+        marketplace, plugin = match
+        marketplace_name = marketplace.get("name", "<unnamed>")
         if plugin.get("installed") is not True:
             marketplace_path = marketplace.get("path")
             if not isinstance(marketplace_path, str) or not marketplace_path:
@@ -126,38 +126,33 @@ def main() -> None:
                     f"computer-use plugin cannot be installed without a local marketplace path: "
                     f"{marketplace!r}"
                 )
-            request(
-                process,
-                4,
+            call(
                 "plugin/install",
                 {"marketplacePath": marketplace_path, "pluginName": PLUGIN_NAME},
             )
-            read_response(process, 4, args.timeout)
-            request(process, 5, "plugin/list", {"marketplaceKinds": ["local"]})
-            result = read_response(process, 5, args.timeout)
+            result = call("plugin/list", {"marketplaceKinds": ["local"]})
             match = find_plugin(result)
             if match is None:
                 raise RuntimeError("computer-use plugin disappeared after plugin/install")
-            marketplace_name, plugin = match
+            marketplace, plugin = match
+            marketplace_name = marketplace.get("name", "<unnamed>")
         if plugin.get("installed") is not True:
             raise RuntimeError(f"computer-use plugin is not installed: {plugin!r}")
         if plugin.get("enabled") is not True:
             raise RuntimeError(f"computer-use plugin is not enabled: {plugin!r}")
         marketplace_path = marketplace.get("path")
-        request(
-            process,
-            6,
+        detail = call(
             "plugin/read",
             {"marketplacePath": marketplace_path, "pluginName": PLUGIN_NAME},
-        )
-        detail = read_response(process, 6, args.timeout).get("plugin", {})
+        ).get("plugin", {})
         skill_names = sorted(skill.get("name") for skill in detail.get("skills", []))
         if PLUGIN_SKILL_NAME not in skill_names:
             raise RuntimeError(f"computer-use plugin does not expose its skill: {detail!r}")
         if PLUGIN_NAME not in detail.get("mcpServers", []):
             raise RuntimeError(f"computer-use plugin does not declare its MCP server: {detail!r}")
-        request(process, 7, "mcpServerStatus/list", {"detail": "toolsAndAuthOnly"})
-        mcp_server = find_mcp_server(read_response(process, 7, args.timeout))
+        mcp_server = find_mcp_server(
+            call("mcpServerStatus/list", {"detail": "toolsAndAuthOnly"})
+        )
         if mcp_server is None:
             raise RuntimeError("computer-use MCP server is not visible after plugin/install")
         tools = sorted(mcp_server.get("tools", {}))
