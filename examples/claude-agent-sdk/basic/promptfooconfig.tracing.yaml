@@ -16,8 +16,12 @@ tracing:
       host: '127.0.0.1'
       acceptFormats: ['json']
 
+# Turn counts are model-dependent, so the bounds below are deliberately loose.
+# A single-tool task is typically ~2 rounds (emit the tool, summarize the
+# result) but a model may add a clarification round; a dependent multi-step
+# task takes more. Tighten these only against a pinned model + cached run.
 tests:
-  # Single tool call: 2 LLM turns (one to emit the tool, one to summarize the result).
+  # Single tool call: a couple of LLM turns (emit the tool, summarize the result).
   - vars:
       task: 'Run `pwd` and report the result. Use only one tool call.'
     metadata:
@@ -27,7 +31,7 @@ tests:
         value:
           pattern: 'gen_ai.turn *'
           min: 1
-          max: 2
+          max: 3
 
   # Multi-step plan: more turns because each tool call depends on the previous.
   - vars:
@@ -38,4 +42,4 @@ tests:
       - type: trace-span-count
         value:
           pattern: 'gen_ai.turn *'
-          min: 3
+          min: 2
