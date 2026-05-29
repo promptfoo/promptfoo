@@ -118,6 +118,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-targets <targets>`         | Only run tests with these targets (alias for --filter-providers)                                         |
 | `--grader <provider>`                | Model that will grade outputs                                                                            |
 | `-j, --max-concurrency <number>`     | Maximum number of concurrent API calls                                                                   |
+| `--max-errors <number>`              | Stop after N consecutive ERROR results (`0` disables fail-fast behavior)                                 |
 | `--model-outputs <path>`             | Path to JSON containing list of LLM output strings                                                       |
 | `--no-cache`                         | Do not read or write results to disk cache                                                               |
 | `--no-progress-bar`                  | Do not show progress bar                                                                                 |
@@ -213,8 +214,18 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 
 - The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
 - **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
-- Cannot be used together with `--resume` or `--no-write` flags.
+- Cannot be used together with `--resume`, `--no-write`, or an enabled `maxErrors` limit (from CLI, config, or `PROMPTFOO_MAX_ERRORS`). Set `--max-errors 0` when retrying so every saved ERROR result is attempted before cleanup.
 - Uses the original eval's configuration and runtime options to ensure consistency.
+
+### Fail Fast on Consecutive Errors
+
+Use `--max-errors` to stop a run that is repeatedly failing due to provider, grader, or timeout errors:
+
+```sh
+promptfoo eval --max-errors 3
+```
+
+Only ERROR results count toward this limit. Successful rows and assertion failures reset the consecutive-error count. Set the value to `0` to disable the limit.
 
 ## `promptfoo init [directory]`
 
@@ -1043,6 +1054,7 @@ tests:
 # Command line options as defaults
 commandLineOptions:
   maxConcurrency: 5
+  maxErrors: 3
   repeat: 2
   delay: 250
   share: false
@@ -1095,6 +1107,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                                                                                                                                                                                                                                                                                                                         |                               |
 | `PROMPTFOO_EVAL_TIMEOUT_MS`                   | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error.                                                                                                                                                                                                                                                                                                                                                                                 |                               |
 | `PROMPTFOO_MAX_EVAL_TIME_MS`                  | Maximum total runtime in milliseconds for the entire eval process. When reached, all remaining tests are marked as errors and the eval ends.                                                                                                                                                                                                                                                                                                                                                                     |                               |
+| `PROMPTFOO_MAX_ERRORS`                        | Stop an eval after this many consecutive ERROR results. Successful results and assertion failures reset the count. Set to `0` to disable fail-fast behavior.                                                                                                                                                                                                                                                                                                                                                     | `0`                           |
 | `PROMPTFOO_STRIP_GRADING_RESULT`              | Strip grading results from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                        | false                         |
 | `PROMPTFOO_STRIP_METADATA`                    | Strip metadata from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                               | false                         |
 | `PROMPTFOO_STRIP_PROMPT_TEXT`                 | Strip prompt text from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                            | false                         |

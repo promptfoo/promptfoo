@@ -3172,6 +3172,11 @@
         "silent": {
           "type": "boolean"
         },
+        "maxErrors": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "filterRange": {
           "$ref": "#/definitions/__schema42"
         }
@@ -3355,6 +3360,11 @@
         },
         "retryErrors": {
           "type": "boolean"
+        },
+        "maxErrors": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "envPath": {
           "anyOf": [

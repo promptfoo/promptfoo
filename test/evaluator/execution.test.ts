@@ -2,8 +2,9 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import {
@@ -1032,5 +1033,219 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+  });
+
+  describe('maxErrors fail-fast', () => {
+    const createMockEval = (overrides: Partial<Eval> = {}) =>
+      ({
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        persisted: false,
+        config: {},
+        addResult: vi.fn().mockResolvedValue(undefined),
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: createEmptyTokenUsage(),
+          },
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+        ...overrides,
+      }) as unknown as Eval;
+
+    it('aborts after reaching maxErrors consecutive provider errors', async () => {
+      let callCount = 0;
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          return {
+            error: 'Connection refused',
+            output: '',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}],
+      };
+
+      await evaluate(testSuite, createMockEval(), {
+        maxConcurrency: 1,
+        maxErrors: 2,
+      });
+
+      expect(callCount).toBe(2);
+    });
+
+    it('runs afterAll extensions when maxErrors stops the evaluation early', async () => {
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Connection refused',
+          output: '',
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      };
+      const testSuite: TestSuite = {
+        extensions: ['file://cleanup.js:afterAll'],
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}],
+      };
+
+      await evaluate(testSuite, createMockEval(), {
+        maxConcurrency: 1,
+        maxErrors: 1,
+      });
+
+      expect(failingProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(runExtensionHook).toHaveBeenCalledWith(
+        testSuite.extensions,
+        'afterAll',
+        expect.objectContaining({ evalId: 'mock-eval-id' }),
+      );
+    });
+
+    it('resets the consecutive error count after a successful provider response', async () => {
+      let callCount = 0;
+      const intermittentProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('intermittent-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          if (callCount % 2 === 1) {
+            return {
+              error: 'Intermittent error',
+              output: '',
+              tokenUsage: createEmptyTokenUsage(),
+            };
+          }
+          return {
+            output: 'Success',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [intermittentProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}, {}],
+      };
+
+      await evaluate(testSuite, createMockEval(), {
+        maxConcurrency: 1,
+        maxErrors: 2,
+      });
+
+      expect(callCount).toBe(6);
+    });
+
+    it('does not abort when maxErrors is disabled', async () => {
+      let callCount = 0;
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          return {
+            error: 'Connection refused',
+            output: '',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}],
+      };
+
+      await evaluate(testSuite, createMockEval(), { maxConcurrency: 1 });
+
+      expect(callCount).toBe(5);
+    });
+
+    it('counts eval step timeouts toward maxErrors', async () => {
+      vi.useFakeTimers();
+      const addResult = vi.fn().mockResolvedValue(undefined);
+      const slowProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('slow-provider'),
+        callApi: vi.fn(
+          (_prompt, _context, options) =>
+            new Promise<ProviderResponse>((_, reject) => {
+              options?.abortSignal?.addEventListener('abort', () => reject(new Error('aborted')), {
+                once: true,
+              });
+            }),
+        ),
+      };
+      const testSuite: TestSuite = {
+        providers: [slowProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}],
+      };
+
+      try {
+        const evalPromise = evaluate(testSuite, createMockEval({ addResult } as Partial<Eval>), {
+          maxConcurrency: 1,
+          maxErrors: 1,
+          timeoutMs: 50,
+        });
+        await vi.advanceTimersByTimeAsync(50);
+        await evalPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(slowProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(addResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    });
+
+    it('saves partial persisted evaluations before returning after maxErrors', async () => {
+      const save = vi.fn().mockResolvedValue(undefined);
+      const setDurationMs = vi.fn();
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Connection refused',
+          output: '',
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}],
+      };
+
+      await evaluate(
+        testSuite,
+        createMockEval({ persisted: true, save, setDurationMs } as Partial<Eval>),
+        {
+          maxConcurrency: 1,
+          maxErrors: 1,
+        },
+      );
+
+      expect(setDurationMs).toHaveBeenCalledWith(expect.any(Number));
+      expect(save).toHaveBeenCalled();
+    });
   });
 });

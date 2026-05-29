@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, getMaxErrors, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -610,6 +610,20 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
+    const maxErrors =
+      cmdObj.maxErrors ?? commandLineOptions?.maxErrors ?? evaluateOptions.maxErrors;
+    const effectiveMaxErrors = maxErrors ?? getMaxErrors();
+
+    if (retryErrors && effectiveMaxErrors > 0) {
+      delete cliState._retryErrorResultIds;
+      cliState.retryMode = false;
+      cliState.resume = false;
+      return failEvalRun(
+        'Cannot use --max-errors with --retry-errors because stopping early could discard ERROR results that were not retried. Set --max-errors 0 to retry every ERROR result.',
+        isCliInvocation,
+      );
+    }
+
     const options: InternalEvaluateOptions = {
       ...evaluateOptions,
       showProgressBar:
@@ -624,6 +638,7 @@ export async function doEval(
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       filterRange,
       maxConcurrency,
+      maxErrors,
       cache,
     };
 
@@ -1252,6 +1267,10 @@ export function evalCommand(
       'Resume a paused/incomplete evaluation. Defaults to latest when omitted',
     )
     .option('--retry-errors', 'Retry all ERROR results from the latest evaluation')
+    .option(
+      '--max-errors <number>',
+      'Maximum number of consecutive errors before the evaluation is aborted (default: 0, no limit)',
+    )
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',

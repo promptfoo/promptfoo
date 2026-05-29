@@ -49,6 +49,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.cache           | boolean                                                                                                                                               | No                             | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
 | evaluateOptions.timeoutMs       | number                                                                                                                                                | No                             | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                                     |
 | evaluateOptions.maxEvalTimeMs   | number                                                                                                                                                | No                             | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
+| evaluateOptions.maxErrors       | number                                                                                                                                                | No                             | Stop after this many consecutive ERROR results. Successful results and assertion failures reset the count. Default is 0 (no limit).                                                                                             |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                                             | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
 
 ### Test Case
@@ -188,6 +189,7 @@ Set default values for command-line options. These defaults will be used unless 
 | suggestionsCount         | integer            | Number of prompt variations to generate when `generateSuggestions` is enabled (default `1`, max `50`). May also be set under `evaluateOptions`; the CLI flag `--suggest-prompts <n>` is equivalent. |
 | **Test Execution**       |                    |                                                                                                                                                                                                     |
 | maxConcurrency           | number             | Maximum number of concurrent requests                                                                                                                                                               |
+| maxErrors                | number             | Stop after this many consecutive ERROR results. Set to `0` to disable fail-fast behavior.                                                                                                           |
 | repeat                   | number             | Number of times to run each test case                                                                                                                                                               |
 | delay                    | number             | Delay between API calls in milliseconds                                                                                                                                                             |
 | grader                   | string             | [Provider](/docs/providers) that will grade [model-graded](/docs/configuration/expected-outputs/model-graded) outputs                                                                               |
@@ -1128,6 +1130,7 @@ interface EvaluateOptions {
   showProgressBar?: boolean;
   timeoutMs?: number;
   maxEvalTimeMs?: number;
+  maxErrors?: number;
   isRedteam?: boolean;
   silent?: boolean;
   abortSignal?: AbortSignal;
