@@ -732,6 +732,16 @@ describe('CommandLineOptionsSchema', () => {
     ).toThrow();
   });
 
+  it('should reject unsafe integer filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow();
+  });
+
   it('should reject invalid filterRange values', () => {
     const baseOptions = {
       output: ['output1'],

@@ -1671,6 +1671,37 @@ describe('resolveConfigs', () => {
     expect(firstPositions?.[0]).not.toEqual(firstPositions?.[1]);
   });
 
+  it('should derive distinct scenario sampling streams at the maximum safe seed', async () => {
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{position}}'],
+      providers: ['echo'],
+      commandLineOptions: {
+        filterSample: 10,
+        filterSampleSeed: Number.MAX_SAFE_INTEGER,
+      },
+      scenarios: ['A', 'B', 'C'].map((group) => ({
+        config: [{}],
+        tests: Array.from({ length: 50 }, (_, position) => ({
+          vars: { group, position: String(position) },
+        })),
+      })),
+    };
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{position}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const resolved = await resolveConfigs({}, defaultConfig);
+    const selectedPositions = resolved.testSuite.scenarios?.map((scenario) =>
+      scenario.tests.map((test) => test.vars?.position),
+    );
+
+    expect(selectedPositions?.[1]).not.toEqual(selectedPositions?.[2]);
+  });
+
   it('should not mutate reused default config scenarios when sampling', async () => {
     const originalPositions = ['0', '1', '2', '3'];
     const scenarios: Scenario[] = [
@@ -2110,6 +2141,45 @@ describe('readConfig', () => {
 
     expect(result).toEqual(mockConfig);
     expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+  });
+
+  it('should normalize a quoted configured filter sample seed', async () => {
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      commandLineOptions: {
+        filterSampleSeed: '42',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.yaml');
+
+    expect(result.commandLineOptions?.filterSampleSeed).toBe(42);
+  });
+
+  it.each([
+    'named-seed',
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('should reject invalid configured filter sample seed %p', async (filterSampleSeed) => {
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      commandLineOptions: {
+        filterSampleSeed,
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.yaml')).rejects.toMatchObject({
+      name: 'ConfigResolutionError',
+      message: expect.stringContaining(
+        'Invalid commandLineOptions in configuration file config.yaml',
+      ),
+    });
   });
 
   it('should read JavaScript config file', async () => {

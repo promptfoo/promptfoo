@@ -128,7 +128,7 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
-  filterSampleSeed: z.coerce.number().int().optional(),
+  filterSampleSeed: z.coerce.number().int().safe().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
   tags: z.record(z.string(), z.string()).optional(),
