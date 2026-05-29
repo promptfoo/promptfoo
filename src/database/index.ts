@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import * as path from 'path';
 
@@ -8,8 +7,8 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import {
+  closeTestDatabaseClient,
   registerTestDatabaseClient,
-  resetTestDatabaseClient,
   unregisterTestDatabaseClient,
 } from './testing';
 
@@ -152,19 +151,13 @@ export async function getDb() {
         import('drizzle-orm/libsql/node'),
       ]);
       const isTesting = getEnvBool('IS_TESTING');
-      // libsql opens fresh connections for top-level transactions, so a connection-local
-      // `:memory:` database is not sufficient. Give each test module graph its own
-      // file-backed database so internal connections share state without leaking schema
-      // through the process-global `file::memory:?cache=shared` database.
-      const dbUrl = isTesting
-        ? pathToFileURL(
-            path.resolve(getConfigDirectoryPath(true), `promptfoo-test-${randomUUID()}.db`),
-          ).href
-        : pathToFileURL(getDbPath()).href;
+      // libsql opens fresh connections for top-level transactions, so tests need a
+      // shared in-memory database rather than connection-local `:memory:`.
+      const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
       const client = createClient({ url: dbUrl });
       sqliteInstance = client;
       if (isTesting) {
-        registerTestDatabaseClient(client);
+        await registerTestDatabaseClient(client);
       }
 
       await configureDatabase(client, isTesting);
@@ -207,13 +200,13 @@ export async function closeDb() {
       }
 
       if (isTesting) {
-        await resetTestDatabaseClient(sqliteInstance);
+        await closeTestDatabaseClient(sqliteInstance);
+      } else {
+        // libsql Client.close() is synchronous; the WAL checkpoint above already
+        // awaited the I/O that needed to finish before the underlying connection drops.
+        sqliteInstance.close();
       }
 
-      // libsql Client.close() is synchronous; the WAL checkpoint above already
-      // awaited the I/O that needed to finish before the underlying connection drops.
-      unregisterTestDatabaseClient(sqliteInstance);
-      sqliteInstance.close();
       logger.debug('Database connection closed successfully');
     } catch (err) {
       logger.error(`Error closing database connection: ${err}`);

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { closeTestDatabaseClients, resetTestDatabaseClient } from '../../src/database/testing';
+import {
+  closeTestDatabaseClient,
+  closeTestDatabaseClients,
+  registerTestDatabaseClient,
+  resetTestDatabaseClient,
+} from '../../src/database/testing';
 
 describe('database test isolation', () => {
   afterEach(async () => {
@@ -7,7 +12,7 @@ describe('database test isolation', () => {
     vi.resetModules();
   });
 
-  it('does not share the testing database between live isolated module instances', async () => {
+  it('keeps the testing database intact until the last isolated module instance closes', async () => {
     const firstDatabaseModule = await import('../../src/database/index');
     const firstDb = await firstDatabaseModule.getDb();
     await firstDb.run('CREATE TABLE isolated_module_marker (id TEXT PRIMARY KEY)');
@@ -17,10 +22,21 @@ describe('database test isolation', () => {
     const secondDatabaseModule = await import('../../src/database/index');
     const secondDb = await secondDatabaseModule.getDb();
 
-    await expect(secondDb.all('SELECT id FROM isolated_module_marker')).rejects.toThrow();
-    await expect(firstDb.all('SELECT id FROM isolated_module_marker')).resolves.toEqual([
+    await expect(secondDb.all('SELECT id FROM isolated_module_marker')).resolves.toEqual([
       { id: 'first' },
     ]);
+
+    await firstDatabaseModule.closeDb();
+    await expect(secondDb.all('SELECT id FROM isolated_module_marker')).resolves.toEqual([
+      { id: 'first' },
+    ]);
+
+    await secondDatabaseModule.closeDb();
+    vi.resetModules();
+
+    const thirdDatabaseModule = await import('../../src/database/index');
+    const thirdDb = await thirdDatabaseModule.getDb();
+    await expect(thirdDb.all('SELECT id FROM isolated_module_marker')).rejects.toThrow();
   });
 
   it('drops supported schema objects while escaping their identifiers', async () => {
@@ -47,5 +63,45 @@ describe('database test isolation', () => {
     expect(execute).toHaveBeenCalledWith('DROP TRIGGER IF EXISTS "isolated_trigger"');
     expect(execute).not.toHaveBeenCalledWith('DROP INDEX IF EXISTS "ignored_index"');
     expect(execute).toHaveBeenLastCalledWith('PRAGMA foreign_keys = ON');
+  });
+
+  it('waits for schema cleanup before registering another client', async () => {
+    let resolveSchemaQuery!: (value: { rows: never[] }) => void;
+    const firstClient = {
+      close: vi.fn(),
+      execute: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveSchemaQuery = resolve;
+            }),
+        )
+        .mockResolvedValue({ rows: [] }),
+    } as unknown as Parameters<typeof registerTestDatabaseClient>[0];
+    const secondClient = {
+      close: vi.fn(),
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
+    } as unknown as Parameters<typeof registerTestDatabaseClient>[0];
+
+    await registerTestDatabaseClient(firstClient);
+    const closePromise = closeTestDatabaseClient(firstClient);
+    await vi.waitFor(() => expect(firstClient.execute).toHaveBeenCalledTimes(1));
+
+    let registrationFinished = false;
+    const registerPromise = registerTestDatabaseClient(secondClient).then(() => {
+      registrationFinished = true;
+    });
+    await Promise.resolve();
+    expect(registrationFinished).toBe(false);
+
+    resolveSchemaQuery({ rows: [] });
+    await closePromise;
+    await registerPromise;
+    expect(registrationFinished).toBe(true);
+
+    await closeTestDatabaseClient(secondClient);
+    expect(firstClient.close).toHaveBeenCalledOnce();
+    expect(secondClient.close).toHaveBeenCalledOnce();
   });
 });

@@ -56,5 +56,5 @@ afterAll(async () => {
   vi.resetModules();
 
   // Each worker gets a unique config dir, so we can safely remove only its own files.
-  rmSync(TEST_CONFIG_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
 });
