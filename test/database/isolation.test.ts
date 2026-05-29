@@ -7,17 +7,20 @@ describe('database test isolation', () => {
     vi.resetModules();
   });
 
-  it('does not share the testing database between isolated module instances', async () => {
+  it('does not share the testing database between live isolated module instances', async () => {
     const firstDatabaseModule = await import('../../src/database/index');
     const firstDb = await firstDatabaseModule.getDb();
     await firstDb.run('CREATE TABLE isolated_module_marker (id TEXT PRIMARY KEY)');
+    await firstDb.run("INSERT INTO isolated_module_marker VALUES ('first')");
 
-    await closeTestDatabaseClients();
     vi.resetModules();
     const secondDatabaseModule = await import('../../src/database/index');
     const secondDb = await secondDatabaseModule.getDb();
 
     await expect(secondDb.all('SELECT id FROM isolated_module_marker')).rejects.toThrow();
+    await expect(firstDb.all('SELECT id FROM isolated_module_marker')).resolves.toEqual([
+      { id: 'first' },
+    ]);
   });
 
   it('drops supported schema objects while escaping their identifiers', async () => {

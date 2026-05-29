@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import * as path from 'path';
 
@@ -151,9 +152,15 @@ export async function getDb() {
         import('drizzle-orm/libsql/node'),
       ]);
       const isTesting = getEnvBool('IS_TESTING');
-      // libsql opens fresh connections for top-level transactions, so tests need a
-      // shared in-memory database rather than connection-local `:memory:`.
-      const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
+      // libsql opens fresh connections for top-level transactions, so a connection-local
+      // `:memory:` database is not sufficient. Give each test module graph its own
+      // file-backed database so internal connections share state without leaking schema
+      // through the process-global `file::memory:?cache=shared` database.
+      const dbUrl = isTesting
+        ? pathToFileURL(
+            path.resolve(getConfigDirectoryPath(true), `promptfoo-test-${randomUUID()}.db`),
+          ).href
+        : pathToFileURL(getDbPath()).href;
       const client = createClient({ url: dbUrl });
       sqliteInstance = client;
       if (isTesting) {
