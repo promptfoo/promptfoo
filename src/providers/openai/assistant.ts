@@ -4,6 +4,11 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
@@ -213,6 +218,27 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   }
 
   async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.assistantConfig.modelName || this.assistantId,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: { temperature: this.assistantConfig.temperature ?? undefined },
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
