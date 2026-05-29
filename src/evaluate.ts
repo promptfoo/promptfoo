@@ -361,9 +361,14 @@ export async function evaluateWithSource(
   await maybeShareEval(testSuiteConfig, ret);
   if (testSuiteConfig.outputPath) {
     if (typeof testSuiteConfig.outputPath === 'string') {
-      await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
+      if (!testSuiteConfig.outputPath.endsWith('.jsonl')) {
+        await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
+      }
     } else if (Array.isArray(testSuiteConfig.outputPath)) {
-      await writeMultipleOutputs(testSuiteConfig.outputPath, evalRecord, null);
+      const outputPaths = testSuiteConfig.outputPath.filter((path) => !path.endsWith('.jsonl'));
+      if (outputPaths.length > 0) {
+        await writeMultipleOutputs(outputPaths, evalRecord, null);
+      }
     }
   }
 

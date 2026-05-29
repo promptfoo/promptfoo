@@ -560,6 +560,17 @@ describe('evaluate function', () => {
     expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
   });
 
+  it('should skip redundant output writes for JSONL files streamed during evaluation', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: 'test.jsonl',
+    };
+    await evaluate(testSuite);
+    expect(writeOutput).not.toHaveBeenCalled();
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
+  });
+
   it('should skip writing output when outputPath is empty', async () => {
     const testSuite = {
       prompts: ['test'],
@@ -575,11 +586,11 @@ describe('evaluate function', () => {
     const testSuite = {
       prompts: ['test'],
       providers: [],
-      outputPath: ['test1.json', 'test2.json'],
+      outputPath: ['test1.json', 'test2.jsonl', 'test3.json'],
     };
     await evaluate(testSuite);
     expect(writeMultipleOutputs).toHaveBeenCalledWith(
-      ['test1.json', 'test2.json'],
+      ['test1.json', 'test3.json'],
       expect.any(Eval),
       null,
     );

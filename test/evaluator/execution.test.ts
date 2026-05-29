@@ -1,6 +1,9 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
@@ -12,6 +15,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
@@ -69,6 +73,34 @@ describeEvaluator('evaluator execution control', () => {
 
     expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes JSONL writers after evaluation', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const closeSpy = vi.spyOn(JsonlFileWriter.prototype, 'close');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalRecord = new Eval({ outputPath });
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(closeSpy).toHaveBeenCalledOnce();
+      expect(fs.readFileSync(outputPath, 'utf8').trim()).not.toBe('');
+    } finally {
+      closeSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
   });
 
   it('keeps raw SVG text available to llm-rubric judges while indexing media metadata', async () => {

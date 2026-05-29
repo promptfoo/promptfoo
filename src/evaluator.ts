@@ -4633,6 +4633,8 @@ class Evaluator {
     try {
       return await this._runEvaluation();
     } finally {
+      await Promise.all(this.fileWriters.map((writer) => writer.close()));
+
       // Flush and shutdown OTEL SDK
       if (tracingEnabled) {
         logger.debug('[Evaluator] Flushing OTEL spans...');
