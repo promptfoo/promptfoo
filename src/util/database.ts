@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -20,7 +19,6 @@ import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
-  type CompletedPrompt,
   type EvaluateSummaryV2,
   type EvaluateTable,
   type EvalWithMetadata,
@@ -33,6 +31,17 @@ import {
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 import { restoreAzureBlobSasTokens } from './sanitizer';
+import {
+  clearStandaloneEvalCache,
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from './standaloneEvalCache';
+
+import type { StandaloneEval } from './standaloneEvalCache';
+
+export type { StandaloneEval };
+export { clearStandaloneEvalCache };
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -151,6 +160,8 @@ export async function writeResultsToDatabase(
     }
   });
 
+  clearStandaloneEvalCache();
+
   return evalId;
 }
 
@@ -192,7 +203,6 @@ export async function updateResult(
     }
 
     await existingEval.save();
-    clearStandaloneEvalCache();
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
@@ -485,37 +495,6 @@ export async function deleteAllEvals(): Promise<void> {
   clearStandaloneEvalCache();
 }
 
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-  uuid: string;
-};
-
-const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
-  ttl: 60 * 60 * 2 * 1000, // 2 hours in milliseconds
-  // Cache entries are keyed by (limit, tag, description) filter combinations.
-  // 2000 handles heavy automation scenarios while keeping memory bounded (~few MB).
-  // On eviction, the next request simply re-queries the DB with minimal latency impact.
-  max: 2000,
-});
-
-/**
- * Invalidates the standalone eval LRU cache backing `getStandaloneEvals()`.
- * Called by mutation paths in this module (update, delete) so `/api/history` reflects
- * changes immediately instead of waiting up to the 2-hour TTL. Also re-exported for
- * tests that need to assert behavior across cache boundaries.
- */
-export function clearStandaloneEvalCache(): void {
-  standaloneEvalCache.clear();
-}
-
 export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
@@ -525,8 +504,8 @@ export async function getStandaloneEvals({
   tag?: { key: string; value: string };
   description?: string;
 } = {}): Promise<StandaloneEval[]> {
-  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
-  const cachedResult = standaloneEvalCache.get(cacheKey);
+  const cacheKey = getStandaloneEvalCacheKey({ limit, tag, description });
+  const cachedResult = getCachedStandaloneEvals(cacheKey);
 
   if (cachedResult) {
     return cachedResult;
@@ -620,6 +599,6 @@ export async function getStandaloneEvals({
     uuid: crypto.randomUUID(),
   }));
 
-  standaloneEvalCache.set(cacheKey, withUUIDs);
+  setCachedStandaloneEvals(cacheKey, withUUIDs);
   return withUUIDs;
 }
