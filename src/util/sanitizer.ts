@@ -3,6 +3,8 @@
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
 
+import { isDeepStrictEqual } from 'node:util';
+
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
@@ -255,16 +257,17 @@ export function redactAzureBlobSasTokens<T>(value: T): T {
 }
 
 /**
- * Find a stored string whose redacted form matches `redactedValue`, regardless of
- * its position in the stored array. Only the SAS `sig` is redacted, so the rest
- * of the blob URI is preserved and acts as a stable identity for the match.
+ * Find a stored array entry whose redacted form matches `redactedValue`,
+ * regardless of its position in the stored array. Only the SAS `sig` is
+ * redacted, so the rest of the blob URI is preserved and acts as a stable
+ * identity for the match, including when the URI is nested inside an object.
  */
 function findStoredSasMatchByValue(
-  redactedValue: string,
+  redactedValue: unknown,
   storedItems: readonly unknown[],
-): string | undefined {
+): unknown | undefined {
   for (const stored of storedItems) {
-    if (typeof stored === 'string' && redactAzureBlobSasToken(stored) === redactedValue) {
+    if (isDeepStrictEqual(redactAzureBlobSasTokens(stored), redactedValue)) {
       return stored;
     }
   }
@@ -291,10 +294,13 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
       // inserted/removed since it was sanitized, leaving a redacted SAS
       // placeholder in place. Fall back to matching a stored token by value (its
       // blob URI) so the real `sig` is restored regardless of position.
-      if (typeof item === 'string' && positional === item) {
-        const restored = findStoredSasMatchByValue(item, storedItems);
-        if (restored !== undefined && restored !== item) {
-          return restored;
+      if (isDeepStrictEqual(positional, item)) {
+        const storedMatch = findStoredSasMatchByValue(item, storedItems);
+        if (storedMatch !== undefined) {
+          const restored = restoreAzureBlobSasTokens(item, storedMatch);
+          if (!isDeepStrictEqual(restored, item)) {
+            return restored;
+          }
         }
       }
       return positional;
