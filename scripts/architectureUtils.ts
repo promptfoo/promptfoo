@@ -8,7 +8,7 @@ import ts from 'typescript';
 export interface LayerDefinition {
   name: string;
   roots: string[];
-  allowedDependencies?: string[];
+  allowedDependencies: string[];
   allowedImportPaths?: string[];
 }
 
@@ -37,7 +37,13 @@ export function normalizePath(filePath: string): string {
 
 export function readLayerConfig(repoRoot: string): LayerConfig {
   const configPath = path.join(repoRoot, 'architecture/layers.json');
-  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as LayerConfig;
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LayerConfig;
+  for (const layer of config.layers) {
+    if (!Array.isArray(layer.allowedDependencies)) {
+      throw new Error(`Architecture layer "${layer.name}" must declare allowedDependencies.`);
+    }
+  }
+  return config;
 }
 
 export function getSourceFiles(
@@ -118,6 +124,14 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
       specifiers.push(node.moduleReference.expression.text);
     }
 
+    if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteralLike(node.argument.literal)
+    ) {
+      specifiers.push(node.argument.literal.text);
+    }
+
     if (ts.isCallExpression(node)) {
       addStaticCallSpecifier(node);
     }
@@ -137,7 +151,7 @@ export function resolveInternalModule(
 ): string | undefined {
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
-    .find((alias) => specifier.startsWith(alias));
+    .find((alias) => specifier === alias || specifier.startsWith(`${alias}/`));
   const aliasedPath = matchingAlias
     ? `${aliases[matchingAlias]}${specifier.slice(matchingAlias.length)}`
     : undefined;
@@ -208,9 +222,9 @@ export interface BoundaryViolation {
   importer: string;
   importerLayer: string;
   specifier: string;
-  /** Resolved import target. Set for both kinds. */
+  /** Resolved import target. Set for every violation kind. */
   imported: string;
-  /** Layer of the resolved import. Set for both kinds; equals 'facade' when kind === 'facade'. */
+  /** Layer of the resolved import. Set for every violation kind. */
   importedLayer: string;
 }
 
@@ -275,9 +289,10 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
       const importerConfig = layersByName.get(importerLayer);
       if (
         importedLayer !== importerLayer &&
+        resolvedImport !== publicFacade &&
         !leafLayers.has(importerLayer) &&
-        importerConfig?.allowedDependencies &&
-        !importerConfig.allowedDependencies.includes(importedLayer)
+        importerConfig &&
+        !(importerConfig.allowedDependencies ?? []).includes(importedLayer)
       ) {
         violations.push({
           kind: 'layer',
@@ -292,7 +307,7 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
       if (
         importedLayer !== importerLayer &&
         importerConfig?.allowedImportPaths &&
-        !importerConfig.allowedImportPaths.some((root) => isWithinRoot(resolvedImport, root))
+        !importerConfig.allowedImportPaths.includes(resolvedImport)
       ) {
         violations.push({
           kind: 'path',

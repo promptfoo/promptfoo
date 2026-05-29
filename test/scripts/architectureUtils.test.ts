@@ -9,6 +9,7 @@ import {
   findViolations,
   getSourceFiles,
   type LayerConfig,
+  readLayerConfig,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
 
@@ -120,9 +121,18 @@ describe('resolveInternalModule', () => {
       write('src/core/util.ts');
       expect(
         resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo/core/util', {
-          '@promptfoo/': 'src/',
+          '@promptfoo': 'src',
         }),
       ).toBe('src/core/util.ts');
+    });
+
+    it('resolves exact configured source aliases', () => {
+      write('src/index.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo', {
+          '@promptfoo': 'src',
+        }),
+      ).toBe('src/index.ts');
     });
 
     it('prefers a file over a directory when both could match', () => {
@@ -159,6 +169,33 @@ describe('getSourceFiles', () => {
   });
 });
 
+describe('readLayerConfig', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'readlayerconfig-'));
+    fs.mkdirSync(path.join(repoRoot, 'architecture'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  it('rejects layers that omit allowed dependencies', () => {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        layers: [{ name: 'core', roots: ['src/core'] }],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" must declare allowedDependencies.',
+    );
+  });
+});
+
 describe('findViolations', () => {
   let repoRoot: string;
 
@@ -181,9 +218,9 @@ describe('findViolations', () => {
       publicFacade: 'src/index.ts',
       leafLayers,
       layers: [
-        { name: 'facade', roots: ['src/index.ts'] },
-        { name: 'leaf', roots: ['src/leaf'] },
-        { name: 'core', roots: ['src/core'] },
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'leaf', roots: ['src/leaf'], allowedDependencies: [] },
+        { name: 'core', roots: ['src/core'], allowedDependencies: [] },
       ],
     };
   }
@@ -192,11 +229,11 @@ describe('findViolations', () => {
     return {
       publicFacade: 'src/index.ts',
       aliases: {
-        '@promptfoo/': 'src/',
+        '@promptfoo': 'src',
       },
       ignoredRoots: ['src/__mocks__'],
       layers: [
-        { name: 'facade', roots: ['src/index.ts'] },
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
         {
           name: 'app',
           roots: ['src/app'],
@@ -204,7 +241,7 @@ describe('findViolations', () => {
           allowedImportPaths: ['src/shared/allowed.ts'],
         },
         { name: 'core', roots: ['src/core'], allowedDependencies: [] },
-        { name: 'shared', roots: ['src/shared'] },
+        { name: 'shared', roots: ['src/shared'], allowedDependencies: [] },
       ],
     };
   }
@@ -262,12 +299,20 @@ describe('findViolations', () => {
     expect(kinds).toEqual(['facade', 'leaf']);
   });
 
-  it('returns empty when leafLayers is unset (only facade rule applies)', () => {
+  it('still applies layer dependency rules when leafLayers is unset', () => {
     write('src/index.ts');
     write('src/leaf/a.ts', "import { x } from '../core/util';");
     write('src/core/util.ts', 'export const x = 1;');
 
-    expect(findViolations(repoRoot, configWithLeaf([]))).toEqual([]);
+    expect(findViolations(repoRoot, configWithLeaf([]))).toMatchObject([
+      {
+        kind: 'layer',
+        importer: 'src/leaf/a.ts',
+        importerLayer: 'leaf',
+        imported: 'src/core/util.ts',
+        importedLayer: 'core',
+      },
+    ]);
   });
 
   it('flags baseUrl-style src/... imports out of a leaf layer', () => {
@@ -304,6 +349,29 @@ describe('findViolations', () => {
     ]);
   });
 
+  it('treats omitted allowed dependencies as an empty allowlist', () => {
+    write('src/index.ts');
+    write('src/shared/util.ts', 'export const x = 1;');
+    write('src/new/a.ts', "import { x } from '../shared/util';");
+
+    const config = configWithLayerRules();
+    config.layers.push({
+      name: 'new',
+      roots: ['src/new'],
+      allowedDependencies: undefined as unknown as string[],
+    });
+
+    expect(findViolations(repoRoot, config)).toMatchObject([
+      {
+        kind: 'layer',
+        importer: 'src/new/a.ts',
+        importerLayer: 'new',
+        imported: 'src/shared/util.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
   it('allows explicitly configured layer dependencies', () => {
     write('src/index.ts');
     write('src/shared/allowed.ts', 'export const x = 1;');
@@ -316,6 +384,41 @@ describe('findViolations', () => {
     write('src/index.ts');
     write('src/shared/not-allowed.ts', 'export const x = 1;');
     write('src/app/a.ts', "import { x } from '@promptfoo/shared/not-allowed';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        imported: 'src/shared/not-allowed.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('does not treat restricted layer directory entries as broad allowlist roots', () => {
+    write('src/index.ts');
+    write('src/shared/new-file.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/new-file';");
+
+    const config = configWithLayerRules();
+    config.layers[1].allowedImportPaths = ['src/shared'];
+
+    expect(findViolations(repoRoot, config)).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        imported: 'src/shared/new-file.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('flags restricted layer dependencies referenced through inline import types', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export interface X {}');
+    write('src/app/a.ts', "export type X = import('@promptfoo/shared/not-allowed').X;");
 
     expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
       {

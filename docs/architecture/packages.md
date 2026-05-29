@@ -80,7 +80,8 @@ architecture check even when the broader layer relationship already exists.
 
 When moving an existing browser import to a narrower surface, remove its old
 path from the allowlist. Avoid adding paths unless the dependency is
-intentionally browser-safe.
+intentionally browser-safe. Allowlist entries are exact files, not directory
+roots.
 
 ## Dependency Ownership Report
 

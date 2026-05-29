@@ -2,14 +2,15 @@
   "publicFacade": "src/index.ts",
   "leafLayers": ["contracts"],
   "aliases": {
-    "@app/": "src/app/src/",
-    "@promptfoo/": "src/"
+    "@app": "src/app/src",
+    "@promptfoo": "src"
   },
   "ignoredRoots": ["src/__mocks__"],
   "layers": [
     {
       "name": "facade",
-      "roots": ["src/index.ts"]
+      "roots": ["src/index.ts"],
+      "allowedDependencies": []
     },
     {
       "name": "app",
@@ -30,7 +31,12 @@
         "src/redteam/sharedFrontend.ts",
         "src/redteam/types.ts",
         "src/tracing/store.ts",
-        "src/types",
+        "src/types/api/eval.ts",
+        "src/types/api/modelAudit.ts",
+        "src/types/api/user.ts",
+        "src/types/email.ts",
+        "src/types/index.ts",
+        "src/types/modelAudit.ts",
         "src/util/convertEvalResultsToTable.ts",
         "src/util/database.ts",
         "src/util/fileExtensions.ts",
