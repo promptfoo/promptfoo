@@ -1,7 +1,8 @@
 ---
+title: Red Team Getting Started
 sidebar_position: 2
 sidebar_label: Getting started
-description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
+description: 'Start red teaming LLMs in minutes with Promptfoo: scan 50+ vulnerability types including jailbreaks, prompt injection, data exfiltration, and compliance risks'
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -86,7 +87,7 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 Next, configure Promptfoo to communicate with your target application or model.
 
 :::note
-The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
+The target defines the model being tested. Attack generation uses a separate provider; if `redteam.provider` is not set, local generation selects from supported credentials. See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
 :::
 
 Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.

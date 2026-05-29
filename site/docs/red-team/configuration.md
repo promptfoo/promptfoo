@@ -1,7 +1,8 @@
 ---
+title: Red Team Configuration
 sidebar_position: 3
 sidebar_label: Configuration
-description: Red team your LLM configuration settings using automated vulnerability scanning to detect misconfigurations and prevent unauthorized access to AI system parameters
+description: Red team your LLM configuration settings with automated vulnerability scans that detect misconfigurations and prevent unauthorized access to AI parameters
 ---
 
 import React from 'react';
@@ -75,7 +76,7 @@ redteam:
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                                                |
 | `maxCharsPerMessage`         | `number`                  | Maximum characters allowed in each generated user message                                               | None                                             |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                                        |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                                   |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | Credential-based selection                       |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts                            |
 | `contexts`                   | `Array<object>`           | Test contexts for different app states; each generates separate test runs with context-specific grading | None                                             |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                                                    | `basic`, `jailbreak:meta`, `jailbreak:composite` |
