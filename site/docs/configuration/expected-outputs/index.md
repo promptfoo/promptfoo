@@ -330,6 +330,7 @@ type AssertionValueFunctionContext = {
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  metadata?: ProviderResponse['metadata']; // Shortcut to providerResponse?.metadata
 };
 type AssertionResponse = string | boolean | number | GradingResult;
 type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertionResponse;

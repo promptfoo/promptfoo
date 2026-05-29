@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.12",
+  "version": "0.121.13",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -164,7 +164,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.107.0",
+    "webpack": "5.107.1",
     "dompurify": "3.4.5",
     "monaco-editor": {
       ".": "0.55.1",
@@ -172,7 +172,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.145",
+    "@anthropic-ai/claude-agent-sdk": "0.3.153",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -188,7 +188,6 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cli-progress": "^3.11.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -231,7 +230,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.145",
+    "@anthropic-ai/claude-agent-sdk": "0.3.153",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -276,7 +275,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.97.1",
+    "@anthropic-ai/sdk": "0.100.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -285,6 +284,7 @@
     "@inquirer/input": "^5.0.8",
     "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
+    "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
@@ -297,7 +297,6 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "^12.10.0",
     "binary-extensions": "^3.1.0",
     "cache-manager": "^7.2.8",
     "chalk": "^5.6.2",
@@ -370,7 +369,6 @@
       "@huggingface/transformers",
       "@playwright/browser-chromium",
       "@swc/core",
-      "better-sqlite3",
       "core-js",
       "core-js-pure",
       "esbuild",
