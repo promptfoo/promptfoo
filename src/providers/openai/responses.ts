@@ -433,12 +433,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // we actually send (merged config from getOpenAiBody, not raw this.config).
     // The Responses API uses `max_output_tokens` rather than `max_tokens`.
     const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
-    const effectiveConfig = resolved.config;
     const effectiveBody = resolved.body as Record<string, any>;
-    const effectiveMaxOutputTokens =
-      typeof effectiveBody.max_output_tokens === 'number'
-        ? effectiveBody.max_output_tokens
-        : undefined;
+    // Read request params from the resolved body (what we actually send) rather
+    // than the raw config, so defaults/env-derived values (e.g. a default
+    // temperature, OPENAI_TOP_P) are reflected on the span. The Responses API
+    // has no `stop` param, so stopSequences is only set if the body carries it.
+    const asNumber = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
     const spanContext = buildChatSpanContext({
       system: 'openai',
@@ -447,10 +447,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       prompt,
       context,
       request: {
-        maxTokens: effectiveMaxOutputTokens,
-        temperature: effectiveConfig.temperature,
-        topP: effectiveConfig.top_p,
-        stopSequences: effectiveConfig.stop,
+        maxTokens: asNumber(effectiveBody.max_output_tokens),
+        temperature: asNumber(effectiveBody.temperature),
+        topP: asNumber(effectiveBody.top_p),
+        stopSequences: Array.isArray(effectiveBody.stop) ? effectiveBody.stop : undefined,
       },
     });
 

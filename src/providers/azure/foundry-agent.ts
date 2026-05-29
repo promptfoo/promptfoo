@@ -586,6 +586,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         });
       };
 
+      // The Responses API can resolve with a failed/errored response object
+      // instead of throwing. Surface that on the turn marker so a failed model
+      // round is not reported as OK (the parent chat span is already marked
+      // failed downstream via processResponse).
+      const responseFailureMessage = (resp: any): string | undefined => {
+        if (resp?.error) {
+          return typeof resp.error === 'string'
+            ? resp.error
+            : resp.error.message || resp.error.code || 'Response failed';
+        }
+        if (resp?.status === 'failed') {
+          return resp.incomplete_details?.reason || 'Response status: failed';
+        }
+        return undefined;
+      };
+
       let turnStartedAt = Date.now();
       let response;
       try {
@@ -593,7 +609,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           body as ResponseCreateParamsNonStreaming,
           responseOptions,
         );
-        emitTurnSpan(turnStartedAt, Date.now());
+        emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
       } catch (err) {
         emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
         throw err;
@@ -625,7 +641,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             } as ResponseCreateParamsNonStreaming,
             responseOptions,
           );
-          emitTurnSpan(turnStartedAt, Date.now());
+          emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
         } catch (err) {
           emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
           throw err;

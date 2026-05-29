@@ -462,6 +462,29 @@ describe('AzureFoundryAgentProvider', () => {
       expect(chatSpan?.attributes['promptfoo.cache_hit']).toBe(true);
     });
 
+    it('marks a resolved-but-failed Responses turn as errored', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      // The Responses API resolves with a failed status/error object instead of
+      // throwing; the turn marker must reflect that failure, not report OK.
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse('partial'),
+        status: 'failed',
+        error: { message: 'content_filter triggered' },
+      });
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+      await provider.callApi('test prompt');
+
+      const turnSpan = spans.find((span) => span.name === 'gen_ai.turn 1');
+      expect(turnSpan).toBeDefined();
+      // SpanStatusCode.ERROR === 2
+      expect(turnSpan?.status?.code).toBe(2);
+      expect(turnSpan?.status?.message).toContain('content_filter');
+    });
+
     it('should return unresolved function calls when callbacks are missing', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());

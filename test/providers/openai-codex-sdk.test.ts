@@ -2973,6 +2973,37 @@ describe('OpenAICodexSDKProvider', () => {
         expect(turnSpan?.status?.message).toContain('not properly closed');
         spy.mockRestore();
       });
+
+      it('carries cached and reasoning token usage onto the turn span', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.started' };
+            yield {
+              type: 'turn.completed',
+              usage: {
+                input_tokens: 100,
+                output_tokens: 40,
+                cached_input_tokens: 25,
+                reasoning_output_tokens: 12,
+              },
+            };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
+        expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
+        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
+        spy.mockRestore();
+      });
     });
   });
 

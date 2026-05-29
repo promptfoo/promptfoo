@@ -1247,11 +1247,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (usage) {
       const inputTokens = usage.input_tokens ?? usage.inputTokens;
       const outputTokens = usage.output_tokens ?? usage.outputTokens;
+      const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
       if (typeof inputTokens === 'number') {
         attributes['gen_ai.usage.input_tokens'] = inputTokens;
       }
       if (typeof outputTokens === 'number') {
         attributes['gen_ai.usage.output_tokens'] = outputTokens;
+      }
+      if (typeof cachedTokens === 'number') {
+        attributes['gen_ai.usage.cached_tokens'] = cachedTokens;
+      }
+      if (typeof reasoningTokens === 'number') {
+        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
