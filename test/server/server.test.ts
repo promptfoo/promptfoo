@@ -9,6 +9,7 @@ vi.mock('../../src/migrate', () => ({
 }));
 
 vi.mock('../../src/database/signal', () => ({
+  readSignalEvalId: vi.fn(),
   setupSignalWatcher: vi.fn().mockReturnValue({
     close: vi.fn(),
     on: vi.fn(),
@@ -32,16 +33,26 @@ vi.mock('../../src/logger', () => ({
 
 vi.mock('../../src/models/eval', () => ({
   default: {
+    findById: vi.fn(),
     latest: vi.fn().mockResolvedValue(null),
   },
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-import { setupSignalWatcher } from '../../src/database/signal';
+vi.mock('../../src/server/services/promptCacheService', () => ({
+  promptCacheService: {
+    getAll: vi.fn().mockResolvedValue([]),
+    invalidate: vi.fn(),
+  },
+}));
+
+import { readSignalEvalId, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+import Eval from '../../src/models/eval';
 // Import after mocks are set up
 import { ServerError } from '../../src/server/errors';
 import { handleServerError, startServer } from '../../src/server/server';
+import { promptCacheService } from '../../src/server/services/promptCacheService';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -97,6 +108,8 @@ describe('server', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      vi.mocked(readSignalEvalId).mockReset();
+      vi.mocked(Eval.findById).mockReset();
 
       // Track signal handlers using a Map to support multiple handlers per event
       signalHandlers = new Map();
@@ -233,6 +246,24 @@ describe('server', () => {
       await serverPromise;
 
       expect(mockWatcher.close).toHaveBeenCalled();
+    });
+
+    it('should invalidate the prompts cache when an updated eval has no results', async () => {
+      vi.mocked(readSignalEvalId).mockReturnValue('eval-with-prompts');
+      vi.mocked(Eval.findById).mockResolvedValue({
+        getResultsCount: vi.fn().mockResolvedValue(0),
+      } as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+      const watcherCallback = vi.mocked(setupSignalWatcher).mock.calls[0]?.[0];
+      expect(watcherCallback).toBeTypeOf('function');
+
+      watcherCallback?.();
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
     });
 
     it('should not deadlock the shutdown promise if watcher.close throws', async () => {

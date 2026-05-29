@@ -24,7 +24,6 @@ import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
-  getPrompts,
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
@@ -43,13 +42,11 @@ import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
+import { promptCacheService } from './services/promptCacheService';
 import { replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
-import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../types/index';
-
-// Prompts cache
-let allPrompts: PromptWithMetadata[] | null = null;
+import type { Prompt, TestCase, TestSuite } from '../types/index';
 
 // JavaScript file extensions that need proper MIME type
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
@@ -197,10 +194,7 @@ export function createApp() {
   });
 
   app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
-    if (allPrompts == null) {
-      allPrompts = await getPrompts();
-    }
-    res.json(ServerSchemas.Prompts.Response.parse({ data: allPrompts }));
+    res.json(ServerSchemas.Prompts.Response.parse({ data: await promptCacheService.getAll() }));
   });
 
   app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
@@ -384,6 +378,8 @@ export async function startServer(
 
   const watcher = setupSignalWatcher(() => {
     const handleSignalUpdate = async () => {
+      promptCacheService.invalidate();
+
       // Try to get the specific eval that was updated from the signal file
       const signalEvalId = readSignalEvalId();
       const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
@@ -394,7 +390,6 @@ export async function startServer(
           `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
         );
         io.emit('update', { evalId: updatedEval?.id });
-        allPrompts = null;
       }
     };
 
