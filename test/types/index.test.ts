@@ -702,11 +702,24 @@ describe('CommandLineOptionsSchema', () => {
       filterProviders: 'provider1',
       filterRange: '1:3',
       filterSample: 5,
+      filterSampleSeed: 'repeatable-run',
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+
+  it('should coerce numeric filter sample seeds to strings', () => {
+    expect(
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: 42,
+      }),
+    ).toMatchObject({
+      filterSampleSeed: '42',
+    });
   });
 
   it('should reject invalid filterRange values', () => {

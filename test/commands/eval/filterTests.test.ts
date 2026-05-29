@@ -585,6 +585,21 @@ describe('filterTests', () => {
       expect(result.every((t: TestCase) => mockTestSuite.tests!.includes(t))).toBe(true);
     });
 
+    it('should return the same sample when given the same seed', async () => {
+      const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
+        throw new Error('seeded sampling should not use Math.random');
+      });
+      try {
+        const first = await filterTests(mockTestSuite, { sample: 2, sampleSeed: 'stable-run' });
+        const second = await filterTests(mockTestSuite, { sample: 2, sampleSeed: 'stable-run' });
+
+        expect(first.map((test) => test.vars?.var1)).toEqual(second.map((test) => test.vars?.var1));
+        expect(randomSpy).not.toHaveBeenCalled();
+      } finally {
+        randomSpy.mockRestore();
+      }
+    });
+
     it('should throw error if sample is not a number', async () => {
       await expect(filterTests(mockTestSuite, { sample: 'invalid' })).rejects.toThrow(
         'sample must be a number, got: invalid',

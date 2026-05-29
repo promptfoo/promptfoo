@@ -10,7 +10,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type UnifiedConfig } from '../../../src/types/index';
+import { type TestCase, type UnifiedConfig } from '../../../src/types/index';
 import {
   ConfigResolutionError,
   combineConfigs,
@@ -1631,6 +1631,42 @@ describe('resolveConfigs', () => {
     expect(testSuite.prompts[0].raw).toBe(prompt);
     expect(testSuite.tests).toEqual(externalTests);
     expect(testSuite.scenarios).toEqual(scenarios);
+  });
+
+  it('should apply configured seeded sampling independently to default config scenarios', async () => {
+    const createDefaultConfig = (): Partial<UnifiedConfig> => ({
+      prompts: ['Hello {{position}}'],
+      providers: ['echo'],
+      commandLineOptions: {
+        filterSample: 2,
+        filterSampleSeed: 'stable-run',
+      },
+      scenarios: ['A', 'B'].map((group) => ({
+        config: [{}],
+        tests: ['0', '1', '2', '3'].map((position) => ({
+          vars: { group, position },
+        })),
+      })),
+    });
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{position}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const first = await resolveConfigs({}, createDefaultConfig());
+    const second = await resolveConfigs({}, createDefaultConfig());
+    const selectedPositions = (config: Awaited<ReturnType<typeof resolveConfigs>>) =>
+      config.testSuite.scenarios?.map((scenario) =>
+        scenario.tests.map((test) => test.vars?.position),
+      );
+
+    const firstPositions = selectedPositions(first);
+    expect(firstPositions).toEqual(selectedPositions(second));
+    expect(firstPositions?.every((positions) => positions.length === 2)).toBe(true);
+    expect(firstPositions?.[0]).not.toEqual(firstPositions?.[1]);
   });
 
   it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {

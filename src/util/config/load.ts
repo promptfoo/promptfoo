@@ -877,18 +877,18 @@ export async function resolveConfigs(
   );
 
   // Parse testCases for each scenario
-  if (
-    fileConfig.scenarios &&
-    (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
-  ) {
-    fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+  if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
+    config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
-    fileConfig.scenarios = fileConfig.scenarios.flat();
-    // Update config.scenarios with the flattened array
-    config.scenarios = fileConfig.scenarios;
+    config.scenarios = config.scenarios.flat();
   }
-  if (Array.isArray(fileConfig.scenarios)) {
-    for (const scenario of fileConfig.scenarios) {
+  if (Array.isArray(config.scenarios)) {
+    const scenarioCommandLineOptions =
+      fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+    const filterSample = cmdObj.filterSample ?? scenarioCommandLineOptions?.filterSample;
+    const filterSampleSeed =
+      cmdObj.filterSampleSeed ?? scenarioCommandLineOptions?.filterSampleSeed;
+    for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
@@ -910,7 +910,9 @@ export async function resolveConfigs(
           firstN: cmdObj.filterFirstN,
           pattern: cmdObj.filterPattern,
           failing: cmdObj.filterFailing,
-          sample: cmdObj.filterSample,
+          sample: filterSample,
+          sampleSeed:
+            filterSampleSeed === undefined ? undefined : `${filterSampleSeed}:${scenarioIndex}`,
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');
