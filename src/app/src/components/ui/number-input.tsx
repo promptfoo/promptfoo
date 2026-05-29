@@ -151,12 +151,7 @@ function NumberInput({
         )}
       </div>
       {hasFeedback && (
-        <HelperText
-          id={feedbackId}
-          error={hasError}
-          role={hasError ? 'alert' : undefined}
-          className={cn(disabled && 'opacity-50')}
-        >
+        <HelperText id={feedbackId} error={hasError} className={cn(disabled && 'opacity-50')}>
           {errorMessage || helperText}
         </HelperText>
       )}
