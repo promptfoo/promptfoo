@@ -535,8 +535,14 @@ export async function writeOutput(
             '[Output] Falling back to in-place JSONL rewrite because the output directory is not writable',
           );
           await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
-          await fsPromises.writeFile(jsonlOutputPath, '');
-          await appendJsonlResults(jsonlOutputPath, evalRecord);
+          const previousOutput = await fsPromises.readFile(jsonlOutputPath);
+          try {
+            await fsPromises.writeFile(jsonlOutputPath, '');
+            await appendJsonlResults(jsonlOutputPath, evalRecord);
+          } catch (rewriteError) {
+            await fsPromises.writeFile(jsonlOutputPath, previousOutput);
+            throw rewriteError;
+          }
           return;
         }
         throw error;
