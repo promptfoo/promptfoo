@@ -351,7 +351,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       setIsStreaming(true);
 
       const newRecentEvals = await fetchRecentFileEvals();
-      if (!newRecentEvals || newRecentEvals.length === 0) {
+      if (!newRecentEvals) {
+        setIsStreaming(false);
+        return;
+      }
+      if (newRecentEvals.length === 0) {
         clearEvalState();
         if (fetchId) {
           navigate(EVAL_ROUTES.ROOT, { replace: true });
@@ -384,7 +388,9 @@ export default function Eval({ fetchId }: EvalOptions) {
       const updatedEvalId = scopedEvalId ?? latestEvalId;
       const shouldReload =
         fetchId === null
-          ? scopedEvalId === undefined || scopedEvalId === currentEvalIdRef.current
+          ? scopedEvalId === undefined ||
+            scopedEvalId === currentEvalIdRef.current ||
+            scopedEvalId === latestEvalId
           : scopedEvalId === fetchId;
       if (shouldReload) {
         setEvalId(updatedEvalId);
