@@ -106,7 +106,7 @@ describe('programmatic JSONL output', () => {
     );
   });
 
-  it('preserves top-level token usage when finalizing persisted rows', async () => {
+  it('preserves provider and model-graded assertion token usage when finalizing persisted rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
@@ -120,12 +120,37 @@ describe('programmatic JSONL output', () => {
         },
       }),
     };
+    const gradingProvider: ApiProvider = {
+      id: () => 'grading-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({
+          pass: true,
+          score: 1,
+          reason: 'Test passed',
+        }),
+        tokenUsage: {
+          total: 9,
+          prompt: 5,
+          completion: 4,
+        },
+      }),
+    };
 
     await evaluate({
       outputPath,
       prompts: ['Test prompt'],
       providers: [provider],
-      tests: [{ vars: {} }],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output should be valid',
+              provider: gradingProvider,
+            },
+          ],
+        },
+      ],
       writeLatestResults: true,
     });
 
@@ -135,6 +160,13 @@ describe('programmatic JSONL output', () => {
       prompt: 4,
       completion: 2,
       numRequests: 1,
+      assertions: {
+        ...createEmptyTokenUsage().assertions,
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      },
     });
   });
 
