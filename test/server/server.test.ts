@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import http from 'node:http';
 
+import { Server as SocketIOServer } from 'socket.io';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -249,6 +250,7 @@ describe('server', () => {
     });
 
     it('should invalidate the prompts cache when an updated eval has no results', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
       vi.mocked(readSignalEvalId).mockReturnValue('eval-with-prompts');
       vi.mocked(Eval.findById).mockResolvedValue({
         getResultsCount: vi.fn().mockResolvedValue(0),
@@ -261,6 +263,31 @@ describe('server', () => {
 
       watcherCallback?.();
       await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(emitSpy).not.toHaveBeenCalledWith('update', expect.anything());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should invalidate the prompts cache and emit when an updated eval has results', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      vi.mocked(readSignalEvalId).mockReturnValue('eval-with-results');
+      vi.mocked(Eval.findById).mockResolvedValue({
+        id: 'eval-with-results',
+        getResultsCount: vi.fn().mockResolvedValue(1),
+      } as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+      const watcherCallback = vi.mocked(setupSignalWatcher).mock.calls[0]?.[0];
+      expect(watcherCallback).toBeTypeOf('function');
+
+      watcherCallback?.();
+      await vi.waitFor(() => {
+        expect(promptCacheService.invalidate).toHaveBeenCalledOnce();
+        expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-with-results' });
+      });
 
       triggerSignal('SIGINT');
       await serverPromise;
