@@ -65,11 +65,13 @@ export function prepareComments(
     return rankB - rankA;
   });
 
-  // Separate line-specific comments from general PR comments
+  // Separate line-specific comments from general PR comments.
+  // File-only findings (line: null) must go to generalComments — GitHub rejects inline
+  // review comments that have a path but no line number.
   // Filter out severity='none' comments - they shouldn't be posted separately
-  const lineComments = sortedComments.filter((c) => c.file && c.finding);
+  const lineComments = sortedComments.filter((c) => c.file && c.line != null && c.finding);
   const generalComments = sortedComments.filter(
-    (c) => !c.file && c.finding && c.severity !== CodeScanSeverity.NONE,
+    (c) => (!c.file || c.line == null) && c.finding && c.severity !== CodeScanSeverity.NONE,
   );
 
   // Check if we only have "none" severity comments (i.e., no real vulnerabilities)
