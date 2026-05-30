@@ -2901,9 +2901,11 @@ describe('OpenAI Realtime Provider', () => {
       await promise;
 
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
       expect(constructedUrl).toBe(
         'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
       );
+      expect(wsOptions.headers['X-OpenAI-Originator']).toBe('promptfoo');
     });
 
     it('uses the GA realtime wire shape without the beta header', async () => {
