@@ -39,7 +39,12 @@ import {
   resolveConfigs,
 } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import {
+  filterOutputPathsAfterStreaming,
+  printBorder,
+  setupEnv,
+  writeMultipleOutputs,
+} from '../util/index';
 import invariant from '../util/invariant';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -985,9 +990,10 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
-    if (paths.length) {
-      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+    const outputPaths = filterOutputPathsAfterStreaming(evalRecord, paths);
+    if (outputPaths.length) {
+      await writeMultipleOutputs(outputPaths, evalRecord, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${outputPaths.join(', ')}`));
     }
 
     telemetry.record('command_used', {
