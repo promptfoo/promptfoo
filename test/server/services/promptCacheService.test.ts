@@ -43,4 +43,15 @@ describe('PromptCacheService', () => {
     await expect(service.getAll()).resolves.toEqual([{ id: 'fresh' }]);
     expect(getPrompts).toHaveBeenCalledTimes(2);
   });
+
+  it('retries after a rejected load', async () => {
+    vi.mocked(getPrompts)
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValueOnce([{ id: 'fresh' }] as never);
+    const service = new PromptCacheService();
+
+    await expect(service.getAll()).rejects.toThrow('database unavailable');
+    await expect(service.getAll()).resolves.toEqual([{ id: 'fresh' }]);
+    expect(getPrompts).toHaveBeenCalledTimes(2);
+  });
 });
