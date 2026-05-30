@@ -35,14 +35,106 @@ export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
 }
 
+function validateLayerDefinition(
+  repoRoot: string,
+  configPath: string,
+  layer: LayerDefinition,
+): Array<{ layerName: string; root: string }> {
+  if (typeof layer.name !== 'string' || layer.name.length === 0) {
+    throw new Error(`${configPath} contains a layer without a name.`);
+  }
+  if (!Array.isArray(layer.roots) || layer.roots.length === 0) {
+    throw new Error(`Architecture layer "${layer.name}" must declare roots.`);
+  }
+  if (!Array.isArray(layer.allowedDependencies)) {
+    throw new Error(`Architecture layer "${layer.name}" must declare allowedDependencies.`);
+  }
+  if (
+    layer.allowedImportPaths &&
+    (!Array.isArray(layer.allowedImportPaths) ||
+      layer.allowedImportPaths.some(
+        (allowedImportPath) =>
+          typeof allowedImportPath !== 'string' ||
+          !fs.existsSync(path.join(repoRoot, allowedImportPath)),
+      ))
+  ) {
+    throw new Error(
+      `Architecture layer "${layer.name}" contains an invalid allowedImportPaths entry.`,
+    );
+  }
+
+  return layer.roots.map((root) => {
+    if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
+      throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
+    }
+    return { layerName: layer.name, root };
+  });
+}
+
+function validateDependencies(config: LayerConfig, layerNames: Set<string>): void {
+  for (const layer of config.layers) {
+    for (const allowedDependency of layer.allowedDependencies) {
+      if (typeof allowedDependency !== 'string' || !layerNames.has(allowedDependency)) {
+        throw new Error(
+          `Architecture layer "${layer.name}" allows unknown dependency "${String(allowedDependency)}".`,
+        );
+      }
+    }
+  }
+}
+
+function validateAliases(repoRoot: string, aliases: Record<string, string> = {}): void {
+  for (const [alias, target] of Object.entries(aliases)) {
+    if (typeof target !== 'string' || !fs.existsSync(path.join(repoRoot, target))) {
+      throw new Error(`Architecture alias "${alias}" points to missing path "${String(target)}".`);
+    }
+  }
+}
+
+function validateRootsDoNotOverlap(
+  configuredRoots: Array<{ layerName: string; root: string }>,
+): void {
+  for (let index = 0; index < configuredRoots.length; index++) {
+    const root = configuredRoots[index];
+    for (const otherRoot of configuredRoots.slice(index + 1)) {
+      if (isWithinRoot(root.root, otherRoot.root) || isWithinRoot(otherRoot.root, root.root)) {
+        throw new Error(
+          `Architecture roots "${root.root}" (${root.layerName}) and "${otherRoot.root}" (${otherRoot.layerName}) overlap.`,
+        );
+      }
+    }
+  }
+}
+
 export function readLayerConfig(repoRoot: string): LayerConfig {
   const configPath = path.join(repoRoot, 'architecture/layers.json');
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LayerConfig;
-  for (const layer of config.layers) {
-    if (!Array.isArray(layer.allowedDependencies)) {
-      throw new Error(`Architecture layer "${layer.name}" must declare allowedDependencies.`);
-    }
+
+  if (!config || typeof config !== 'object' || !Array.isArray(config.layers)) {
+    throw new Error(`${configPath} must define a layers array.`);
   }
+  if (
+    typeof config.publicFacade !== 'string' ||
+    !fs.existsSync(path.join(repoRoot, config.publicFacade))
+  ) {
+    throw new Error(`${configPath} must define an existing publicFacade path.`);
+  }
+
+  const layerNames = new Set<string>();
+  const configuredRoots: Array<{ layerName: string; root: string }> = [];
+
+  for (const layer of config.layers) {
+    if (layerNames.has(layer.name)) {
+      throw new Error(`${configPath} contains duplicate layer "${layer.name}".`);
+    }
+    layerNames.add(layer.name);
+    configuredRoots.push(...validateLayerDefinition(repoRoot, configPath, layer));
+  }
+
+  validateDependencies(config, layerNames);
+  validateAliases(repoRoot, config.aliases);
+  validateRootsDoNotOverlap(configuredRoots);
+
   return config;
 }
 
@@ -165,11 +257,17 @@ export function resolveInternalModule(
     return undefined;
   }
 
-  const unresolvedPath = aliasedPath
-    ? path.resolve(repoRoot, aliasedPath)
-    : specifier.startsWith('.')
-      ? path.resolve(path.dirname(path.join(repoRoot, importerRelativePath)), specifier)
-      : path.resolve(repoRoot, specifier);
+  let unresolvedPath: string;
+  if (aliasedPath) {
+    unresolvedPath = path.resolve(repoRoot, aliasedPath);
+  } else if (specifier.startsWith('.')) {
+    unresolvedPath = path.resolve(
+      path.dirname(path.join(repoRoot, importerRelativePath)),
+      specifier,
+    );
+  } else {
+    unresolvedPath = path.resolve(repoRoot, specifier);
+  }
 
   const runtimeExtension = path.extname(unresolvedPath);
   const runtimeSourceCandidates = (
@@ -287,12 +385,16 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
       }
 
       const importerConfig = layersByName.get(importerLayer);
+      const allowedLayerDependency =
+        importedLayer === importerLayer ||
+        (importerConfig?.allowedDependencies.includes(importedLayer) ?? false);
+
       if (
         importedLayer !== importerLayer &&
         resolvedImport !== publicFacade &&
         !leafLayers.has(importerLayer) &&
         importerConfig &&
-        !(importerConfig.allowedDependencies ?? []).includes(importedLayer)
+        !allowedLayerDependency
       ) {
         violations.push({
           kind: 'layer',
@@ -306,6 +408,7 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
 
       if (
         importedLayer !== importerLayer &&
+        allowedLayerDependency &&
         importerConfig?.allowedImportPaths &&
         !importerConfig.allowedImportPaths.includes(resolvedImport)
       ) {

@@ -175,6 +175,8 @@ describe('readLayerConfig', () => {
   beforeEach(() => {
     repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'readlayerconfig-'));
     fs.mkdirSync(path.join(repoRoot, 'architecture'), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, 'src/core'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'src/index.ts'), '');
   });
 
   afterEach(() => {
@@ -192,6 +194,53 @@ describe('readLayerConfig', () => {
 
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" must declare allowedDependencies.',
+    );
+  });
+
+  it('rejects dependencies on unknown layers', () => {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        layers: [{ name: 'core', roots: ['src/core'], allowedDependencies: ['missing'] }],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" allows unknown dependency "missing".',
+    );
+  });
+
+  it('rejects aliases that point to missing paths', () => {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        aliases: { '@missing': 'src/missing' },
+        layers: [{ name: 'core', roots: ['src/core'], allowedDependencies: [] }],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture alias "@missing" points to missing path "src/missing".',
+    );
+  });
+
+  it('rejects overlapping layer roots', () => {
+    fs.mkdirSync(path.join(repoRoot, 'src/core/nested'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        layers: [
+          { name: 'core', roots: ['src/core'], allowedDependencies: [] },
+          { name: 'nested', roots: ['src/core/nested'], allowedDependencies: [] },
+        ],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture roots "src/core" (core) and "src/core/nested" (nested) overlap.',
     );
   });
 });
@@ -349,24 +398,21 @@ describe('findViolations', () => {
     ]);
   });
 
-  it('treats omitted allowed dependencies as an empty allowlist', () => {
+  it('reports a layer violation without a duplicate path violation', () => {
     write('src/index.ts');
-    write('src/shared/util.ts', 'export const x = 1;');
-    write('src/new/a.ts', "import { x } from '../shared/util';");
+    write('src/shared/not-allowed.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/not-allowed';");
 
     const config = configWithLayerRules();
-    config.layers.push({
-      name: 'new',
-      roots: ['src/new'],
-      allowedDependencies: undefined as unknown as string[],
-    });
+    config.layers[1].allowedDependencies = [];
 
-    expect(findViolations(repoRoot, config)).toMatchObject([
+    expect(findViolations(repoRoot, config)).toEqual([
       {
         kind: 'layer',
-        importer: 'src/new/a.ts',
-        importerLayer: 'new',
-        imported: 'src/shared/util.ts',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        specifier: '@promptfoo/shared/not-allowed',
+        imported: 'src/shared/not-allowed.ts',
         importedLayer: 'shared',
       },
     ]);
@@ -427,6 +473,32 @@ describe('findViolations', () => {
         importerLayer: 'app',
         imported: 'src/shared/not-allowed.ts',
         importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('flags restricted layer dependencies referenced through dynamic imports and exports', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export const x = 1;');
+    write(
+      'src/app/a.ts',
+      `
+        export { x } from '@promptfoo/shared/not-allowed';
+        import('@promptfoo/shared/not-allowed');
+      `,
+    );
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toHaveLength(2);
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        imported: 'src/shared/not-allowed.ts',
+      },
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        imported: 'src/shared/not-allowed.ts',
       },
     ]);
   });
