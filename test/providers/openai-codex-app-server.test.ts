@@ -4472,6 +4472,82 @@ describe('OpenAICodexAppServerProvider', () => {
     ]);
   });
 
+  it('detects repo-local skill calls without accepting wildcard or unrelated skill paths', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Use a repo skill');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_local_skill' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_local_skill', status: 'inProgress' } },
+    });
+
+    for (const [id, command] of [
+      ['cmd_local_skill', '.agents/skills/repo-skill/SKILL.md --help'],
+      ['cmd_wildcard_skill', '.agents/skills/*/SKILL.md --help'],
+      ['cmd_unrelated_skill', '/tmp/unrelated-project/skills/external/SKILL.md --help'],
+    ]) {
+      server.send({
+        method: 'item/completed',
+        params: {
+          threadId: 'thr_local_skill',
+          turnId: 'turn_local_skill',
+          item: {
+            type: 'commandExecution',
+            id,
+            command,
+            cwd: process.cwd(),
+            status: 'completed',
+            exitCode: 0,
+            durationMs: 1,
+          },
+        },
+      });
+    }
+
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_local_skill',
+        turnId: 'turn_local_skill',
+        itemId: 'msg_local_skill',
+        delta: 'Skill used',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_local_skill',
+        turn: { id: 'turn_local_skill', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.metadata?.skillCalls).toEqual([
+      {
+        name: 'repo-skill',
+        path: '.agents/skills/repo-skill/SKILL.md',
+        source: 'heuristic',
+      },
+    ]);
+    expect(result.metadata?.attemptedSkillCalls).toBeUndefined();
+  });
+
   it('records attempted repo-local skill calls when command execution fails', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
