@@ -544,6 +544,45 @@ describe('GoogleAuthManager', () => {
       getOAuthClientSpy.mockRestore();
     });
 
+    it('should suppress expected metadata lookup warnings during optional probes', async () => {
+      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockImplementation(async () => {
+          process.emitWarning(
+            'received unexpected error = All promises were rejected code = UNKNOWN',
+            'MetadataLookupWarning',
+          );
+          throw new Error('no default credentials');
+        });
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(emitWarningSpy).not.toHaveBeenCalled();
+      } finally {
+        getOAuthClientSpy.mockRestore();
+        emitWarningSpy.mockRestore();
+      }
+    });
+
+    it('should forward unrelated warnings during optional probes', async () => {
+      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockImplementation(async () => {
+          process.emitWarning('different warning', 'MetadataLookupWarning');
+          throw new Error('no default credentials');
+        });
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(emitWarningSpy).toHaveBeenCalledWith('different warning', 'MetadataLookupWarning');
+      } finally {
+        getOAuthClientSpy.mockRestore();
+        emitWarningSpy.mockRestore();
+      }
+    });
+
     it('should clear cached default credential probe results', async () => {
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')
