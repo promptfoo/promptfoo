@@ -22,6 +22,12 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  buildCodexSkillMetadata,
+  extractCodexSkillPathCandidates,
+  getCodexSkillMetadataFields,
+  getCodexSkillRootPrefixes,
+} from './codexSkillMetadata';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -29,7 +35,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-  SkillCallEntry,
 } from '../../types/index';
 
 /**
@@ -695,145 +700,30 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
-    const prefixes = new Set<string>();
+    const resolvedWorkingDir = workingDir
+      ? path.resolve(workingDir).replace(/\\/g, '/')
+      : undefined;
 
-    const addPrefix = (candidate?: string) => {
-      if (!candidate) {
-        return;
-      }
-
-      const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
-      if (normalized) {
-        prefixes.add(normalized);
-      }
-    };
-
-    addPrefix(env.CODEX_HOME);
-    // Codex's system skill root is documented as /etc/codex/skills.
-    addPrefix('/etc/codex');
-
-    if (workingDir) {
-      const resolvedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
-      addPrefix(path.posix.join(resolvedWorkingDir, '.agents'));
-
-      const gitRoot = this.findGitRepositoryRoot(resolvedWorkingDir);
-      if (gitRoot) {
-        addPrefix(path.posix.join(gitRoot.replace(/\\/g, '/'), '.agents'));
-      }
-    }
-
-    const homeDir = env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE;
-    if (homeDir) {
-      addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
-    }
-
-    return Array.from(prefixes);
-  }
-
-  private isValidCodexSkillName(name: string): boolean {
-    return /^[A-Za-z0-9._:-]+$/.test(name);
-  }
-
-  private extractSkillPathCandidates(
-    text: string,
-    skillRootPrefixes: readonly string[] = [],
-  ): Array<{ name: string; path: string }> {
-    const matches = new Map<string, { name: string; path: string }>();
-
-    for (const rawToken of text.split(/\s+/)) {
-      const token = rawToken.replace(/^[`"'([{<]+|[`"',;:)\]}>]+$/g, '').trim();
-      if (!token) {
-        continue;
-      }
-
-      const normalizedPath = token.replace(/\\/g, '/');
-      const repoMatch = normalizedPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
-      if (repoMatch) {
-        if (this.isValidCodexSkillName(repoMatch[1])) {
-          matches.set(normalizedPath, { name: repoMatch[1], path: normalizedPath });
-        }
-        continue;
-      }
-
-      const matchingRoot = skillRootPrefixes.find((prefix) =>
-        normalizedPath.startsWith(`${prefix}/skills/`),
-      );
-      if (!matchingRoot) {
-        continue;
-      }
-
-      const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
-      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-      if (customRootMatch && this.isValidCodexSkillName(customRootMatch[1])) {
-        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
-      }
-    }
-
-    return Array.from(matches.values());
-  }
-
-  private extractSkillCallsFromItems(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-    options: { requireSuccessfulCommand?: boolean } = {},
-  ): SkillCallEntry[] {
-    const skillCalls = new Map<
-      string,
-      {
-        name: string;
-        path: string;
-      }
-    >();
-
-    for (const item of items) {
-      if (item?.type !== 'command_execution') {
-        continue;
-      }
-      if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
-        continue;
-      }
-
-      const command =
-        typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
-      if (!command) {
-        continue;
-      }
-
-      for (const skillPath of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
-        const existing = skillCalls.get(skillPath.path) ?? {
-          name: skillPath.name,
-          path: skillPath.path,
-        };
-
-        skillCalls.set(skillPath.path, existing);
-      }
-    }
-
-    return Array.from(skillCalls.values()).map((skillCall) => ({
-      name: skillCall.name,
-      path: skillCall.path,
-      source: 'heuristic',
-    }));
-  }
-
-  private buildSkillMetadata(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-  ): { attemptedSkillCalls: SkillCallEntry[]; skillCalls: SkillCallEntry[] } | undefined {
-    if (!Array.isArray(items) || items.length === 0) {
-      return undefined;
-    }
-
-    const attemptedSkillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes);
-    const skillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes, {
-      requireSuccessfulCommand: true,
+    return getCodexSkillRootPrefixes({
+      codexHome: env.CODEX_HOME,
+      gitRepositoryRoot: resolvedWorkingDir
+        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        : undefined,
+      homeDir: env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE,
+      workingDir: resolvedWorkingDir,
     });
+  }
 
-    if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
-      return undefined;
-    }
-
-    return { attemptedSkillCalls, skillCalls };
+  private buildSkillMetadata(items: any[], skillRootPrefixes: readonly string[] = []) {
+    return buildCodexSkillMetadata(items, skillRootPrefixes, {
+      getCommand: (item: any) =>
+        item?.type === 'command_execution' &&
+        typeof item.command === 'string' &&
+        item.command.trim()
+          ? item.command
+          : undefined,
+      isSuccessfulCommand: (item: any) => this.isSuccessfulCommandExecution(item),
+    });
   }
 
   private isSuccessfulCommandExecution(item: any): boolean {
@@ -1525,7 +1415,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const skillCandidates = new Map<string, { name: string; path: string }>();
 
     if (command) {
-      for (const skill of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+      for (const skill of extractCodexSkillPathCandidates(command, skillRootPrefixes)) {
         skillCandidates.set(skill.path, skill);
       }
     }
@@ -2250,12 +2140,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
-    return {
-      ...(skillMetadata.skillCalls.length > 0 ? { skillCalls: skillMetadata.skillCalls } : {}),
-      ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
-        ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
-        : {}),
-    };
+    return getCodexSkillMetadataFields(skillMetadata);
   }
 
   private buildCodexTokenUsage(turnUsage: any): ProviderResponse['tokenUsage'] {
