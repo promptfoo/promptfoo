@@ -106,7 +106,7 @@ describe('programmatic JSONL output', () => {
     );
   });
 
-  it('exports rows with sensitive HTTP metadata redacted', async () => {
+  it('exports non-persisted rows with sensitive HTTP metadata redacted', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
