@@ -74,9 +74,10 @@ default `src/node/evaluatorRuntime.ts` adapter owns result persistence, JSONL
 writer construction, and resume checkpoint updates while the evaluator
 continues to orchestrate evaluation behavior.
 
-The checker also resolves source aliases such as `@promptfoo/*` and `@app/*`.
-That matters most for the browser app, which currently reaches several
-transitional root modules through Vite aliases.
+The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
+The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
+does not exempt a browser import from the same layer and path checks as a
+relative import.
 
 ## Browser Import Ratchet
 
