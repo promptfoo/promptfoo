@@ -101,6 +101,43 @@ describe('evaluator', () => {
     });
   });
 
+  describe('fetchResultsBatched', () => {
+    it('returns in-memory results in batches for non-persisted evals', async () => {
+      const eval_ = new Eval({});
+      const results = Array.from({ length: 3 }, (_, testIdx) => {
+        return new EvalResult({
+          id: `in-memory-${testIdx}`,
+          evalId: eval_.id,
+          promptIdx: 0,
+          testIdx,
+          testCase: { vars: { testIdx } },
+          prompt: { raw: 'Test prompt', label: 'Test prompt' },
+          provider: { id: 'test-provider' },
+          response: { output: `Result ${testIdx}` },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        });
+      });
+      await eval_.setResults(results);
+
+      const batches: EvalResult[][] = [];
+      for await (const batch of eval_.fetchResultsBatched(2)) {
+        batches.push(batch);
+      }
+
+      expect(batches.map((batch) => batch.map((result) => result.id))).toEqual([
+        ['in-memory-0', 'in-memory-1'],
+        ['in-memory-2'],
+      ]);
+    });
+  });
+
   describe('setResults', () => {
     it('should persist result rows when replacing results on a persisted eval', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });

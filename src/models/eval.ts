@@ -722,6 +722,13 @@ export default class Eval {
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
+    if (!this.persisted) {
+      for (let offset = 0; offset < this.results.length; offset += batchSize) {
+        yield this.results.slice(offset, offset + batchSize);
+      }
+      return;
+    }
+
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
       yield batch;
     }

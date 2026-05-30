@@ -3032,7 +3032,9 @@ class Evaluator {
         ? [evalRecord.config.outputPath]
         : [];
 
-    this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+    this.fileWriters = jsonlFiles.map(
+      (p) => new JsonlFileWriter(p, { append: Boolean(cliState.resume) }),
+    );
 
     // Create rate limit registry for adaptive concurrency control
     this.rateLimitRegistry = createRateLimitRegistry({

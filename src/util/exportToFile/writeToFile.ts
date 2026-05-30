@@ -3,8 +3,11 @@ import { createWriteStream, type WriteStream } from 'fs';
 export class JsonlFileWriter {
   private writeStream: WriteStream;
 
-  constructor(private filePath: string) {
-    this.writeStream = createWriteStream(filePath, { flags: 'a' });
+  constructor(
+    private filePath: string,
+    { append = false }: { append?: boolean } = {},
+  ) {
+    this.writeStream = createWriteStream(filePath, { flags: append ? 'a' : 'w' });
   }
 
   async write(data: Record<string, any>): Promise<void> {

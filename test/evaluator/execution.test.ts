@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -92,13 +93,47 @@ describeEvaluator('evaluator execution control', () => {
     };
 
     try {
+      fs.writeFileSync(outputPath, 'stale row\n');
       const evalRecord = new Eval({ outputPath });
       await evaluate(testSuite, evalRecord, {});
 
       expect(closeSpy).toHaveBeenCalledOnce();
-      expect(fs.readFileSync(outputPath, 'utf8').trim()).not.toBe('');
+      const output = fs.readFileSync(outputPath, 'utf8');
+      expect(output).not.toContain('stale row');
+      expect(output.trim()).not.toBe('');
     } finally {
       closeSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('appends JSONL rows when resuming an evaluation', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      fs.writeFileSync(outputPath, 'existing row\n');
+      cliState.resume = true;
+
+      const evalRecord = new Eval({ outputPath });
+      await evaluate(testSuite, evalRecord, {});
+
+      const output = fs.readFileSync(outputPath, 'utf8');
+      expect(output).toContain('existing row');
+      expect(output.trim().split('\n')).toHaveLength(2);
+    } finally {
+      cliState.resume = false;
       fs.rmSync(outputPath, { force: true });
     }
   });
