@@ -171,8 +171,7 @@ describe('Redteam Recon Routes', () => {
       const response = await request(app).get('/api/redteam/recon/pending');
 
       expect(response.status).toBe(400);
-      // Error message now includes regeneration guidance
-      expect(response.body.error).toContain('Invalid pending recon file format');
+      expect(response.body.error).toContain('Invalid pending recon configuration');
       expect(response.body.error).toContain('Run `promptfoo redteam recon` again');
       expect(response.body.details).toBeUndefined();
       // Corrupted file should be auto-deleted to prevent repeated failures
@@ -186,7 +185,7 @@ describe('Redteam Recon Routes', () => {
 
       // Malformed JSON now returns 400 (InvalidPendingReconError) instead of 500
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('malformed JSON');
+      expect(response.body.error).toContain('Invalid pending recon configuration');
       expect(response.body.error).toContain('Run `promptfoo redteam recon` again');
       // Corrupted file should be auto-deleted to prevent repeated failures
       expect(fs.existsSync(pendingReconPath)).toBe(false);

@@ -77,7 +77,7 @@ export const DEFAULT_APPLICATION_DEFINITION: ApplicationDefinition =
  * the field was not actually populated with real data:
  * - Empty strings
  * - "none", "n/a", "na"
- * - Phrases starting with "not " (e.g., "not specified", "not provided")
+ * - Placeholder "not ..." phrases (e.g., "not specified", "not provided")
  * - Phrases starting with "none " (e.g., "none mentioned")
  * - Phrases like "no formal", "no built-in" (but NOT "nosql database")
  *
@@ -96,7 +96,9 @@ export function isValueMeaningful(value: string | undefined): boolean {
     lower === 'none' ||
     lower === 'n/a' ||
     lower === 'na' ||
-    lower.startsWith('not ') || // "not specified", "not mentioned", "not provided", "not applicable", "not found"
+    /^not\s+(specified|mentioned|provided|applicable|found|detected|available|identified|documented|known|observed|present|set|disclosed|given|stated|described|configured)\b/.test(
+      lower,
+    ) ||
     lower.startsWith('none ') || // "none mentioned", "none specified"
     /^no\s+(formal|built-in|additional|specific|explicit|dedicated|documented|known|particular|special)\b/.test(
       lower,

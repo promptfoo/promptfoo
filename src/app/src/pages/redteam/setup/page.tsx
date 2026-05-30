@@ -126,7 +126,10 @@ export default function RedTeamSetupPage() {
       // Skip setup modal if recon was applied
       setSetupModalOpen(false);
       markSetupAsSeen();
-      toast.showToast('Recon configuration applied! Review and configure your target.', 'success');
+      toast.showToast(
+        'Recon configuration applied! Configure your target before reviewing.',
+        'success',
+      );
     },
     [markSetupAsSeen, toast],
   );

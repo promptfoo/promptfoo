@@ -57,6 +57,17 @@ describe('ReconSummaryBanner', () => {
     expect(screen.getByText('.../projects/my-app')).toBeInTheDocument();
   });
 
+  it('should truncate Windows-style codebase directories', () => {
+    mockReconContext.mockReturnValue({
+      source: 'recon-cli',
+      timestamp: Date.now(),
+      codebaseDirectory: 'C:\\Users\\test\\projects\\my-app',
+    });
+
+    render(<ReconSummaryBanner />);
+    expect(screen.getByText('.../projects/my-app')).toBeInTheDocument();
+  });
+
   it('should display key files analyzed count', () => {
     mockReconContext.mockReturnValue({
       source: 'recon-cli',

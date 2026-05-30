@@ -99,7 +99,7 @@ describe('usePendingRecon', () => {
       });
     });
 
-    it('should apply config and navigate to review tab on success', async () => {
+    it('should apply config and navigate to target config tab on success', async () => {
       const mockData = {
         config: {
           description: 'Recon config',
@@ -142,11 +142,11 @@ describe('usePendingRecon', () => {
       expect(appliedConfig.plugins).toEqual(['pii:direct', 'sql-injection']);
       expect(appliedConfig.purpose).toBe('Healthcare app');
 
-      // Should navigate to review tab
-      expect(mockNavigate).toHaveBeenCalledWith('/redteam/setup#5', { replace: true });
+      // Should navigate to target config tab before review/run
+      expect(mockNavigate).toHaveBeenCalledWith('/redteam/setup#1', { replace: true });
 
       // Should call the callback
-      expect(onReconApplied).toHaveBeenCalledWith(5);
+      expect(onReconApplied).toHaveBeenCalledWith(1);
 
       // Should have recon context
       expect(result.current.reconContext).toEqual({

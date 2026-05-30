@@ -524,7 +524,12 @@ function addIndustryPlugins(pluginIds: Set<string>, industry: string | undefined
     pluginIds.add('harmful:specialized-advice');
   }
 
-  if (normalizedIndustry.includes('finance') || normalizedIndustry.includes('banking')) {
+  if (
+    normalizedIndustry.includes('finance') ||
+    normalizedIndustry.includes('financial') ||
+    normalizedIndustry.includes('fintech') ||
+    normalizedIndustry.includes('banking')
+  ) {
     pluginIds.add('harmful:specialized-advice');
   }
 }

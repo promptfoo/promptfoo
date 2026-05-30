@@ -73,6 +73,30 @@ describe('recon target preparation', () => {
     expect(target.skippedEntries).toBeGreaterThanOrEqual(5);
   });
 
+  it('follows the user-selected symlink root while skipping nested symlinks', () => {
+    const linkedSourceDir = path.join(tempDir, 'linked-source');
+    const outsideFile = path.join(tempDir, 'outside.txt');
+    fs.writeFileSync(path.join(sourceDir, 'README.md'), 'allowed docs');
+    fs.writeFileSync(outsideFile, 'outside content');
+
+    try {
+      fs.symlinkSync(sourceDir, linkedSourceDir, 'dir');
+      fs.symlinkSync(outsideFile, path.join(sourceDir, 'outside-link.txt'));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') {
+        return;
+      }
+      throw err;
+    }
+
+    const target = prepareReconTarget(linkedSourceDir, scratchpadDir);
+
+    expect(fs.readFileSync(path.join(target.directory, 'README.md'), 'utf8')).toBe('allowed docs');
+    expect(fs.existsSync(path.join(target.directory, 'outside-link.txt'))).toBe(false);
+    expect(target.copiedFiles).toBe(1);
+    expect(target.skippedEntries).toBeGreaterThanOrEqual(1);
+  });
+
   it('resolves absolute custom exclusions relative to the scanned root', () => {
     const secretsDir = path.join(sourceDir, 'secrets');
     fs.mkdirSync(secretsDir, { recursive: true });

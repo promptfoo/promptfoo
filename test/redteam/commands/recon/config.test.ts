@@ -272,6 +272,14 @@ describe('buildRedteamConfig', () => {
     expect(config.redteam?.plugins).toContainEqual({ id: 'harmful:illegal-activities' });
   });
 
+  it('should add specialized-advice for common financial industry labels', () => {
+    for (const industry of ['Financial services', 'financial planning', 'FinTech']) {
+      const config = buildRedteamConfig({ purpose: 'Test', industry });
+
+      expect(config.redteam?.plugins).toContainEqual({ id: 'harmful:specialized-advice' });
+    }
+  });
+
   it('should include only single-turn strategies for stateless apps', () => {
     const result: ReconResult = { purpose: 'Test', stateful: false };
     const config = buildRedteamConfig(result);
@@ -538,6 +546,9 @@ describe('isValueMeaningful', () => {
     expect(isValueMeaningful('Healthcare')).toBe(true);
     expect(isValueMeaningful('Patient data, SSN, medical records')).toBe(true);
     expect(isValueMeaningful('A medical assistant application')).toBe(true);
+    expect(isValueMeaningful('Not allowed to provide legal advice')).toBe(true);
+    expect(isValueMeaningful('Not permitted to reveal pricing')).toBe(true);
+    expect(isValueMeaningful('Not authorized to access billing records')).toBe(true);
   });
 });
 
@@ -566,6 +577,20 @@ describe('buildApplicationDefinition', () => {
     expect(def.purpose).toBe('Test app');
     expect(def.features).toBeUndefined();
     expect(def.industry).toBeUndefined();
+  });
+
+  it('should preserve negative security constraints', () => {
+    const result: ReconResult = {
+      purpose: 'Test app',
+      forbiddenTopics: 'Not allowed to provide legal advice',
+      attackConstraints: 'Not permitted to reveal pricing',
+      doesNotHaveAccessTo: 'Not authorized to access billing records',
+    };
+    const def = buildApplicationDefinition(result);
+
+    expect(def.forbiddenTopics).toBe('Not allowed to provide legal advice');
+    expect(def.attackConstraints).toBe('Not permitted to reveal pricing');
+    expect(def.doesNotHaveAccessTo).toBe('Not authorized to access billing records');
   });
 
   it('should generate hasAccessTo from discoveredTools when missing', () => {

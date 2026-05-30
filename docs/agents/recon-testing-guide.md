@@ -22,17 +22,17 @@ doRecon()
   → writePendingReconConfig()
      (writes ~/.promptfoo/pending-recon.json)
   → openBrowserWithRecon()
-     (opens localhost:3000/redteam/setup?source=recon&token=<one-time-token>)
+     (opens localhost:15500/redteam/setup?source=recon&token=<one-time-token>)
                                                          usePendingRecon()
                                                            → Shows loading overlay
-                                                           → callApi('/redteam/recon/pending?token=...')
+                                                           → callSameOriginApi('/redteam/recon/pending?token=...')
                                  GET /api/redteam/recon/pending?token=...
                                    → Reads pending-recon.json
                                    → Returns PendingReconConfig without token
                                                            → applyReconConfig()
                                                            → setFullConfig() to Zustand
                                                            → GET consumes pending file
-                                                           → Navigate to Review tab
+                                                           → Navigate to Target Config tab
                                                            → Show success toast
 ```
 
@@ -183,7 +183,7 @@ Maps recon findings to appropriate plugins.
 | API returns 404                   | Warning toast: "No pending recon configuration found..." |
 | API returns error                 | Error toast with message                                 |
 | Loading state                     | Shows full-page loading overlay with spinner             |
-| Success                           | Navigates to Review tab (#5), shows success toast        |
+| Success                           | Navigates to Target Config tab (#1), shows success toast |
 | Multiple mounts                   | Only fetches once (hasAttemptedLoad ref)                 |
 
 ### ReconSummaryBanner
@@ -251,7 +251,7 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent
 # - Browser opens to redteam setup page with ?source=recon&token=<one-time-token>
 # - Loading overlay appears briefly
 # - ReconSummaryBanner shows on Application Details page
-# - Navigates to Review tab automatically
+# - Navigates to Target Config tab automatically
 # - Success toast appears
 ```
 
@@ -300,7 +300,7 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent
    - [ ] Form fields pre-populated
 
 5. **Browser UI - Review Tab**
-   - [ ] Automatically navigated to Review tab (#5)
+   - [ ] Automatically navigated to Target Config tab (#1)
    - [ ] Description field populated
    - [ ] Plugins summary shows correct count
    - [ ] Strategies summary shows correct count
@@ -328,7 +328,7 @@ npm run local -- redteam recon
 
 # Test: Missing pending file (browser handoff error)
 # 1. Navigate directly to URL without running recon first
-open http://localhost:3000/redteam/setup?source=recon
+open http://localhost:15500/redteam/setup?source=recon
 # Expected:
 # - Error toast indicates that the one-time handoff token is missing
 # - URL cleaned up to /redteam/setup (without ?source=recon)
@@ -430,7 +430,7 @@ describe('usePendingRecon', () => {
     // Render with ?source=recon&token=<generated-token>
     // Verify loading state shown
     // Verify config applied to store
-    // Verify navigation to Review tab
+    // Verify navigation to Target Config tab
   });
 
   it('should show error toast when no pending config', async () => {

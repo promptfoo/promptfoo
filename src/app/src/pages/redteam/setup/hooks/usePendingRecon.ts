@@ -28,10 +28,10 @@ interface UsePendingReconResult {
  * 1. Fetches the pending recon config from the server
  * 2. Applies it to the Zustand store
  * 3. Relies on the successful fetch to consume the single-use handoff
- * 4. Navigates to the Review tab
+ * 4. Navigates to the Target Config tab so the user can configure their endpoint
  * 5. Cleans up the URL
  *
- * @param onReconApplied - Callback when recon is successfully applied (e.g., navigate to Review tab)
+ * @param onReconApplied - Callback when recon is successfully applied (e.g., navigate to Target Config tab)
  * @param onError - Optional callback when loading fails (e.g., show toast notification)
  */
 export function usePendingRecon(
@@ -171,12 +171,12 @@ export function usePendingRecon(
 
         setReconApplied(true);
 
-        // Clean up URL and navigate to Review tab
-        navigate(`/redteam/setup#${SETUP_TAB_INDICES.REVIEW}`, { replace: true });
+        // Clean up URL and navigate to Target Config before review/run.
+        navigate(`/redteam/setup#${SETUP_TAB_INDICES.TARGET_CONFIG}`, { replace: true });
 
         // Notify parent to switch tabs
         if (onReconApplied) {
-          onReconApplied(SETUP_TAB_INDICES.REVIEW);
+          onReconApplied(SETUP_TAB_INDICES.TARGET_CONFIG);
         }
       } catch (err) {
         console.error('Failed to load pending recon config:', err);

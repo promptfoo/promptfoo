@@ -152,6 +152,13 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
 
   // Create an isolated temporary working directory and always remove it afterward.
   const scratchpad = createScratchpad();
+  let scratchpadCleaned = false;
+  const cleanupScratchpad = () => {
+    if (!scratchpadCleaned) {
+      scratchpad.cleanup();
+      scratchpadCleaned = true;
+    }
+  };
   let spinner: ReturnType<typeof ora> | undefined;
 
   try {
@@ -205,6 +212,7 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     const result = await provider.analyze(reconTarget.directory, prompt);
     spinner.succeed('Analysis complete');
     spinner = undefined;
+    cleanupScratchpad();
 
     // Display summary of findings
     displayResults(result, options.verbose);
@@ -263,6 +271,6 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     throw error;
   } finally {
     // Always clean up temporary analysis workspace artifacts.
-    scratchpad.cleanup();
+    cleanupScratchpad();
   }
 }

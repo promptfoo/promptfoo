@@ -113,6 +113,7 @@ export function prepareReconTarget(
 ): PreparedReconTarget {
   const exclusions = buildReconExclusions(additionalExclusions, targetDirectory);
   const resolvedScratchpadDirectory = path.resolve(scratchpadDirectory);
+  const resolvedTargetDirectory = fs.realpathSync(targetDirectory);
   const snapshotRoot = path.join(scratchpadDirectory, 'target');
   const snapshotDirectory = path.join(snapshotRoot, path.basename(targetDirectory) || 'codebase');
   let copiedFiles = 0;
@@ -160,7 +161,7 @@ export function prepareReconTarget(
     copiedFiles += 1;
   };
 
-  copyEntry(targetDirectory, snapshotDirectory, '');
+  copyEntry(resolvedTargetDirectory, snapshotDirectory, '');
 
   return {
     directory: snapshotDirectory,

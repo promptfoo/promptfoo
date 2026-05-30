@@ -36,10 +36,13 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { sendError } from '../utils/errors';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
+const INVALID_PENDING_RECON_MESSAGE =
+  'Invalid pending recon configuration. Run `promptfoo redteam recon` again to regenerate.';
 
 function isLocalhostRequest(req: Request): boolean {
   const remoteAddress = req.socket?.remoteAddress || req.ip || '';
@@ -472,12 +475,12 @@ redteamRouter.head('/recon/pending', async (req: Request, res: Response): Promis
     res.sendStatus(204);
   } catch (error) {
     if (error instanceof InvalidPendingReconError) {
-      res.status(400).json({ error: error.message });
+      logger.warn('Invalid pending recon file during ownership probe', { error });
+      res.status(400).json({ error: INVALID_PENDING_RECON_MESSAGE });
       return;
     }
 
-    logger.error('Failed to verify pending recon file', { error });
-    res.status(500).json({ error: 'Failed to verify pending recon configuration' });
+    sendError(res, 500, 'Failed to verify pending recon configuration', error);
   }
 });
 
@@ -520,17 +523,12 @@ redteamRouter.get('/recon/pending', async (req: Request, res: Response): Promise
     res.json(response);
   } catch (error) {
     if (error instanceof InvalidPendingReconError) {
-      res.status(400).json({
-        error: error.message,
-      });
+      logger.warn('Invalid pending recon file during retrieval', { error });
+      res.status(400).json({ error: INVALID_PENDING_RECON_MESSAGE });
       return;
     }
 
-    logger.error('Failed to read pending recon file', { error });
-    const errorResponse: ReconErrorResponse = {
-      error: 'Failed to read pending recon configuration',
-    };
-    res.status(500).json(errorResponse);
+    sendError(res, 500, 'Failed to read pending recon configuration', error);
   }
 });
 
@@ -566,16 +564,11 @@ redteamRouter.delete('/recon/pending', async (req: Request, res: Response): Prom
     res.json(response);
   } catch (error) {
     if (error instanceof InvalidPendingReconError) {
-      res.status(400).json({
-        error: error.message,
-      });
+      logger.warn('Invalid pending recon file during delete', { error });
+      res.status(400).json({ error: INVALID_PENDING_RECON_MESSAGE });
       return;
     }
 
-    logger.error('Failed to delete pending recon file', { error });
-    const errorResponse: ReconErrorResponse = {
-      error: 'Failed to delete pending recon configuration',
-    };
-    res.status(500).json(errorResponse);
+    sendError(res, 500, 'Failed to delete pending recon configuration', error);
   }
 });

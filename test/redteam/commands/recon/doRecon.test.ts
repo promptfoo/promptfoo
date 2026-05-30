@@ -327,6 +327,8 @@ describe('doRecon', () => {
       );
     });
 
+    expect(mockedCreateScratchpad.mock.results[0]?.value.cleanup).toHaveBeenCalledOnce();
+
     let settled = false;
     reconPromise.then(() => {
       settled = true;
