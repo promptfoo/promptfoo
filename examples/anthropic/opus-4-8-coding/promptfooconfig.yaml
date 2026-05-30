@@ -1,16 +1,22 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Claude Opus 4.7 advanced coding with xhigh effort
+description: Claude Opus 4.8 advanced coding with xhigh effort and adaptive thinking
 
 prompts:
   - |
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-opus-4-7
+  - id: anthropic:messages:claude-opus-4-8
     config:
-      # Opus 4.7 uses adaptive thinking by default and has deprecated temperature
-      # at the model level — do not set temperature here.
-      effort: xhigh # New level introduced with Opus 4.7, between high and max
+      # Opus 4.8 deprecates manual sampling controls (temperature/top_p/top_k) at
+      # the model level — promptfoo omits them automatically, so don't set them here.
+      #
+      # Adaptive thinking is opt-in: without an explicit `thinking` block the model
+      # runs WITHOUT extended thinking even at high effort. Set it to let the model
+      # decide when and how much to reason per request.
+      thinking:
+        type: adaptive
+      effort: xhigh # Recommended starting point for coding/agentic work (between high and max)
       max_tokens: 8000
 
 tests:
