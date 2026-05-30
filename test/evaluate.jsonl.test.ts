@@ -106,7 +106,7 @@ describe('programmatic JSONL output', () => {
     );
   });
 
-  it('exports persisted rows with sensitive HTTP metadata redacted', async () => {
+  it('exports non-persisted rows with sensitive HTTP metadata redacted', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
@@ -135,7 +135,6 @@ describe('programmatic JSONL output', () => {
       prompts: ['Test prompt'],
       providers: [provider],
       tests: [{ vars: { topic: 'weather' } }],
-      writeLatestResults: true,
     });
 
     const [result] = readJsonl(outputPath);

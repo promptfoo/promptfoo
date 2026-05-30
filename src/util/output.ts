@@ -12,6 +12,7 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { sanitizeResultForJsonlArtifact } from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -461,8 +462,9 @@ export async function writeOutput(
     await fsPromises.writeFile(outputPath, '');
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text =
-        batchResults.map((result) => JSON.stringify(toEvaluateResult(result))).join(os.EOL) +
-        os.EOL;
+        batchResults
+          .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
+          .join(os.EOL) + os.EOL;
       await fsPromises.appendFile(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
