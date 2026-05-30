@@ -17,6 +17,7 @@ import {
 } from '../util/config/load';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
+import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateAssertionTokenUsage,
@@ -340,11 +341,11 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
     // SUCCESS: Now it's safe to delete the old ERROR results
     // This is the key fix for data loss - deletion only happens after successful retry
-    let cleanupSucceeded = false;
+    let errorRowsDeleted = false;
     try {
       await deleteErrorResults(errorResultIds);
+      errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
-      cleanupSucceeded = true;
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
       logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
@@ -352,14 +353,14 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
       });
     }
 
-    if (cleanupSucceeded) {
+    if (errorRowsDeleted) {
       const outputPaths = (
         Array.isArray(originalEval.config.outputPath)
           ? originalEval.config.outputPath
           : [originalEval.config.outputPath]
       ).filter(
         (outputPath): outputPath is string =>
-          typeof outputPath === 'string' && outputPath.endsWith('.jsonl'),
+          typeof outputPath === 'string' && getOutputFileFormat(outputPath) === 'jsonl',
       );
       if (outputPaths.length > 0) {
         await writeMultipleOutputs(outputPaths, retriedEval, null);

@@ -138,9 +138,9 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
-    it('rewrites the original JSONL output after retrying with an override config', async () => {
+    it('rewrites the original JSONL output after partial cleanup with an override config', async () => {
       const artifactId = randomUUID();
-      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
+      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.JSONL`);
       const jsonOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.json`);
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
       const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
@@ -187,6 +187,18 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
+      const originalAddPrompts = Eval.prototype.addPrompts;
+      let addPromptsCalls = 0;
+      vi.spyOn(Eval.prototype, 'addPrompts').mockImplementation(async function (
+        this: Eval,
+        prompts,
+      ) {
+        addPromptsCalls += 1;
+        if (addPromptsCalls === 4) {
+          throw new Error('simulated prompt metric save failure');
+        }
+        return originalAddPrompts.call(this, prompts);
+      });
 
       try {
         await retryCommand(evalRecord.id, { config: configPath });
@@ -206,6 +218,7 @@ describe('retry command', () => {
         expect(JSON.stringify(rows)).not.toContain(staleResultId);
         expect(JSON.stringify(rows)).not.toContain('stale error');
         expect(fs.existsSync(jsonOutputPath)).toBe(false);
+        expect(addPromptsCalls).toBe(4);
 
         const persistedRows = await db
           .select()
