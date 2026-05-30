@@ -417,7 +417,7 @@ describe('Eval', () => {
 
     render(
       <MemoryRouter>
-        <Eval fetchId={null} />
+        <Eval fetchId="retried-eval" />
       </MemoryRouter>,
     );
 
@@ -445,7 +445,7 @@ describe('Eval', () => {
 
     render(
       <MemoryRouter>
-        <Eval fetchId={null} />
+        <Eval fetchId="selected-eval" />
       </MemoryRouter>,
     );
 
