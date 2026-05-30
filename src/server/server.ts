@@ -402,7 +402,7 @@ export async function startServer(
           `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
         );
         io.emit('update', { evalId: updatedEval.id });
-      } else if (!updatedEval) {
+      } else if (!updatedEval && !signal.evalId) {
         io.emit('update', null);
       }
     };

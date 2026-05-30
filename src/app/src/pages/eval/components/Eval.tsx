@@ -384,9 +384,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       const updatedEvalId = scopedEvalId ?? latestEvalId;
       const shouldReload =
         fetchId === null
-          ? scopedEvalId === undefined ||
-            scopedEvalId === currentEvalIdRef.current ||
-            scopedEvalId === latestEvalId
+          ? scopedEvalId === undefined || scopedEvalId === currentEvalIdRef.current
           : scopedEvalId === fetchId;
       if (shouldReload) {
         setEvalId(updatedEvalId);

@@ -407,6 +407,15 @@ describe('evaluator', () => {
       await expect(db.select().from(tracesTable).all()).resolves.toHaveLength(0);
       await expect(db.select().from(spansTable).all()).resolves.toHaveLength(0);
     });
+
+    it('should suppress deletion signals while replacing an evaluation', async () => {
+      const eval1 = await EvalFactory.create();
+
+      await eval1.delete({ notify: false });
+
+      expect(await Eval.findById(eval1.id)).toBeUndefined();
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+    });
   });
 
   describe('create', () => {

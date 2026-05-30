@@ -247,7 +247,7 @@ async function replaceExistingEval(
   }
 
   logger.info(`Replacing existing eval ${importId}`);
-  await existingEval.delete();
+  await existingEval.delete({ notify: false });
   return importId;
 }
 

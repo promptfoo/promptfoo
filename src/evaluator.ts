@@ -20,7 +20,6 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { notifyEvaluationChanged } from './models/evalMutation';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -3780,9 +3779,6 @@ class Evaluator {
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    if (!this.evalRecord.persisted) {
-      notifyEvaluationChanged(this.evalRecord.id);
-    }
     return this.evalRecord;
   }
 
@@ -3809,9 +3805,6 @@ class Evaluator {
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    if (!this.evalRecord.persisted) {
-      notifyEvaluationChanged(this.evalRecord.id);
-    }
     return this.evalRecord;
   }
 
@@ -4228,8 +4221,6 @@ class Evaluator {
 
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
-    } else {
-      notifyEvaluationChanged(this.evalRecord.id);
     }
   }
 

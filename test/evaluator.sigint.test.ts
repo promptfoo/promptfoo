@@ -92,8 +92,8 @@ describe('evaluate SIGINT/abort handling', () => {
     expect(result).toBeDefined();
     expect(result.id).toBe('test-eval-abort-123');
 
-    // When user aborts (not timeout), should update signal file for resume
-    expect(updateSignalFile).toHaveBeenCalledWith('test-eval-abort-123');
+    // Non-persisted evals are not visible to database watchers.
+    expect(updateSignalFile).not.toHaveBeenCalled();
 
     // Should persist vars and prompts before early return
     expect(mockSetVars).toHaveBeenCalled();
@@ -272,7 +272,7 @@ describe('evaluate SIGINT/abort handling', () => {
     // Should have added at least one result before abort
     expect(resultsAdded.length).toBeGreaterThanOrEqual(1);
 
-    // Signal file should be updated for resume capability
-    expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
+    // Non-persisted evals are not visible to database watchers.
+    expect(updateSignalFile).not.toHaveBeenCalled();
   });
 });

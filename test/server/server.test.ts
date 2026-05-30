@@ -299,6 +299,24 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('should ignore scoped updates for evals that were not persisted', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'update', evalId: 'missing-eval' });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(emitSpy).not.toHaveBeenCalledWith('update', null);
+      expect(emitSpy).not.toHaveBeenCalledWith('update', { evalId: 'missing-eval' });
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('should not broadcast a surviving latest eval for an unscoped mutation', async () => {
       const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
       vi.mocked(Eval.latest).mockResolvedValueOnce({ id: 'surviving-eval' } as never);

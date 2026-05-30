@@ -1419,7 +1419,7 @@ export default class Eval {
     return results;
   }
 
-  async delete() {
+  async delete({ notify = true }: { notify?: boolean } = {}) {
     const db = await getDb();
     await db.transaction(async (tx) => {
       await deleteTraceRecordsForEvals(tx, [this.id]);
@@ -1429,7 +1429,9 @@ export default class Eval {
       await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
-    notifyEvaluationsDeleted([this.id]);
+    if (notify) {
+      notifyEvaluationsDeleted([this.id]);
+    }
   }
 
   /**
