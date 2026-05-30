@@ -504,6 +504,28 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalled();
     });
 
+    it('should publish a completed redteam eval through the eval job endpoint', async () => {
+      const summary = { results: [] };
+      mockedDoRedteamRun.mockResolvedValueOnce({
+        id: 'redteam-eval-id',
+        toEvaluateSummary: vi.fn().mockResolvedValue(summary),
+      } as any);
+
+      const runResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' } });
+      expect(runResponse.status).toBe(200);
+
+      await vi.waitFor(async () => {
+        const completedResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+        expect(completedResponse.body).toMatchObject({
+          status: 'complete',
+          evalId: 'redteam-eval-id',
+          result: summary,
+        });
+      });
+    });
+
     it('should publish logs and cancellation through the eval job endpoint', async () => {
       let resolveRun: ((value: undefined) => void) | undefined;
       mockedDoRedteamRun.mockReturnValueOnce(
@@ -546,7 +568,7 @@ describe('Redteam Routes', () => {
     });
 
     it('should keep a replaced job cancelled when its stale run settles', async () => {
-      let resolveFirstRun: ((value: undefined) => void) | undefined;
+      let resolveFirstRun: ((value: any) => void) | undefined;
       let resolveSecondRun: ((value: undefined) => void) | undefined;
       mockedDoRedteamRun
         .mockReturnValueOnce(
@@ -575,7 +597,11 @@ describe('Redteam Routes', () => {
         logs: ['Job cancelled - new job started'],
       });
 
-      resolveFirstRun!(undefined);
+      const toEvaluateSummary = vi.fn().mockResolvedValue({ results: [] });
+      resolveFirstRun!({
+        id: 'stale-redteam-eval-id',
+        toEvaluateSummary,
+      });
       await vi.waitFor(async () => {
         const settledResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
         expect(settledResponse.body).toMatchObject({
@@ -583,6 +609,7 @@ describe('Redteam Routes', () => {
           logs: ['Job cancelled - new job started'],
         });
       });
+      expect(toEvaluateSummary).toHaveBeenCalledOnce();
 
       resolveSecondRun!(undefined);
       await vi.waitFor(async () => {
