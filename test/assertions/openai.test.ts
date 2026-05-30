@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
+import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
 import { createMockProvider } from '../factories/provider';
@@ -214,6 +215,17 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidFunctionCall', () => {
+    it.each([
+      ['undefined provider', undefined],
+      ['null provider', null],
+      ['missing capability', {}],
+      ['string capability', { validateFunctionToolCall: 'validate' }],
+      ['boolean capability', { validateFunctionToolCall: true }],
+      ['object capability', { validateFunctionToolCall: {} }],
+    ])('rejects %s', (_label, provider) => {
+      expect(hasFunctionToolCallValidator(provider)).toBe(false);
+    });
+
     it('should fail when provider does not expose the validator capability', () => {
       const output = { arguments: '{"x": 10}', name: 'add' };
 
