@@ -215,11 +215,18 @@ function isSensitiveResponseHeader(headerName: string): boolean {
   return SENSITIVE_RESPONSE_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
-function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string, unknown> | null {
+function redactSensitiveHeaders(
+  headers: Record<string, unknown>,
+  sourceHeaders: Record<string, unknown> = headers,
+): Record<string, unknown> | null {
   let mutated = false;
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (isSensitiveResponseHeader(key)) {
+    if (
+      Object.hasOwn(sourceHeaders, key) &&
+      sourceHeaders[key] === value &&
+      isSensitiveResponseHeader(key)
+    ) {
       next[key] = REDACTED;
       mutated = true;
     } else {
@@ -231,11 +238,16 @@ function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string
 
 // Redact transport headers on a single metadata object. Providers populate
 // `metadata.http.headers` / `requestHeaders`, while some legacy integrations still
-// use `metadata.headers`. Does NOT recurse into other keys (e.g. `output`, `audio`,
-// arbitrary model output) — walking arbitrary subtrees risks rewriting
-// user-controlled content that legitimately uses an `http` key (see
+// use `metadata.headers`. Legacy slots are only redacted when their transport source
+// is known because top-level result metadata also includes arbitrary test metadata.
+// Does NOT recurse into other keys (e.g. `output`, `audio`, arbitrary model output)
+// — walking arbitrary subtrees risks rewriting user-controlled content that
+// legitimately uses an `http` key (see
 // https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
-function redactHttpHeadersOnMetadata<T>(metadata: T): T {
+function redactHttpHeadersOnMetadata<T>(
+  metadata: T,
+  options?: { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean },
+): T {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return metadata;
   }
@@ -244,8 +256,21 @@ function redactHttpHeadersOnMetadata<T>(metadata: T): T {
   let nextMetadata: Record<string, unknown> | undefined;
 
   const legacyHeaders = m.headers;
-  if (legacyHeaders && typeof legacyHeaders === 'object' && !Array.isArray(legacyHeaders)) {
-    const redacted = redactSensitiveHeaders(legacyHeaders as Record<string, unknown>);
+  const legacyHeadersSource = options?.redactLegacyHeaders
+    ? legacyHeaders
+    : (options?.legacyHeadersSource as Record<string, unknown> | undefined)?.headers;
+  if (
+    legacyHeaders &&
+    typeof legacyHeaders === 'object' &&
+    !Array.isArray(legacyHeaders) &&
+    legacyHeadersSource &&
+    typeof legacyHeadersSource === 'object' &&
+    !Array.isArray(legacyHeadersSource)
+  ) {
+    const redacted = redactSensitiveHeaders(
+      legacyHeaders as Record<string, unknown>,
+      legacyHeadersSource as Record<string, unknown>,
+    );
     if (redacted) {
       nextMetadata = { ...m, headers: redacted };
     }
@@ -291,7 +316,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   const next: Record<string, unknown> = { ...gr };
 
   if (gr.metadata !== undefined) {
-    const redacted = redactHttpHeadersOnMetadata(gr.metadata);
+    const redacted = redactHttpHeadersOnMetadata(gr.metadata, { redactLegacyHeaders: true });
     if (redacted !== gr.metadata) {
       next.metadata = redacted;
       mutated = true;
@@ -321,15 +346,17 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata);
+  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+    redactLegacyHeaders: true,
+  });
   if (redactedMetadata === (response as ProviderResponse).metadata) {
     return response;
   }
   return { ...response, metadata: redactedMetadata } as T;
 }
 
-function sanitizeMetadataForDb<T>(metadata: T): T {
-  return redactHttpHeadersOnMetadata(metadata);
+function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
+  return redactHttpHeadersOnMetadata(metadata, { legacyHeadersSource: responseMetadata });
 }
 
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {
@@ -359,7 +386,10 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ),
     gradingResult: sanitizeGradingResultForDb(sanitizeForDb(artifactResult.gradingResult)),
     namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: sanitizeMetadataForDb(sanitizeForDb(artifactResult.metadata)),
+    metadata: sanitizeMetadataForDb(
+      sanitizeForDb(artifactResult.metadata),
+      (artifactResult.response as ProviderResponse | null | undefined)?.metadata,
+    ),
   } as T;
 }
 
@@ -431,7 +461,7 @@ export default class EvalResult {
 
       args.response = sanitizeResponseForDb(args.response);
       args.gradingResult = sanitizeGradingResultForDb(args.gradingResult);
-      args.metadata = sanitizeMetadataForDb(args.metadata);
+      args.metadata = sanitizeMetadataForDb(args.metadata, processedResponse?.metadata);
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
@@ -466,7 +496,10 @@ export default class EvalResult {
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),
           gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
+          metadata: sanitizeMetadataForDb(
+            sanitizeForDb(result.metadata),
+            result.response?.metadata,
+          ),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = await tx

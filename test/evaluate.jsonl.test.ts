@@ -282,6 +282,39 @@ describe('programmatic JSONL output', () => {
     expect(JSON.stringify(result)).not.toContain('legacy_persisted_req_should_not_persist');
   });
 
+  it('preserves arbitrary test metadata headers when finalizing persisted rows', async () => {
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'metadata-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    await evaluate({
+      outputPath,
+      prompts: ['Test prompt'],
+      providers: [provider],
+      tests: [
+        {
+          metadata: {
+            headers: {
+              'x-request-id': 'user-defined-reporting-id',
+            },
+          },
+        },
+      ],
+      writeLatestResults: true,
+    });
+
+    const [result] = readJsonl(outputPath);
+    expect(result.metadata.headers).toEqual({
+      'x-request-id': 'user-defined-reporting-id',
+    });
+  });
+
   it('preserves sanitized streamed rows for uppercase JSONL after persistence fails', async () => {
     const outputPath = createOutputPath('.JSONL');
     outputPaths.push(outputPath);
