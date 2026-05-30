@@ -518,6 +518,9 @@ export async function writeOutput(
             .join(os.EOL) + os.EOL;
         await fsPromises.appendFile(tempOutputPath, text);
       }
+      if (outputMode !== undefined) {
+        await fsPromises.chmod(tempOutputPath, outputMode);
+      }
       await fsPromises.rename(tempOutputPath, jsonlOutputPath);
     } catch (error) {
       await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});

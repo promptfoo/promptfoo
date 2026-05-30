@@ -185,14 +185,19 @@ describe('JSONL output with proper line endings', () => {
       return;
     }
 
-    fs.writeFileSync(tempFilePath, '{"status":"existing"}\n', { mode: 0o600 });
+    fs.writeFileSync(tempFilePath, '{"status":"existing"}\n', { mode: 0o644 });
     mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
     });
 
-    await writeOutput(tempFilePath, mockEval, null);
+    const originalUmask = process.umask(0o077);
+    try {
+      await writeOutput(tempFilePath, mockEval, null);
+    } finally {
+      process.umask(originalUmask);
+    }
 
-    expect(fs.statSync(tempFilePath).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(tempFilePath).mode & 0o777).toBe(0o644);
   });
 
   it('should preserve an existing artifact symlink during a rewrite', async () => {

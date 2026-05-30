@@ -48,6 +48,7 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  chmod: vi.fn(),
   lstat: vi.fn(),
   stat: vi.fn(),
   realpath: vi.fn(),
