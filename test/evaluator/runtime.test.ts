@@ -88,6 +88,7 @@ describeEvaluator('evaluator runtime ports', () => {
   });
 
   it('persists per-call timeout rows without streaming them', async () => {
+    vi.useFakeTimers();
     const resultWriter = createResultWriter();
     const runtime = createRuntime(resultWriter);
     const slowProvider: ApiProvider = {
@@ -113,10 +114,16 @@ describeEvaluator('evaluator runtime ports', () => {
       tests: [{}],
     };
 
-    await evaluate(testSuite, createEvalRecord(), { timeoutMs: 10 }, runtime);
+    try {
+      const evaluation = evaluate(testSuite, createEvalRecord(), { timeoutMs: 10 }, runtime);
+      await vi.advanceTimersByTimeAsync(10);
+      await evaluation;
 
-    expect(runtime.persistResult).toHaveBeenCalledOnce();
-    expect(resultWriter.write).not.toHaveBeenCalled();
-    expect(resultWriter.close).toHaveBeenCalledOnce();
+      expect(runtime.persistResult).toHaveBeenCalledOnce();
+      expect(resultWriter.write).not.toHaveBeenCalled();
+      expect(resultWriter.close).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
