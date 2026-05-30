@@ -114,26 +114,256 @@ function formatNamedScores(namedScores: Record<string, number> | undefined): str
   return JSON.stringify(rounded);
 }
 
+function formatNamedScoreValue(value: number | undefined): string {
+  return typeof value === 'number' && !Number.isNaN(value) ? value.toFixed(2) : '';
+}
+
+/**
+ * Build a per-prompt list of `Metric: <name>` column names, deduplicated and
+ * sorted with `localeCompare`. Shared shell for both the row-scanning helper
+ * (WebUI path) and the aggregate-reading helper (streaming CLI path); see the
+ * two call sites below.
+ */
+function collectMetricNamesByPrompt<T>(
+  items: T[],
+  namesFor: (item: T, index: number) => Iterable<string>,
+): string[][] {
+  return items.map((item, index) =>
+    [...new Set(namesFor(item, index))].sort((a, b) => a.localeCompare(b)),
+  );
+}
+
+/**
+ * Collect per-row named metric names by scanning row outputs. Used by the
+ * non-streaming WebUI export, which has the full table in memory.
+ *
+ * Returns one sorted name list per prompt, aligned with `table.head.prompts`.
+ * Names whose only values are non-numeric or NaN are skipped so we don't emit
+ * blank columns for invalid data.
+ */
+function collectNamedScoreNamesByPrompt(table: {
+  head: { prompts: Prompt[]; vars: string[] };
+  body: EvaluateTableRow[];
+}): string[][] {
+  return collectMetricNamesByPrompt(table.head.prompts, (_, promptIndex) => {
+    const names: string[] = [];
+    for (const row of table.body) {
+      const namedScores = row.outputs[promptIndex]?.namedScores;
+      if (!namedScores) {
+        continue;
+      }
+      for (const [name, value] of Object.entries(namedScores)) {
+        if (typeof value === 'number' && !Number.isNaN(value)) {
+          names.push(name);
+        }
+      }
+    }
+    return names;
+  });
+}
+
+/**
+ * Collect per-row named metric names from prompt-level aggregate metrics, for
+ * use by the streaming CSV path which cannot scan rows up front.
+ *
+ * Uses `namedScoresCount` because it is incremented only when a per-row
+ * result contributes a metric (`src/util/namedMetrics.ts`). Derived metrics
+ * write to `namedScores` but not `namedScoresCount` (`src/evaluator.ts`
+ * `updateDerivedMetrics`), so this keeps the streaming column set aligned
+ * with what `collectNamedScoreNamesByPrompt` would produce from row outputs.
+ *
+ * Returns an empty list both for prompts with no per-row contributions
+ * (`namedScoresCount: {}` — modern eval with no named metrics configured)
+ * and for prompts whose count map is missing entirely (legacy/imported
+ * evals). Use `promptNeedsDiscoveryFallback` to distinguish the two: only
+ * the latter requires a row-scan pre-pass.
+ */
+function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
+  return collectMetricNamesByPrompt(prompts, (prompt) => {
+    const counts = (prompt as CompletedPrompt).metrics?.namedScoresCount;
+    if (!counts) {
+      return [];
+    }
+    return Object.keys(counts).filter((name) => (counts[name] ?? 0) > 0);
+  });
+}
+
+/**
+ * True when a prompt's aggregate `metrics.namedScoresCount` is missing/absent,
+ * not merely empty. Legacy evals persisted before count tracking shipped, and
+ * external imports via `POST /api/eval` that don't backfill the count, both
+ * land here. Modern evals always have an object (possibly empty) and skip the
+ * discovery pass.
+ */
+function promptNeedsDiscoveryFallback(prompt: Prompt): boolean {
+  const metrics = (prompt as CompletedPrompt).metrics;
+  return !metrics || !metrics.namedScoresCount;
+}
+
+/**
+ * Accumulator for the `streamEvalCsv` legacy-eval discovery pass. Records
+ * per-prompt metric name sets and whether any row carries a description, so
+ * `streamEvalCsv` can size CSV columns correctly before emitting headers.
+ *
+ * Lives outside the streaming hot path; populated incrementally by
+ * `scanBatchForDiscovery` so we never retain row content across batches.
+ */
+type DiscoveryAccumulator = {
+  metricNamesByPrompt: Map<number, Set<string>>;
+  hasDescriptions: boolean;
+};
+
+/**
+ * Scan one batch of `EvalResult` rows for the metric names that will need
+ * dedicated `Metric: <name>` columns. Only inspects the prompts in
+ * `fallbackPromptIndices` (those whose aggregate `namedScoresCount` is
+ * missing/empty), and only touches `namedScores` + `testCase.description` —
+ * not the full row shape — so the discovery pass stays allocation-light even
+ * for very large legacy evals.
+ *
+ * Mirrors the row-output filter in `collectNamedScoreNamesByPrompt` so the
+ * streaming CSV column set matches the WebUI CSV column set.
+ */
+function scanBatchForDiscovery(
+  batchResults: Iterable<{
+    promptIdx: number;
+    testCase?: { description?: string };
+    namedScores?: Record<string, number>;
+  }>,
+  acc: DiscoveryAccumulator,
+  fallbackPromptIndices: ReadonlySet<number>,
+): void {
+  for (const result of batchResults) {
+    if (!acc.hasDescriptions && result.testCase?.description) {
+      acc.hasDescriptions = true;
+    }
+    if (!fallbackPromptIndices.has(result.promptIdx)) {
+      continue;
+    }
+    const namedScores = result.namedScores;
+    if (!namedScores) {
+      continue;
+    }
+    let names = acc.metricNamesByPrompt.get(result.promptIdx);
+    if (!names) {
+      names = new Set();
+      acc.metricNamesByPrompt.set(result.promptIdx, names);
+    }
+    for (const [name, value] of Object.entries(namedScores)) {
+      if (typeof value === 'number' && !Number.isNaN(value)) {
+        names.add(name);
+      }
+    }
+  }
+}
+
+type StreamRow = {
+  testIdx: number;
+  vars: string[];
+  outputs: Array<{
+    text: string;
+    pass: boolean;
+    score?: number;
+    namedScores?: Record<string, number>;
+    failureReason?: ResultFailureReason;
+    gradingResult?: { reason?: string; comment?: string } | null;
+    metadata?: Record<string, unknown>;
+    response?: { reasoning?: ReasoningContent[] };
+  } | null>;
+  test: { description?: string };
+};
+
+/**
+ * Convert a batch of `EvalResult` rows (grouped by testIdx) into the table-row
+ * shape that `tableRowToCsvValues` accepts. Used by `streamEvalCsv` to keep its
+ * per-batch processing tight; the outputs array is pre-sized so columns line up
+ * with prompts even when results arrive out of promptIdx order.
+ */
+function batchToStreamRows(
+  batchResults: Iterable<{
+    testIdx: number;
+    promptIdx: number;
+    testCase?: { vars?: Record<string, unknown>; description?: string };
+    response?: { output?: string; reasoning?: ReasoningContent[] };
+    success: boolean;
+    score?: number;
+    namedScores?: Record<string, number>;
+    failureReason?: ResultFailureReason;
+    gradingResult?: { reason?: string; comment?: string } | null;
+    metadata?: Record<string, unknown>;
+  }>,
+  varNames: string[],
+  numPrompts: number,
+): StreamRow[] {
+  const rowsByTestIdx = new Map<number, StreamRow>();
+  for (const result of batchResults) {
+    let row = rowsByTestIdx.get(result.testIdx);
+    if (!row) {
+      row = {
+        testIdx: result.testIdx,
+        vars: varNames.map((varName) => {
+          const value = result.testCase?.vars?.[varName];
+          return value === undefined ? '' : String(value);
+        }),
+        outputs: new Array(numPrompts).fill(null),
+        test: { description: result.testCase?.description },
+      };
+      rowsByTestIdx.set(result.testIdx, row);
+    }
+    row.outputs[result.promptIdx] = {
+      text: result.response?.output ?? '',
+      pass: result.success,
+      score: result.score,
+      namedScores: result.namedScores,
+      failureReason: result.failureReason,
+      gradingResult: result.gradingResult,
+      metadata: result.metadata,
+      response: result.response?.reasoning ? { reasoning: result.response.reasoning } : undefined,
+    };
+  }
+  return Array.from(rowsByTestIdx.values());
+}
+
 /**
  * Build CSV headers for an evaluation table.
  *
  * @param vars - Variable names from the table head
  * @param prompts - Prompt definitions from the table head
  * @param options - Export options
+ * @param options.namedScoreNamesByPrompt - Named metric names that should get
+ *   dedicated `Metric: <name>` columns, one sorted list per prompt (aligned
+ *   with `prompts`). Must match the value passed to `tableRowToCsvValues` so
+ *   header and row column counts stay in sync.
  * @returns Array of header strings
  */
 export function buildCsvHeaders(
   vars: string[],
   prompts: Prompt[],
-  options: { hasDescriptions?: boolean; isRedteam?: boolean } = {},
+  options: {
+    hasDescriptions?: boolean;
+    isRedteam?: boolean;
+    namedScoreNamesByPrompt?: string[][];
+  } = {},
 ): string[] {
   const headers: string[] = [
     ...(options.hasDescriptions ? ['Description'] : []),
     ...vars,
-    ...prompts.flatMap((prompt) => {
+    ...prompts.flatMap((prompt, promptIndex) => {
       const provider = (prompt as CompletedPrompt).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      return [label, 'Reasoning', 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
+      const metricColumns = (options.namedScoreNamesByPrompt?.[promptIndex] || []).map(
+        (name) => `Metric: ${name}`,
+      );
+      return [
+        label,
+        'Reasoning',
+        'Status',
+        'Score',
+        'Named Scores',
+        ...metricColumns,
+        'Grader Reason',
+        'Comment',
+      ];
     }),
   ];
 
@@ -148,25 +378,34 @@ export function buildCsvHeaders(
  * Convert a single table row to CSV row values.
  *
  * @param row - The table row to convert
- * @param options - Export options
+ * @param options - Export options (`namedScoreNamesByPrompt` must match the
+ *   array passed to `buildCsvHeaders`)
  * @returns Array of values for the CSV row
  */
 export function tableRowToCsvValues(
   row: EvaluateTableRow,
-  options: { hasDescriptions?: boolean; isRedteam?: boolean } = {},
+  options: {
+    hasDescriptions?: boolean;
+    isRedteam?: boolean;
+    namedScoreNamesByPrompt?: string[][];
+  } = {},
 ): (string | number | boolean)[] {
   const rowValues: (string | number | boolean)[] = [
     ...(options.hasDescriptions ? [row.test.description || ''] : []),
     ...row.vars,
-    ...row.outputs.flatMap((output) => {
+    ...row.outputs.flatMap((output, outputIndex) => {
+      const namedScoreNames = options.namedScoreNamesByPrompt?.[outputIndex] || [];
       if (!output) {
-        return ['', '', '', '', '', '', ''];
+        return ['', '', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
       }
 
       const status = getOutputStatus(output);
       const score = output.score?.toFixed(2) ?? '';
       const namedScores = formatNamedScores(output.namedScores);
       const reasoning = reasoningToString(output.response?.reasoning) || '';
+      const namedScoreValues = namedScoreNames.map((name) =>
+        formatNamedScoreValue(output.namedScores?.[name]),
+      );
 
       return [
         output.text || '',
@@ -174,6 +413,7 @@ export function tableRowToCsvValues(
         status,
         score,
         namedScores,
+        ...namedScoreValues,
         output.gradingResult?.reason || '',
         output.gradingResult?.comment || '',
       ];
@@ -215,6 +455,10 @@ export function tableRowToCsvValues(
  * - Status: PASS | FAIL | ERROR
  * - Score: Numeric score (e.g., "1.00")
  * - Named Scores: JSON object with per-assertion scores (e.g., {"clarity": 0.90, "accuracy": 0.85})
+ * - Metric: <name>: One dedicated column per distinct per-row named score,
+ *   sorted alphabetically by name. Empty when a row has no value for that
+ *   metric. Derived metrics are intentionally omitted (they live on the
+ *   aggregate prompt metrics, not on individual rows).
  * - Grader Reason: Explanation from the grader
  * - Comment: Additional grader comment
  *
@@ -232,14 +476,18 @@ export function evalTableToCsv(
   const { isRedteam } = options;
   const hasDescriptions = table.body.some((row) => row.test.description);
 
+  const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
   const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
     hasDescriptions,
     isRedteam,
+    namedScoreNamesByPrompt,
   });
 
   const csvRows = [
     headers,
-    ...table.body.map((row) => tableRowToCsvValues(row, { hasDescriptions, isRedteam })),
+    ...table.body.map((row) =>
+      tableRowToCsvValues(row, { hasDescriptions, isRedteam, namedScoreNamesByPrompt }),
+    ),
   ];
 
   return csvStringify(csvRows);
@@ -458,78 +706,70 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
+  // Derive metric column names from `namedScoresCount` so derived/aggregate-only
+  // metrics don't introduce columns that the WebUI path would omit.
+  const namedScoreNamesByPrompt = collectNamedScoreNamesByPromptFromAggregate(prompts);
+  // Legacy evals and external imports may persist `metrics.namedScores` without
+  // a matching `namedScoresCount`, so the aggregate read can't tell row-level
+  // metrics from derived ones. We can't trust the first batch alone because
+  // `EvalResult` batches slice `testIdx` ranges (default 100), so a metric that
+  // only appears past testIdx 99 would be missed. For those prompts we run a
+  // bounded-memory discovery pass over every batch first — it only inspects
+  // `namedScores` keys and `testCase.description`, never the full row, so
+  // memory stays O(prompts × distinct metric names). Streaming is preserved in
+  // the main pass below.
+  //
+  // Only prompts where `metrics.namedScoresCount` is *missing* trigger this
+  // pass — a present-but-empty count (modern eval with no named-metric
+  // assertions) is authoritative and means "no metric columns," so we avoid the
+  // extra DB round trip for the common no-metrics case.
+  //
+  // Note: in the rare case of concurrent writes between the two passes (e.g. a
+  // CLI export run while results are still being persisted), a metric that
+  // appears only in a row added after the discovery pass would be missing from
+  // the column header but still present in the JSON `Named Scores` cell. CLI
+  // exports normally run after the eval completes, so this is a documented
+  // limitation rather than a defended invariant.
+  const fallbackPromptIndices = prompts.flatMap((prompt, promptIndex) =>
+    promptNeedsDiscoveryFallback(prompt) ? [promptIndex] : [],
+  );
+  const needsRowScanFallback = fallbackPromptIndices.length > 0;
 
   // Track whether we've written headers yet
   let headersWritten = false;
   let hasDescriptions = false;
 
-  // Buffer to accumulate the first batch while we determine hasDescriptions
-  let firstBatchBuffer: Array<{
-    testIdx: number;
-    vars: string[];
-    outputs: Array<{
-      text: string;
-      pass: boolean;
-      score?: number;
-      namedScores?: Record<string, number>;
-      failureReason?: ResultFailureReason;
-      gradingResult?: { reason?: string; comment?: string } | null;
-      metadata?: Record<string, unknown>;
-      response?: { reasoning?: ReasoningContent[] };
-    }>;
-    test: { description?: string };
-  }> | null = null;
+  // Buffer to accumulate the first batch while we determine hasDescriptions.
+  let firstBatchBuffer: StreamRow[] | null = null;
 
-  for await (const batchResults of eval_.fetchResultsBatched()) {
-    // Group results by testIdx to reconstruct table rows
-    const rowsByTestIdx = new Map<
-      number,
-      {
-        testIdx: number;
-        vars: string[];
-        outputs: Array<{
-          text: string;
-          pass: boolean;
-          score?: number;
-          namedScores?: Record<string, number>;
-          failureReason?: ResultFailureReason;
-          gradingResult?: { reason?: string; comment?: string } | null;
-          metadata?: Record<string, unknown>;
-          response?: { reasoning?: ReasoningContent[] };
-        }>;
-        test: { description?: string };
-      }
-    >();
-
-    for (const result of batchResults) {
-      if (!rowsByTestIdx.has(result.testIdx)) {
-        // Pre-allocate outputs array with correct size for all prompts
-        // This ensures outputs align with prompt columns regardless of result order
-        rowsByTestIdx.set(result.testIdx, {
-          testIdx: result.testIdx,
-          vars: varNames.map((varName) => {
-            const value = result.testCase?.vars?.[varName];
-            return value === undefined ? '' : String(value);
-          }),
-          outputs: new Array(numPrompts).fill(null),
-          test: { description: result.testCase?.description },
-        });
-      }
-      const row = rowsByTestIdx.get(result.testIdx)!;
-      // Use promptIdx to position output correctly (matches prompt column order)
-      row.outputs[result.promptIdx] = {
-        text: result.response?.output ?? '',
-        pass: result.success,
-        score: result.score,
-        namedScores: result.namedScores,
-        failureReason: result.failureReason,
-        gradingResult: result.gradingResult,
-        metadata: result.metadata,
-        response: result.response?.reasoning ? { reasoning: result.response.reasoning } : undefined,
-      };
+  if (needsRowScanFallback) {
+    const fallbackPromptIndexSet = new Set(fallbackPromptIndices);
+    const accumulator: DiscoveryAccumulator = {
+      metricNamesByPrompt: new Map(),
+      hasDescriptions: false,
+    };
+    for await (const batchResults of eval_.fetchResultsBatched()) {
+      scanBatchForDiscovery(batchResults, accumulator, fallbackPromptIndexSet);
+    }
+    hasDescriptions = accumulator.hasDescriptions;
+    for (const promptIndex of fallbackPromptIndices) {
+      const names = accumulator.metricNamesByPrompt.get(promptIndex);
+      namedScoreNamesByPrompt[promptIndex] = names
+        ? [...names].sort((a, b) => a.localeCompare(b))
+        : [];
     }
 
-    const rows = Array.from(rowsByTestIdx.values());
+    const headers = buildCsvHeaders(varNames, prompts, {
+      hasDescriptions,
+      isRedteam,
+      namedScoreNamesByPrompt,
+    });
+    await write(csvStringify([headers]));
+    headersWritten = true;
+  }
+
+  for await (const batchResults of eval_.fetchResultsBatched()) {
+    const rows = batchToStreamRows(batchResults, varNames, numPrompts);
 
     // On first batch, determine hasDescriptions and write headers
     if (!headersWritten) {
@@ -537,6 +777,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       const headers = buildCsvHeaders(varNames, prompts, {
         hasDescriptions,
         isRedteam,
+        namedScoreNamesByPrompt,
       });
       await write(csvStringify([headers]));
       headersWritten = true;
@@ -560,7 +801,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       }
       // Write the buffered first batch
       const bufferedCsvRows = firstBatchBuffer.map((row) =>
-        tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+        tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+          hasDescriptions,
+          isRedteam,
+          namedScoreNamesByPrompt,
+        }),
       );
       if (bufferedCsvRows.length > 0) {
         await write(csvStringify(bufferedCsvRows));
@@ -570,7 +815,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
 
     // Convert to CSV rows and write
     const csvRows = rows.map((row) =>
-      tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+      tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+        hasDescriptions,
+        isRedteam,
+        namedScoreNamesByPrompt,
+      }),
     );
 
     if (csvRows.length > 0) {
@@ -581,7 +830,11 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // Handle case where we only had one batch and it was buffered
   if (firstBatchBuffer !== null) {
     const bufferedCsvRows = firstBatchBuffer.map((row) =>
-      tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
+      tableRowToCsvValues(row as unknown as EvaluateTableRow, {
+        hasDescriptions,
+        isRedteam,
+        namedScoreNamesByPrompt,
+      }),
     );
     if (bufferedCsvRows.length > 0) {
       await write(csvStringify(bufferedCsvRows));
@@ -593,6 +846,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     const headers = buildCsvHeaders(varNames, prompts, {
       hasDescriptions: false,
       isRedteam,
+      namedScoreNamesByPrompt,
     });
     await write(csvStringify([headers]));
   }

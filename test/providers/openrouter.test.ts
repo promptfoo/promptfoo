@@ -467,6 +467,73 @@ describe('OpenRouter', () => {
         });
       });
 
+      it('should handle reasoning_details without plaintext reasoning', async () => {
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'Visible answer',
+                reasoning_details: [
+                  {
+                    type: 'reasoning.text',
+                    text: 'Detailed private reasoning.',
+                  },
+                  {
+                    type: 'reasoning.encrypted',
+                    data: 'encrypted-reasoning-payload',
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 35, prompt_tokens: 10, completion_tokens: 25 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Visible answer');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'Detailed private reasoning.' },
+          { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+        ]);
+      });
+
+      it('should suppress reasoning_details when showThinking is false', async () => {
+        const providerWithoutThinking = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: { showThinking: false },
+        });
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'Visible answer',
+                reasoning_details: [{ type: 'reasoning.text', text: 'Private reasoning.' }],
+              },
+            },
+          ],
+          usage: { total_tokens: 35, prompt_tokens: 10, completion_tokens: 25 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithoutThinking.callApi('Test prompt');
+
+        expect(result.output).toBe('Visible answer');
+        expect(result.reasoning).toBeUndefined();
+      });
+
       it('should handle tool calls without including reasoning when showThinking is false', async () => {
         const providerWithoutThinking = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: { showThinking: false },

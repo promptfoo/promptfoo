@@ -30,6 +30,8 @@ export interface AzureCompletionOptions {
   /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
   o1?: boolean;
   isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
+  /** Treat a custom-named deployment as Claude Opus 4.7 or 4.8 for sampling compatibility. */
+  isClaudeOpus47OrLater?: boolean;
   max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
   // Azure cognitive services params

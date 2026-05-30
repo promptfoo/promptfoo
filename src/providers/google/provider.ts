@@ -24,14 +24,18 @@ import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   createAuthCacheDiscriminator,
   extractGeminiReasoningFromCandidate,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -499,7 +503,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const dataWithResponse = normalizedData as GeminiResponseData[];
-      let output;
+      let output: ReturnType<typeof formatCandidateContents> | undefined;
       const reasoningBlocks: NonNullable<ProviderResponse['reasoning']> = [];
 
       for (const datum of dataWithResponse) {
@@ -538,6 +542,10 @@ export class GoogleProvider extends GoogleGenericProvider {
                 : undefined,
             },
           };
+        }
+
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+          continue;
         }
 
         const candidate = getCandidate(datum);
@@ -584,19 +592,21 @@ export class GoogleProvider extends GoogleGenericProvider {
         } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
           // MAX_TOKENS is treated as a successful completion
           if (candidate.content?.parts) {
-            output = formatCandidateContents(candidate);
+            output = mergeParts(output, formatCandidateContents(candidate));
           }
         } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
           return {
             error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
           };
         } else if (candidate.content?.parts) {
-          output = formatCandidateContents(candidate);
-        } else {
-          return {
-            error: `No output found in response: ${JSON.stringify(data)}`,
-          };
+          output = mergeParts(output, formatCandidateContents(candidate));
         }
+      }
+
+      if (output === undefined) {
+        return {
+          error: `No output found in response: ${JSON.stringify(data)}`,
+        };
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
@@ -628,23 +638,18 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
 
       let guardrails: GuardrailResponse | undefined;
-      const candidate = getCandidate(lastData);
-      if (lastData.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastData.promptFeedback?.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
+      const lastDataWithCandidate =
+        dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
+      const candidate = getCandidate(lastDataWithCandidate);
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
+      if (promptSafetyRatings || candidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
         guardrails = { flaggedInput, flaggedOutput, flagged };
       }
 
-      // Extract grounding metadata
-      const candidateWithMetadata = dataWithResponse
-        .map((datum) => getCandidate(datum))
-        .find(
-          (c) =>
-            c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
-        );
+      const grounding = collectGroundingMetadata(dataWithResponse);
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
@@ -669,20 +674,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: {
-          ...(candidateWithMetadata?.groundingMetadata && {
-            groundingMetadata: candidateWithMetadata.groundingMetadata,
-          }),
-          ...(candidateWithMetadata?.groundingChunks && {
-            groundingChunks: candidateWithMetadata.groundingChunks,
-          }),
-          ...(candidateWithMetadata?.groundingSupports && {
-            groundingSupports: candidateWithMetadata.groundingSupports,
-          }),
-          ...(candidateWithMetadata?.webSearchQueries && {
-            webSearchQueries: candidateWithMetadata.webSearchQueries,
-          }),
-        },
+        metadata: { ...grounding },
       };
 
       // Handle function tool callbacks

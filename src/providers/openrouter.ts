@@ -35,11 +35,79 @@ function extractOpenRouterReasoning(
   message: any,
   showThinking: boolean,
 ): ReasoningContent[] | undefined {
-  const reasoning = message?.reasoning;
-  if (!showThinking || typeof reasoning !== 'string' || !reasoning.trim()) {
+  if (!showThinking) {
     return undefined;
   }
-  return [{ type: 'reasoning', content: reasoning }];
+
+  const reasoning = message?.reasoning;
+  if (typeof reasoning === 'string' && reasoning.trim()) {
+    return [{ type: 'reasoning', content: reasoning }];
+  }
+
+  const details = message?.reasoning_details;
+  const detailBlocks = Array.isArray(details)
+    ? details.map((detail) => normalizeOpenRouterReasoningDetail(detail))
+    : [normalizeOpenRouterReasoningDetail(details)];
+  const reasoningBlocks = detailBlocks.filter((block): block is ReasoningContent => Boolean(block));
+  if (reasoningBlocks.length === 0) {
+    return undefined;
+  }
+  return reasoningBlocks;
+}
+
+function firstNonBlankString(...values: unknown[]): string | undefined {
+  return values.find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+}
+
+function extractOpenRouterSummaryText(summary: unknown): string | undefined {
+  if (typeof summary === 'string' && summary.trim()) {
+    return summary;
+  }
+  if (!Array.isArray(summary)) {
+    return undefined;
+  }
+  const text = summary
+    .map((item) =>
+      typeof item === 'string' ? item : firstNonBlankString(item?.text, item?.content),
+    )
+    .filter((item): item is string => Boolean(item))
+    .join('\n');
+  return text.trim() ? text : undefined;
+}
+
+function normalizeOpenRouterReasoningDetail(detail: any): ReasoningContent | undefined {
+  if (typeof detail === 'string') {
+    return detail.trim() ? { type: 'reasoning', content: detail } : undefined;
+  }
+  if (!detail || typeof detail !== 'object') {
+    return undefined;
+  }
+
+  const detailType = typeof detail.type === 'string' ? detail.type.toLowerCase() : '';
+  const redactedData = firstNonBlankString(
+    detail.data,
+    detail.encrypted,
+    detail.encrypted_content,
+    detail.redacted,
+  );
+
+  if ((detailType.includes('redacted') || detailType.includes('encrypted')) && redactedData) {
+    return { type: 'redacted_thinking', data: redactedData };
+  }
+
+  const text = firstNonBlankString(
+    detail.text,
+    detail.reasoning,
+    detail.content,
+    extractOpenRouterSummaryText(detail.summary),
+  );
+  if (text) {
+    return { type: 'reasoning', content: text };
+  }
+
+  return redactedData ? { type: 'redacted_thinking', data: redactedData } : undefined;
 }
 
 function getOpenRouterOutput(message: any): string | object {
