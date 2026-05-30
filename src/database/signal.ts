@@ -13,7 +13,7 @@ export function updateSignalFile(evalId?: string): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date().toISOString();
-    // Keep the legacy wire format while accepting structured payloads below.
+    // Keep the existing evalId:timestamp wire format.
     const content = evalId ? `${evalId}:${now}` : now;
     fs.writeFileSync(filePath, content);
   } catch (err) {
@@ -29,15 +29,6 @@ export function readSignalEvalId(): string | undefined {
   const filePath = getDbSignalPath();
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
-    try {
-      const payload = JSON.parse(content);
-      return typeof payload.evalId === 'string' && payload.evalId.length > 8
-        ? payload.evalId
-        : undefined;
-    } catch {
-      // Read signal files written by older Promptfoo versions.
-    }
-
     if (/^\d{4}-\d{2}-\d{2}T/.test(content)) {
       return undefined;
     }

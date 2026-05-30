@@ -81,19 +81,6 @@ describe('signal', () => {
   });
 
   describe('readSignalEvalId', () => {
-    it('should return a full generated eval ID from a JSON signal payload', () => {
-      mockReadFileSync.mockReturnValue(
-        JSON.stringify({
-          evalId: 'eval-abc-2026-05-29T22:43:41',
-          timestamp: '2026-05-29T22:43:42.000Z',
-        }),
-      );
-
-      const result = readSignalEvalId();
-
-      expect(result).toBe('eval-abc-2026-05-29T22:43:41');
-    });
-
     it('should return evalId when signal file contains evalId:timestamp format', () => {
       mockReadFileSync.mockReturnValue('eval-12345-abcdef:2024-01-01T00:00:00.000Z');
 
