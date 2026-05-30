@@ -138,12 +138,15 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
-    it('rewrites JSONL output after replacing stale error rows', async () => {
-      const outputPath = path.join(os.tmpdir(), `promptfoo-retry-${randomUUID()}.jsonl`);
+    it('rewrites the original JSONL output after retrying with an override config', async () => {
+      const artifactId = randomUUID();
+      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
+      const jsonOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.json`);
+      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
       const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
       const evalRecord = await Eval.create(
         {
-          outputPath,
+          outputPath: [jsonlOutputPath, jsonOutputPath],
           prompts: [prompt.raw],
           providers: ['echo'],
           tests: [{ vars: { name: 'World' } }],
@@ -169,15 +172,27 @@ describe('retry command', () => {
         namedScores: {},
       });
       fs.writeFileSync(
-        outputPath,
+        jsonlOutputPath,
         `${JSON.stringify({ id: staleResultId, error: 'stale error' })}\n`,
+      );
+      fs.writeFileSync(
+        configPath,
+        [
+          'providers:',
+          '  - echo',
+          'prompts:',
+          `  - "${prompt.raw}"`,
+          'tests:',
+          '  - vars:',
+          '      name: World',
+        ].join('\n'),
       );
 
       try {
-        await retryCommand(evalRecord.id, {});
+        await retryCommand(evalRecord.id, { config: configPath });
 
         const rows = fs
-          .readFileSync(outputPath, 'utf8')
+          .readFileSync(jsonlOutputPath, 'utf8')
           .split(/\r?\n/)
           .filter(Boolean)
           .map((line) => JSON.parse(line));
@@ -190,6 +205,7 @@ describe('retry command', () => {
         );
         expect(JSON.stringify(rows)).not.toContain(staleResultId);
         expect(JSON.stringify(rows)).not.toContain('stale error');
+        expect(fs.existsSync(jsonOutputPath)).toBe(false);
 
         const persistedRows = await db
           .select()
@@ -203,7 +219,9 @@ describe('retry command', () => {
           }),
         );
       } finally {
-        fs.rmSync(outputPath, { force: true });
+        fs.rmSync(jsonlOutputPath, { force: true });
+        fs.rmSync(jsonOutputPath, { force: true });
+        fs.rmSync(configPath, { force: true });
       }
     });
   });

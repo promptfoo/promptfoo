@@ -354,10 +354,12 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
     if (cleanupSucceeded) {
       const outputPaths = (
-        Array.isArray(config?.outputPath) ? config.outputPath : [config?.outputPath]
+        Array.isArray(originalEval.config.outputPath)
+          ? originalEval.config.outputPath
+          : [originalEval.config.outputPath]
       ).filter(
         (outputPath): outputPath is string =>
-          typeof outputPath === 'string' && outputPath.length > 0,
+          typeof outputPath === 'string' && outputPath.endsWith('.jsonl'),
       );
       if (outputPaths.length > 0) {
         await writeMultipleOutputs(outputPaths, retriedEval, null);
