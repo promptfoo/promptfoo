@@ -286,7 +286,9 @@ describe('retry command', () => {
         .mockRejectedValueOnce(new Error('simulated result persistence failure'));
 
       try {
-        await retryCommand(evalRecord.id, { config: configPath });
+        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
+          'Retry results failed to persist. Existing ERROR rows were preserved.',
+        );
 
         expect(addResultSpy).toHaveBeenCalledTimes(1);
         expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);

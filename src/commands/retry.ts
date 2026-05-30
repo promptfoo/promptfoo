@@ -339,22 +339,20 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
 
-    let errorRowsDeleted = false;
     if (retriedEval.resultPersistenceFailed) {
-      logger.warn(
-        'Skipping post-retry cleanup because one or more retried rows failed to persist.',
-      );
-    } else {
-      try {
-        await deleteErrorResults(errorResultIds);
-        errorRowsDeleted = true;
-        await recalculatePromptMetrics(retriedEval);
-      } catch (cleanupError) {
-        // Cleanup failure is non-fatal - retry itself succeeded
-        logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
-          error: cleanupError,
-        });
-      }
+      throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
+    }
+
+    let errorRowsDeleted = false;
+    try {
+      await deleteErrorResults(errorResultIds);
+      errorRowsDeleted = true;
+      await recalculatePromptMetrics(retriedEval);
+    } catch (cleanupError) {
+      // Cleanup failure is non-fatal - retry itself succeeded
+      logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+        error: cleanupError,
+      });
     }
 
     if (errorRowsDeleted) {
