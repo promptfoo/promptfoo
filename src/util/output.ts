@@ -60,6 +60,15 @@ function isFileNotFoundError(error: unknown): boolean {
   return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
 }
 
+function isPermissionDeniedError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error.code === 'EACCES' || error.code === 'EPERM')
+  );
+}
+
 async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   try {
     const stats = await fsPromises.lstat(outputPath);
@@ -91,6 +100,16 @@ async function getExistingFileMode(outputPath: string): Promise<number | undefin
       return undefined;
     }
     throw error;
+  }
+}
+
+async function appendJsonlResults(outputPath: string, evalRecord: Eval): Promise<void> {
+  for await (const batchResults of evalRecord.fetchResultsBatched()) {
+    const text =
+      batchResults
+        .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
+        .join(os.EOL) + os.EOL;
+    await fsPromises.appendFile(outputPath, text);
   }
 }
 
@@ -504,20 +523,25 @@ export async function writeOutput(
       `.promptfoo-${randomUUID()}.tmp`,
     );
     try {
-      if (outputMode === undefined) {
-        await fsPromises.writeFile(tempOutputPath, '');
-      } else {
-        await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
+      try {
+        if (outputMode === undefined) {
+          await fsPromises.writeFile(tempOutputPath, '');
+        } else {
+          await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
+        }
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          logger.warn(
+            '[Output] Falling back to in-place JSONL rewrite because the output directory is not writable',
+          );
+          await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
+          await fsPromises.writeFile(jsonlOutputPath, '');
+          await appendJsonlResults(jsonlOutputPath, evalRecord);
+          return;
+        }
+        throw error;
       }
-      for await (const batchResults of evalRecord.fetchResultsBatched()) {
-        const text =
-          batchResults
-            .map((result) =>
-              JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))),
-            )
-            .join(os.EOL) + os.EOL;
-        await fsPromises.appendFile(tempOutputPath, text);
-      }
+      await appendJsonlResults(tempOutputPath, evalRecord);
       if (outputMode !== undefined) {
         await fsPromises.chmod(tempOutputPath, outputMode);
       }

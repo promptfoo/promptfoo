@@ -75,6 +75,8 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
+    vi.mocked(fsPromises.rename).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.rm).mockResolvedValue(undefined);
     vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
     vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
@@ -1125,6 +1127,20 @@ describe('writeOutput', () => {
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
     expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), '');
     expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+  });
+
+  it('falls back to an in-place JSONL rewrite when the output directory is not writable', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+
+    const outputPath = 'output.jsonl';
+    await writeOutput(outputPath, new Eval({}), null);
+
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.tmp$/), '');
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(2, outputPath, '');
+    expect(fsPromises.rename).not.toHaveBeenCalled();
   });
 
   it('writeOutput with json and txt output', async () => {
