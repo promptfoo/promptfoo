@@ -21,6 +21,7 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
+import { sanitizeResultForJsonlArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -79,6 +80,7 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
+import { getOutputFileFormat } from './util/outputFormats';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -3027,8 +3029,9 @@ class Evaluator {
     this.registers = {};
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
-      ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
-      : evalRecord.config.outputPath?.endsWith('.jsonl')
+      ? evalRecord.config.outputPath.filter((p) => getOutputFileFormat(p) === 'jsonl')
+      : evalRecord.config.outputPath &&
+          getOutputFileFormat(evalRecord.config.outputPath) === 'jsonl'
         ? [evalRecord.config.outputPath]
         : [];
 
@@ -3150,7 +3153,7 @@ class Evaluator {
     }
 
     for (const writer of this.fileWriters) {
-      await writer.write(row);
+      await writer.write(sanitizeResultForJsonlArtifact(row));
     }
   }
 
