@@ -78,8 +78,20 @@ function run(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch (error) {
-    if (error instanceof Error && 'stderr' in error && typeof error.stderr === 'string') {
-      throw new Error(`${error.message}\n${error.stderr}`);
+    if (error instanceof Error) {
+      const details = [error.message];
+      if ('stdout' in error && typeof error.stdout === 'string' && error.stdout.length > 0) {
+        details.push(`stdout:\n${error.stdout}`);
+      }
+      if (
+        'stderr' in error &&
+        typeof error.stderr === 'string' &&
+        error.stderr.length > 0 &&
+        !error.message.includes(error.stderr)
+      ) {
+        details.push(`stderr:\n${error.stderr}`);
+      }
+      throw new Error(details.join('\n'), { cause: error });
     }
     throw error;
   }
@@ -234,7 +246,12 @@ function main(): void {
       ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
       ROOT,
     );
-    const packResults = JSON.parse(packOutput) as PackResult[];
+    let packResults: PackResult[];
+    try {
+      packResults = JSON.parse(packOutput) as PackResult[];
+    } catch (error) {
+      throw new Error(`Failed to parse npm pack JSON output:\n${packOutput}`, { cause: error });
+    }
     assert.equal(packResults.length, 1, 'Expected npm pack to produce one artifact');
 
     const [packResult] = packResults;
