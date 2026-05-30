@@ -13,7 +13,7 @@ export function updateSignalFile(evalId?: string): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date().toISOString();
-    // Keep writes readable by older view processes while accepting both formats below.
+    // Keep the legacy wire format while accepting structured payloads below.
     const content = evalId ? `${evalId}:${now}` : now;
     fs.writeFileSync(filePath, content);
   } catch (err) {

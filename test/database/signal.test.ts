@@ -67,13 +67,6 @@ describe('signal', () => {
       expect(content).toMatch(/^eval-123-abc:\d{4}-\d{2}-\d{2}T/);
     });
 
-    it('should keep scoped writes readable by older view processes', () => {
-      updateSignalFile('eval-123-abc');
-
-      const [, content] = mockWriteFileSync.mock.calls[0];
-      expect(content.split(':')[0]).toBe('eval-123-abc');
-    });
-
     it('should log warning when write fails', () => {
       mockWriteFileSync.mockImplementation(() => {
         throw new Error('Write failed');
