@@ -4,20 +4,72 @@ import debounce from 'debounce';
 import logger from '../logger';
 import { getDbSignalPath } from './index';
 
+export interface DatabaseSignal {
+  type: 'delete' | 'update';
+  evalId?: string;
+  deletedEvalIds?: string[];
+}
+
+function writeSignalFile(content: string): void {
+  const filePath = getDbSignalPath();
+  try {
+    fs.writeFileSync(filePath, content);
+  } catch (err) {
+    logger.warn(`Failed to write database signal file: ${err}`);
+  }
+}
+
 /**
  * Updates the signal file with the current timestamp and optional eval ID.
  * This is used to notify clients that there are new data available.
  * @param evalId - Optional eval ID that triggered the update
  */
 export function updateSignalFile(evalId?: string): void {
+  const now = new Date().toISOString();
+  // Keep the existing evalId:timestamp wire format.
+  writeSignalFile(evalId ? `${evalId}:${now}` : now);
+}
+
+export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void {
+  writeSignalFile(
+    JSON.stringify({
+      type: 'delete',
+      deletedEvalIds,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+function readLegacySignalEvalId(content: string): string | undefined {
+  if (/^\d{4}-\d{2}-\d{2}T/.test(content)) {
+    return undefined;
+  }
+
+  const legacyScopedSignal = content.match(/^(.*):\d{4}-\d{2}-\d{2}T/);
+  const evalId = legacyScopedSignal?.[1];
+  return evalId && evalId.length > 8 ? evalId : undefined;
+}
+
+export function readSignalFile(): DatabaseSignal {
   const filePath = getDbSignalPath();
   try {
-    const now = new Date().toISOString();
-    // Keep the existing evalId:timestamp wire format.
-    const content = evalId ? `${evalId}:${now}` : now;
-    fs.writeFileSync(filePath, content);
-  } catch (err) {
-    logger.warn(`Failed to write database signal file: ${err}`);
+    const content = fs.readFileSync(filePath, 'utf8').trim();
+    try {
+      const parsed = JSON.parse(content) as unknown;
+      if (parsed !== null && typeof parsed === 'object' && 'type' in parsed) {
+        const deletedEvalIds =
+          'deletedEvalIds' in parsed && Array.isArray(parsed.deletedEvalIds)
+            ? parsed.deletedEvalIds.filter((evalId): evalId is string => typeof evalId === 'string')
+            : undefined;
+        if (parsed.type === 'delete') {
+          return { type: 'delete', deletedEvalIds };
+        }
+      }
+    } catch {}
+
+    return { type: 'update', evalId: readLegacySignalEvalId(content) };
+  } catch {
+    return { type: 'update' };
   }
 }
 
@@ -26,22 +78,7 @@ export function updateSignalFile(evalId?: string): void {
  * @returns The eval ID from the signal file, or undefined if not present
  */
 export function readSignalEvalId(): string | undefined {
-  const filePath = getDbSignalPath();
-  try {
-    const content = fs.readFileSync(filePath, 'utf8').trim();
-    if (/^\d{4}-\d{2}-\d{2}T/.test(content)) {
-      return undefined;
-    }
-
-    const legacyScopedSignal = content.match(/^(.*):\d{4}-\d{2}-\d{2}T/);
-    const evalId = legacyScopedSignal?.[1];
-    if (evalId && evalId.length > 8) {
-      return evalId;
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
+  return readSignalFile().evalId;
 }
 
 /**

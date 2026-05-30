@@ -43,7 +43,11 @@ import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
+import {
+  invalidateEvaluationCache,
+  notifyEvaluationChanged,
+  notifyEvaluationsDeleted,
+} from './evalMutation';
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
@@ -1425,7 +1429,7 @@ export default class Eval {
       await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
-    notifyEvaluationChanged();
+    notifyEvaluationsDeleted([this.id]);
   }
 
   /**

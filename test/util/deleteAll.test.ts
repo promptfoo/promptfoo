@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { updateSignalFile } from '../../src/database/signal';
+import { updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { deleteAllEvals } from '../../src/util/database';
@@ -10,6 +10,7 @@ vi.mock('../../src/database/signal', async () => {
   return {
     ...actual,
     updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
   };
 });
 
@@ -32,6 +33,6 @@ describe('delete all evals', () => {
 
     const evals2 = await Eval.getMany();
     expect(evals2).toHaveLength(0);
-    expect(updateSignalFile).toHaveBeenCalledWith(undefined);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(undefined);
   });
 });

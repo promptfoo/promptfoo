@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { updateSignalFile } from '../../src/database/signal';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -38,6 +38,7 @@ vi.mock('../../src/database/signal', async () => {
   return {
     ...actual,
     updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
   };
 });
 
@@ -380,7 +381,7 @@ describe('evaluator', () => {
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
       expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
-      expect(updateSignalFile).toHaveBeenCalledWith(undefined);
+      expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval1.id]);
     });
 
     it('should delete traces and spans for an evaluation', async () => {

@@ -10,7 +10,7 @@ vi.mock('../../src/migrate', () => ({
 }));
 
 vi.mock('../../src/database/signal', () => ({
-  readSignalEvalId: vi.fn().mockReturnValue(undefined),
+  readSignalFile: vi.fn().mockReturnValue({ type: 'update' }),
   setupSignalWatcher: vi.fn().mockReturnValue({
     close: vi.fn(),
     on: vi.fn(),
@@ -44,7 +44,7 @@ vi.mock('../../src/models/eval', () => ({
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-import { readSignalEvalId, setupSignalWatcher } from '../../src/database/signal';
+import { readSignalFile, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { invalidateEvaluationCache } from '../../src/models/evalMutation';
@@ -262,7 +262,7 @@ describe('server', () => {
 
     it('should emit scoped updates for legacy evals without normalized result rows', async () => {
       const getResultsCount = vi.fn().mockResolvedValue(0);
-      vi.mocked(readSignalEvalId).mockReturnValueOnce('legacy-eval');
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'update', evalId: 'legacy-eval' });
       vi.mocked(Eval.findById).mockResolvedValueOnce({
         id: 'legacy-eval',
         config: {},
@@ -311,6 +311,27 @@ describe('server', () => {
 
       await new Promise((resolve) => setImmediate(resolve));
       expect(emitSpy).not.toHaveBeenCalledWith('update', { evalId: 'surviving-eval' });
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should broadcast deleted eval IDs without selecting a surviving eval', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      vi.mocked(readSignalFile).mockReturnValueOnce({
+        type: 'delete',
+        deletedEvalIds: ['deleted-eval'],
+      });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { deletedEvalIds: ['deleted-eval'] }),
+      );
 
       triggerSignal('SIGINT');
       await serverPromise;

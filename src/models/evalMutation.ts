@@ -1,4 +1,4 @@
-import { updateSignalFile } from '../database/signal';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../database/signal';
 import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { clearCountCache } from './evalPerformance';
 
@@ -10,4 +10,9 @@ export function invalidateEvaluationCache(evalId?: string): void {
 export function notifyEvaluationChanged(evalId?: string): void {
   invalidateEvaluationCache(evalId);
   updateSignalFile(evalId);
+}
+
+export function notifyEvaluationsDeleted(evalIds?: string[]): void {
+  invalidateEvaluationCache();
+  updateSignalFileForDeletedEvals(evalIds);
 }

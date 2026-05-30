@@ -461,6 +461,83 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('background-eval');
   });
 
+  it('replaces a pinned eval route when that eval is deleted', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['selected-eval'] });
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/latest-eval', { replace: true });
+  });
+
+  it('preserves a pinned eval route when another eval is deleted', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['background-eval'] });
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('/eval/latest-eval', { replace: true });
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
+  });
+
+  it('clears a pinned eval route when all evals are deleted', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: [] });
+    });
+
+    expect(baseMockTableStore.setTable).toHaveBeenCalledWith(null);
+    expect(baseMockTableStore.setConfig).toHaveBeenCalledWith(null);
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('');
+    expect(baseMockTableStore.setAuthor).toHaveBeenCalledWith(null);
+    expect(mockNavigate).toHaveBeenCalledWith('/eval', { replace: true });
+  });
+
   it('clears the eval state when a socket update reports no remaining evals', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 

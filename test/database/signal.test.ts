@@ -33,7 +33,12 @@ vi.mock('../../src/database/index', () => ({
   getDbSignalPath: mockGetDbSignalPath,
 }));
 
-import { readSignalEvalId, updateSignalFile } from '../../src/database/signal';
+import {
+  readSignalEvalId,
+  readSignalFile,
+  updateSignalFile,
+  updateSignalFileForDeletedEvals,
+} from '../../src/database/signal';
 
 describe('signal', () => {
   beforeEach(() => {
@@ -77,6 +82,34 @@ describe('signal', () => {
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to write database signal file'),
       );
+    });
+
+    it('should write deleted eval IDs as a structured signal', () => {
+      updateSignalFileForDeletedEvals(['eval-deleted-1', 'eval-deleted-2']);
+
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      const [, content] = mockWriteFileSync.mock.calls[0];
+      expect(JSON.parse(content)).toMatchObject({
+        type: 'delete',
+        deletedEvalIds: ['eval-deleted-1', 'eval-deleted-2'],
+      });
+    });
+  });
+
+  describe('readSignalFile', () => {
+    it('should return deleted eval IDs from a structured signal', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-deleted-1', 'eval-deleted-2'],
+          timestamp: '2026-05-30T22:00:00.000Z',
+        }),
+      );
+
+      expect(readSignalFile()).toEqual({
+        type: 'delete',
+        deletedEvalIds: ['eval-deleted-1', 'eval-deleted-2'],
+      });
     });
   });
 

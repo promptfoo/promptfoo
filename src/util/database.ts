@@ -17,7 +17,7 @@ import {
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
-import { notifyEvaluationChanged } from '../models/evalMutation';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvaluateSummaryV2,
@@ -457,7 +457,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
-  notifyEvaluationChanged();
+  notifyEvaluationsDeleted([evalId]);
 }
 
 /**
@@ -474,7 +474,7 @@ export async function deleteEvals(ids: string[]): Promise<void> {
     await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
-  notifyEvaluationChanged();
+  notifyEvaluationsDeleted(ids);
 }
 
 /**
@@ -493,7 +493,7 @@ export async function deleteAllEvals(): Promise<void> {
     await tx.delete(evalsToTagsTable).run();
     await tx.delete(evalsTable).run();
   });
-  notifyEvaluationChanged();
+  notifyEvaluationsDeleted();
 }
 
 export async function getStandaloneEvals({

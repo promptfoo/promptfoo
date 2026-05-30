@@ -339,7 +339,9 @@ export default function Eval({ fetchId }: EvalOptions) {
      * Populates the table store with the most recent eval result by fetching the data by eval ID.
      * Explicit /eval/:id routes remain pinned while the root /eval route follows the latest eval.
      */
-    const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
+    const handleResultsFile = async (
+      data: ResultsFile | { deletedEvalIds?: string[]; evalId?: string } | null,
+    ) => {
       if (!data) {
         logger.debug('[Eval] No eval data available', {});
         clearEvalState();
@@ -349,21 +351,46 @@ export default function Eval({ fetchId }: EvalOptions) {
       setIsStreaming(true);
 
       const newRecentEvals = await fetchRecentFileEvals();
-      if (newRecentEvals && newRecentEvals.length > 0) {
-        const latestEvalId = newRecentEvals[0].evalId;
-        const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
-        const updatedEvalId = scopedEvalId ?? latestEvalId;
-        const shouldReload =
-          fetchId === null
-            ? scopedEvalId === undefined ||
-              scopedEvalId === currentEvalIdRef.current ||
-              scopedEvalId === latestEvalId
-            : scopedEvalId === fetchId;
-        setDefaultEvalId(latestEvalId);
-        if (shouldReload) {
-          setEvalId(updatedEvalId);
-          await loadEvalById(updatedEvalId, true);
+      if (!newRecentEvals || newRecentEvals.length === 0) {
+        clearEvalState();
+        if (fetchId) {
+          navigate(EVAL_ROUTES.ROOT, { replace: true });
         }
+        setIsStreaming(false);
+        return;
+      }
+
+      const latestEvalId = newRecentEvals[0].evalId;
+      const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
+      const displayedEvalId = fetchId ?? currentEvalIdRef.current;
+      setDefaultEvalId(latestEvalId);
+      if (deletedEvalIds) {
+        if (
+          deletedEvalIds.length === 0 ||
+          (displayedEvalId && deletedEvalIds.includes(displayedEvalId))
+        ) {
+          if (fetchId) {
+            navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
+          } else {
+            setEvalId(latestEvalId);
+            await loadEvalById(latestEvalId, true);
+          }
+        }
+        setIsStreaming(false);
+        return;
+      }
+
+      const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
+      const updatedEvalId = scopedEvalId ?? latestEvalId;
+      const shouldReload =
+        fetchId === null
+          ? scopedEvalId === undefined ||
+            scopedEvalId === currentEvalIdRef.current ||
+            scopedEvalId === latestEvalId
+          : scopedEvalId === fetchId;
+      if (shouldReload) {
+        setEvalId(updatedEvalId);
+        await loadEvalById(updatedEvalId, true);
       }
 
       setIsStreaming(false);
@@ -387,7 +414,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       socket.disconnect();
       setIsStreaming(false);
     };
-  }, [apiBaseUrl, clearEvalState, fetchId, loadEvalById, setIsStreaming]);
+  }, [apiBaseUrl, clearEvalState, fetchId, loadEvalById, navigate, setIsStreaming]);
 
   usePageMeta({
     title: config?.description || evalId || 'Eval',

@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { updateSignalFile } from '../../src/database/signal';
-import { invalidateEvaluationCache, notifyEvaluationChanged } from '../../src/models/evalMutation';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
+import {
+  invalidateEvaluationCache,
+  notifyEvaluationChanged,
+  notifyEvaluationsDeleted,
+} from '../../src/models/evalMutation';
 import { clearCountCache } from '../../src/models/evalPerformance';
 import { clearStandaloneEvalCache } from '../../src/util/standaloneEvalCache';
 
 vi.mock('../../src/database/signal', () => ({
   updateSignalFile: vi.fn(),
+  updateSignalFileForDeletedEvals: vi.fn(),
 }));
 
 vi.mock('../../src/util/standaloneEvalCache', () => ({
@@ -38,5 +43,13 @@ describe('eval mutation invalidation', () => {
     expect(vi.mocked(clearStandaloneEvalCache).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(updateSignalFile).mock.invocationCallOrder[0],
     );
+  });
+
+  it('invalidates all cached evaluations before notifying watchers about deletions', () => {
+    notifyEvaluationsDeleted(['eval-123']);
+
+    expect(clearStandaloneEvalCache).toHaveBeenCalledOnce();
+    expect(clearCountCache).toHaveBeenCalledWith(undefined);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(['eval-123']);
   });
 });

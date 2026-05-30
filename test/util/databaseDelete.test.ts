@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { updateSignalFile } from '../../src/database/signal';
+import { updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -13,6 +13,7 @@ vi.mock('../../src/database/signal', async () => {
   return {
     ...actual,
     updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
   };
 });
 
@@ -62,7 +63,7 @@ describe('database eval deletion', () => {
     expect(await Eval.findById(eval_.id)).toBeUndefined();
     expect(await db.select().from(tracesTable).all()).toHaveLength(0);
     expect(await db.select().from(spansTable).all()).toHaveLength(0);
-    expect(updateSignalFile).toHaveBeenCalledWith(undefined);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval_.id]);
   });
 
   it('deletes only traces and spans for selected evals', async () => {
@@ -85,7 +86,7 @@ describe('database eval deletion', () => {
     expect(await db.select({ traceId: spansTable.traceId }).from(spansTable).all()).toEqual([
       { traceId: 'trace-retained' },
     ]);
-    expect(updateSignalFile).toHaveBeenCalledWith(undefined);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval1.id, eval2.id]);
   });
 
   it('deletes traces and spans when deleting all evals', async () => {
@@ -100,7 +101,7 @@ describe('database eval deletion', () => {
     expect(await Eval.getMany()).toHaveLength(0);
     expect(await db.select().from(tracesTable).all()).toHaveLength(0);
     expect(await db.select().from(spansTable).all()).toHaveLength(0);
-    expect(updateSignalFile).toHaveBeenCalledWith(undefined);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(undefined);
   });
 
   it('handles evals with no traces without error', async () => {

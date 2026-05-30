@@ -11,7 +11,7 @@ import path from 'node:path';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
-import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
+import { readSignalFile, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -385,14 +385,19 @@ export async function startServer(
 
   const watcher = setupSignalWatcher(() => {
     const handleSignalUpdate = async () => {
-      // Try to get the specific eval that was updated from the signal file
-      const signalEvalId = readSignalEvalId();
+      const signal = readSignalFile();
       // Mutations can happen in a separate CLI process, so clear this server's
       // process-local caches before serving the next request.
-      invalidateEvaluationCache(signalEvalId);
-      const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+      invalidateEvaluationCache(signal.evalId);
+      allPrompts = null;
 
-      if (updatedEval && signalEvalId) {
+      if (signal.type === 'delete') {
+        io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });
+        return;
+      }
+
+      const updatedEval = signal.evalId ? await Eval.findById(signal.evalId) : await Eval.latest();
+      if (updatedEval && signal.evalId) {
         logger.debug(
           `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
         );
@@ -400,7 +405,6 @@ export async function startServer(
       } else if (!updatedEval) {
         io.emit('update', null);
       }
-      allPrompts = null;
     };
 
     void handleSignalUpdate();
