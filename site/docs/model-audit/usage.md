@@ -378,10 +378,10 @@ The result envelope includes scan statistics, scanned assets, file metadata, `is
 
 Optional fields may be omitted, and scanner-specific fields may be added over time. Consumers should tolerate unknown fields, especially within `details` and `file_metadata`.
 
-Export the installed version's rule catalog when you need the current rule codes and descriptions:
+Export the installed version's scanner catalog when you need the current scanner IDs and dependency metadata:
 
 ```bash
-modelaudit rules --list --format json
+modelaudit scan --list-scanners --format json
 ```
 
 ## SARIF Output Format
