@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { shouldCopyDrizzlePath } from './postbuild';
+
 type PackFile = {
   mode: number;
   path: string;
@@ -92,7 +94,7 @@ function assertPackagedFiles(packResult: PackResult): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
   const missingDrizzleFiles = listFiles(drizzleDir)
-    .filter((file) => !file.endsWith('.md') && !file.includes('AGENTS') && !file.includes('CLAUDE'))
+    .filter(shouldCopyDrizzlePath)
     .map((file) => `dist/${file}`)
     .filter((file) => !packagedPaths.has(file));
   const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
