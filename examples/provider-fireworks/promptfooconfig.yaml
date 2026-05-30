@@ -15,8 +15,8 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 120
-  - id: fireworks:accounts/fireworks/models/mixtral-8x7b-instruct
-    label: 'Mixtral 8x7B'
+  - id: fireworks:accounts/fireworks/models/llama-v3p1-8b-instruct
+    label: 'Llama 3.1 8B'
     config:
       temperature: 0.2
       max_tokens: 120
