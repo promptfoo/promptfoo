@@ -190,7 +190,11 @@ describeEvaluator('evaluator execution control', () => {
     callApi: ReturnType<typeof vi.fn>;
   };
 
-  async function runConcurrencyProbe(rawPrompt: string, testCount = 4): Promise<ConcurrencyProbe> {
+  async function runConcurrencyProbe(
+    rawPrompt: string,
+    testCount = 4,
+    providerOverrides: Partial<ApiProvider> = {},
+  ): Promise<ConcurrencyProbe> {
     let activeCalls = 0;
     let maxActiveCalls = 0;
     // Explicit barrier so every concurrent slot actually observes peak
@@ -230,6 +234,7 @@ describeEvaluator('evaluator execution control', () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi,
+      ...providerOverrides,
     };
 
     const tests = Array.from({ length: testCount }, (_, idx) => ({
@@ -305,6 +310,24 @@ describeEvaluator('evaluator execution control', () => {
     );
 
     expect(maxActiveCalls).toBe(1);
+  });
+
+  it('forces concurrency to 1 for browser providers with persistent sessions', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe('Ask: {{ question }}', 2, {
+      config: { persistSession: true },
+      id: vi.fn().mockReturnValue('browser-provider'),
+    });
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('keeps non-persistent browser provider calls concurrent', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe('Ask: {{ question }}', 2, {
+      config: { persistSession: false },
+      id: vi.fn().mockReturnValue('browser-provider'),
+    });
+
+    expect(maxActiveCalls).toBeGreaterThan(1);
   });
 
   it('falls back to serial execution when a prompt that mentions _conversation fails to parse', async () => {

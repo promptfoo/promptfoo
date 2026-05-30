@@ -578,6 +578,7 @@ export function isGradingResult(result: any): result is GradingResult {
 }
 
 export const BaseAssertionTypesSchema = z.enum([
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -707,7 +708,7 @@ export const AssertionSchema = z.object({
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
+  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
 
   // Override the grading rubric
