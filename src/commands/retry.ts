@@ -16,6 +16,7 @@ import {
   resolveConfigs,
 } from '../util/config/load';
 import { accumulateNamedMetric } from '../util/namedMetrics';
+import { writeMultipleOutputs } from '../util/output';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateAssertionTokenUsage,
@@ -339,14 +340,28 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
     // SUCCESS: Now it's safe to delete the old ERROR results
     // This is the key fix for data loss - deletion only happens after successful retry
+    let cleanupSucceeded = false;
     try {
       await deleteErrorResults(errorResultIds);
       await recalculatePromptMetrics(retriedEval);
+      cleanupSucceeded = true;
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
       logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
         error: cleanupError,
       });
+    }
+
+    if (cleanupSucceeded) {
+      const outputPaths = (
+        Array.isArray(config?.outputPath) ? config.outputPath : [config?.outputPath]
+      ).filter(
+        (outputPath): outputPath is string =>
+          typeof outputPath === 'string' && outputPath.length > 0,
+      );
+      if (outputPaths.length > 0) {
+        await writeMultipleOutputs(outputPaths, retriedEval, null);
+      }
     }
 
     logger.info(`✅ Retry completed for evaluation: ${chalk.cyan(evalId)}`);

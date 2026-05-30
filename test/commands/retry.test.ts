@@ -1,4 +1,7 @@
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +9,7 @@ import {
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
+  retryCommand,
 } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
@@ -130,6 +134,77 @@ describe('retry command', () => {
 
       const errorIds = await getErrorResultIds(emptyEval.id);
       expect(errorIds).toHaveLength(0);
+    });
+  });
+
+  describe('retryCommand', () => {
+    it('rewrites JSONL output after replacing stale error rows', async () => {
+      const outputPath = path.join(os.tmpdir(), `promptfoo-retry-${randomUUID()}.jsonl`);
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const evalRecord = await Eval.create(
+        {
+          outputPath,
+          prompts: [prompt.raw],
+          providers: ['echo'],
+          tests: [{ vars: { name: 'World' } }],
+        },
+        [prompt],
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const staleResultId = `${evalRecord.id}-stale-error`;
+      await db.insert(evalResultsTable).values({
+        id: staleResultId,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt,
+        testCase: { vars: { name: 'World' } },
+        provider: { id: 'echo' },
+        response: { output: 'stale error' },
+        error: 'stale error',
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        namedScores: {},
+      });
+      fs.writeFileSync(
+        outputPath,
+        `${JSON.stringify({ id: staleResultId, error: 'stale error' })}\n`,
+      );
+
+      try {
+        await retryCommand(evalRecord.id, {});
+
+        const rows = fs
+          .readFileSync(outputPath, 'utf8')
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toEqual(
+          expect.objectContaining({
+            success: true,
+            testIdx: 0,
+          }),
+        );
+        expect(JSON.stringify(rows)).not.toContain(staleResultId);
+        expect(JSON.stringify(rows)).not.toContain('stale error');
+
+        const persistedRows = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalRecord.id));
+        expect(persistedRows).toHaveLength(1);
+        expect(persistedRows[0]).toEqual(
+          expect.objectContaining({
+            success: true,
+            testIdx: 0,
+          }),
+        );
+      } finally {
+        fs.rmSync(outputPath, { force: true });
+      }
     });
   });
 
