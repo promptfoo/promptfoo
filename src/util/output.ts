@@ -56,6 +56,44 @@ function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
   return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 }
 
+function isFileNotFoundError(error: unknown): boolean {
+  return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+}
+
+async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
+  try {
+    const stats = await fsPromises.lstat(outputPath);
+    if (!stats.isSymbolicLink()) {
+      return outputPath;
+    }
+
+    try {
+      return await fsPromises.realpath(outputPath);
+    } catch (error) {
+      if (isFileNotFoundError(error)) {
+        return path.resolve(path.dirname(outputPath), await fsPromises.readlink(outputPath));
+      }
+      throw error;
+    }
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return outputPath;
+    }
+    throw error;
+  }
+}
+
+async function getExistingFileMode(outputPath: string): Promise<number | undefined> {
+  try {
+    return (await fsPromises.stat(outputPath)).mode & 0o7777;
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
     ? '[PASS]'
@@ -459,12 +497,18 @@ export async function writeOutput(
     });
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
+    const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
+    const outputMode = await getExistingFileMode(jsonlOutputPath);
     const tempOutputPath = path.join(
-      path.dirname(outputPath),
-      `.${path.basename(outputPath)}.${randomUUID()}.tmp`,
+      path.dirname(jsonlOutputPath),
+      `.promptfoo-${randomUUID()}.tmp`,
     );
     try {
-      await fsPromises.writeFile(tempOutputPath, '');
+      if (outputMode === undefined) {
+        await fsPromises.writeFile(tempOutputPath, '');
+      } else {
+        await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
+      }
       for await (const batchResults of evalRecord.fetchResultsBatched()) {
         const text =
           batchResults
@@ -474,7 +518,7 @@ export async function writeOutput(
             .join(os.EOL) + os.EOL;
         await fsPromises.appendFile(tempOutputPath, text);
       }
-      await fsPromises.rename(tempOutputPath, outputPath);
+      await fsPromises.rename(tempOutputPath, jsonlOutputPath);
     } catch (error) {
       await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
       throw error;

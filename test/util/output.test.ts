@@ -48,6 +48,10 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  lstat: vi.fn(),
+  stat: vi.fn(),
+  realpath: vi.fn(),
+  readlink: vi.fn(),
   rename: vi.fn().mockResolvedValue(undefined),
   rm: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn(),
@@ -62,6 +66,7 @@ describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
   beforeEach(() => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     vi.clearAllMocks();
     // Restore mock implementations that vi.resetAllMocks() clears
     mockFileHandle.write.mockResolvedValue(undefined);
@@ -69,6 +74,8 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
+    vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
+    vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockResolvedValue({
