@@ -4,14 +4,18 @@ import { getDb } from '../../src/database/index';
 import { evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
+import { type CompletedPrompt, type Prompt, ResultFailureReason } from '../../src/types/index';
 import {
   clearStandaloneEvalCache,
   deleteEval,
   getStandaloneEvals,
   updateResult,
 } from '../../src/util/database';
-
-import type { CompletedPrompt, Prompt } from '../../src/types/index';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+} from '../../src/util/standaloneEvalCache';
 
 const completedPrompt: CompletedPrompt = {
   raw: 'hello',
@@ -61,6 +65,10 @@ async function setIsRedteam(evalId: string, value: boolean) {
   await db.update(evalsTable).set({ isRedteam: value }).where(eq(evalsTable.id, evalId)).run();
 }
 
+function expectStandaloneHistoryCached(options?: Parameters<typeof getStandaloneEvalCacheKey>[0]) {
+  expect(getCachedStandaloneEvals(getStandaloneEvalCacheKey(options))).toBeDefined();
+}
+
 describe('getStandaloneEvals', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -108,6 +116,104 @@ describe('getStandaloneEvals', () => {
     const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
     expect(afterIds).toContain(keep.id);
     expect(afterIds).not.toContain(drop.id);
+  });
+
+  it('includes newly created evals after history has been cached', async () => {
+    const first = await createEvalWithPrompts({});
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    const limitedBeforeIds = (await getStandaloneEvals({ limit: 5 })).map((row) => row.evalId);
+    expect(beforeIds).toContain(first.id);
+    expect(limitedBeforeIds).toContain(first.id);
+    expectStandaloneHistoryCached();
+    expectStandaloneHistoryCached({ limit: 5 });
+
+    const second = await createEvalWithPrompts({});
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    const limitedAfterIds = (await getStandaloneEvals({ limit: 5 })).map((row) => row.evalId);
+    expect(afterIds).toContain(first.id);
+    expect(afterIds).toContain(second.id);
+    expect(limitedAfterIds).toContain(first.id);
+    expect(limitedAfterIds).toContain(second.id);
+  });
+
+  it('includes copied evals after history has been cached', async () => {
+    const source = await createEvalWithPrompts({});
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toContain(source.id);
+    expectStandaloneHistoryCached();
+
+    const persistedSource = await Eval.findById(source.id);
+    expect(persistedSource).toBeDefined();
+    const copy = await persistedSource!.copy('copy of source');
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(afterIds).toContain(source.id);
+    expect(afterIds).toContain(copy.id);
+  });
+
+  it('includes direct eval saves after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.description).toBeNull();
+    expectStandaloneHistoryCached();
+
+    const persistedEval = await Eval.findById(eval_.id);
+    expect(persistedEval).toBeDefined();
+    persistedEval!.config.description = 'updated description';
+    await persistedEval!.save();
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.description).toBe('updated description');
+  });
+
+  it('includes prompt changes after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.raw).toBe('hello');
+    expectStandaloneHistoryCached();
+
+    await eval_.addPrompts([
+      {
+        ...completedPrompt,
+        raw: 'goodbye',
+        label: 'goodbye',
+      },
+    ]);
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.raw).toBe('goodbye');
+  });
+
+  it('includes result changes after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.pluginFailCount['plugin-a']).toBeUndefined();
+    expectStandaloneHistoryCached();
+
+    await eval_.setResults([
+      new EvalResult({
+        id: 'set-results-history-row',
+        evalId: eval_.id,
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {}, metadata: { pluginId: 'plugin-a' } },
+        prompt: renderedPrompts[0],
+        provider: { id: 'test-provider' },
+        response: { output: 'bad' },
+        gradingResult: null,
+        namedScores: {},
+        metadata: {},
+        success: false,
+        score: 0,
+        latencyMs: 1,
+        cost: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      }),
+    ]);
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.pluginFailCount['plugin-a']).toBe(1);
   });
 
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {

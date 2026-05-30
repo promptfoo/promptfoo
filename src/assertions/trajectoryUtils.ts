@@ -139,12 +139,29 @@ function extractToolName(span: TraceSpan): string | undefined {
       continue;
     }
 
-    if (/tool.?name|function.?name/i.test(key)) {
-      return value.trim();
+    const trimmed = value.trim();
+
+    // A tool name is always a scalar identifier. Some chat/generation spans carry the list
+    // of *available* tools as a JSON-serialized array/object under a `tool`-matching key
+    // (e.g. `gen_ai.tool.definitions` from pydantic-ai). Never treat such a structured
+    // value as a tool name, or those chat spans get misclassified as tool calls. (#9523)
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed !== null && typeof parsed === 'object') {
+          continue;
+        }
+      } catch {
+        // Not JSON — fall through and treat it as an ordinary string tool name.
+      }
     }
 
-    if (/(^|[._])tool($|[._])/i.test(key) && !/result|output/i.test(key)) {
-      return value.trim();
+    if (/tool.?name|function.?name/i.test(key)) {
+      return trimmed;
+    }
+
+    if (/(^|[._])tool($|[._])/i.test(key) && !/result|output|definition/i.test(key)) {
+      return trimmed;
     }
   }
 
