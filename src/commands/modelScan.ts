@@ -15,13 +15,14 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
 import { createShareableModelAuditUrl, isModelAuditSharingEnabled } from '../share';
-import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
+import { checkModelAuditUpdates } from '../updates';
 import {
   getHuggingFaceMetadata,
   isHuggingFaceModel,
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
 import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { checkModelAuditInstalled } from '../util/modelAuditInstall';
 import { getModelAuditVerdict, parseCompleteModelAuditResults } from '../util/modelAuditResults';
 import type { Command } from 'commander';
 
@@ -106,17 +107,6 @@ export function supportsCliUiWithOutput(version: string | null): boolean {
     return false;
   }
   return semver.gte(parsed, '0.2.20');
-}
-
-/**
- * Check if modelaudit is installed and get its version.
- */
-export async function checkModelAuditInstalled(): Promise<{
-  installed: boolean;
-  version: string | null;
-}> {
-  const version = await getModelAuditCurrentVersion();
-  return { installed: version !== null, version };
 }
 
 /**

@@ -3,8 +3,9 @@ import { writeFileSync } from 'fs';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
-import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
+import { modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
+import { checkModelAuditInstalled } from '../../src/util/modelAuditInstall';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('child_process');
