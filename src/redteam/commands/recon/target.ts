@@ -112,7 +112,7 @@ export function prepareReconTarget(
   additionalExclusions?: string[],
 ): PreparedReconTarget {
   const exclusions = buildReconExclusions(additionalExclusions, targetDirectory);
-  const resolvedScratchpadDirectory = path.resolve(scratchpadDirectory);
+  const resolvedScratchpadDirectory = fs.realpathSync(scratchpadDirectory);
   const resolvedTargetDirectory = fs.realpathSync(targetDirectory);
   const snapshotRoot = path.join(scratchpadDirectory, 'target');
   const snapshotDirectory = path.join(snapshotRoot, path.basename(targetDirectory) || 'codebase');
