@@ -213,6 +213,7 @@ describe('retry command', () => {
           expect.objectContaining({
             success: true,
             testIdx: 0,
+            vars: { name: 'World' },
           }),
         );
         expect(JSON.stringify(rows)).not.toContain(staleResultId);
