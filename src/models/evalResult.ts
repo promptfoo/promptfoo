@@ -711,7 +711,7 @@ export default class EvalResult {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
     if (this.gradingResult?.tokensUsed) {
-      tokenUsage.assertions.numRequests++;
+      tokenUsage.assertions.numRequests = (tokenUsage.assertions.numRequests ?? 0) + 1;
       accumulateAssertionTokenUsage(tokenUsage.assertions, this.gradingResult.tokensUsed);
     }
 
