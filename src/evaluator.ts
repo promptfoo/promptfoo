@@ -4219,8 +4219,9 @@ class Evaluator {
 
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
+    } else {
+      notifyEvaluationChanged(this.evalRecord.id);
     }
-    notifyEvaluationChanged(this.evalRecord.id);
   }
 
   private async addMaxDurationTimeoutResults({

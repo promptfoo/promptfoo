@@ -12,11 +12,9 @@ import { getDbSignalPath } from './index';
 export function updateSignalFile(evalId?: string): void {
   const filePath = getDbSignalPath();
   try {
-    const now = new Date();
-    const content = JSON.stringify({
-      ...(evalId && { evalId }),
-      timestamp: now.toISOString(),
-    });
+    const now = new Date().toISOString();
+    // Keep writes readable by older view processes while accepting both formats below.
+    const content = evalId ? `${evalId}:${now}` : now;
     fs.writeFileSync(filePath, content);
   } catch (err) {
     logger.warn(`Failed to write database signal file: ${err}`);

@@ -55,9 +55,7 @@ describe('signal', () => {
       expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
       const [, content] = mockWriteFileSync.mock.calls[0];
       expect(mockWriteFileSync).toHaveBeenCalledWith('/mock/path/signal.txt', expect.any(String));
-      expect(JSON.parse(content)).toEqual({
-        timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
-      });
+      expect(content).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
 
     it('should write evalId and timestamp when evalId is provided', () => {
@@ -66,10 +64,14 @@ describe('signal', () => {
       expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
       const [, content] = mockWriteFileSync.mock.calls[0];
       expect(mockWriteFileSync).toHaveBeenCalledWith('/mock/path/signal.txt', expect.any(String));
-      expect(JSON.parse(content)).toEqual({
-        evalId: 'eval-123-abc',
-        timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-      });
+      expect(content).toMatch(/^eval-123-abc:\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('should keep scoped writes readable by older view processes', () => {
+      updateSignalFile('eval-123-abc');
+
+      const [, content] = mockWriteFileSync.mock.calls[0];
+      expect(content.split(':')[0]).toBe('eval-123-abc');
     });
 
     it('should log warning when write fails', () => {

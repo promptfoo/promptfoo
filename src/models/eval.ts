@@ -45,7 +45,6 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import {
-  clearCountCache,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -558,7 +557,7 @@ export default class Eval {
       }
     });
 
-    invalidateEvaluationCache();
+    invalidateEvaluationCache(evalId);
 
     return new Eval(config, {
       id: evalId,
@@ -1272,7 +1271,6 @@ export default class Eval {
         .insert(evalResultsTable)
         .values(results.map((r) => ({ ...r, evalId: this.id })))
         .run();
-      clearCountCache(this.id);
       notifyEvaluationChanged(this.id);
     }
     this._resultsLoaded = true;

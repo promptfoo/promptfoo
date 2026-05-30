@@ -627,7 +627,7 @@ export default class EvalResult {
       this.id = result[0].id;
       this.persisted = true;
     }
-    invalidateEvaluationCache();
+    invalidateEvaluationCache(this.evalId);
   }
 
   toEvaluateResult(): EvaluateResult {
