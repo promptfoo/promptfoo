@@ -1,8 +1,8 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
-import { spansTable, tracesTable } from '../../src/database/tables';
+import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -12,10 +12,11 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
+import { type Prompt, ResultFailureReason } from '../../src/types/index';
+import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import EvalFactory from '../factories/evalFactory';
-
-import type { Prompt } from '../../src/types/index';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -44,7 +45,7 @@ describe('evaluator', () => {
     vi.mocked(updateSignalFile).mockClear();
 
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     // Delete related tables first
     await db.run('DELETE FROM spans');
     await db.run('DELETE FROM traces');
@@ -100,6 +101,45 @@ describe('evaluator', () => {
     });
   });
 
+  describe('setResults', () => {
+    it('should persist result rows when replacing results on a persisted eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const result = new EvalResult({
+        id: 'set-results-row',
+        evalId: eval_.id,
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { state: 'colorado' } },
+        prompt: {
+          raw: 'What is the capital of colorado?',
+          label: 'What is the capital of {{state}}?',
+        },
+        provider: { id: 'test-provider' },
+        response: { output: 'Denver' },
+        gradingResult: null,
+        namedScores: {},
+        metadata: {},
+        success: true,
+        score: 1,
+        latencyMs: 12,
+        cost: 0,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      await eval_.setResults([result]);
+
+      const persistedResults = await EvalResult.findManyByEvalId(eval_.id);
+      expect(persistedResults).toHaveLength(1);
+      expect(persistedResults[0]).toEqual(
+        expect.objectContaining({
+          evalId: eval_.id,
+          promptIdx: 0,
+          response: expect.objectContaining({ output: 'Denver' }),
+        }),
+      );
+    });
+  });
+
   describe('summaryResults', () => {
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
@@ -141,6 +181,10 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       const eval3 = await EvalFactory.create();
+      const db = await getDb();
+      await db.update(evalsTable).set({ createdAt: 1 }).where(eq(evalsTable.id, eval1.id)).run();
+      await db.update(evalsTable).set({ createdAt: 2 }).where(eq(evalsTable.id, eval2.id)).run();
+      await db.update(evalsTable).set({ createdAt: 3 }).where(eq(evalsTable.id, eval3.id)).run();
 
       const evaluations = await getEvalSummaries();
 
@@ -148,6 +192,98 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
+    });
+
+    it('should sort timestamp ties consistently in full and filtered summaries', async () => {
+      const eval1 = await Eval.create({}, []);
+      const eval2 = await Eval.create({}, []);
+      const createdAt = Date.now();
+
+      const db = await getDb();
+      await db.update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval1.id)).run();
+      await db.update(evalsTable).set({ createdAt }).where(eq(evalsTable.id, eval2.id)).run();
+
+      const expectedIds = [eval1.id, eval2.id].sort().reverse();
+      const allIds = (await getEvalSummaries()).map(({ evalId }) => evalId);
+      const filteredIds = (await getEvalSummaries(undefined, 'eval')).map(({ evalId }) => evalId);
+
+      expect(allIds).toEqual(expectedIds);
+      expect(filteredIds).toEqual(expectedIds);
+    });
+
+    it('should update redteam classification when a persisted config changes type', async () => {
+      const redteamEvaluation = await Eval.create({ redteam: {} as any }, []);
+      const regularEvaluation = await Eval.create({}, []);
+
+      await updateResult(redteamEvaluation.id, {});
+      await updateResult(regularEvaluation.id, { redteam: {} as any });
+
+      const db = await getDb();
+      const stored = await db
+        .select({ id: evalsTable.id, isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .all();
+      const redteamSummaries = await getEvalSummaries(undefined, 'redteam');
+      const evalSummaries = await getEvalSummaries(undefined, 'eval');
+
+      expect(stored).toContainEqual({ id: redteamEvaluation.id, isRedteam: false });
+      expect(stored).toContainEqual({ id: regularEvaluation.id, isRedteam: true });
+      expect(redteamSummaries).not.toContainEqual(
+        expect.objectContaining({ evalId: redteamEvaluation.id }),
+      );
+      expect(redteamSummaries).toContainEqual(
+        expect.objectContaining({ evalId: regularEvaluation.id, isRedteam: true }),
+      );
+      expect(evalSummaries).toContainEqual(
+        expect.objectContaining({ evalId: redteamEvaluation.id, isRedteam: false }),
+      );
+      expect(evalSummaries).not.toContainEqual(
+        expect.objectContaining({ evalId: regularEvaluation.id }),
+      );
+    });
+
+    it('should persist the redteam flag for legacy result writes', async () => {
+      const evalId = await writeResultsToDatabase(
+        {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: [],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0 },
+        } as any,
+        { redteam: {} as any },
+      );
+
+      const db = await getDb();
+      const stored = await db
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, evalId))
+        .get();
+
+      expect(stored?.isRedteam).toBe(true);
+    });
+
+    it.each([
+      { label: 'redteam: {}', config: { redteam: {} as any }, expected: true },
+      { label: 'redteam: null', config: { redteam: null as any }, expected: true },
+      { label: 'no redteam key', config: {}, expected: false },
+    ])('classifies $label as isRedteam=$expected on create', async ({ config, expected }) => {
+      const eval_ = await Eval.create(config, []);
+      const db = await getDb();
+      const stored = await db
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, eval_.id))
+        .get();
+      expect(stored?.isRedteam).toBe(expected);
+
+      const redteamSummaries = await getEvalSummaries(undefined, 'redteam');
+      const evalSummaries = await getEvalSummaries(undefined, 'eval');
+      const presentInRedteam = redteamSummaries.some((s) => s.evalId === eval_.id);
+      const presentInEval = evalSummaries.some((s) => s.evalId === eval_.id);
+      expect(presentInRedteam).toBe(expected);
+      expect(presentInEval).toBe(!expected);
     });
 
     it('should correctly deserialize all provider types', async () => {
@@ -251,10 +387,10 @@ describe('evaluator', () => {
 
       await eval1.delete();
 
-      const db = getDb();
+      const db = await getDb();
       expect(await Eval.findById(eval1.id)).toBeUndefined();
-      expect(db.select().from(tracesTable).all()).toHaveLength(0);
-      expect(db.select().from(spansTable).all()).toHaveLength(0);
+      await expect(db.select().from(tracesTable).all()).resolves.toHaveLength(0);
+      await expect(db.select().from(spansTable).all()).resolves.toHaveLength(0);
     });
   });
 
@@ -333,7 +469,7 @@ describe('evaluator', () => {
       });
 
       // Remove vars from the evals table to trigger backfill
-      const db = getDb();
+      const db = await getDb();
       // Drizzle's .run() does not support ? params for this case, so interpolate directly
       await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
 
@@ -349,7 +485,7 @@ describe('evaluator', () => {
       });
 
       // Remove vars from the evals table to trigger backfill
-      const db = getDb();
+      const db = await getDb();
       await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
 
       const persistedEval1 = await Eval.findById(eval1.id);
@@ -365,7 +501,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject NaN as durationMs in the results column
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', 'NaN') WHERE id = '${eval1.id}'`,
       );
@@ -380,7 +516,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject negative number as durationMs
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', -5000) WHERE id = '${eval1.id}'`,
       );
@@ -395,7 +531,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject string as durationMs
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', '"not a number"') WHERE id = '${eval1.id}'`,
       );
@@ -410,7 +546,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject valid durationMs
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', 12345) WHERE id = '${eval1.id}'`,
       );
@@ -423,7 +559,7 @@ describe('evaluator', () => {
     it('should extract generationDurationMs and evaluationDurationMs from database', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ durationMs: 15000, generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
       );
@@ -437,7 +573,7 @@ describe('evaluator', () => {
     it('should handle missing generationDurationMs and evaluationDurationMs in database', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000 })}' WHERE id = '${eval1.id}'`,
       );
@@ -451,7 +587,7 @@ describe('evaluator', () => {
     it('should handle invalid generationDurationMs in database by returning undefined', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000, generationDurationMs: -100, evaluationDurationMs: 'bad' })}' WHERE id = '${eval1.id}'`,
       );
@@ -465,7 +601,7 @@ describe('evaluator', () => {
     it('should recompute durationMs from split fields when durationMs is missing', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
       );
@@ -495,7 +631,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Seed the results column with an extra key (simulating future fields or other data)
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ someOtherKey: 'preserve-me' })}' WHERE id = '${eval1.id}'`,
       );
@@ -517,7 +653,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Corrupt the results column with invalid JSON
-      const db = getDb();
+      const db = await getDb();
       await db.run(`UPDATE evals SET results = 'not-valid-json' WHERE id = '${eval1.id}'`);
 
       eval1.setDurationMs(5000);
@@ -532,7 +668,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Set results to a valid JSON array (non-object)
-      const db = getDb();
+      const db = await getDb();
       await db.run(`UPDATE evals SET results = '[]' WHERE id = '${eval1.id}'`);
 
       eval1.setDurationMs(3000);
@@ -800,9 +936,24 @@ describe('evaluator', () => {
         config: eval1.config,
         author: null,
         prompts: eval1.getPrompts(),
+        ...(eval1.vars.length > 0 && { vars: eval1.vars }),
         datasetId: null,
         results: await eval1.toEvaluateSummary(),
       });
+    });
+
+    it('should include persisted variable display order', async () => {
+      const eval1 = new Eval({}, { vars: ['zebra', 'apple'] });
+
+      expect((await eval1.toResultsFile()).vars).toEqual(['zebra', 'apple']);
+    });
+
+    it('omits the vars field entirely when no variable order is persisted', async () => {
+      const eval1 = new Eval({});
+
+      const results = await eval1.toResultsFile();
+
+      expect(results).not.toHaveProperty('vars');
     });
 
     it('should handle null author and datasetId', async () => {
@@ -1062,7 +1213,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create();
 
       // Add eval results with different metadata
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
@@ -1090,7 +1241,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create();
 
       // Add eval result with empty metadata
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
@@ -1102,6 +1253,49 @@ describe('evaluator', () => {
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
+    });
+  });
+
+  describe('EvalQueries.getVarsFromEvals', () => {
+    it('returns each evaluations var keys sorted alphabetically for stable list output', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const eval2 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"zebra":"z","apple":"a","mango":"m"}}') WHERE eval_id = '${eval1.id}'`,
+      );
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"yellow":"y","banana":"b"}}') WHERE eval_id = '${eval2.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([eval1, eval2]);
+
+      expect(vars[eval1.id]).toEqual(['apple', 'mango', 'zebra']);
+      expect(vars[eval2.id]).toEqual(['banana', 'yellow']);
+    });
+
+    it('returns an empty object for an empty evals list', async () => {
+      const vars = await EvalQueries.getVarsFromEvals([]);
+
+      expect(vars).toEqual({});
+    });
+
+    it('omits evals whose test_case has no $.vars from the result map', async () => {
+      const evalWithVars = await EvalFactory.create({ numResults: 1 });
+      const evalWithoutVars = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"foo":"f"}}') WHERE eval_id = '${evalWithVars.id}'`,
+      );
+      // Strip $.vars so json_each(t.vars) yields no rows for this eval_id.
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{}') WHERE eval_id = '${evalWithoutVars.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([evalWithVars, evalWithoutVars]);
+
+      expect(vars[evalWithVars.id]).toEqual(['foo']);
+      expect(vars).not.toHaveProperty(evalWithoutVars.id);
     });
   });
 
@@ -1191,7 +1385,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello world"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
       );
@@ -1230,13 +1424,46 @@ describe('evaluator', () => {
       expect(containsRes.testIndices).toEqual([1]);
     });
 
+    it('filters by metadata not_contains without dropping missing fields', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 4,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"note":"contains risky phrase"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"note":"boring"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"other":"risky"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      const result = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'not_contains',
+            field: 'note',
+            value: 'risky',
+          }),
+        ],
+      });
+
+      expect(result.filteredCount).toBe(3);
+      expect(result.testIndices).toEqual([1, 2, 3]);
+    });
+
     it('filters by metadata exists operator (non-empty values only)', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       // Set up test data with various field states
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1282,7 +1509,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       // Set up test data with different data types
       await db.run(
         `UPDATE eval_results SET metadata = json('{"count":42}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1370,7 +1597,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       // Test metadata keys with quotes and backslashes that could cause JSON path injection
       await db.run(
         `UPDATE eval_results SET metadata = json('{"field\\"with\\"quotes":"value1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1381,6 +1608,12 @@ describe('evaluator', () => {
       await db.run(
         `UPDATE eval_results SET metadata = json('{"normal_field":"value3"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
       );
+      const attackField = `field"'; DROP TABLE eval_results; --`;
+      await db
+        .update(evalResultsTable)
+        .set({ metadata: { [attackField]: 'value4' } })
+        .where(sql`${evalResultsTable.evalId} = ${eval_.id} AND ${evalResultsTable.testIdx} = ${3}`)
+        .run();
 
       // Test equals filter with quotes in field name
       const quotesResult = await (eval_ as any).queryTestIndices({
@@ -1441,6 +1674,25 @@ describe('evaluator', () => {
       });
       expect(existsBackslashResult.filteredCount).toBe(1);
       expect(existsBackslashResult.testIndices).toEqual([1]);
+
+      // Field names stay bound JSON paths even when they look like SQL.
+      const attackResult = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: attackField,
+            value: 'value4',
+          }),
+        ],
+      });
+      expect(attackResult.filteredCount).toBe(1);
+      expect(attackResult.testIndices).toEqual([3]);
+
+      // The eval results table remains queryable after the attack-shaped field is filtered.
+      const tableAfterAttack = await eval_.getTablePage({ filters: [] });
+      expect(tableAfterAttack.totalCount).toBe(5);
     });
 
     it('filters by metadata exists operator with empty arrays and objects', async () => {
@@ -1449,7 +1701,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       // Test empty array - should match (not empty)
       await db.run(
         `UPDATE eval_results SET metadata = json('{"arrayField":[]}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1526,7 +1778,7 @@ describe('evaluator', () => {
         numResults: 6,
         resultTypes: ['success', 'failure'],
       });
-      const db = getDb();
+      const db = await getDb();
       // Set pluginId on one row and strategyId on another
       await db.run(
         `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
@@ -1567,7 +1819,7 @@ describe('evaluator', () => {
         numResults: 5,
         resultTypes: ['success'],
       });
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
       );
@@ -1609,7 +1861,7 @@ describe('evaluator', () => {
         numResults: 4,
         resultTypes: ['success', 'failure'],
       });
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
       );
@@ -1872,48 +2124,31 @@ describe('evaluator', () => {
 
       const injection2 = "field' OR 1=1; --";
       const escaped2 = escapeJsonPathKey(injection2);
-      // Single quotes pass through escapeJsonPathKey (handled by buildSafeJsonPath)
+      // Single quotes stay in the JSON path value and are bound as parameters.
       expect(escaped2).toBe("field' OR 1=1; --");
     });
   });
 
   describe('buildSafeJsonPath', () => {
-    // Helper to extract the raw string from sql.raw() result
-    const getRawString = (result: ReturnType<typeof buildSafeJsonPath>) =>
-      (result.queryChunks[0] as { value: string[] }).value[0];
-
     it('should build valid JSON paths for simple field names', () => {
-      const result = buildSafeJsonPath('field');
-      expect(getRawString(result)).toBe('\'$."field"\'');
+      expect(buildSafeJsonPath('field')).toBe('$."field"');
     });
 
     it('should properly escape double quotes in field names', () => {
-      const result = buildSafeJsonPath('field"with"quotes');
-      expect(getRawString(result)).toBe('\'$."field\\"with\\"quotes"\'');
+      expect(buildSafeJsonPath('field"with"quotes')).toBe(String.raw`$."field\"with\"quotes"`);
     });
 
-    it('should properly escape single quotes for SQL safety', () => {
-      const result = buildSafeJsonPath("field'with'single'quotes");
-      // Single quotes become doubled for SQL string literal safety
-      expect(getRawString(result)).toBe("'$.\"field''with''single''quotes\"'");
+    it('should leave single quotes in the bound JSON path value', () => {
+      expect(buildSafeJsonPath("field'with'single'quotes")).toBe("$.\"field'with'single'quotes\"");
     });
 
     it('should handle complex SQL injection attempts', () => {
-      // This attack attempts to break out of both JSON path and SQL string
       const attack = `field"'; DROP TABLE users; --`;
-      const result = buildSafeJsonPath(attack);
-      // Double quotes escaped with backslash, single quote doubled for SQL
-      // Input: field"'; DROP TABLE users; --
-      // After escapeJsonPathKey: field\"'; DROP TABLE users; --
-      // As JSON path: $."field\"'; DROP TABLE users; --"
-      // After SQL escaping ('' for '): $."field\"''; DROP TABLE users; --"
-      // Final with outer quotes: '$."field\"''; DROP TABLE users; --"'
-      expect(getRawString(result)).toBe("'$.\"field\\\"''; DROP TABLE users; --\"'");
+      expect(buildSafeJsonPath(attack)).toBe(String.raw`$."field\"'; DROP TABLE users; --"`);
     });
 
     it('should handle backslashes correctly', () => {
-      const result = buildSafeJsonPath('path\\to\\field');
-      expect(getRawString(result)).toBe('\'$."path\\\\to\\\\field"\'');
+      expect(buildSafeJsonPath('path\\to\\field')).toBe(String.raw`$."path\\to\\field"`);
     });
   });
 
@@ -1978,11 +2213,29 @@ describe('evaluator', () => {
   });
 
   describe('getTablePage sessionId header detection', () => {
+    it('sorts legacy backfilled vars before appending metadata-only sessionId', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET
+          metadata = json('{"sessionId":"session-123"}'),
+          test_case = json('{"vars":{"zebra":"z","apple":"a"}}')
+        WHERE eval_id = '${eval_.id}'`,
+      );
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval_.id}'`);
+
+      const reloadedEval = await Eval.findById(eval_.id);
+      const result = await reloadedEval!.getTablePage({ filters: [] });
+
+      expect(reloadedEval!.vars).toEqual(['apple', 'zebra']);
+      expect(result.head.vars).toEqual(['apple', 'zebra', 'sessionId']);
+    });
+
     it('should add sessionId to vars header when metadata.sessionId exists but not in vars', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set metadata.sessionId on the result
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionId":"session-123"}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -1997,7 +2250,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set metadata.sessionIds array on the result (multi-turn strategy format)
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionIds":["session-a","session-b","session-c"]}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2012,7 +2265,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set both metadata.sessionIds and testCase.vars.sessionId
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET
           metadata = json('{"sessionIds":["session-a","session-b"]}'),
@@ -2036,7 +2289,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set empty sessionIds array
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionIds":[]}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2051,7 +2304,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set both sessionIds array and sessionId
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionId":"single","sessionIds":["multi-1","multi-2"]}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2065,7 +2318,7 @@ describe('evaluator', () => {
     it('should handle multiple results with varying sessionId/sessionIds configurations', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
 
-      const db = getDb();
+      const db = await getDb();
       // Result 0: Has sessionIds array (multi-turn)
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionIds":["multi-0a","multi-0b"]}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -2089,7 +2342,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 2 });
 
       // Set empty metadata on all results
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"otherField":"value"}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2102,49 +2355,27 @@ describe('evaluator', () => {
   });
 
   describe('parameterization verification', () => {
-    it('should use parameterized queries for filter values', async () => {
-      // This test verifies that filter values are parameterized, not interpolated
-      // The "filters by metadata with special characters in field names" test above
-      // already exercises this with actual database queries.
-      //
-      // Here we verify the SQL structure at a unit level:
-      // The buildSafeJsonPath tests above verify JSON path escaping
-      // The combineFilterConditions tests verify SQL fragment composition
-      //
-      // A malicious value like "'; DROP TABLE evals; --" would:
-      // 1. Be passed as a parameterized value via sql`... ${value}`
-      // 2. Never be interpolated directly into the SQL string
-      // 3. Be treated as a literal string value by the database
-      //
-      // This is verified by the fact that:
-      // - All user values use Drizzle's sql template strings with ${value}
-      // - Only JSON paths use sql.raw(), and those are escaped by buildSafeJsonPath
-
-      // Unit test: verify buildSafeJsonPath escapes injection attempts
+    it('should use parameterized queries for filter field and value', async () => {
+      // Both metric and metadata filters now use json_each(...) WHERE key = ${field}
+      // AND value = ${value}, so user-controlled `field` and `value` are bound as
+      // parameters rather than interpolated. The "filters by metadata with special
+      // characters in field names" test above exercises this against the live DB —
+      // no string-escaping helper is needed because nothing reaches sql.raw().
       const attackField = "field'; DROP TABLE evals; --";
-      const safePath = buildSafeJsonPath(attackField);
-      // The path should be properly escaped (verified in buildSafeJsonPath tests)
-      expect(safePath).toBeDefined();
-      expect(safePath.queryChunks).toBeDefined();
-    });
-
-    it('should safely handle search queries with SQL metacharacters', async () => {
-      // Search queries are handled via Drizzle's parameterized sql template strings:
-      // sql`response LIKE ${searchPattern}`
-      //
-      // The searchPattern is never interpolated into the SQL string.
-      // A malicious search like "'; SELECT * FROM evals; --" would be:
-      // 1. Wrapped in % for LIKE: "%'; SELECT * FROM evals; --%"
-      // 2. Passed as a parameterized value
-      // 3. Treated as a literal string to search for
-      //
-      // This is verified by inspection of buildFilterWhereSql:
-      // const searchPattern = `%${opts.searchQuery}%`;
-      // sql`response LIKE ${searchPattern}` - parameterized, not interpolated
-
-      // The existing "should sanitize SQL inputs properly" test at line 711
-      // exercises this with actual database queries and verifies no SQL error occurs.
-      expect(true).toBe(true);
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      await expect(
+        eval_.getTablePage({
+          filters: [
+            JSON.stringify({
+              type: 'metadata',
+              field: attackField,
+              operator: 'equals',
+              value: 'whatever',
+              logicOperator: 'AND',
+            }),
+          ],
+        }),
+      ).resolves.toBeDefined();
     });
   });
 });

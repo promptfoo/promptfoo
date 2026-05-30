@@ -396,11 +396,19 @@ providers:
 With streaming enabled, the provider creates spans for:
 
 - **Provider-level calls** - Overall request timing and token usage
+- **SDK turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes.
 - **Agent responses** - Individual message completions
 - **Reasoning steps** - Model reasoning captured in span events
 - **Command executions** - Shell commands with exit codes and output
 - **File changes** - File modifications with paths and change types
 - **MCP tool calls** - External tool invocations
+
+Every item span (commands, file changes, MCP tools, etc.) is additionally tagged with `gen_ai.turn.index` so callers can correlate it back to the SDK turn that emitted it.
+
+The Codex SDK exposes a turn for each `thread.runStreamed()` call, including its
+intermediate tool items. It does not expose each internal model generation, so these
+markers can verify and correlate SDK turns but cannot prove whether tool calls were
+batched into one LLM round-trip.
 
 ### Deep Tracing
 
@@ -534,6 +542,22 @@ When collaboration mode is enabled, the agent can use tools like `spawn_agent`, 
 Collaboration mode is a beta feature. `config.collaboration_mode` is merged into `cli_config.collaboration_mode`, and the top-level field wins if both are set. Some user-configured settings like `model` and `model_reasoning_effort` may still be overridden by Codex collaboration presets.
 
 :::
+
+### Goals and Subagents
+
+Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`; Promptfoo forwards the `cli_config` object to the Codex SDK as config overrides.
+
+```yaml
+providers:
+  - id: openai:codex-sdk:gpt-5.5
+    config:
+      cli_config:
+        features:
+          goals: true
+          multi_agent: true
+```
+
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
 
 ## Model Reasoning Effort
 

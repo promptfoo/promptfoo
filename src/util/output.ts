@@ -58,6 +58,46 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
     `.trim();
 };
 
+const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
+  const status = output.pass
+    ? 'pass'
+    : output.failureReason === ResultFailureReason.ERROR
+      ? 'error'
+      : 'fail';
+  const namedScores = Object.entries(output.namedScores).map(([name, value]) => ({
+    name,
+    value: value?.toFixed(2),
+  }));
+
+  return {
+    status,
+    statusLabel: status.toUpperCase(),
+    score: output.score?.toFixed(2),
+    namedScores,
+    text: output.text,
+    reason: output.gradingResult?.reason || '',
+    prompt: output.prompt,
+    provider: output.provider || '',
+    error: output.error || '',
+    failureReason: output.failureReason,
+    latencyDisplay: Number.isFinite(output.latencyMs) ? `${output.latencyMs.toFixed(0)} ms` : '',
+    costDisplay:
+      Number.isFinite(output.cost) && output.cost > 0 ? `$${output.cost.toFixed(6)}` : '',
+    totalTokensDisplay:
+      typeof output.tokenUsage?.total === 'number'
+        ? output.tokenUsage.total.toLocaleString('en-US')
+        : '',
+    promptTokensDisplay:
+      typeof output.tokenUsage?.prompt === 'number'
+        ? output.tokenUsage.prompt.toLocaleString('en-US')
+        : '',
+    completionTokensDisplay:
+      typeof output.tokenUsage?.completion === 'number'
+        ? output.tokenUsage.completion.toLocaleString('en-US')
+        : '',
+  };
+};
+
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   return sanitizeObject(config, {
     context: 'output config',
@@ -345,6 +385,7 @@ export async function writeOutput(
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+    const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
@@ -354,12 +395,44 @@ export async function writeOutput(
         ...table.head.vars,
         ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
       ],
-      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ...table.body.map((row, rowIndex) => [
+        ...row.vars.map((value, variableIndex) => ({
+          kind: 'variable',
+          name: table.head.vars[variableIndex],
+          text: value,
+        })),
+        ...row.outputs.map((output, outputIndex) => ({
+          kind: 'output',
+          detailId: `result-detail-${rowIndex}-${outputIndex}`,
+          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
+          description: row.description || row.test?.description || '',
+          ...outputToHtmlReportCell(output),
+        })),
+      ]),
     ];
+    const reportOutputs = table.body.flatMap((row) => row.outputs);
+    const totalResults = reportOutputs.length;
+    const successes = reportOutputs.filter((output) => output.pass).length;
+    const errors = reportOutputs.filter(
+      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+    ).length;
+    const failures = totalResults - successes - errors;
+    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
     const htmlOutput = getNunjucksEngine().renderString(template, {
       config: redactedConfig,
       table: htmlTable,
       results: summary,
+      metadata,
+      report: {
+        totalResults,
+        totalRows: table.body.length,
+        promptCount: table.head.prompts.length,
+        variableCount: table.head.vars.length,
+        successes,
+        failures,
+        errors,
+        passRateDisplay: `${passRate.toFixed(1)}%`,
+      },
     });
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {

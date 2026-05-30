@@ -119,11 +119,7 @@ export const RedteamPluginObjectSchema = z.object({
 });
 
 const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
-  numTests: z
-    .int()
-    .positive()
-    .optional()
-    .describe('Number of tests to generate for this plugin'),
+  numTests: z.int().positive().optional().describe('Number of tests to generate for this plugin'),
 });
 
 /**

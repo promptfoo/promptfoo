@@ -658,6 +658,16 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(WebhookProvider);
   });
 
+  it('loadApiProvider with n8n keeps webhook URLs out of provider IDs', async () => {
+    const provider = await loadApiProvider(
+      'n8n:https://example.com/webhook/private-token?key=secret',
+    );
+
+    expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+    expect(provider.id()).not.toContain('private-token');
+    expect(provider.id()).not.toContain('secret');
+  });
+
   it('loadApiProvider with huggingface:text-generation', async () => {
     const provider = await loadApiProvider('huggingface:text-generation:foobar/baz');
     expect(provider).toBeInstanceOf(HuggingfaceTextGenerationProvider);
@@ -716,6 +726,14 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('llama-3-sonar-large-32k-online');
     expect(provider.config.apiBaseUrl).toBe('https://api.perplexity.ai');
     expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
+  });
+
+  it('loadApiProvider with minimax', async () => {
+    const provider = await loadApiProvider('minimax:MiniMax-M2.7');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    expect(provider.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
+    expect(provider.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
   });
 
   it('loadApiProvider with togetherai', async () => {
@@ -2045,10 +2063,25 @@ describe('resolveProvider', () => {
     );
   });
 
-  it('should throw error for invalid provider type', async () => {
+  it.each([
+    ['number', 123],
+    ['boolean', false],
+    ['bigint', 1n],
+    ['symbol', Symbol('invalid-provider')],
+  ])('should identify invalid %s provider values', async (type, provider) => {
     const { resolveProvider } = await import('../../src/providers');
 
-    await expect(resolveProvider(123, mockProviderMap)).rejects.toThrow('Invalid provider type');
+    await expect(resolveProvider(provider as any, mockProviderMap)).rejects.toThrow(
+      `Invalid provider type. Expected a string (provider id), an object with an 'id' field, a ProviderOptionsMap, or a function. Got: ${type}`,
+    );
+  });
+
+  it('should report invalid arrays through object-shape diagnostics', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    await expect(resolveProvider([], mockProviderMap)).rejects.toThrow(
+      "Provider object must have an 'id' field or be a ProviderOptionsMap",
+    );
   });
 
   it('should handle function provider', async () => {

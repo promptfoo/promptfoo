@@ -41,6 +41,7 @@ The `promptfoo` command line utility includes these command groups:
   - `logs [file]`
   - `logs list`
 - `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
+- `optimize` - Improve one configured prompt against one configured provider.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
@@ -165,6 +166,35 @@ Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3`
 When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+
+## `promptfoo optimize`
+
+Improve one configured prompt against one configured provider. The optimizer runs a baseline eval, proposes prompt candidates from observed failures and prior scores, evaluates those candidates, and prints the strongest prompt it found.
+
+```sh
+promptfoo optimize
+promptfoo optimize -c path/to/promptfooconfig.yaml
+promptfoo optimize --prompt-index 1 --provider-index 0
+promptfoo optimize --validation-split 0.2
+```
+
+The default config is loaded implicitly when `-c` is omitted. Optimization
+targets one resolved prompt/provider pair at a time.
+
+| Option                          | Description                                                                                                  | Default                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `-c, --config <path>`           | Path to the configuration file                                                                               | `promptfooconfig.yaml` |
+| `--prompt-index <index>`        | Zero-based resolved prompt index to optimize                                                                 | `0`                    |
+| `--provider-index <index>`      | Zero-based resolved provider index to optimize against                                                       | `0`                    |
+| `--validation-split <fraction>` | Hold out up to half of the configured test cases for validation scoring while search uses the remaining set. | none                   |
+
+When `--validation-split` is omitted, optimization uses the full eval set and
+may overfit to the configured cases.
+Validation splitting requires explicit `tests`; configs that use `scenarios`
+must be expanded into explicit test cases first.
+
+See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
+target selection details, and validation split recommendations.
 
 ### Pause and Resume
 
@@ -865,21 +895,30 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                                             | Default              |
-| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
-| `--remote`                                         | Force remote inference wherever possible                                | false                |
-| `--force`                                          | Force generation even if no changes are detected                        | false                |
-| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
-| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
+| Option                                             | Description                                                                      | Default              |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                                       | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                          | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                                        |                      |
+| `--tag <key=value>`                                | Set an eval tag. Can be specified multiple times; CLI tags override config tags. |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                                       | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                           |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                          |                      |
+| `--remote`                                         | Force remote inference wherever possible                                         | false                |
+| `--force`                                          | Force generation even if no changes are detected                                 | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                                      |                      |
+
+Use `--tag` to attach CI/CD context to the evaluation result without changing the
+scan template or generated `redteam.yaml`. CLI tags override matching tags from the
+configuration and are included when the eval is shared.
+
+```sh
+promptfoo redteam run --tag ci.run-id=$CI_RUN_ID --tag git.sha=$GIT_COMMIT
+```
 
 ## `promptfoo redteam discover`
 
@@ -959,7 +998,8 @@ Generate poisoned documents for RAG testing.
 
 ## `promptfoo redteam eval`
 
-Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `redteam.yaml`.
+Works the same as [`promptfoo eval`](#promptfoo-eval), including repeatable `--tag`
+options for run-specific labels, but defaults to loading `redteam.yaml`.
 
 ## `promptfoo redteam report`
 

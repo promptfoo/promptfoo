@@ -67,7 +67,6 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(mockApiProvider.delay).toBe(0);
     expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
@@ -194,6 +193,44 @@ describeEvaluator('evaluator execution control', () => {
     expect(maxActiveCalls).toBeGreaterThan(1);
   });
 
+  it('persists configured variable order when concurrent rows complete out of order', async () => {
+    let releaseFirst!: () => void;
+    const waitForSecond = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let invocation = 0;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('out-of-order-provider'),
+      callApi: vi.fn(async () => {
+        invocation += 1;
+        if (invocation === 1) {
+          await waitForSecond;
+        }
+        return {
+          output: 'ok',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Static prompt')],
+      tests: [{ vars: { zebra: 'first' } }, { vars: { apple: 'second' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addResult = evalRecord.addResult.bind(evalRecord);
+    vi.spyOn(evalRecord, 'addResult').mockImplementation(async (row) => {
+      await addResult(row);
+      if (row.testIdx === 1) {
+        releaseFirst();
+      }
+    });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(evalRecord.vars).toEqual(['zebra', 'apple']);
+  });
+
   it('forces concurrency to 1 for real _conversation template references', async () => {
     const { maxActiveCalls } = await runConcurrencyProbe(
       '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
@@ -246,6 +283,155 @@ describeEvaluator('evaluator execution control', () => {
     expect(firstRenderedPrompt).not.toContain('prior=');
     expect(secondRenderedPrompt).toContain('prior=');
     expect(secondRenderedPrompt).toContain('now=Turn 2');
+  });
+
+  it('persists updated prompt metrics between serial eval steps for live result refreshes', async () => {
+    let releaseSecondCall!: () => void;
+    let markSecondCallStarted!: () => void;
+    const secondCallStarted = new Promise<void>((resolve) => {
+      markSecondCallStarted = resolve;
+    });
+
+    let callCount = 0;
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async () => {
+        callCount += 1;
+        if (callCount === 2) {
+          markSecondCallStarted();
+          await new Promise<void>((resolve) => {
+            releaseSecondCall = resolve;
+          });
+        }
+
+        return {
+          output: 'Test output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ options: { runSerially: true } }, { options: { runSerially: true } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 10000 });
+
+    await secondCallStarted;
+
+    expect(addPromptsSpy).toHaveBeenCalledTimes(2);
+    expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
+    const refreshedEval = await Eval.findById(evalRecord.id);
+    expect(refreshedEval?.prompts[0].metrics?.testPassCount).toBe(1);
+
+    releaseSecondCall();
+    await evalPromise;
+  });
+
+  it('throttles rapid prompt metric persistence between serial eval steps', async () => {
+    let releaseThirdCall!: () => void;
+    let markThirdCallStarted!: () => void;
+    const thirdCallStarted = new Promise<void>((resolve) => {
+      markThirdCallStarted = resolve;
+    });
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
+
+    let callCount = 0;
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async () => {
+        callCount += 1;
+        if (callCount === 3) {
+          markThirdCallStarted();
+          await new Promise<void>((resolve) => {
+            releaseThirdCall = resolve;
+          });
+        }
+
+        return {
+          output: 'Test output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { options: { runSerially: true } },
+        { options: { runSerially: true } },
+        { options: { runSerially: true } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 10000 });
+
+    await thirdCallStarted;
+
+    const promptWriteCountDuringThirdCall = addPromptsSpy.mock.calls.length;
+    const refreshedEval = await Eval.findById(evalRecord.id);
+    const persistedPassCountDuringThirdCall = refreshedEval?.prompts[0].metrics?.testPassCount;
+
+    releaseThirdCall();
+    await evalPromise;
+    dateNowSpy.mockRestore();
+
+    expect(promptWriteCountDuringThirdCall).toBe(2);
+    expect(persistedPassCountDuringThirdCall).toBe(1);
+  });
+
+  it('persists updated prompt metrics between grouped eval steps without deferred grading', async () => {
+    let releaseSecondCall!: () => void;
+    let markSecondCallStarted!: () => void;
+    const secondCallStarted = new Promise<void>((resolve) => {
+      markSecondCallStarted = resolve;
+    });
+
+    let callCount = 0;
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async () => {
+        callCount += 1;
+        if (callCount === 2) {
+          markSecondCallStarted();
+          await new Promise<void>((resolve) => {
+            releaseSecondCall = resolve;
+          });
+        }
+
+        return {
+          output: 'Test output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}, {}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    await secondCallStarted;
+
+    expect(addPromptsSpy).toHaveBeenCalledTimes(2);
+    expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
+    const refreshedEval = await Eval.findById(evalRecord.id);
+    expect(refreshedEval?.prompts[0].metrics?.testPassCount).toBe(1);
+
+    releaseSecondCall();
+    await evalPromise;
   });
 
   it('skips delay for cached responses', async () => {

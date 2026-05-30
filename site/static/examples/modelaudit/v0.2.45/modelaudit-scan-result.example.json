@@ -1,0 +1,178 @@
+{
+  "bytes_scanned": 82,
+  "issues": [
+    {
+      "message": "Found REDUCE opcode invoking dangerous global: posix.system",
+      "severity": "critical",
+      "location": "tests/assets/samples/pickles/malicious_system_call.pkl (pos 79)",
+      "details": {
+        "pickle_source": "tests/assets/samples/pickles/malicious_system_call.pkl",
+        "opcode": "REDUCE",
+        "module": "posix",
+        "name": "system",
+        "import_reference": "posix.system",
+        "global_position": 28,
+        "function": "system",
+        "associated_global": "posix.system",
+        "pickle_rule_code": "DANGEROUS_CALL"
+      },
+      "why": "The 'posix' module provides direct access to POSIX system calls on Unix-like systems. Like the 'os' module, it can execute arbitrary system commands and manipulate the file system. The 'posix.system' function is equivalent to 'os.system' and poses the same security risks.",
+      "timestamp": 1750000000.0,
+      "type": "pickle_check",
+      "rule_code": "S201"
+    }
+  ],
+  "checks": [
+    {
+      "name": "Path Exists",
+      "status": "passed",
+      "message": "Path exists",
+      "location": "tests/assets/samples/pickles/malicious_system_call.pkl",
+      "details": {
+        "path": "tests/assets/samples/pickles/malicious_system_call.pkl"
+      },
+      "timestamp": 1750000000.0
+    },
+    {
+      "name": "Path Readable",
+      "status": "passed",
+      "message": "Path is readable",
+      "location": "tests/assets/samples/pickles/malicious_system_call.pkl",
+      "details": {
+        "path": "tests/assets/samples/pickles/malicious_system_call.pkl"
+      },
+      "timestamp": 1750000000.0
+    },
+    {
+      "name": "File Type Validation",
+      "status": "passed",
+      "message": "File type validation passed",
+      "location": "tests/assets/samples/pickles/malicious_system_call.pkl",
+      "details": {},
+      "timestamp": 1750000000.0
+    },
+    {
+      "name": "File Integrity Hash",
+      "status": "passed",
+      "message": "File integrity hashes calculated",
+      "location": "tests/assets/samples/pickles/malicious_system_call.pkl",
+      "details": {
+        "md5": "7866977b6b51d7fa3e6602e7238b13cf",
+        "sha256": "f98e96e2a0e16ca139b0a7250f7bdae4d2340fa1386ee6bfd667ab2784b2e51e",
+        "sha512": "498ad126ed53104c568aff5c68b497b5676432ad9cc1b48890c0d945f6a8efcfdc409acfe345e4a9ba7eaca05189846c68fa692eab8f515fa56e5f5670e02e16",
+        "file_size": 82
+      },
+      "timestamp": 1750000000.0
+    },
+    {
+      "name": "REDUCE Opcode Safety Check",
+      "status": "failed",
+      "message": "Found REDUCE opcode invoking dangerous global: posix.system",
+      "severity": "critical",
+      "location": "tests/assets/samples/pickles/malicious_system_call.pkl (pos 79)",
+      "details": {
+        "pickle_source": "tests/assets/samples/pickles/malicious_system_call.pkl",
+        "opcode": "REDUCE",
+        "module": "posix",
+        "name": "system",
+        "import_reference": "posix.system",
+        "global_position": 28,
+        "function": "system",
+        "associated_global": "posix.system",
+        "pickle_rule_code": "DANGEROUS_CALL"
+      },
+      "why": "The 'posix' module provides direct access to POSIX system calls on Unix-like systems. Like the 'os' module, it can execute arbitrary system commands and manipulate the file system. The 'posix.system' function is equivalent to 'os.system' and poses the same security risks.",
+      "rule_code": "S201",
+      "timestamp": 1750000000.0
+    }
+  ],
+  "files_scanned": 1,
+  "assets": [
+    {
+      "path": "tests/assets/samples/pickles/malicious_system_call.pkl",
+      "type": "pickle",
+      "size": 82
+    }
+  ],
+  "has_errors": false,
+  "scanner_names": [
+    "pickle"
+  ],
+  "file_metadata": {
+    "tests/assets/samples/pickles/malicious_system_call.pkl": {
+      "file_size": 82,
+      "file_hashes": {
+        "md5": "7866977b6b51d7fa3e6602e7238b13cf",
+        "sha256": "f98e96e2a0e16ca139b0a7250f7bdae4d2340fa1386ee6bfd667ab2784b2e51e",
+        "sha512": "498ad126ed53104c568aff5c68b497b5676432ad9cc1b48890c0d945f6a8efcfdc409acfe345e4a9ba7eaca05189846c68fa692eab8f515fa56e5f5670e02e16"
+      },
+      "opcode_count": 15,
+      "license_info": [],
+      "copyright_notices": [],
+      "license_files_nearby": [],
+      "is_dataset": true,
+      "is_model": true,
+      "risk_score": 0.0,
+      "scan_timestamp": 1750000000.0,
+      "opcode_counts": {
+        "FRAME": 1,
+        "SHORT_BINUNICODE": 3,
+        "PROTO": 1,
+        "TUPLE1": 1,
+        "MEMOIZE": 6,
+        "STACK_GLOBAL": 1,
+        "REDUCE": 1,
+        "STOP": 1
+      },
+      "globals_count": 1,
+      "import_references": [
+        {
+          "opcode": "STACK_GLOBAL",
+          "module": "posix",
+          "name": "system",
+          "import_reference": "posix.system",
+          "position": 28,
+          "is_dangerous": true
+        }
+      ],
+      "callable_invocations": [
+        {
+          "opcode": "REDUCE",
+          "module": "posix",
+          "name": "system",
+          "import_reference": "posix.system",
+          "global_position": 28,
+          "opcode_position": 79,
+          "positional_arg_count": 1
+        }
+      ],
+      "callable_invocations_truncated": false,
+      "protocols": [
+        4
+      ],
+      "first_pickle_end_pos": 82,
+      "pickle_report_status": "complete",
+      "pickle_verdict": "malicious",
+      "pickle_source": "tests/assets/samples/pickles/malicious_system_call.pkl",
+      "pickle_coverage": {
+        "bytes_scanned": 82,
+        "bytes_total": 82,
+        "opcode_count": 15,
+        "raw_scan_complete": true,
+        "opcode_scan_complete": true
+      },
+      "pickle_primary_engine": "rust",
+      "pickle_cve_raw_detector_skipped": true,
+      "pickle_secrets_raw_detector_skipped": true,
+      "pickle_jit_raw_detector_skipped": true,
+      "pickle_network_raw_detector_skipped": true
+    }
+  },
+  "content_hash": "6ad17e8e4197a0dfade4b382474db9a46e55625bef1bc42189e3314eff1c362a",
+  "start_time": 1750000000.0,
+  "duration": 0.015,
+  "total_checks": 5,
+  "passed_checks": 4,
+  "failed_checks": 1,
+  "success": true
+}

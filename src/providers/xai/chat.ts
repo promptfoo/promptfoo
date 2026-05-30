@@ -483,7 +483,15 @@ export function calculateXAICost(
   completionTokens?: number,
   reasoningTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  // xAI follows the OpenAI token convention: completion/output tokens already
+  // INCLUDE reasoning tokens (reasoning is a sub-breakdown, not a separate
+  // addend). Bill completion tokens at the output rate exactly like
+  // calculateOpenAICost; adding reasoningTokens on top double-counts them.
+  // Fall back to reasoning tokens only when the API reports zero completion
+  // tokens (a reasoning-only turn) so it is not billed as free.
+  const completion = completionTokens ?? 0;
+  const billableOutputTokens = completion > 0 ? completion : (reasoningTokens ?? 0);
+  if (promptTokens == null || billableOutputTokens <= 0) {
     return undefined;
   }
 
@@ -498,11 +506,6 @@ export function calculateXAICost(
 
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-
-  // xAI bills reasoning tokens at the same per-token rate as completion tokens.
-  // The OpenAI base provider reports them separately in completion_tokens_details
-  // (and getTokenUsage hoists them out of `completion`), so include them here.
-  const billableOutputTokens = completionTokens + (reasoningTokens ?? 0);
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * billableOutputTokens;
@@ -680,8 +683,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       if (response.tokenUsage && !response.cached) {
         // The OpenAI base provider does not surface the raw API body, so
         // `usage.cost_in_usd_ticks` (which xAI does return for chat completions)
-        // is not reachable here. Fall back to local pricing math, which now
-        // includes reasoning tokens at the output rate.
+        // is not reachable here. Fall back to local pricing math. Completion
+        // tokens already include reasoning tokens, so they are not added on top.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
         response.cost = calculateXAICost(
           this.modelName,

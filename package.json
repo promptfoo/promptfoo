@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.12",
+  "version": "0.121.13",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -120,11 +120,21 @@
       "gcp-metadata": "^8.1.2"
     },
     "webpack-dev-server": {
-      "express": "^4.22.1"
+      "express": "^4.22.2"
     },
-    "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.95.2"
+    "engine.io": {
+      ".": "6.6.8",
+      "ws": "$ws"
     },
+    "engine.io-client": {
+      ".": "6.6.5",
+      "ws": "$ws"
+    },
+    "socket.io-adapter": {
+      ".": "2.5.7",
+      "ws": "$ws"
+    },
+    "qs": ">=6.15.2 <7.0.0",
     "@isaacs/brace-expansion": ">=5.0.1",
     "brace-expansion@5": "^5.0.6",
     "fast-xml-parser": "$fast-xml-parser",
@@ -154,15 +164,15 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.106.2",
-    "dompurify": "3.4.3",
+    "webpack": "5.107.1",
+    "dompurify": "3.4.5",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.3"
+      "dompurify": "3.4.5"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@anthropic-ai/claude-agent-sdk": "0.3.153",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -178,7 +188,6 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cli-progress": "^3.11.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -221,7 +230,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@anthropic-ai/claude-agent-sdk": "0.3.153",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -231,11 +240,16 @@
     "@azure/identity": "^4.13.0",
     "@azure/msal-node": "^5.2.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
+    "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
+    "@googleapis/sheets": "^13.0.1",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.12",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.130.0",
+    "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.60.3",
     "@slack/web-api": "^7.15.2",
@@ -249,19 +263,20 @@
     "google-auth-library": "^10.6.2",
     "hono": "^4.12.5",
     "ibm-cloud-sdk-core": "^5.4.11",
+    "jks-js": "^1.1.5",
     "langfuse": "^3.38.20",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
+    "pem": "~1.14.8",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
     "read-excel-file": "^9.0.0",
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.97.1",
+    "@anthropic-ai/sdk": "0.100.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
-    "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",
@@ -269,9 +284,7 @@
     "@inquirer/input": "^5.0.8",
     "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/agents": "^0.11.3",
-    "@opencode-ai/sdk": "^1.14.33",
+    "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
@@ -284,7 +297,6 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "^12.10.0",
     "binary-extensions": "^3.1.0",
     "cache-manager": "^7.2.8",
     "chalk": "^5.6.2",
@@ -311,7 +323,6 @@
     "glob": "^13.0.6",
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
-    "jks-js": "^1.1.5",
     "js-rouge": "^3.2.0",
     "js-yaml": "^4.1.1",
     "json5": "^2.2.3",
@@ -325,7 +336,6 @@
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
-    "pem": "~1.14.8",
     "posthog-node": "~5.24.10",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^8.0.0",
@@ -359,7 +369,6 @@
       "@huggingface/transformers",
       "@playwright/browser-chromium",
       "@swc/core",
-      "better-sqlite3",
       "core-js",
       "core-js-pure",
       "esbuild",
@@ -367,5 +376,6 @@
       "sharp"
     ],
     "ignoredBuiltDependencies": []
-  }
+  },
+  "homepage": "https://promptfoo.dev"
 }

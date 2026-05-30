@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -67,7 +68,11 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
+import { createN8nProvider } from './n8n';
+import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -80,6 +85,7 @@ import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
+import { createOrcaRouterProvider } from './orcarouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
@@ -475,6 +481,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('novita:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNovitaProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
       providerPath: string,
@@ -550,6 +569,21 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
       return new DatabricksMosaicAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: providerOptions.config || {},
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('mlflow-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new MlflowGatewayChatCompletionProvider(modelName, {
         ...providerOptions,
         config: providerOptions.config || {},
       });
@@ -684,17 +718,15 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
-          apiKeyEnvar: 'FIREWORKS_API_KEY',
-        },
+      const { createFireworksProvider } = await import('./fireworks/chat');
+      return createFireworksProvider(providerPath, {
+        config: providerOptions,
+        // loadApiProvider merges any provider-level `env` block into
+        // providerOptions.env, so let those overrides win over the suite-level
+        // env from context.
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
@@ -825,6 +857,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('minimax:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMiniMaxProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
       providerPath: string,
@@ -848,6 +893,20 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nvidia:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createNvidiaProvider } = await import('./nvidia/chat');
+      return createNvidiaProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -986,8 +1045,17 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
-        const { OpenAiAgentsProvider } = await import('./openai/agents');
-        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+        try {
+          const { OpenAiAgentsProvider } = await import('./openai/agents');
+          return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+        } catch (error) {
+          if (isMissingPackageImportError(error, '@openai/agents')) {
+            throw new Error(
+              'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
+            );
+          }
+          throw error;
+        }
       }
       if (modelType === 'chatkit') {
         const { OpenAiChatKitProvider } = await import('./openai/chatkit');
@@ -1017,6 +1085,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('orcarouter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createOrcaRouterProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -1268,6 +1349,16 @@ export const providerMap: ProviderFactory[] = [
       // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('n8n:') || providerPath === 'n8n',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return createN8nProvider(providerPath, providerOptions);
     },
   },
   {
