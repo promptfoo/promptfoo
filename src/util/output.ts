@@ -122,6 +122,7 @@ async function rewriteJsonlWithExternalBackup(
   const backupPath = path.join(tempDirectory, 'backup.jsonl');
   const replacementPath = path.join(tempDirectory, 'replacement.jsonl');
   let overwriteAttempted = false;
+  let preserveTempDirectory = false;
 
   try {
     await fsPromises.copyFile(outputPath, backupPath);
@@ -138,15 +139,25 @@ async function rewriteJsonlWithExternalBackup(
     }
   } catch (error) {
     if (overwriteAttempted) {
-      await fsPromises.copyFile(backupPath, outputPath).catch((restoreError) => {
+      try {
+        await fsPromises.copyFile(backupPath, outputPath);
+      } catch (restoreError) {
+        preserveTempDirectory = true;
         logger.error('[Output] Failed to restore JSONL output after rewrite failure', {
+          backupPath,
           error: restoreError,
         });
-      });
+        throw new AggregateError(
+          [error, restoreError],
+          `Failed to rewrite JSONL output and restore backup. Backup retained at ${backupPath}`,
+        );
+      }
     }
     throw error;
   } finally {
-    await fsPromises.rm(tempDirectory, { recursive: true, force: true }).catch(() => {});
+    if (!preserveTempDirectory) {
+      await fsPromises.rm(tempDirectory, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 

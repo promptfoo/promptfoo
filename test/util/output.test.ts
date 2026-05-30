@@ -1193,6 +1193,27 @@ describe('writeOutput', () => {
     expect(fsPromises.copyFile).toHaveBeenCalledTimes(1);
   });
 
+  it('retains the external JSONL backup when restoration fails', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.copyFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('copy failed'))
+      .mockRejectedValueOnce(new Error('restore failed'));
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow(
+      'Backup retained at /tmp/promptfoo-jsonl-test/backup.jsonl',
+    );
+
+    expect(fsPromises.rm).not.toHaveBeenCalledWith('/tmp/promptfoo-jsonl-test', {
+      recursive: true,
+      force: true,
+    });
+  });
+
   it('writeOutput with json and txt output', async () => {
     const outputPath = ['output.json', 'output.txt'];
     const eval_ = new Eval({});

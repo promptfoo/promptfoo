@@ -16,7 +16,7 @@ import {
   resolveConfigs,
 } from '../util/config/load';
 import { accumulateNamedMetric } from '../util/namedMetrics';
-import { filterOutputPathsAfterStreaming, writeMultipleOutputs } from '../util/output';
+import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
@@ -356,15 +356,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     }
 
     if (errorRowsDeleted) {
-      const outputPaths = filterOutputPathsAfterStreaming(
-        retriedEval,
-        (Array.isArray(originalEval.config.outputPath)
+      const outputPaths = (
+        Array.isArray(originalEval.config.outputPath)
           ? originalEval.config.outputPath
           : [originalEval.config.outputPath]
-        ).filter(
-          (outputPath): outputPath is string =>
-            typeof outputPath === 'string' && getOutputFileFormat(outputPath) === 'jsonl',
-        ),
+      ).filter(
+        (outputPath): outputPath is string =>
+          typeof outputPath === 'string' && getOutputFileFormat(outputPath) === 'jsonl',
       );
       if (outputPaths.length > 0) {
         try {
