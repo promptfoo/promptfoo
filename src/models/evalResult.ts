@@ -224,10 +224,10 @@ function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string
   return mutated ? next : null;
 }
 
-// Redact `metadata.http.headers` and `metadata.http.requestHeaders` on a single
-// metadata object. Does NOT recurse into other keys (e.g. `output`, `audio`,
-// arbitrary model output) — providers populate transport metadata at the canonical
-// `metadata.http` slot only, and walking arbitrary subtrees risks rewriting
+// Redact transport headers on a single metadata object. Providers populate
+// `metadata.http.headers` / `requestHeaders`, while some legacy integrations still
+// use `metadata.headers`. Does NOT recurse into other keys (e.g. `output`, `audio`,
+// arbitrary model output) — walking arbitrary subtrees risks rewriting
 // user-controlled content that legitimately uses an `http` key (see
 // https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
 function redactHttpHeadersOnMetadata<T>(metadata: T): T {
@@ -236,13 +236,24 @@ function redactHttpHeadersOnMetadata<T>(metadata: T): T {
   }
 
   const m = metadata as Record<string, unknown>;
+  let mutated = false;
+  const nextMetadata: Record<string, unknown> = { ...m };
+
+  const legacyHeaders = m.headers;
+  if (legacyHeaders && typeof legacyHeaders === 'object' && !Array.isArray(legacyHeaders)) {
+    const redacted = redactSensitiveHeaders(legacyHeaders as Record<string, unknown>);
+    if (redacted) {
+      nextMetadata.headers = redacted;
+      mutated = true;
+    }
+  }
+
   const http = m.http;
   if (!http || typeof http !== 'object' || Array.isArray(http)) {
-    return metadata;
+    return (mutated ? nextMetadata : metadata) as T;
   }
 
   const httpRecord = http as Record<string, unknown>;
-  let mutated = false;
   const nextHttp: Record<string, unknown> = { ...httpRecord };
 
   for (const slot of ['headers', 'requestHeaders'] as const) {
@@ -256,7 +267,7 @@ function redactHttpHeadersOnMetadata<T>(metadata: T): T {
     }
   }
 
-  return (mutated ? { ...m, http: nextHttp } : metadata) as T;
+  return (mutated ? { ...nextMetadata, http: nextHttp } : metadata) as T;
 }
 
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and

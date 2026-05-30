@@ -125,6 +125,10 @@ describe('programmatic JSONL output', () => {
           },
         },
         metadata: {
+          headers: {
+            'x-request-id': 'legacy_req_should_not_persist',
+            'x-safe-debug': 'keep-legacy',
+          },
           http: {
             status: 200,
             statusText: 'OK',
@@ -152,6 +156,10 @@ describe('programmatic JSONL output', () => {
 
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
+    expect(result.response.metadata.headers).toEqual({
+      'x-request-id': '[REDACTED]',
+      'x-safe-debug': 'keep-legacy',
+    });
     expect(result.response.metadata.http).toEqual({
       status: 200,
       statusText: 'OK',
@@ -171,6 +179,7 @@ describe('programmatic JSONL output', () => {
     );
     expect(JSON.stringify(result)).not.toContain('session=secret');
     expect(JSON.stringify(result)).not.toContain('req_should_not_persist');
+    expect(JSON.stringify(result)).not.toContain('legacy_req_should_not_persist');
     expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
     expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-not-persist');
   });
