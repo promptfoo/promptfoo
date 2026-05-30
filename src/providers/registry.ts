@@ -718,17 +718,15 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
-          apiKeyEnvar: 'FIREWORKS_API_KEY',
-        },
+      const { createFireworksProvider } = await import('./fireworks/chat');
+      return createFireworksProvider(providerPath, {
+        config: providerOptions,
+        // loadApiProvider merges any provider-level `env` block into
+        // providerOptions.env, so let those overrides win over the suite-level
+        // env from context.
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
