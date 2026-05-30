@@ -25,8 +25,15 @@ export class JsonlFileWriter {
   }
 
   async close(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      this.writeStream.end(resolve);
+    return new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => {
+        reject(new Error(`Failed to close JSONL output ${this.filePath}: ${error.message}`));
+      };
+      this.writeStream.once('error', onError);
+      this.writeStream.end(() => {
+        this.writeStream.off('error', onError);
+        resolve();
+      });
     });
   }
 }
