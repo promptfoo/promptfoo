@@ -301,6 +301,10 @@ describe('evaluate SIGINT/abort handling', () => {
               },
             },
             metadata: {
+              headers: {
+                'x-request-id': 'legacy_abort_should_not_persist',
+                'x-safe-debug': 'keep-legacy',
+              },
               http: {
                 status: 200,
                 statusText: 'OK',
@@ -342,6 +346,10 @@ describe('evaluate SIGINT/abort handling', () => {
         .filter(Boolean)
         .map((line) => JSON.parse(line));
       expect(rows).toHaveLength(1);
+      expect(rows[0].response.metadata.headers).toEqual({
+        'x-request-id': '[REDACTED]',
+        'x-safe-debug': 'keep-legacy',
+      });
       expect(rows[0].response.metadata.http.headers).toEqual({
         'set-cookie': '[REDACTED]',
         'x-request-id': '[REDACTED]',
@@ -359,6 +367,7 @@ describe('evaluate SIGINT/abort handling', () => {
       });
       expect(JSON.stringify(rows[0])).not.toContain('session=secret');
       expect(JSON.stringify(rows[0])).not.toContain('req_should_not_persist');
+      expect(JSON.stringify(rows[0])).not.toContain('legacy_abort_should_not_persist');
       expect(JSON.stringify(rows[0])).not.toContain('sk-abort-vars-should-not-persist');
     } finally {
       writeSpy.mockRestore();

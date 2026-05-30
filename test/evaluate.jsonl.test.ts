@@ -106,6 +106,38 @@ describe('programmatic JSONL output', () => {
     );
   });
 
+  it('preserves top-level token usage when finalizing persisted rows', async () => {
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'token-usage-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: {
+          total: 6,
+          prompt: 4,
+          completion: 2,
+        },
+      }),
+    };
+
+    await evaluate({
+      outputPath,
+      prompts: ['Test prompt'],
+      providers: [provider],
+      tests: [{ vars: {} }],
+      writeLatestResults: true,
+    });
+
+    expect(readJsonl(outputPath)[0].tokenUsage).toEqual({
+      ...createEmptyTokenUsage(),
+      total: 6,
+      prompt: 4,
+      completion: 2,
+      numRequests: 1,
+    });
+  });
+
   it('exports non-persisted rows with sensitive HTTP metadata redacted', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
@@ -184,13 +216,19 @@ describe('programmatic JSONL output', () => {
     expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-not-persist');
   });
 
-  it('preserves top-level vars when finalizing persisted rows', async () => {
+  it('preserves vars and redacts legacy headers when finalizing persisted rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
       id: () => 'vars-provider',
       callApi: vi.fn().mockResolvedValue({
         output: 'hello world',
+        metadata: {
+          headers: {
+            'x-request-id': 'legacy_persisted_req_should_not_persist',
+            'x-safe-debug': 'keep-legacy',
+          },
+        },
         tokenUsage: createEmptyTokenUsage(),
       }),
     };
@@ -203,7 +241,13 @@ describe('programmatic JSONL output', () => {
       writeLatestResults: true,
     });
 
-    expect(readJsonl(outputPath)[0].vars).toEqual({ topic: 'weather' });
+    const [result] = readJsonl(outputPath);
+    expect(result.vars).toEqual({ topic: 'weather' });
+    expect(result.response.metadata.headers).toEqual({
+      'x-request-id': '[REDACTED]',
+      'x-safe-debug': 'keep-legacy',
+    });
+    expect(JSON.stringify(result)).not.toContain('legacy_persisted_req_should_not_persist');
   });
 
   it('preserves sanitized streamed rows for uppercase JSONL after persistence fails', async () => {
@@ -217,6 +261,9 @@ describe('programmatic JSONL output', () => {
           http: {
             headers: {
               'set-cookie': 'session=secret',
+            },
+            requestHeaders: {
+              authorization: 'Bearer sk-should-not-persist',
             },
           },
         },
@@ -235,6 +282,8 @@ describe('programmatic JSONL output', () => {
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
     expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
     expect(JSON.stringify(result)).not.toContain('session=secret');
+    expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
   });
 });
