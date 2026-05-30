@@ -69,6 +69,26 @@ describe('EvalJobService', () => {
     });
   });
 
+  it('stores JSON-safe snapshots for circular references and bigint values', () => {
+    const service = new EvalJobService();
+    service.create('job-1');
+    const output: { count: bigint; self?: unknown } = { count: 42n };
+    output.self = output;
+
+    expect(() =>
+      service.complete(
+        'job-1',
+        {
+          results: [{ response: { output } }],
+        } as never,
+        'eval-1',
+      ),
+    ).not.toThrow();
+    expect(service.get('job-1')?.result).toEqual({
+      results: [{ response: { output: { count: '42' } } }],
+    });
+  });
+
   it('supports replacing and appending failure logs', () => {
     const service = new EvalJobService();
     service.create('job-1');

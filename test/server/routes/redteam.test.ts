@@ -594,6 +594,26 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('should preserve streamed logs when the background run rejects', async () => {
+      mockedDoRedteamRun.mockImplementationOnce(async ({ logCallback }) => {
+        logCallback?.('working');
+        throw new Error('run failed');
+      });
+
+      const runResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' } });
+      expect(runResponse.status).toBe(200);
+
+      await vi.waitFor(async () => {
+        const failedResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+        expect(failedResponse.body).toMatchObject({
+          status: 'error',
+          logs: expect.arrayContaining(['working', 'Error: run failed']),
+        });
+      });
+    });
+
     it('should not force runtime defaults when delay and maxConcurrency are omitted', async () => {
       const response = await request(app)
         .post('/api/redteam/run')

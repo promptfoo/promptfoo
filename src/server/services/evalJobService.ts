@@ -12,7 +12,24 @@ function createInitialJob(): Job {
 }
 
 function cloneResult(result: NonNullable<Job['result']>): NonNullable<Job['result']> {
-  return JSON.parse(JSON.stringify(result));
+  const ancestors: unknown[] = [];
+  const serialized = JSON.stringify(result, function (_key, value) {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    if (typeof value === 'object' && value !== null) {
+      while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+        ancestors.pop();
+      }
+      if (ancestors.includes(value)) {
+        return undefined;
+      }
+      ancestors.push(value);
+    }
+    return value;
+  });
+
+  return JSON.parse(serialized);
 }
 
 function cloneJob(job: Job): Job {
