@@ -334,7 +334,10 @@ function main(): void {
         tarballPath,
       ],
       consumerDir,
-      { npm_config_userconfig: consumerNpmrc },
+      {
+        npm_config_engine_strict: 'false',
+        npm_config_userconfig: consumerNpmrc,
+      },
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
