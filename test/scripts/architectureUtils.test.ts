@@ -208,6 +208,13 @@ describe('production layer config', () => {
 
     expect(coreLayer?.allowedDependencies).toContain('contracts');
   });
+
+  it('allows transitional runtime shims to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const legacyRuntimeLayer = config.layers.find((layer) => layer.name === 'legacy-runtime');
+
+    expect(legacyRuntimeLayer?.allowedDependencies).toContain('contracts');
+  });
 });
 
 describe('findViolations', () => {

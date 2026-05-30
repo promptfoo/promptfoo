@@ -44,7 +44,7 @@ leaf-safe surface. They currently own the dependency-free-or-`zod` subset that c
 
 - shared token/input contracts
 - browser-safe common and user API DTOs
-- provider-neutral capability contracts
+- portable blob references and provider-neutral capability/result contracts
 - provider environment override schema
 - prompt contracts and prompt validation
 - transform contracts and shared transform validation
