@@ -214,6 +214,29 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidFunctionCall', () => {
+    it('should fail when provider does not expose the validator capability', () => {
+      const output = { arguments: '{"x": 10}', name: 'add' };
+
+      const result = handleIsValidFunctionCall({
+        assertion: functionAssertion,
+        output,
+        provider: createMockProvider(),
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        assertionValueContext: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(output),
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Provider does not have functionality for checking function call.',
+        assertion: functionAssertion,
+      });
+    });
+
     it('should delegate to a structural provider capability', () => {
       const validateFunctionToolCall = vi.fn();
       const provider = {
