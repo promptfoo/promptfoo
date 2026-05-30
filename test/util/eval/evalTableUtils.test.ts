@@ -1,5 +1,6 @@
 import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { ResultFailureReason } from '../../../src/types/index';
 import {
   evalTableToCsv,
   evalTableToJson,
@@ -7,8 +8,7 @@ import {
   getEvalTablePromptStrippedPayload,
   STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
-} from '../../../src/server/utils/evalTableUtils';
-import { ResultFailureReason } from '../../../src/types/index';
+} from '../../../src/util/eval/evalTableUtils';
 import { createCompletedPrompt, createPromptMetrics } from '../../factories/eval';
 
 import type Eval from '../../../src/models/eval';

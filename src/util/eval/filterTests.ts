@@ -12,7 +12,7 @@
  * matching test cases to results, ensuring proper matching even when multi-turn strategies
  * add runtime state to test vars.
  *
- * @module commands/eval/filterTests
+ * @module util/eval/filterTests
  */
 
 import logger from '../../logger';

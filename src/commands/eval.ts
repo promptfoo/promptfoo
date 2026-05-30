@@ -38,6 +38,8 @@ import {
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
+import { filterProviders } from '../util/eval/filterProviders';
+import { filterTests } from '../util/eval/filterTests';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
@@ -48,8 +50,6 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { filterProviders } from './eval/filterProviders';
-import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
 import { collectKeyValueOption, normalizeTagOption } from './options';
@@ -59,7 +59,7 @@ import type { Command } from 'commander';
 
 import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
-import type { FilterOptions } from './eval/filterTests';
+import type { FilterOptions } from '../util/eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
