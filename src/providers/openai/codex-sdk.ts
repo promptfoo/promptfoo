@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -10,9 +10,11 @@ import { getEnvString } from '../../envars';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
+  closeTurnSpan,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
+  openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -21,6 +23,12 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  buildCodexSkillMetadata,
+  extractCodexSkillPathCandidates,
+  getCodexSkillMetadataFields,
+  getCodexSkillRootPrefixes,
+} from './codexSkillMetadata';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -28,7 +36,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-  SkillCallEntry,
 } from '../../types/index';
 
 /**
@@ -120,6 +127,16 @@ interface CodexStreamingState {
   lastEventTime: number;
   reasoningTexts: string[];
   conversationMessages: Array<{ role: string; content: string }>;
+  /**
+   * Counter for SDK turns observed in this run. A streamed provider call
+   * normally contains one `turn.started` / `turn.completed` lifecycle. This
+   * marker exposes that SDK boundary; it does not reveal hidden model rounds.
+   */
+  turnCount: number;
+  /** Active `gen_ai.turn` span, opened on `turn.started` and ended on `turn.completed`. */
+  activeTurnSpan?: Span;
+  /** 1-based index of the currently open turn, stamped on item spans for correlation. */
+  activeTurnIndex: number;
 }
 
 const MINIMAL_CLI_ENV_KEYS = [
@@ -806,145 +823,30 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
-    const prefixes = new Set<string>();
+    const resolvedWorkingDir = workingDir
+      ? path.resolve(workingDir).replace(/\\/g, '/')
+      : undefined;
 
-    const addPrefix = (candidate?: string) => {
-      if (!candidate) {
-        return;
-      }
-
-      const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
-      if (normalized) {
-        prefixes.add(normalized);
-      }
-    };
-
-    addPrefix(env.CODEX_HOME);
-    // Codex's system skill root is documented as /etc/codex/skills.
-    addPrefix('/etc/codex');
-
-    if (workingDir) {
-      const resolvedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
-      addPrefix(path.posix.join(resolvedWorkingDir, '.agents'));
-
-      const gitRoot = this.findGitRepositoryRoot(resolvedWorkingDir);
-      if (gitRoot) {
-        addPrefix(path.posix.join(gitRoot.replace(/\\/g, '/'), '.agents'));
-      }
-    }
-
-    const homeDir = env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE;
-    if (homeDir) {
-      addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
-    }
-
-    return Array.from(prefixes);
-  }
-
-  private isValidCodexSkillName(name: string): boolean {
-    return /^[A-Za-z0-9._:-]+$/.test(name);
-  }
-
-  private extractSkillPathCandidates(
-    text: string,
-    skillRootPrefixes: readonly string[] = [],
-  ): Array<{ name: string; path: string }> {
-    const matches = new Map<string, { name: string; path: string }>();
-
-    for (const rawToken of text.split(/\s+/)) {
-      const token = rawToken.replace(/^[`"'([{<]+|[`"',;:)\]}>]+$/g, '').trim();
-      if (!token) {
-        continue;
-      }
-
-      const normalizedPath = token.replace(/\\/g, '/');
-      const repoMatch = normalizedPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
-      if (repoMatch) {
-        if (this.isValidCodexSkillName(repoMatch[1])) {
-          matches.set(normalizedPath, { name: repoMatch[1], path: normalizedPath });
-        }
-        continue;
-      }
-
-      const matchingRoot = skillRootPrefixes.find((prefix) =>
-        normalizedPath.startsWith(`${prefix}/skills/`),
-      );
-      if (!matchingRoot) {
-        continue;
-      }
-
-      const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
-      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-      if (customRootMatch && this.isValidCodexSkillName(customRootMatch[1])) {
-        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
-      }
-    }
-
-    return Array.from(matches.values());
-  }
-
-  private extractSkillCallsFromItems(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-    options: { requireSuccessfulCommand?: boolean } = {},
-  ): SkillCallEntry[] {
-    const skillCalls = new Map<
-      string,
-      {
-        name: string;
-        path: string;
-      }
-    >();
-
-    for (const item of items) {
-      if (item?.type !== 'command_execution') {
-        continue;
-      }
-      if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
-        continue;
-      }
-
-      const command =
-        typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
-      if (!command) {
-        continue;
-      }
-
-      for (const skillPath of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
-        const existing = skillCalls.get(skillPath.path) ?? {
-          name: skillPath.name,
-          path: skillPath.path,
-        };
-
-        skillCalls.set(skillPath.path, existing);
-      }
-    }
-
-    return Array.from(skillCalls.values()).map((skillCall) => ({
-      name: skillCall.name,
-      path: skillCall.path,
-      source: 'heuristic',
-    }));
-  }
-
-  private buildSkillMetadata(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-  ): { attemptedSkillCalls: SkillCallEntry[]; skillCalls: SkillCallEntry[] } | undefined {
-    if (!Array.isArray(items) || items.length === 0) {
-      return undefined;
-    }
-
-    const attemptedSkillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes);
-    const skillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes, {
-      requireSuccessfulCommand: true,
+    return getCodexSkillRootPrefixes({
+      codexHome: env.CODEX_HOME,
+      gitRepositoryRoot: resolvedWorkingDir
+        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        : undefined,
+      homeDir: env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE,
+      workingDir: resolvedWorkingDir,
     });
+  }
 
-    if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
-      return undefined;
-    }
-
-    return { attemptedSkillCalls, skillCalls };
+  private buildSkillMetadata(items: any[], skillRootPrefixes: readonly string[] = []) {
+    return buildCodexSkillMetadata(items, skillRootPrefixes, {
+      getCommand: (item: any) =>
+        item?.type === 'command_execution' &&
+        typeof item.command === 'string' &&
+        item.command.trim()
+          ? item.command
+          : undefined,
+      isSuccessfulCommand: (item: any) => this.isSuccessfulCommandExecution(item),
+    });
   }
 
   private isSuccessfulCommandExecution(item: any): boolean {
@@ -1131,6 +1033,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       if (!state.turnCompleted) {
         if (state.lastStreamError) {
+          if (!state.activeTurnSpan) {
+            this.startTurnSpan(state, tracer, state.lastEventTime);
+          }
+          this.endTurnSpan(state, state.lastEventTime, undefined, state.lastStreamError);
           throw new Error(`Codex stream ended after error: ${state.lastStreamError}`);
         }
         throw new Error('Codex stream ended before turn completion');
@@ -1158,6 +1064,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           content: this.formatPromptInputForTrace(prompt),
         },
       ],
+      turnCount: 0,
+      activeTurnSpan: undefined,
+      activeTurnIndex: 0,
     };
   }
 
@@ -1181,10 +1090,21 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       case 'turn.completed':
         state.usage = event.usage;
         state.turnCompleted = true;
+        if (!state.activeTurnSpan) {
+          // Some Codex SDK streams emit `turn.completed` without a prior
+          // `turn.started`. Lazily synthesize a turn span so the
+          // `gen_ai.turn *` count still reflects this SDK turn.
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
+        this.endTurnSpan(state, eventTime, event.usage);
         logger.debug('Codex turn completed', { usage: state.usage });
         return;
       case 'turn.failed': {
         const errorMsg = event.error?.message || 'Turn failed';
+        if (!state.activeTurnSpan) {
+          this.startTurnSpan(state, tracer, state.lastEventTime);
+        }
+        this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex turn failed', { error: errorMsg });
         const previousStreamError =
           state.lastStreamError && state.lastStreamError !== errorMsg
@@ -1202,7 +1122,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return;
       }
       case 'thread.started':
+        return;
       case 'turn.started':
+        this.startTurnSpan(state, tracer, eventTime);
         return;
       default:
         logger.debug('Codex unknown event type', { type: event.type });
@@ -1220,6 +1142,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       logger.warn('Codex item.started event missing item', { event });
       return;
     }
+    if (!state.activeTurnSpan) {
+      // Stream omitted `turn.started`; open a turn span lazily so the first
+      // item lands inside a real turn and gets a `gen_ai.turn.index` tag.
+      this.startTurnSpan(state, tracer, eventTime);
+    }
     if (!item.id) {
       logger.debug('Codex item.started without id, will create span at completion', {
         type: item.type,
@@ -1228,7 +1155,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     const itemId = String(item.id);
-    const span = this.startStreamingItemSpan(tracer, item, itemId);
+    const span = this.startStreamingItemSpan(
+      tracer,
+      item,
+      itemId,
+      undefined,
+      state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+    );
     state.activeSpans.set(itemId, span);
     state.itemStartTimes.set(itemId, eventTime);
     logger.debug('Codex item started', { itemId, type: item.type });
@@ -1246,6 +1179,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       logger.warn('Codex item.completed event missing item', { event });
       return;
     }
+    if (!state.activeTurnSpan) {
+      // Same lazy-open as `handleStreamingItemStarted`: covers streams that
+      // emit only `item.completed` events without prior `turn.started` /
+      // `item.started` events.
+      this.startTurnSpan(state, tracer, state.lastEventTime);
+    }
 
     const itemId = item.id ? String(item.id) : crypto.randomUUID();
     state.items.push(item);
@@ -1253,7 +1192,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     const span =
       state.activeSpans.get(itemId) ??
-      this.startStreamingItemSpan(tracer, item, itemId, state.lastEventTime);
+      this.startStreamingItemSpan(
+        tracer,
+        item,
+        itemId,
+        state.lastEventTime,
+        state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+      );
     const hadStartEvent = state.activeSpans.has(itemId);
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
     const durationMs = eventTime - startTime;
@@ -1297,6 +1242,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     item: any,
     itemId: string,
     startTime?: number,
+    turnIndex?: number,
   ): Span {
     return tracer.startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
@@ -1305,9 +1251,46 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         'codex.item.id': itemId,
         'codex.item.type': item.type,
         ...(startTime === undefined ? {} : { 'codex.timing.estimated': true }),
+        ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
       },
     });
+  }
+
+  private startTurnSpan(
+    state: CodexStreamingState,
+    tracer: ReturnType<typeof trace.getTracer>,
+    eventTime: number,
+  ): void {
+    openTurnSpan(state, { tracer, eventTime, system: 'openai', logLabel: 'CodexSDK' });
+  }
+
+  private endTurnSpan(
+    state: CodexStreamingState,
+    eventTime: number,
+    usage?: any,
+    errorMessage?: string,
+  ): void {
+    const attributes: Attributes = {};
+    if (usage) {
+      const inputTokens = usage.input_tokens ?? usage.inputTokens;
+      const outputTokens = usage.output_tokens ?? usage.outputTokens;
+      const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
+      if (typeof inputTokens === 'number') {
+        attributes['gen_ai.usage.input_tokens'] = inputTokens;
+      }
+      if (typeof outputTokens === 'number') {
+        attributes['gen_ai.usage.output_tokens'] = outputTokens;
+      }
+      if (typeof cachedTokens === 'number') {
+        attributes['gen_ai.usage.cached_tokens'] = cachedTokens;
+      }
+      if (typeof reasoningTokens === 'number') {
+        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
+      }
+    }
+    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
   }
 
   private collectStreamingItemText(item: any, state: CodexStreamingState): void {
@@ -1417,6 +1400,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
+    closeTurnSpan(state, {
+      errorMessage: 'Turn span not properly closed',
+      logLabel: 'CodexSDK',
+    });
   }
 
   private buildStreamingTurnResult(state: CodexStreamingState): {
@@ -1566,7 +1553,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const skillCandidates = new Map<string, { name: string; path: string }>();
 
     if (command) {
-      for (const skill of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+      for (const skill of extractCodexSkillPathCandidates(command, skillRootPrefixes)) {
         skillCandidates.set(skill.path, skill);
       }
     }
@@ -2293,12 +2280,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
-    return {
-      ...(skillMetadata.skillCalls.length > 0 ? { skillCalls: skillMetadata.skillCalls } : {}),
-      ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
-        ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
-        : {}),
-    };
+    return getCodexSkillMetadataFields(skillMetadata);
   }
 
   private buildCodexTokenUsage(turnUsage: any): ProviderResponse['tokenUsage'] {

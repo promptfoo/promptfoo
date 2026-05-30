@@ -90,6 +90,7 @@ describe('OpenAiModerationProvider', () => {
             'Content-Type': 'application/json',
             'x-promptfoo-silent': 'true',
             Authorization: 'Bearer test-key',
+            'X-OpenAI-Originator': 'promptfoo',
           }),
           body: expect.stringContaining('"model":"text-moderation-latest"'),
         }),
