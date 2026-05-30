@@ -1129,56 +1129,17 @@ describe('writeOutput', () => {
     expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
-  it('falls back to an in-place JSONL rewrite when the output directory is not writable', async () => {
+  it('preserves the existing JSONL artifact when the output directory is not writable', async () => {
     const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
-    vi.mocked(fsPromises.readFile).mockResolvedValue('previous output');
-    vi.mocked(fsPromises.writeFile)
-      .mockRejectedValueOnce(permissionError)
-      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(permissionError);
 
     const outputPath = 'output.jsonl';
-    await writeOutput(outputPath, new Eval({}), null);
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('EACCES');
 
     expect(fsPromises.writeFile).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.tmp$/), '');
-    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(2, outputPath, '');
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    expect(fsPromises.appendFile).not.toHaveBeenCalled();
     expect(fsPromises.rename).not.toHaveBeenCalled();
-  });
-
-  it('restores the previous JSONL artifact when an in-place rewrite fails', async () => {
-    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
-    const appendError = new Error('append failed');
-    const previousOutput = Buffer.from('previous output');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(previousOutput);
-    vi.mocked(fsPromises.writeFile)
-      .mockRejectedValueOnce(permissionError)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
-    vi.mocked(fsPromises.appendFile).mockRejectedValueOnce(appendError);
-    const eval_ = {
-      async *fetchResultsBatched() {
-        yield [
-          {
-            success: true,
-            failureReason: ResultFailureReason.NONE,
-            score: 1,
-            namedScores: {},
-            latencyMs: 0,
-            provider: { id: 'echo' },
-            prompt: { raw: 'prompt', label: 'prompt' },
-            response: { output: 'output' },
-            vars: {},
-            promptIdx: 0,
-            testIdx: 0,
-            testCase: {},
-            promptId: 'prompt',
-          },
-        ];
-      },
-    } as unknown as Eval;
-
-    await expect(writeOutput('output.jsonl', eval_, null)).rejects.toThrow('append failed');
-
-    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(3, 'output.jsonl', previousOutput);
   });
 
   it('writeOutput with json and txt output', async () => {

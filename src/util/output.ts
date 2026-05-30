@@ -60,15 +60,6 @@ function isFileNotFoundError(error: unknown): boolean {
   return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
 }
 
-function isPermissionDeniedError(error: unknown): boolean {
-  return (
-    error !== null &&
-    typeof error === 'object' &&
-    'code' in error &&
-    (error.code === 'EACCES' || error.code === 'EPERM')
-  );
-}
-
 async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   try {
     const stats = await fsPromises.lstat(outputPath);
@@ -523,29 +514,10 @@ export async function writeOutput(
       `.promptfoo-${randomUUID()}.tmp`,
     );
     try {
-      try {
-        if (outputMode === undefined) {
-          await fsPromises.writeFile(tempOutputPath, '');
-        } else {
-          await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
-        }
-      } catch (error) {
-        if (isPermissionDeniedError(error)) {
-          logger.warn(
-            '[Output] Falling back to in-place JSONL rewrite because the output directory is not writable',
-          );
-          await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
-          const previousOutput = await fsPromises.readFile(jsonlOutputPath);
-          try {
-            await fsPromises.writeFile(jsonlOutputPath, '');
-            await appendJsonlResults(jsonlOutputPath, evalRecord);
-          } catch (rewriteError) {
-            await fsPromises.writeFile(jsonlOutputPath, previousOutput);
-            throw rewriteError;
-          }
-          return;
-        }
-        throw error;
+      if (outputMode === undefined) {
+        await fsPromises.writeFile(tempOutputPath, '');
+      } else {
+        await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
       }
       await appendJsonlResults(tempOutputPath, evalRecord);
       if (outputMode !== undefined) {

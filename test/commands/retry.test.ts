@@ -238,6 +238,62 @@ describe('retry command', () => {
         fs.rmSync(configPath, { force: true });
       }
     });
+
+    it('preserves stale ERROR rows when replacement persistence fails', async () => {
+      const artifactId = randomUUID();
+      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const evalRecord = await Eval.create(
+        {
+          prompts: [prompt.raw],
+          providers: ['echo'],
+          tests: [{ vars: { name: 'World' } }],
+        },
+        [prompt],
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const staleResultId = `${evalRecord.id}-stale-error`;
+      await db.insert(evalResultsTable).values({
+        id: staleResultId,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt,
+        testCase: { vars: { name: 'World' } },
+        provider: { id: 'echo' },
+        response: { output: 'stale error' },
+        error: 'stale error',
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        namedScores: {},
+      });
+      fs.writeFileSync(
+        configPath,
+        [
+          'providers:',
+          '  - echo',
+          'prompts:',
+          `  - "${prompt.raw}"`,
+          'tests:',
+          '  - vars:',
+          '      name: World',
+        ].join('\n'),
+      );
+      const addResultSpy = vi
+        .spyOn(Eval.prototype, 'addResult')
+        .mockRejectedValueOnce(new Error('simulated result persistence failure'));
+
+      try {
+        await retryCommand(evalRecord.id, { config: configPath });
+
+        expect(addResultSpy).toHaveBeenCalledTimes(1);
+        expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
+      } finally {
+        fs.rmSync(configPath, { force: true });
+      }
+    });
   });
 
   describe('deleteErrorResults', () => {
