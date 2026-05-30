@@ -128,3 +128,8 @@ paths and any authentication details out of committed notes.
   `redteam generate`; generated policy eval `eval-eHb-2026-05-30T23:41:30`
   reported the expected finding in 20 seconds with the same bounded trajectory
   and zero runtime errors.
+- After merging the current `origin/main`, smoke eval
+  `eval-K7F-2026-05-30T23:44:54` passed in 21 seconds and generated policy eval
+  `eval-rp6-2026-05-30T23:46:45` reported the expected finding in 29 seconds.
+  Both retained the same bounded three-call UI trajectory with zero runtime
+  errors.
