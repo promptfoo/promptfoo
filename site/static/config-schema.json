@@ -287,6 +287,12 @@
         "FAL_KEY": {
           "type": "string"
         },
+        "FIREWORKS_API_BASE_URL": {
+          "type": "string"
+        },
+        "FIREWORKS_API_KEY": {
+          "type": "string"
+        },
         "GITHUB_TOKEN": {
           "type": "string"
         },
@@ -1734,6 +1740,12 @@
                       "type": "string"
                     },
                     "FAL_KEY": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_KEY": {
                       "type": "string"
                     },
                     "GITHUB_TOKEN": {
