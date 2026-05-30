@@ -54,6 +54,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -70,6 +71,10 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import {
+  buildConfiguredProviderMap,
+  resolveConfiguredProviderReference,
+} from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
@@ -1990,6 +1995,51 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
   return promptIndexMap;
 }
 
+function resolveAssertionProviderReferences(
+  assertion: AssertionOrSet,
+  providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
+): AssertionOrSet {
+  if (assertion.type === 'assert-set') {
+    const resolvedAssertions = assertion.assert.map(
+      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
+    );
+    if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
+      return assertion;
+    }
+    return { ...assertion, assert: resolvedAssertions };
+  }
+
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
+  return provider === assertion.provider ? assertion : { ...assertion, provider };
+}
+
+function resolveRuntimeGradingProviderReferences(
+  testCase: AtomicTestCase,
+  providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
+): void {
+  if (testCase.options?.provider) {
+    const provider = resolveConfiguredProviderReference(
+      testCase.options.provider,
+      providerMap,
+      env,
+    );
+    if (provider !== testCase.options.provider) {
+      testCase.options = { ...testCase.options, provider };
+    }
+  }
+
+  if (testCase.assert) {
+    const assertions = testCase.assert.map((assertion) =>
+      resolveAssertionProviderReferences(assertion, providerMap, env),
+    );
+    if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
+      testCase.assert = assertions;
+    }
+  }
+}
+
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
@@ -2136,6 +2186,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const promptIdCache = new Map<Prompt, string>();
+  const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
   for (const prompt of testSuite.prompts) {
     promptIdCache.set(prompt, generateIdFromPrompt(prompt));
   }
@@ -2144,6 +2195,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -2612,10 +2664,12 @@ async function filterCompletedResumeSteps(runEvalOptions: RunEvalOptions[], eval
 function adjustConcurrencyForSerialFeatures({
   concurrency,
   prompts,
+  providers,
   tests,
 }: {
   concurrency: number;
   prompts: CompletedPrompt[];
+  providers: ApiProvider[];
   tests: AtomicTestCase[];
 }) {
   const usesConversationVar = prompts.some(promptUsesConversationVariable);
@@ -2624,6 +2678,9 @@ function adjustConcurrencyForSerialFeatures({
   }
 
   const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
+  const usesPersistentBrowserSession = providers.some(
+    (provider) => provider.id() === 'browser-provider' && provider.config?.persistSession === true,
+  );
   if (usesConversationVar) {
     logger.info(
       `Setting concurrency to 1 because the ${chalk.cyan(CONVERSATION_VAR_NAME)} variable is used.`,
@@ -2632,6 +2689,10 @@ function adjustConcurrencyForSerialFeatures({
   }
   if (usesStoreOutputAs) {
     logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
+    return { concurrency: 1, usesConversationVar };
+  }
+  if (usesPersistentBrowserSession) {
+    logger.info(`Setting concurrency to 1 because browser persistSession is enabled.`);
     return { concurrency: 1, usesConversationVar };
   }
   return { concurrency, usesConversationVar };
@@ -4394,6 +4455,7 @@ class Evaluator {
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
       prompts,
+      providers: runEvalOptions.map((evalOption) => evalOption.provider),
       tests,
     });
     concurrency = concurrencySettings.concurrency;
