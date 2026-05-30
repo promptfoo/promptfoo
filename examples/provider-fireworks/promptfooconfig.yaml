@@ -5,18 +5,18 @@ prompts:
   - 'In one sentence, summarise: {{passage}}'
 
 providers:
-  - id: fireworks:accounts/fireworks/models/llama-v3p3-70b-instruct
-    label: 'Llama 3.3 70B'
+  - id: fireworks:accounts/fireworks/models/gpt-oss-120b
+    label: 'GPT-OSS 120B'
     config:
       temperature: 0.2
       max_tokens: 120
-  - id: fireworks:accounts/fireworks/models/deepseek-v3
-    label: 'DeepSeek V3'
+  - id: fireworks:accounts/fireworks/models/qwen3-235b-a22b-instruct-2507
+    label: 'Qwen 3 235B A22B'
     config:
       temperature: 0.2
       max_tokens: 120
-  - id: fireworks:accounts/fireworks/models/llama-v3p1-8b-instruct
-    label: 'Llama 3.1 8B'
+  - id: fireworks:accounts/fireworks/models/kimi-k2-instruct
+    label: 'Kimi K2'
     config:
       temperature: 0.2
       max_tokens: 120

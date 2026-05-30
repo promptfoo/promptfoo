@@ -149,11 +149,31 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
       response.tokenUsage?.prompt,
       response.tokenUsage?.completion,
       response.cached,
-      response.tokenUsage?.completionDetails?.cacheReadInputTokens ?? 0,
+      readFireworksCachedPromptTokens(response),
     );
 
     return response;
   }
+}
+
+// Fireworks's chat-completions endpoint exposes prompt-cache hits two different
+// ways depending on how the request was made: as the `fireworks-cached-prompt-tokens`
+// response header on every call, and as `prompt_tokens_details.cached_tokens` in the
+// usage body when the upstream OpenAI-style parser surfaces it via
+// `completionDetails.cacheReadInputTokens`. Prefer the larger of the two so the
+// discount lands whichever source the deployment populates. See:
+// https://docs.fireworks.ai/guides/prompt-caching
+export function readFireworksCachedPromptTokens(response: ProviderResponse): number {
+  const fromUsageDetails = response.tokenUsage?.completionDetails?.cacheReadInputTokens ?? 0;
+  const headerRecord = (
+    response.metadata as { http?: { headers?: Record<string, unknown> } } | undefined
+  )?.http?.headers;
+  const headerValue =
+    headerRecord?.['fireworks-cached-prompt-tokens'] ??
+    headerRecord?.['Fireworks-Cached-Prompt-Tokens'];
+  const fromHeader = typeof headerValue === 'string' ? Number.parseInt(headerValue, 10) : 0;
+  const safeHeader = Number.isFinite(fromHeader) && fromHeader > 0 ? fromHeader : 0;
+  return Math.max(fromUsageDetails, safeHeader);
 }
 
 export function createFireworksProvider(

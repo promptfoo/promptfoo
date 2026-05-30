@@ -4,6 +4,7 @@ import {
   calculateFireworksCost,
   createFireworksProvider,
   FireworksProvider,
+  readFireworksCachedPromptTokens,
 } from '../../src/providers/fireworks/chat';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { mockProcessEnv } from '../util/utils';
@@ -210,6 +211,75 @@ describe('Fireworks AI', () => {
           40,
         ),
       ).toBeCloseTo(0.001 * 60 + 0.0001 * 40 + 0.002 * 5);
+    });
+  });
+
+  describe('readFireworksCachedPromptTokens', () => {
+    it('reads from the OpenAI-style completionDetails field when present', () => {
+      expect(
+        readFireworksCachedPromptTokens({
+          output: 'ok',
+          tokenUsage: {
+            prompt: 100,
+            completion: 5,
+            total: 105,
+            completionDetails: { cacheReadInputTokens: 40 },
+          },
+        } as any),
+      ).toBe(40);
+    });
+
+    it('falls back to the `fireworks-cached-prompt-tokens` response header', () => {
+      expect(
+        readFireworksCachedPromptTokens({
+          output: 'ok',
+          tokenUsage: { prompt: 100, completion: 5, total: 105 },
+          metadata: { http: { headers: { 'fireworks-cached-prompt-tokens': '40' } } },
+        } as any),
+      ).toBe(40);
+    });
+
+    it('handles a title-cased response header for the cache count', () => {
+      // Different proxies normalise header casing differently, so accept both.
+      expect(
+        readFireworksCachedPromptTokens({
+          output: 'ok',
+          metadata: { http: { headers: { 'Fireworks-Cached-Prompt-Tokens': '12' } } },
+        } as any),
+      ).toBe(12);
+    });
+
+    it('prefers the larger value when both sources are populated', () => {
+      expect(
+        readFireworksCachedPromptTokens({
+          output: 'ok',
+          tokenUsage: {
+            prompt: 100,
+            completion: 5,
+            total: 105,
+            completionDetails: { cacheReadInputTokens: 30 },
+          },
+          metadata: { http: { headers: { 'fireworks-cached-prompt-tokens': '50' } } },
+        } as any),
+      ).toBe(50);
+    });
+
+    it('returns 0 when no source provides a cache count', () => {
+      expect(
+        readFireworksCachedPromptTokens({
+          output: 'ok',
+          tokenUsage: { prompt: 100, completion: 5, total: 105 },
+        } as any),
+      ).toBe(0);
+    });
+
+    it('ignores malformed header values without throwing', () => {
+      expect(
+        readFireworksCachedPromptTokens({
+          output: 'ok',
+          metadata: { http: { headers: { 'fireworks-cached-prompt-tokens': 'not-a-number' } } },
+        } as any),
+      ).toBe(0);
     });
   });
 
