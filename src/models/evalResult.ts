@@ -21,7 +21,11 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateAssertionTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -691,6 +695,10 @@ export default class EvalResult {
     const tokenUsage = createEmptyTokenUsage();
     if (this.response?.tokenUsage) {
       accumulateResponseTokenUsage(tokenUsage, this.response);
+    }
+    if (this.gradingResult?.tokensUsed) {
+      tokenUsage.assertions.numRequests++;
+      accumulateAssertionTokenUsage(tokenUsage.assertions, this.gradingResult.tokensUsed);
     }
 
     return {
