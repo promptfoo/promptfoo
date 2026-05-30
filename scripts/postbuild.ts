@@ -45,6 +45,13 @@ const WRAPPER_FILES: Record<WrapperType, string[]> = {
  */
 const DRIZZLE_EXCLUDE_PATTERNS = ['.md', 'CLAUDE', 'AGENTS'];
 
+export function shouldCopyDrizzlePath(src: string): boolean {
+  const basename = path.basename(src);
+  return !DRIZZLE_EXCLUDE_PATTERNS.some(
+    (pattern) => basename.includes(pattern) || basename.endsWith(pattern),
+  );
+}
+
 /**
  * Critical build outputs that must exist for the build to be valid.
  */
@@ -148,12 +155,7 @@ function getDrizzleTask(): CopyTask {
     src: path.join(ROOT, 'drizzle'),
     dest: path.join(DIST, 'drizzle'),
     recursive: true,
-    filter: (src: string) => {
-      const basename = path.basename(src);
-      return !DRIZZLE_EXCLUDE_PATTERNS.some(
-        (pattern) => basename.includes(pattern) || basename.endsWith(pattern),
-      );
-    },
+    filter: shouldCopyDrizzlePath,
   };
 }
 
