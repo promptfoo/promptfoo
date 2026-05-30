@@ -133,11 +133,12 @@ describe('programmatic JSONL output', () => {
       outputPath,
       prompts: ['Test prompt'],
       providers: [provider],
-      tests: [{ vars: {} }],
+      tests: [{ vars: { topic: 'weather' } }],
       writeLatestResults: true,
     });
 
     const [result] = readJsonl(outputPath);
+    expect(result.vars).toEqual({ topic: 'weather' });
     expect(result.response.metadata.http).toEqual({
       headers: {
         'content-type': 'application/json',
