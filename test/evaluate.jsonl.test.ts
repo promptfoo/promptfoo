@@ -43,7 +43,7 @@ describe('programmatic JSONL output', () => {
     const provider: ApiProvider = {
       id: () => 'slow-provider',
       callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {
-        return new Promise((_resolve, reject) => {
+        return new Promise<never>((_resolve, reject) => {
           options?.abortSignal?.addEventListener(
             'abort',
             () => reject(new Error('Provider call aborted')),
