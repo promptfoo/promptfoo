@@ -4,6 +4,7 @@ import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
 
+import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type Eval from '../../src/models/eval';
 import type { EvaluateOptions, TestSuite } from '../../src/types/index';
 
@@ -145,6 +146,7 @@ describe('evaluator trace integration', () => {
       sanitizeAttributes: false,
     });
     expect(mockFlushOtel).toHaveBeenCalled();
+    expect(mockShutdownOtel).toHaveBeenCalledOnce();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -153,6 +155,39 @@ describe('evaluator trace integration', () => {
         score: 1,
       }),
     );
+  });
+
+  it('closes writers but skips OTEL shutdown when initialization fails', async () => {
+    const writer = {
+      write: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const runtime: EvaluatorRuntime = {
+      createResultWriters: vi.fn().mockReturnValue([writer]),
+      persistResult: vi.fn(),
+      updateResumeSignal: vi.fn(),
+    };
+    mockInitializeOtel.mockImplementationOnce(() => {
+      throw new Error('otel unavailable');
+    });
+
+    await expect(
+      evaluate(
+        {
+          providers: [],
+          prompts: [],
+          tests: [],
+          tracing: { enabled: true },
+        },
+        mockEval,
+        {},
+        runtime,
+      ),
+    ).rejects.toThrow('otel unavailable');
+
+    expect(writer.close).toHaveBeenCalledOnce();
+    expect(mockFlushOtel).not.toHaveBeenCalled();
+    expect(mockShutdownOtel).not.toHaveBeenCalled();
   });
 
   it('should handle assertions gracefully when tracing is disabled', async () => {
@@ -196,6 +231,7 @@ describe('evaluator trace integration', () => {
     expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
     expect(mockFlushOtel).not.toHaveBeenCalled();
+    expect(mockShutdownOtel).not.toHaveBeenCalled();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(

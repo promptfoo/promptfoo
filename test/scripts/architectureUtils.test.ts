@@ -351,6 +351,12 @@ describe('production layer config', () => {
       'legacy-runtime',
     );
   });
+
+  it('classifies the evaluator runtime adapter as a node module', () => {
+    expect(getLayerForFile('src/node/evaluatorRuntime.ts', readLayerConfig(process.cwd()))).toBe(
+      'node',
+    );
+  });
 });
 
 describe('findViolations', () => {
