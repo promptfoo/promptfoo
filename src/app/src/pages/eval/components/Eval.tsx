@@ -76,6 +76,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
+  const currentEvalIdRef = useRef(evalId);
+  currentEvalIdRef.current = evalId;
 
   // ================================
   // Handlers
@@ -308,10 +310,17 @@ export default function Eval({ fetchId }: EvalOptions) {
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const latestEvalId = newRecentEvals[0].evalId;
-          const updatedEvalId = ('evalId' in data ? data.evalId : undefined) ?? latestEvalId;
+          const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
+          const updatedEvalId = scopedEvalId ?? latestEvalId;
           setDefaultEvalId(latestEvalId);
-          setEvalId(updatedEvalId);
-          await loadEvalById(updatedEvalId, true);
+          if (
+            scopedEvalId === undefined ||
+            scopedEvalId === currentEvalIdRef.current ||
+            scopedEvalId === latestEvalId
+          ) {
+            setEvalId(updatedEvalId);
+            await loadEvalById(updatedEvalId, true);
+          }
         }
 
         setIsStreaming(false);

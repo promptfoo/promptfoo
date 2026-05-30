@@ -392,12 +392,14 @@ export async function startServer(
       invalidateEvaluationCache(signalEvalId);
       const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
 
-      if (updatedEval) {
+      if (updatedEval && signalEvalId) {
         logger.debug(
           `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
         );
+        io.emit('update', { evalId: updatedEval.id });
+      } else if (!updatedEval) {
+        io.emit('update', null);
       }
-      io.emit('update', updatedEval ? { evalId: updatedEval.id } : null);
       allPrompts = null;
     };
 

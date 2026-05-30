@@ -406,7 +406,10 @@ describe('Eval', () => {
   });
 
   it('reloads the scoped eval from a socket update', async () => {
-    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'retried-eval',
+    });
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
       json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
@@ -428,6 +431,34 @@ describe('Eval', () => {
       expect.objectContaining({ skipLoadingState: true }),
     );
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
+  });
+
+  it('does not navigate away for a scoped background socket update', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ evalId: 'background-eval' });
+    });
+
+    expect(baseMockTableStore.fetchEvalData).not.toHaveBeenCalledWith(
+      'background-eval',
+      expect.anything(),
+    );
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('background-eval');
   });
 
   it('clears the eval state when a socket update reports no remaining evals', async () => {
