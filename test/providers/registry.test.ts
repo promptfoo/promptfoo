@@ -1024,6 +1024,19 @@ describe('Provider Registry', () => {
     };
 
     it.each([
+      ['google:live:gemini-live-2.5-flash-preview', 'GoogleLiveProvider'],
+      ['google:image:imagen-3.0-generate-002', 'GoogleImageProvider'],
+      ['google:video:veo-3.1-generate-preview', 'GoogleVideoProvider'],
+      ['google:gemini-2.5-flash-image', 'GeminiImageProvider'],
+      ['palm:chat-bison', 'AIStudioChatProvider'],
+    ])('routes %s to %s', async (providerPath, expectedProviderName) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect(provider.constructor.name).toBe(expectedProviderName);
+    });
+
+    it.each([
       ['google:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['google:embeddings:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['palm:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
