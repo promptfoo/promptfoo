@@ -19,6 +19,7 @@ vi.mock('../src/database/signal', () => ({
 
 import { evaluate } from '../src/evaluator';
 import { ResultFailureReason } from '../src/types';
+import { JsonlFileWriter } from '../src/util/exportToFile/writeToFile';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
 describe('evaluate SIGINT/abort handling', () => {
@@ -289,7 +290,6 @@ describe('evaluate SIGINT/abort handling', () => {
       callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         providerCallCount++;
         if (providerCallCount === 1) {
-          setTimeout(() => abortController.abort(), 0);
           return {
             output: {
               http: {
@@ -316,6 +316,13 @@ describe('evaluate SIGINT/abort handling', () => {
         throw new Error('Operation cancelled');
       }),
     });
+    const originalWrite = JsonlFileWriter.prototype.write;
+    const writeSpy = vi
+      .spyOn(JsonlFileWriter.prototype, 'write')
+      .mockImplementation(async function (data) {
+        await originalWrite.call(this, data);
+        abortController.abort();
+      });
     const evalRecord = new Eval({ outputPath });
     const testSuite: TestSuite = {
       providers: [provider],
@@ -354,6 +361,7 @@ describe('evaluate SIGINT/abort handling', () => {
       expect(JSON.stringify(rows[0])).not.toContain('req_should_not_persist');
       expect(JSON.stringify(rows[0])).not.toContain('sk-abort-vars-should-not-persist');
     } finally {
+      writeSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });
     }
   });
