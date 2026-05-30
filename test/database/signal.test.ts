@@ -138,6 +138,18 @@ describe('signal', () => {
       expect(result).toBeUndefined();
     });
 
+    it('should not treat structured deletion signals as scoped eval updates', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-deleted-1'],
+          timestamp: '2026-05-30T22:00:00.000Z',
+        }),
+      );
+
+      expect(readSignalEvalId()).toBeUndefined();
+    });
+
     it('should return undefined when evalId is too short (8 chars or less)', () => {
       mockReadFileSync.mockReturnValue('short:2024-01-01T00:00:00.000Z');
 

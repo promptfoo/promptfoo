@@ -485,6 +485,34 @@ describe('Eval', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/eval/latest-eval', { replace: true });
   });
 
+  it('reloads the latest eval on the root route when the displayed eval is deleted', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['selected-eval'] });
+    });
+
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+      'latest-eval',
+      expect.objectContaining({ skipLoadingState: true }),
+    );
+  });
+
   it('preserves a pinned eval route when another eval is deleted', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
