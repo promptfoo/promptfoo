@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { OpenAiGenericProvider } from '../../../src/providers/openai/index';
+import {
+  DEFAULT_OPENAI_ORIGINATOR,
+  OPENAI_ORIGINATOR_HEADER,
+  OpenAiGenericProvider,
+} from '../../../src/providers/openai/index';
 import { mockProcessEnv } from '../../util/utils';
 
 describe('OpenAI Provider', () => {
@@ -41,6 +45,36 @@ describe('OpenAI Provider', () => {
       mockProcessEnv({ OPENAI_ORGANIZATION: 'env-org' });
       const envProvider = new OpenAiGenericProvider('test-model');
       expect(envProvider.getOrganization()).toBe('env-org');
+    });
+
+    it('should include the default originator header and allow explicit overrides', () => {
+      expect(provider.getOpenAiRequestHeaders()).toEqual({
+        [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR,
+        'OpenAI-Organization': 'test-org',
+      });
+
+      expect(
+        provider.getOpenAiRequestHeaders({
+          [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+        }),
+      ).toMatchObject({
+        [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
+    });
+
+    it('should not attribute compatible endpoints unless explicitly configured', () => {
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.api.com/openai' },
+      });
+
+      expect(customProvider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORIGINATOR_HEADER);
+      expect(
+        customProvider.getOpenAiRequestHeaders({
+          [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+        }),
+      ).toMatchObject({
+        [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
     });
 
     it('should get API key', () => {
