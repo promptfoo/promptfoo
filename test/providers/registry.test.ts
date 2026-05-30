@@ -1,14 +1,8 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AwsBedrockConverseProvider } from '../../src/providers/bedrock/converse';
-import { NovaSonicProvider } from '../../src/providers/bedrock/nova-sonic';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
-import {
-  SageMakerCompletionProvider,
-  SageMakerEmbeddingProvider,
-} from '../../src/providers/sagemaker';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
@@ -497,7 +491,7 @@ describe('Provider Registry', () => {
         mockProviderOptions,
         mockContext,
       );
-      expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+      expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
     });
 
     it('should handle bedrock-agent providers correctly', async () => {
@@ -541,21 +535,21 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
 
       const provider = await factory!.create('bedrock:nova-sonic', { config: {} }, mockContext);
-      expect(provider).toBeInstanceOf(NovaSonicProvider);
+      expect(provider.constructor.name).toBe('NovaSonicProvider');
     });
 
     it.each([
-      ['sagemaker:embedding:endpoint-name', SageMakerEmbeddingProvider, {}],
-      ['sagemaker:endpoint-name', SageMakerCompletionProvider, { modelType: 'custom' }],
-      ['sagemaker:jumpstart:endpoint-name', SageMakerCompletionProvider, {}],
-      ['sagemaker:openai:endpoint-name', SageMakerCompletionProvider, {}],
-    ])('should handle %s providers correctly', async (path, ExpectedProvider, config) => {
+      ['sagemaker:embedding:endpoint-name', 'SageMakerEmbeddingProvider', {}],
+      ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }],
+      ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}],
+      ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}],
+    ])('should handle %s providers correctly', async (path, expectedProviderName, config) => {
       const factories = await getProviderFactories(path);
       const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
       const provider = await factory!.create(path, { config }, mockContext);
-      expect(provider).toBeInstanceOf(ExpectedProvider);
+      expect(provider.constructor.name).toBe(expectedProviderName);
     });
 
     it('should handle bedrock Luma Ray video provider with model version', async () => {
