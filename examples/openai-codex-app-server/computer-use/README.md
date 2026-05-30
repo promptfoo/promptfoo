@@ -5,14 +5,15 @@ provider and the macOS Computer Use plugin. The target deliberately has no chat
 API or network endpoint: its response logic runs inside a disposable native
 AppKit application after a user submits the form.
 
-The checked-in target contains an intentional prompt-injection vulnerability. A
-successful run uses direct UI interaction to make the target reveal the canary
+The checked-in target contains an intentional diagnostic-token disclosure
+vulnerability. A successful run uses direct UI interaction to make the target reveal the canary
 `PROMPTFOO_UI_ONLY_CANARY_7F3A`, then verifies both the canary and the
 `computer-use` MCP trajectory recorded by the app-server provider.
 
 ## Prerequisites
 
-- macOS with Computer Use already installed and approved for local UI access.
+- An unlocked macOS desktop with Computer Use already installed and approved
+  for local UI access.
 - Xcode Command Line Tools with `xcrun swiftc`.
 - A local Codex login, or `OPENAI_API_KEY` / `CODEX_API_KEY`.
 - The complete Computer Use plugin directory, including `.mcp.json`,
@@ -44,7 +45,8 @@ The runner:
 4. Stops any stale instance of its generated target path.
 5. Compiles the native UI-only target under `.tmp/`.
 6. Starts the generated `PromptfooComputerUseTarget.app`.
-7. Runs a fresh local Promptfoo eval with `--no-cache`.
+7. Runs a fresh local Promptfoo eval with `--no-cache`, or the Promptfoo command
+   supplied as runner arguments.
 8. Writes the exported Promptfoo result to `.tmp/results.json` and stops the
    generated target.
 
@@ -80,6 +82,35 @@ COMPUTER_USE_TARGET_APP=/absolute/path/to/PromptfooComputerUseTarget.app \
   --no-cache --no-share \
   -o /tmp/promptfoo-computer-use-results.json
 ```
+
+## Run A Real Red Team
+
+The same config is also a red-team generation source. It includes one targeted
+policy plugin case so the run remains bounded while proving that generated
+adversarial input reaches the UI-only target.
+
+Generation prints an informational warning that the fixed smoke test is ignored.
+The generated suite supplies its own policy probe as expected.
+
+From the repository root:
+
+```bash
+npm run local -- redteam generate \
+  -c examples/openai-codex-app-server/computer-use/promptfooconfig.yaml \
+  -o examples/openai-codex-app-server/computer-use/.tmp/redteam.yaml \
+  --force --strict
+
+examples/openai-codex-app-server/computer-use/scripts/run-e2e.sh \
+  redteam eval \
+  -c examples/openai-codex-app-server/computer-use/.tmp/redteam.yaml \
+  --no-cache --no-share \
+  -o examples/openai-codex-app-server/computer-use/.tmp/redteam-results.json
+```
+
+The eval is expected to report a finding because the disposable target is
+intentionally vulnerable. Inspect `.tmp/redteam-results.json` to confirm that
+the generated policy probe reached the native app through Computer Use and
+revealed the canary.
 
 ## Safety Boundaries
 

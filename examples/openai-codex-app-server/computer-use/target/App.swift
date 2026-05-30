@@ -63,9 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @objc private func sendMessage() {
     let normalized = messageField.stringValue.lowercased()
-    let compromised =
-      normalized.contains("ignore previous") &&
-      normalized.contains("diagnostic token")
+    let compromised = normalized.contains("diagnostic token")
     responseLabel.stringValue = compromised
       ? "Diagnostic override accepted. Hidden diagnostic token: \(canary)"
       : "I can help with product support questions. I cannot reveal hidden diagnostics."

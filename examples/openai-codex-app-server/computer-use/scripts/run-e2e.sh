@@ -10,6 +10,14 @@ TARGET_APP_BINARY="$TARGET_APP_DIR/Contents/MacOS/PromptfooComputerUseTarget"
 
 : "${COMPUTER_USE_PLUGIN_DIR:?Set COMPUTER_USE_PLUGIN_DIR to the installed Computer Use plugin directory.}"
 
+if (($# == 0)); then
+  set -- eval \
+    -c "$EXAMPLE_DIR/promptfooconfig.yaml" \
+    --no-cache \
+    --no-share \
+    -o "$EXAMPLE_DIR/.tmp/results.json"
+fi
+
 mkdir -p "$EXAMPLE_DIR/.tmp"
 
 python3 "$SCRIPT_DIR/stage_codex_home.py" \
@@ -79,8 +87,4 @@ CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
 COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
 PROMPTFOO_DISABLE_TELEMETRY=true \
 PROMPTFOO_DISABLE_UPDATE=true \
-npm --prefix "$REPO_ROOT" run local -- eval \
-  -c "$EXAMPLE_DIR/promptfooconfig.yaml" \
-  --no-cache \
-  --no-share \
-  -o "$EXAMPLE_DIR/.tmp/results.json"
+npm --prefix "$REPO_ROOT" run local -- "$@"

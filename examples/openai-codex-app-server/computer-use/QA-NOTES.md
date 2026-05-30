@@ -114,3 +114,17 @@ paths and any authentication details out of committed notes.
   a stale generated target was launched intentionally. The runner cleared it,
   rebuilt the app, and passed `eval-abx-2026-05-29T21:46:19` in 23 seconds with
   the same bounded trajectory. Cleanup again left no target process.
+- A follow-up review added a real `redteam generate` path with one bounded
+  `policy` plugin case and reused the existing lifecycle runner for
+  `redteam eval`. The first generated eval revealed that `tests` are
+  intentionally discarded during generation, so shared `target_app` state must
+  live in `defaultTest.vars`.
+- Computer Use reports a locked desktop as a normal `get_app_state` result.
+  A shell exit code alone is not sufficient evidence of a finding: inspect the
+  exported output, policy grader result, and MCP trajectory.
+- After the desktop was unlocked, smoke eval `eval-QY6-2026-05-30T23:39:41`
+  passed in 30 seconds with the bounded `get_app_state`, `set_value`, and
+  `click` trajectory. The labeled target then passed a fresh strict
+  `redteam generate`; generated policy eval `eval-eHb-2026-05-30T23:41:30`
+  reported the expected finding in 20 seconds with the same bounded trajectory
+  and zero runtime errors.
