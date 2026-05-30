@@ -154,6 +154,12 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.apiKey).toBe('test-key');
     });
 
+    it('should accept maxRetries for scheduler-managed rate limit retries', () => {
+      const provider = new OpenAICodexSDKProvider({ config: { maxRetries: 5 } });
+
+      expect(provider.config.maxRetries).toBe(5);
+    });
+
     it('should accept promptfoo cloud linkedTargetId metadata', () => {
       const provider = new OpenAICodexSDKProvider({
         config: {
@@ -370,6 +376,94 @@ describe('OpenAICodexSDKProvider', () => {
         expect(errorSpy).toHaveBeenCalled();
 
         errorSpy.mockRestore();
+      });
+
+      it('should not classify unrelated errors containing a tpm path as throttling', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(new Error('Unable to read /tmp/tpm/output.json'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe(
+          'Error calling OpenAI Codex SDK: Unable to read /tmp/tpm/output.json',
+        );
+        expect(result.metadata).toBeUndefined();
+      });
+
+      it('should expose transient TPM throttles with scheduler retry timing', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          new Error(
+            'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 1.25s.',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('Please try again in 1.25s.');
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '1250' },
+          },
+        });
+      });
+
+      it('should use a one-minute retry delay for TPM throttles without an SDK reset hint', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          new Error(
+            'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000.',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '60000' },
+          },
+        });
+      });
+
+      it('should classify hard quota exhaustion as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          new Error(
+            'insufficient_quota: You exceeded your current quota. Please check your plan and billing details.',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('Retries will not help');
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'quota',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: {},
+          },
+        });
       });
 
       it('should ignore non-provider prompt config keys merged from test options', async () => {
@@ -1703,6 +1797,115 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toBe('OpenAI Codex SDK call aborted before it started');
       });
+
+      it('should expose streamed TPM failures with scheduler retry timing', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message:
+                'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 250ms.',
+            },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '250' },
+          },
+        });
+      });
+
+      it('should let Codex recover after an intermediate stream error event', async () => {
+        vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message:
+              'Reconnecting... 2/5 (Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000)',
+          };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Recovered response' },
+          };
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 2 },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Recovered response');
+      });
+
+      it('should retry if a stream ends after a TPM error event', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message:
+              'Reconnecting... 5/5 (Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000)',
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
+      });
+
+      it('should preserve TPM context when a stream later fails generically', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message:
+              'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000',
+          };
+          yield {
+            type: 'turn.failed',
+            error: { message: 'Turn terminated after reconnect attempts' },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('Turn terminated after reconnect attempts');
+        expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
+      });
     });
 
     describe('config merging', () => {
@@ -2744,7 +2947,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.error).toContain('Codex turn failed: Model overloaded');
       });
 
-      it('should handle fatal stream error events', async () => {
+      it('should return stream error events that reach end-of-stream without completion', async () => {
         const mockEvents = async function* () {
           yield {
             type: 'error',
@@ -2761,7 +2964,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toContain('Codex stream error: Stream transport failed');
+        expect(result.error).toContain('Codex stream ended after error: Stream transport failed');
       });
 
       it('emits a gen_ai.turn span even when the stream omits turn.started', async () => {
@@ -2939,7 +3142,7 @@ describe('OpenAICodexSDKProvider', () => {
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
         const result = await provider.callApi('Test prompt');
-        expect(result.error).toContain('Codex stream error: Stream transport failed');
+        expect(result.error).toContain('Codex stream ended after error: Stream transport failed');
 
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
         expect(turnSpan).toBeDefined();
