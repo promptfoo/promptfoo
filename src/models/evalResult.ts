@@ -223,7 +223,7 @@ function redactSensitiveHeaders(
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(headers)) {
     if (
-      Object.hasOwn(sourceHeaders, key) &&
+      Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
       sourceHeaders[key] === value &&
       isSensitiveResponseHeader(key)
     ) {
