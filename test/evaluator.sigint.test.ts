@@ -319,7 +319,7 @@ describe('evaluate SIGINT/abort handling', () => {
     const originalWrite = JsonlFileWriter.prototype.write;
     const writeSpy = vi
       .spyOn(JsonlFileWriter.prototype, 'write')
-      .mockImplementation(async function (data) {
+      .mockImplementation(async function (this: JsonlFileWriter, data) {
         await originalWrite.call(this, data);
         abortController.abort();
       });
