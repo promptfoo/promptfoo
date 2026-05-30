@@ -496,12 +496,14 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
-      const embeddingProvider = await factory!.create(
-        'bedrock:embedding:amazon.titan-embed-text-v1',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(embeddingProvider).toBeDefined();
+      for (const embeddingAlias of ['embedding', 'embeddings']) {
+        const embeddingProvider = await factory!.create(
+          `bedrock:${embeddingAlias}:amazon.titan-embed-text-v1`,
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(embeddingProvider).toBeDefined();
+      }
 
       // Test backwards compatibility
       const legacyProvider = await factory!.create(
@@ -570,17 +572,22 @@ describe('Provider Registry', () => {
     });
 
     it.each([
-      ['sagemaker:embedding:endpoint-name', 'SageMakerEmbeddingProvider', {}],
-      ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }],
-      ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}],
-      ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}],
-    ])('should handle %s providers correctly', async (path, expectedProviderName, config) => {
+      ['sagemaker:embedding:endpoint-name', 'SageMakerEmbeddingProvider', {}, undefined],
+      ['sagemaker:embeddings:endpoint-name', 'SageMakerEmbeddingProvider', {}, undefined],
+      ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
+      ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+    ])('should handle %s providers correctly', async (path, expectedProviderName, config, expectedModelType) => {
       const factories = await getProviderFactories(path);
       const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
       const provider = await factory!.create(path, { config }, mockContext);
       expect(provider.constructor.name).toBe(expectedProviderName);
+      if (expectedModelType) {
+        expect((provider as any).modelType).toBe(expectedModelType);
+      }
     });
 
     it('should handle bedrock Luma Ray video provider with model version', async () => {
