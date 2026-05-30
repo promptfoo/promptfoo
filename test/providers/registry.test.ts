@@ -167,6 +167,37 @@ describe('Provider Registry', () => {
         expect(bBedrock).toBe(cBedrock);
         expect(a.filter((factory) => factory.test(path)).length).toBe(1);
       });
+
+      it.each([
+        'vertex:chat:gemini-2.5-flash',
+        'google:gemini-2.5-flash',
+        'palm:chat-bison',
+      ])('appends Google factories without mutating providerMap for %s', async (path) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      });
+
+      it('resolves the same Google factory under concurrent lookups', async () => {
+        const path = 'google:gemini-2.5-flash';
+        const [a, b, c] = await Promise.all([
+          getProviderFactories(path),
+          getProviderFactories(path),
+          getProviderFactories(path),
+        ]);
+        const aGoogle = a.find((factory) => factory.test(path));
+        const bGoogle = b.find((factory) => factory.test(path));
+        const cGoogle = c.find((factory) => factory.test(path));
+
+        expect(aGoogle).toBeDefined();
+        expect(aGoogle).toBe(bGoogle);
+        expect(bGoogle).toBe(cGoogle);
+        expect(a.filter((factory) => factory.test(path)).length).toBe(1);
+      });
     });
 
     it('should handle echo provider correctly', async () => {
@@ -990,7 +1021,7 @@ describe('Provider Registry', () => {
       ['google:embeddings:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['palm:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
     ])('routes %s to the AI Studio embedding provider (id %s)', async (providerPath, expectedId) => {
-      const factory = providerMap.find((f) => f.test(providerPath));
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       expect(provider.id()).toBe(expectedId);
@@ -998,7 +1029,9 @@ describe('Provider Registry', () => {
     });
 
     it('does not route google:<model> (chat) to the embedding provider', async () => {
-      const factory = providerMap.find((f) => f.test('google:gemini-2.5-flash'));
+      const factory = (await getProviderFactories('google:gemini-2.5-flash')).find((f) =>
+        f.test('google:gemini-2.5-flash'),
+      );
       expect(factory).toBeDefined();
       const provider = await factory!.create('google:gemini-2.5-flash', bareOptions, bareContext);
       expect(typeof (provider as any).callEmbeddingApi).not.toBe('function');
@@ -1010,7 +1043,7 @@ describe('Provider Registry', () => {
       'google:embeddings:',
       'palm:embedding:',
     ])('throws a clear error for %s with no model name', async (providerPath) => {
-      const factory = providerMap.find((f) => f.test(providerPath));
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
         /Missing model name/,
