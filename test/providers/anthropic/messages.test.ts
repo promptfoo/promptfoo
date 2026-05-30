@@ -2330,7 +2330,6 @@ describe('AnthropicMessagesProvider', () => {
           server_tool_use: null,
           service_tier: null,
           inference_geo: null,
-          output_tokens_details: null,
         },
       };
 
