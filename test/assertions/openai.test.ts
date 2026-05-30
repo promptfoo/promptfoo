@@ -214,6 +214,35 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidFunctionCall', () => {
+    it('should delegate to a structural provider capability', () => {
+      const validateFunctionToolCall = vi.fn();
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall,
+      };
+      const output = { arguments: '{"x": 10}', name: 'add' };
+
+      const result = handleIsValidFunctionCall({
+        assertion: functionAssertion,
+        output,
+        provider,
+        test: { vars: { value: 10 } },
+        baseType: functionAssertion.type,
+        assertionValueContext: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(output),
+        providerResponse: { output },
+      });
+
+      expect(validateFunctionToolCall).toHaveBeenCalledWith(output, { value: 10 });
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: functionAssertion,
+      });
+    });
+
     it('should pass when function call matches schema', async () => {
       const functionOutput = {
         name: 'getCurrentTemperature',

@@ -201,6 +201,13 @@ describe('production layer config', () => {
   it('classifies the public contracts entrypoint as leaf-safe', () => {
     expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
   });
+
+  it('allows core logic to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const coreLayer = config.layers.find((layer) => layer.name === 'core');
+
+    expect(coreLayer?.allowedDependencies).toContain('contracts');
+  });
 });
 
 describe('findViolations', () => {
