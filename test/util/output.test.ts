@@ -10,7 +10,12 @@ import Eval from '../../src/models/eval';
 import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
-import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
+import {
+  createOutputMetadata,
+  filterOutputPathsAfterStreaming,
+  writeMultipleOutputs,
+  writeOutput,
+} from '../../src/util/output';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -1399,6 +1404,22 @@ describe('writeOutput', () => {
     const columnKeys = Object.keys(rows[0]);
     expect(columnKeys).toContain('[openai:gpt-4] Test Prompt');
     expect(columnKeys).toContain('[anthropic:claude-3] Test Prompt');
+  });
+});
+
+describe('filterOutputPathsAfterStreaming', () => {
+  it('keeps streamed JSONL artifacts intact after a row persistence failure', () => {
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+
+    expect(
+      filterOutputPathsAfterStreaming(eval_, [
+        'results.jsonl',
+        'results.JSONL',
+        'results.json',
+        'results.yaml',
+      ]),
+    ).toEqual(['results.json', 'results.yaml']);
   });
 });
 

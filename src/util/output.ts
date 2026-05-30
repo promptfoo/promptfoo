@@ -34,6 +34,22 @@ export interface OutputOptions {
   includeMedia?: boolean;
 }
 
+export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: string[]): string[] {
+  if (!evalRecord.resultPersistenceFailed) {
+    return outputPaths;
+  }
+
+  const filteredPaths = outputPaths.filter(
+    (outputPath) => getOutputFileFormat(outputPath) !== 'jsonl',
+  );
+  if (filteredPaths.length !== outputPaths.length) {
+    logger.warn(
+      '[Output] Skipping JSONL finalization because one or more streamed rows failed to persist',
+    );
+  }
+  return filteredPaths;
+}
+
 function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
   return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 }

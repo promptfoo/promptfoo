@@ -17,7 +17,12 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
+import {
+  filterOutputPathsAfterStreaming,
+  readFilters,
+  writeMultipleOutputs,
+  writeOutput,
+} from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -360,10 +365,16 @@ export async function evaluateWithSource(
 
   await maybeShareEval(testSuiteConfig, ret);
   if (testSuiteConfig.outputPath) {
-    if (typeof testSuiteConfig.outputPath === 'string') {
-      await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
-    } else if (Array.isArray(testSuiteConfig.outputPath)) {
-      await writeMultipleOutputs(testSuiteConfig.outputPath, evalRecord, null);
+    const outputPaths = filterOutputPathsAfterStreaming(
+      evalRecord,
+      typeof testSuiteConfig.outputPath === 'string'
+        ? [testSuiteConfig.outputPath]
+        : testSuiteConfig.outputPath,
+    );
+    if (outputPaths.length === 1) {
+      await writeOutput(outputPaths[0], evalRecord, null);
+    } else if (outputPaths.length > 1) {
+      await writeMultipleOutputs(outputPaths, evalRecord, null);
     }
   }
 

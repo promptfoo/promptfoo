@@ -9,7 +9,11 @@ import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
-import { writeMultipleOutputs, writeOutput } from '../src/util/index';
+import {
+  filterOutputPathsAfterStreaming,
+  writeMultipleOutputs,
+  writeOutput,
+} from '../src/util/index';
 import { createMockProvider } from './factories/provider';
 
 vi.mock('../src/cache');
@@ -239,6 +243,7 @@ describe('evaluate function', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
+    vi.mocked(filterOutputPathsAfterStreaming).mockImplementation((_evalRecord, paths) => paths);
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -568,6 +573,24 @@ describe('evaluate function', () => {
     };
     await evaluate(testSuite);
     expect(writeOutput).toHaveBeenCalledWith('test.jsonl', expect.any(Eval), null);
+  });
+
+  it('should preserve streamed JSONL files when finalization filters them out', async () => {
+    vi.mocked(filterOutputPathsAfterStreaming).mockReturnValueOnce(['test.json']);
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: ['test.jsonl', 'test.json'],
+    };
+
+    await evaluate(testSuite);
+
+    expect(filterOutputPathsAfterStreaming).toHaveBeenCalledWith(expect.any(Eval), [
+      'test.jsonl',
+      'test.json',
+    ]);
+    expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
   });
 
   it('should skip writing output when outputPath is empty', async () => {
