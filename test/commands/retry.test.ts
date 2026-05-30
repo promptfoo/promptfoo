@@ -13,6 +13,7 @@ import {
 } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
@@ -241,10 +242,12 @@ describe('retry command', () => {
 
     it('preserves stale ERROR rows when replacement persistence fails', async () => {
       const artifactId = randomUUID();
+      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
       const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
       const evalRecord = await Eval.create(
         {
+          outputPath: jsonlOutputPath,
           prompts: [prompt.raw],
           providers: ['echo'],
           tests: [{ vars: { name: 'World' } }],
@@ -270,6 +273,10 @@ describe('retry command', () => {
         namedScores: {},
       });
       fs.writeFileSync(
+        jsonlOutputPath,
+        `${JSON.stringify({ id: staleResultId, error: 'stale error' })}\n`,
+      );
+      fs.writeFileSync(
         configPath,
         [
           'providers:',
@@ -292,7 +299,174 @@ describe('retry command', () => {
 
         expect(addResultSpy).toHaveBeenCalledTimes(1);
         expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
+        const artifactRows = fs
+          .readFileSync(jsonlOutputPath, 'utf8')
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+        expect(artifactRows).toHaveLength(1);
+        expect(artifactRows[0]).toEqual(
+          expect.objectContaining({
+            id: staleResultId,
+            error: 'stale error',
+          }),
+        );
+        expect(JSON.stringify(artifactRows)).not.toContain('Hello World');
       } finally {
+        fs.rmSync(jsonlOutputPath, { force: true });
+        fs.rmSync(configPath, { force: true });
+      }
+    });
+
+    it('rewrites JSONL from the partially persisted database state when retry persistence fails', async () => {
+      const artifactId = randomUUID();
+      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
+      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const evalRecord = await Eval.create(
+        {
+          outputPath: jsonlOutputPath,
+          prompts: [prompt.raw],
+          providers: ['echo'],
+          tests: [{ vars: { name: 'World' } }, { vars: { name: 'Mars' } }],
+        },
+        [prompt],
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const staleResultIds = [`${evalRecord.id}-stale-error-1`, `${evalRecord.id}-stale-error-2`];
+      await db.insert(evalResultsTable).values(
+        staleResultIds.map((id, testIdx) => ({
+          id,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx,
+          prompt,
+          testCase: { vars: { name: testIdx === 0 ? 'World' : 'Mars' } },
+          provider: { id: 'echo' },
+          response: { output: 'stale error' },
+          error: 'stale error',
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        })),
+      );
+      fs.writeFileSync(
+        jsonlOutputPath,
+        `${staleResultIds.map((id) => JSON.stringify({ id, error: 'stale error' })).join('\n')}\n`,
+      );
+      fs.writeFileSync(
+        configPath,
+        [
+          'providers:',
+          '  - echo',
+          'prompts:',
+          `  - "${prompt.raw}"`,
+          'tests:',
+          '  - vars:',
+          '      name: World',
+          '  - vars:',
+          '      name: Mars',
+        ].join('\n'),
+      );
+      const originalAddResult = Eval.prototype.addResult;
+      vi.spyOn(Eval.prototype, 'addResult')
+        .mockImplementationOnce(function (this: Eval, result) {
+          return originalAddResult.call(this, result);
+        })
+        .mockRejectedValueOnce(new Error('simulated result persistence failure'));
+
+      try {
+        await expect(
+          retryCommand(evalRecord.id, { config: configPath, maxConcurrency: 1 }),
+        ).rejects.toThrow('Retry results failed to persist. Existing ERROR rows were preserved.');
+
+        const persistedRows = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalRecord.id));
+        const artifactRows = fs
+          .readFileSync(jsonlOutputPath, 'utf8')
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+        expect(artifactRows.map((row) => row.id).sort()).toEqual(
+          persistedRows.map((row) => row.id).sort(),
+        );
+        expect(artifactRows).toHaveLength(3);
+      } finally {
+        fs.rmSync(jsonlOutputPath, { force: true });
+        fs.rmSync(configPath, { force: true });
+      }
+    });
+
+    it('keeps the persistence error primary when restoring JSONL output also fails', async () => {
+      const artifactId = randomUUID();
+      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
+      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const evalRecord = await Eval.create(
+        {
+          outputPath: jsonlOutputPath,
+          prompts: [prompt.raw],
+          providers: ['echo'],
+          tests: [{ vars: { name: 'World' } }],
+        },
+        [prompt],
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const staleResultId = `${evalRecord.id}-stale-error`;
+      await db.insert(evalResultsTable).values({
+        id: staleResultId,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt,
+        testCase: { vars: { name: 'World' } },
+        provider: { id: 'echo' },
+        response: { output: 'stale error' },
+        error: 'stale error',
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        namedScores: {},
+      });
+      fs.writeFileSync(jsonlOutputPath, `${JSON.stringify({ id: staleResultId })}\n`);
+      fs.writeFileSync(
+        configPath,
+        [
+          'providers:',
+          '  - echo',
+          'prompts:',
+          `  - "${prompt.raw}"`,
+          'tests:',
+          '  - vars:',
+          '      name: World',
+        ].join('\n'),
+      );
+      vi.spyOn(Eval.prototype, 'addResult').mockRejectedValueOnce(
+        new Error('simulated result persistence failure'),
+      );
+      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementationOnce(async function* () {
+        throw new Error('simulated artifact restore failure');
+      });
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+      try {
+        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
+          'Retry results failed to persist. Existing ERROR rows were preserved.',
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          'Retry results failed to persist, and restoring JSONL output failed.',
+          expect.objectContaining({
+            error: expect.objectContaining({ message: 'simulated artifact restore failure' }),
+            jsonlOutputPaths: [jsonlOutputPath],
+          }),
+        );
+      } finally {
+        fs.rmSync(jsonlOutputPath, { force: true });
         fs.rmSync(configPath, { force: true });
       }
     });

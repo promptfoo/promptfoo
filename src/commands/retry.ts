@@ -38,6 +38,30 @@ interface RetryCommandOptions {
   share?: boolean;
 }
 
+function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[] {
+  return (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+    (path): path is string => typeof path === 'string' && getOutputFileFormat(path) === 'jsonl',
+  );
+}
+
+async function restoreJsonlOutputsAfterPersistenceFailure(
+  jsonlOutputPaths: string[],
+  evalRecord: Eval,
+): Promise<void> {
+  if (jsonlOutputPaths.length === 0) {
+    return;
+  }
+
+  try {
+    await writeMultipleOutputs(jsonlOutputPaths, evalRecord, null);
+  } catch (error) {
+    logger.warn('Retry results failed to persist, and restoring JSONL output failed.', {
+      error,
+      jsonlOutputPaths,
+    });
+  }
+}
+
 /**
  * Gets all ERROR results from an evaluation and returns their IDs
  */
@@ -338,8 +362,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   try {
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
+    const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);
 
     if (retriedEval.resultPersistenceFailed) {
+      await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, retriedEval);
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
 
@@ -356,17 +382,9 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     }
 
     if (errorRowsDeleted) {
-      const outputPaths = (
-        Array.isArray(originalEval.config.outputPath)
-          ? originalEval.config.outputPath
-          : [originalEval.config.outputPath]
-      ).filter(
-        (outputPath): outputPath is string =>
-          typeof outputPath === 'string' && getOutputFileFormat(outputPath) === 'jsonl',
-      );
-      if (outputPaths.length > 0) {
+      if (jsonlOutputPaths.length > 0) {
         try {
-          await writeMultipleOutputs(outputPaths, retriedEval, null);
+          await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
         } catch (outputError) {
           logger.warn('Retry results are saved, but JSONL output finalization failed.', {
             error: outputError,

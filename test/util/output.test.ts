@@ -1214,15 +1214,16 @@ describe('writeOutput', () => {
 
   it('rewrites the target of a dangling JSONL symlink', async () => {
     const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const outputPath = path.join('artifacts', 'output.jsonl');
     const symlinkTarget = path.join('nested', 'missing.jsonl');
-    const resolvedTarget = path.resolve(symlinkTarget);
+    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
     vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
       isSymbolicLink: () => true,
     } as never);
     vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
     vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
 
-    await writeOutput('output.jsonl', new Eval({}), null);
+    await writeOutput(outputPath, new Eval({}), null);
 
     expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
   });
