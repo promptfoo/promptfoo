@@ -307,10 +307,11 @@ export default function Eval({ fetchId }: EvalOptions) {
 
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
-          const newId = newRecentEvals[0].evalId;
-          setDefaultEvalId(newId);
-          setEvalId(newId);
-          await loadEvalById(newId, true);
+          const latestEvalId = newRecentEvals[0].evalId;
+          const updatedEvalId = data.evalId ?? latestEvalId;
+          setDefaultEvalId(latestEvalId);
+          setEvalId(updatedEvalId);
+          await loadEvalById(updatedEvalId, true);
         }
 
         setIsStreaming(false);

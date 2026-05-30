@@ -391,13 +391,12 @@ export async function startServer(
       // process-local caches before serving the next request.
       invalidateEvaluationCache(signalEvalId);
       const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
-      const results = await updatedEval?.getResultsCount();
 
-      if (results && results > 0) {
+      if (updatedEval) {
         logger.debug(
-          `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
+          `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
         );
-        io.emit('update', { evalId: updatedEval?.id });
+        io.emit('update', { evalId: updatedEval.id });
         allPrompts = null;
       }
     };

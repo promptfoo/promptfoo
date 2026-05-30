@@ -9,10 +9,14 @@ import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
-const { mockNavigate, mockShowToast } = vi.hoisted(() => ({
-  mockNavigate: vi.fn(),
-  mockShowToast: vi.fn(),
-}));
+const { mockNavigate, mockShowToast, mockSocketDisconnect, mockSocketHandlers } = vi.hoisted(
+  () => ({
+    mockNavigate: vi.fn(),
+    mockShowToast: vi.fn(),
+    mockSocketDisconnect: vi.fn(),
+    mockSocketHandlers: new Map<string, (data: any) => Promise<void>>(),
+  }),
+);
 
 vi.mock('@app/utils/api');
 vi.mock('@app/hooks/useToast', () => ({
@@ -60,10 +64,16 @@ vi.mock('@app/stores/apiConfig', () => ({
   default: () => ({ apiBaseUrl: 'http://localhost' }),
 }));
 vi.mock('socket.io-client', () => ({
-  io: vi.fn(() => ({
-    on: vi.fn().mockReturnThis(),
-    disconnect: vi.fn(),
-  })),
+  io: vi.fn(() => {
+    const socket = {
+      on: vi.fn((event: string, handler: (data: any) => Promise<void>) => {
+        mockSocketHandlers.set(event, handler);
+        return socket;
+      }),
+      disconnect: mockSocketDisconnect,
+    };
+    return socket;
+  }),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -138,6 +148,8 @@ describe('Eval', () => {
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
     mockNavigate.mockClear();
     mockShowToast.mockClear();
+    mockSocketDisconnect.mockClear();
+    mockSocketHandlers.clear();
     window.history.replaceState({}, '', '/eval/test-eval');
 
     (useTableStore as any).getState = vi.fn(() => ({
@@ -391,6 +403,31 @@ describe('Eval', () => {
     const resultsView = container.querySelector('[data-testid="results-view"]');
     expect(resultsView).toBeInTheDocument();
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
+  });
+
+  it('reloads the scoped eval from a socket update', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ evalId: 'retried-eval' });
+    });
+
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+      'retried-eval',
+      expect.objectContaining({ skipLoadingState: true }),
+    );
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
   });
 
   it('clears a details row hint from a selected eval without rewriting the source URL', async () => {

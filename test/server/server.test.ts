@@ -37,13 +37,15 @@ vi.mock('../../src/logger', () => ({
 
 vi.mock('../../src/models/eval', () => ({
   default: {
+    findById: vi.fn().mockResolvedValue(null),
     latest: vi.fn().mockResolvedValue(null),
   },
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-import { setupSignalWatcher } from '../../src/database/signal';
+import { readSignalEvalId, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+import Eval from '../../src/models/eval';
 import { invalidateEvaluationCache } from '../../src/models/evalMutation';
 // Import after mocks are set up
 import { ServerError } from '../../src/server/errors';
@@ -252,6 +254,30 @@ describe('server', () => {
       expect(invalidateEvaluationCache).toHaveBeenCalledWith(undefined);
 
       await new Promise((resolve) => setImmediate(resolve));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should emit scoped updates for legacy evals without normalized result rows', async () => {
+      const getResultsCount = vi.fn().mockResolvedValue(0);
+      vi.mocked(readSignalEvalId).mockReturnValueOnce('legacy-eval');
+      vi.mocked(Eval.findById).mockResolvedValueOnce({
+        id: 'legacy-eval',
+        config: {},
+        getResultsCount,
+      } as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(logger.debug).toHaveBeenCalledWith('Emitting update for eval: legacy-eval'),
+      );
+      expect(getResultsCount).not.toHaveBeenCalled();
 
       triggerSignal('SIGINT');
       await serverPromise;
