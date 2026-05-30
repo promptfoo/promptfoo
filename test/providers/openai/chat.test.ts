@@ -1102,6 +1102,72 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
       });
 
+      it('should load external function callbacks from Windows-style file paths', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'external_function',
+                        arguments: '{"param": "test_value"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
+        mockImportModule.mockResolvedValue({
+          testFunction: mockExternalFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      param: { type: 'string' },
+                    },
+                    required: ['param'],
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              external_function: 'file://C:/test/callbacks.js:testFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call external function');
+
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'C:/test/callbacks.js'),
+          'testFunction',
+        );
+        expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
+        expect(result.output).toBe('External function result');
+        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
+      });
+
       it('should cache external functions and not reload them on subsequent calls', async () => {
         const mockResponse = {
           data: {

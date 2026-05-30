@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
@@ -8,6 +9,49 @@ import { getOpenAiMissingApiKeyMessage } from './shared';
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
 vi.mock('openai');
+
+interface RecordedSpan {
+  name: string;
+  attributes: Record<string, any>;
+  status?: { code: number; message?: string };
+  ended: boolean;
+}
+
+function installTracerSpy(): RecordedSpan[] {
+  const spans: RecordedSpan[] = [];
+  const make = (name: string, attributes: Record<string, any> = {}) => {
+    const entry: RecordedSpan = { name, attributes: { ...attributes }, ended: false };
+    spans.push(entry);
+    return {
+      setAttribute: (key: string, value: unknown) => {
+        entry.attributes[key] = value;
+      },
+      setAttributes: (attrs: Record<string, unknown>) => Object.assign(entry.attributes, attrs),
+      setStatus: (status: { code: number; message?: string }) => {
+        entry.status = status;
+      },
+      end: () => {
+        entry.ended = true;
+      },
+      recordException: () => undefined,
+      addEvent: () => undefined,
+      spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+      isRecording: () => true,
+      updateName: () => undefined,
+    };
+  };
+  vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startSpan: (name: string, options?: { attributes?: Record<string, unknown> }) =>
+      make(name, options?.attributes),
+    startActiveSpan: (...args: any[]) => {
+      const name = args[0];
+      const options = typeof args[1] === 'object' ? args[1] : undefined;
+      const callback = args[args.length - 1];
+      return callback(make(name, options?.attributes));
+    },
+  } as any);
+  return spans;
+}
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -109,6 +153,60 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits a chat <model> span around the assistant run', async () => {
+      const spans = installTracerSpy();
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
+      const mockMessage = {
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      };
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const localProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: { apiKey: 'test-key' },
+      });
+      await localProvider.callApi('Test prompt');
+
+      const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
+      expect(chatSpan).toBeDefined();
+      expect(chatSpan?.attributes).toMatchObject({
+        'gen_ai.system': 'openai',
+        'gen_ai.operation.name': 'chat',
+        'gen_ai.request.model': 'test-assistant-id',
+      });
+      expect(chatSpan?.ended).toBe(true);
+      // SpanStatusCode.OK === 1
+      expect(chatSpan?.status?.code).toBe(1);
+    });
+
+    it('marks the chat span ERROR when the assistant run fails', async () => {
+      const spans = installTracerSpy();
+      mockClient.beta.threads.createAndRun.mockRejectedValue(new Error('assistant boom'));
+
+      const localProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: { apiKey: 'test-key' },
+      });
+      const result = await localProvider.callApi('Test prompt');
+      expect(result.error).toBeDefined();
+
+      const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
+      expect(chatSpan).toBeDefined();
+      // SpanStatusCode.ERROR === 2
+      expect(chatSpan?.status?.code).toBe(2);
+      expect(chatSpan?.ended).toBe(true);
     });
 
     it('should preserve an explicit temperature of 0', async () => {
