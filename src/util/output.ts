@@ -591,7 +591,19 @@ export async function writeOutput(
       if (outputMode !== undefined) {
         await fsPromises.chmod(tempOutputPath, outputMode);
       }
-      await fsPromises.rename(tempOutputPath, jsonlOutputPath);
+      try {
+        await fsPromises.rename(tempOutputPath, jsonlOutputPath);
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          logger.warn(
+            '[Output] Falling back to JSONL rewrite with external backup because replacing the output file is not permitted',
+          );
+          await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
+          await rewriteJsonlWithExternalBackup(jsonlOutputPath, outputMode, evalRecord);
+          return;
+        }
+        throw error;
+      }
     } catch (error) {
       await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
       throw error;

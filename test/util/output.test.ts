@@ -1161,6 +1161,27 @@ describe('writeOutput', () => {
     expect(fsPromises.rename).not.toHaveBeenCalled();
   });
 
+  it('rewrites JSONL through an external backup when replacing the output file is not permitted', async () => {
+    const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
+
+    const outputPath = 'output.jsonl';
+    await writeOutput(outputPath, new Eval({}), null);
+
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+    expect(fsPromises.rm).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), { force: true });
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      1,
+      outputPath,
+      '/tmp/promptfoo-jsonl-test/backup.jsonl',
+    );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/promptfoo-jsonl-test/replacement.jsonl',
+      outputPath,
+    );
+  });
+
   it('restores the JSONL backup when an external rewrite fails', async () => {
     const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
     const copyError = new Error('copy failed');
