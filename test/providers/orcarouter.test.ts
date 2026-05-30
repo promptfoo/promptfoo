@@ -868,7 +868,7 @@ describe('OrcaRouter', () => {
         mockProcessEnv({ ORCAROUTER_API_KEY: undefined });
       });
 
-      it('prefixes reasoning when showThinking is true (default)', async () => {
+      it('returns reasoning separately when showThinking is true (default)', async () => {
         const mockResponse = {
           choices: [
             {
@@ -889,9 +889,10 @@ describe('OrcaRouter', () => {
         );
 
         const result = await provider.callApi('Test prompt');
-        expect(result.output).toBe(
-          'Thinking: Let me think this through carefully.\n\nThe answer is 42.',
-        );
+        expect(result.output).toBe('The answer is 42.');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'Let me think this through carefully.' },
+        ]);
       });
 
       it('hides reasoning when showThinking is false', async () => {
@@ -919,6 +920,7 @@ describe('OrcaRouter', () => {
 
         const result = await p.callApi('Test prompt');
         expect(result.output).toBe('The answer is 42.');
+        expect(result.reasoning).toBeUndefined();
       });
 
       it('returns tool_calls when content is empty and tool_calls are present', async () => {
@@ -1017,9 +1019,12 @@ describe('OrcaRouter', () => {
 
         const result = await p.callApi('Generate JSON');
         expect(result.output).toEqual({ name: 'Jane' });
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'The model selected a valid JSON object.' },
+        ]);
       });
 
-      it('surfaces reasoning_content (DeepSeek/Qwen-style) as thinking when reasoning is absent', async () => {
+      it('surfaces reasoning_content (DeepSeek/Qwen-style) as separate reasoning when reasoning is absent', async () => {
         mockedFetchWithRetries.mockResolvedValueOnce(
           new Response(
             JSON.stringify({
@@ -1042,9 +1047,10 @@ describe('OrcaRouter', () => {
         );
 
         const result = await provider.callApi('Test prompt');
-        expect(result.output).toBe(
-          'Thinking: Working through this step by step.\n\nThe answer is 42.',
-        );
+        expect(result.output).toBe('The answer is 42.');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'Working through this step by step.' },
+        ]);
       });
 
       it('returns an API error on non-2xx status', async () => {
