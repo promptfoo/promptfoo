@@ -5,7 +5,6 @@ import {
   resolveFireworksApiUrl,
 } from './shared';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
 
 export class FireworksEmbeddingProvider extends OpenAiEmbeddingProvider {
@@ -27,7 +26,7 @@ export class FireworksEmbeddingProvider extends OpenAiEmbeddingProvider {
   // Don't fall through to OPENAI_API_KEY: a misconfigured environment must fail
   // loudly rather than silently send an OpenAI key to Fireworks.
   override getApiKey(): string | undefined {
-    return resolveFireworksApiKey(this.config, this.env as EnvOverrides | undefined);
+    return resolveFireworksApiKey(this.config, this.env);
   }
 
   // OpenAI-Organization is OpenAI-specific; it must not leak onto Fireworks calls.

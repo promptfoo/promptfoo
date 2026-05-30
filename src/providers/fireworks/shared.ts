@@ -18,31 +18,21 @@ type FireworksCredentialConfig =
     }
   | undefined;
 
-// Resolve the Fireworks base URL the provider should target. Falls back to an
-// explicit `FIREWORKS_API_BASE_URL` (provider-level env override or process
-// env) before the public endpoint, but — unlike the OpenAI base class — never
-// consults OPENAI_API_HOST / OPENAI_API_BASE_URL / OPENAI_BASE_URL so an
-// environment configured for OpenAI can't silently reroute Fireworks traffic.
-export function resolveFireworksApiBaseUrl(
-  explicitBaseUrl: string | undefined,
-  env: EnvOverrides | undefined,
-): string {
-  const envBaseUrl =
-    (env as Record<string, string | undefined> | undefined)?.FIREWORKS_API_BASE_URL ||
-    getEnvString('FIREWORKS_API_BASE_URL');
-  return explicitBaseUrl || envBaseUrl || FIREWORKS_API_BASE_URL;
-}
-
 // Build the config the Fireworks providers hand to their OpenAI-compatible base
 // class: the caller's config plus the resolved base URL and the Fireworks API
-// key envar (so a missing key surfaces a Fireworks-specific error).
+// key envar (so a missing key surfaces a Fireworks-specific error). The base URL
+// resolves from explicit config → `FIREWORKS_API_BASE_URL` (provider env
+// override or process env) → the public endpoint. Unlike the OpenAI base class
+// we never consult OPENAI_API_HOST / OPENAI_API_BASE_URL / OPENAI_BASE_URL, so an
+// OpenAI-configured environment can't silently reroute Fireworks traffic.
 export function buildFireworksProviderConfig<T extends FireworksCredentialConfig>(
   config: T,
   env: EnvOverrides | undefined,
 ): T & { apiBaseUrl: string; apiKeyEnvar: string } {
+  const envBaseUrl = env?.FIREWORKS_API_BASE_URL || getEnvString('FIREWORKS_API_BASE_URL');
   return {
     ...config,
-    apiBaseUrl: resolveFireworksApiBaseUrl(config?.apiBaseUrl, env),
+    apiBaseUrl: config?.apiBaseUrl || envBaseUrl || FIREWORKS_API_BASE_URL,
     apiKeyEnvar: config?.apiKeyEnvar || DEFAULT_FIREWORKS_API_KEY_ENVAR,
   } as T & { apiBaseUrl: string; apiKeyEnvar: string };
 }

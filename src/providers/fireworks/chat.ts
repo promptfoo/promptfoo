@@ -100,7 +100,7 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
   // Don't fall through to OPENAI_API_KEY: a misconfigured environment must
   // fail loudly rather than silently send an OpenAI key to Fireworks.
   override getApiKey(): string | undefined {
-    return resolveFireworksApiKey(this.config, this.env as EnvOverrides | undefined);
+    return resolveFireworksApiKey(this.config, this.env);
   }
 
   // OpenAI-Organization is OpenAI-specific; it must not leak onto requests
@@ -159,9 +159,9 @@ export function readFireworksCachedPromptTokens(response: ProviderResponse): num
   const headerValue =
     headerRecord?.['fireworks-cached-prompt-tokens'] ??
     headerRecord?.['Fireworks-Cached-Prompt-Tokens'];
+  // parseInt yields NaN for non-numeric headers; `> 0` rejects NaN and negatives.
   const fromHeader = typeof headerValue === 'string' ? Number.parseInt(headerValue, 10) : 0;
-  const safeHeader = Number.isFinite(fromHeader) && fromHeader > 0 ? fromHeader : 0;
-  return Math.max(fromUsageDetails, safeHeader);
+  return Math.max(fromUsageDetails, fromHeader > 0 ? fromHeader : 0);
 }
 
 export function createFireworksProvider(
