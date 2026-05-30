@@ -346,29 +346,10 @@ function main(): void {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    run(
-      process.execPath,
-      [path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'), '--project', 'tsconfig.json'],
-      consumerDir,
-    );
-    run(
-      process.execPath,
-      [
-        path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'),
-        '--project',
-        'tsconfig.legacy.json',
-      ],
-      consumerDir,
-    );
-    run(
-      process.execPath,
-      [
-        path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'),
-        '--project',
-        'tsconfig.node16-cjs.json',
-      ],
-      consumerDir,
-    );
+    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
     assertInstalledWebApp(installedPackageDir);
 
     for (const binName of ['promptfoo', 'pf']) {
