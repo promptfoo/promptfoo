@@ -1,3 +1,8 @@
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateSignalFile } from '../src/database/signal';
 import { runDbMigrations } from '../src/migrate';
@@ -274,5 +279,73 @@ describe('evaluate SIGINT/abort handling', () => {
 
     // Signal file should be updated for resume capability
     expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
+  });
+
+  it('should redact streamed JSONL rows when user aborts before final export', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-abort-${randomUUID()}.jsonl`);
+    const abortController = new AbortController();
+    let providerCallCount = 0;
+    const provider = createMockProvider({
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
+        providerCallCount++;
+        if (providerCallCount === 1) {
+          setTimeout(() => abortController.abort(), 0);
+          return {
+            output: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  authorization: 'model output should stay intact',
+                },
+              },
+            },
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  'set-cookie': 'session=secret',
+                  'x-request-id': 'req_should_not_persist',
+                },
+              },
+            },
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }
+        throw new Error('Operation cancelled');
+      }),
+    });
+    const evalRecord = new Eval({ outputPath });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+      tests: [{}, {}],
+    };
+
+    try {
+      await evaluate(testSuite, evalRecord, {
+        abortSignal: abortController.signal,
+        maxConcurrency: 1,
+      });
+
+      const rows = fs
+        .readFileSync(outputPath, 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response.metadata.http.headers).toEqual({
+        'set-cookie': '[REDACTED]',
+        'x-request-id': '[REDACTED]',
+      });
+      expect(rows[0].response.output.http.headers.authorization).toBe(
+        'model output should stay intact',
+      );
+      expect(JSON.stringify(rows[0])).not.toContain('session=secret');
+      expect(JSON.stringify(rows[0])).not.toContain('req_should_not_persist');
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+    }
   });
 });

@@ -42,7 +42,7 @@ describe('programmatic JSONL output', () => {
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
       id: () => 'slow-provider',
-      callApi: vi.fn((_prompt, _context, options) => {
+      callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {
         return new Promise((_resolve, reject) => {
           options?.abortSignal?.addEventListener(
             'abort',
@@ -105,15 +105,28 @@ describe('programmatic JSONL output', () => {
     );
   });
 
-  it('exports persisted rows with sensitive HTTP metadata redacted', async () => {
+  it('exports rows with sensitive HTTP metadata redacted', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
       id: () => 'metadata-provider',
+      config: {
+        apiKey: 'sk-provider-config-should-not-persist',
+      },
       callApi: vi.fn().mockResolvedValue({
-        output: 'hello world',
+        output: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              authorization: 'model output should stay intact',
+            },
+          },
+        },
         metadata: {
           http: {
+            status: 200,
+            statusText: 'OK',
             headers: {
               'content-type': 'application/json',
               'set-cookie': 'session=secret',
@@ -134,11 +147,12 @@ describe('programmatic JSONL output', () => {
       prompts: ['Test prompt'],
       providers: [provider],
       tests: [{ vars: {} }],
-      writeLatestResults: true,
     });
 
     const [result] = readJsonl(outputPath);
     expect(result.response.metadata.http).toEqual({
+      status: 200,
+      statusText: 'OK',
       headers: {
         'content-type': 'application/json',
         'set-cookie': '[REDACTED]',
@@ -149,8 +163,13 @@ describe('programmatic JSONL output', () => {
         'x-safe-debug': 'keep-me',
       },
     });
+    expect(result.provider.config.apiKey).toBe('[REDACTED]');
+    expect(result.response.output.http.headers.authorization).toBe(
+      'model output should stay intact',
+    );
     expect(JSON.stringify(result)).not.toContain('session=secret');
     expect(JSON.stringify(result)).not.toContain('req_should_not_persist');
     expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
+    expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-not-persist');
   });
 });

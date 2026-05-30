@@ -317,6 +317,30 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+  const artifactResult = result as T & Record<string, unknown>;
+  return {
+    ...result,
+    ...(artifactResult.testCase
+      ? { testCase: sanitizeForDbWithSecrets(artifactResult.testCase) }
+      : {}),
+    ...(artifactResult.prompt ? { prompt: sanitizeForDbWithSecrets(artifactResult.prompt) } : {}),
+    ...(artifactResult.provider
+      ? {
+          provider: sanitizeProvider(
+            artifactResult.provider as ApiProvider | ProviderOptions | string,
+          ),
+        }
+      : {}),
+    response: sanitizeResponseForDb(
+      sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
+    ),
+    gradingResult: sanitizeGradingResultForDb(sanitizeForDb(artifactResult.gradingResult)),
+    namedScores: sanitizeForDb(artifactResult.namedScores),
+    metadata: sanitizeMetadataForDb(sanitizeForDb(artifactResult.metadata)),
+  } as T;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
