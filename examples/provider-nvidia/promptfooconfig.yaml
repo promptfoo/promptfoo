@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'NVIDIA NIM Provider Demo'
+
+prompts:
+  - 'In one sentence, summarise: {{passage}}'
+
+providers:
+  - id: nvidia:meta/llama-3.3-70b-instruct
+    label: 'Llama 3.3 70B'
+    config:
+      temperature: 0.2
+      max_tokens: 120
+  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+    label: 'Nemotron 70B'
+    config:
+      temperature: 0.2
+      max_tokens: 120
+  - id: nvidia:qwen/qwen2.5-coder-32b-instruct
+    label: 'Qwen 2.5 Coder 32B'
+    config:
+      temperature: 0.2
+      max_tokens: 120
+
+tests:
+  - vars:
+      passage: 'Photosynthesis is the process plants use to convert sunlight, water, and carbon dioxide into glucose and oxygen.'
+    assert:
+      - type: icontains
+        value: 'plant'
+      - type: icontains-any
+        value: ['sunlight', 'light', 'energy']
+  - vars:
+      passage: "Mitochondria are organelles found in most eukaryotic cells where cellular respiration generates ATP, the cell's main energy currency."
+    assert:
+      - type: icontains
+        value: 'mitochondria'
+      - type: icontains-any
+        value: ['ATP', 'energy']
