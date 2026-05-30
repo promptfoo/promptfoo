@@ -215,6 +215,12 @@ describe('production layer config', () => {
 
     expect(legacyRuntimeLayer?.allowedDependencies).toContain('contracts');
   });
+
+  it('classifies evaluator runtime ports as transitional runtime modules', () => {
+    expect(getLayerForFile('src/evaluator/runtime.ts', readLayerConfig(process.cwd()))).toBe(
+      'legacy-runtime',
+    );
+  });
 });
 
 describe('findViolations', () => {

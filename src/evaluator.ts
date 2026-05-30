@@ -16,12 +16,12 @@ import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
-import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { generateIdFromPrompt } from './models/prompt';
+import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
@@ -66,7 +66,6 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -100,6 +99,7 @@ import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
+import type { EvaluatorResultWriter, EvaluatorRuntime } from './evaluator/runtime';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type {
@@ -3010,10 +3010,16 @@ class Evaluator {
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
-  fileWriters: JsonlFileWriter[];
+  fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  runtime: EvaluatorRuntime;
 
-  constructor(testSuite: TestSuite, evalRecord: Eval, options: InternalEvaluateOptions) {
+  constructor(
+    testSuite: TestSuite,
+    evalRecord: Eval,
+    options: InternalEvaluateOptions,
+    runtime: EvaluatorRuntime,
+  ) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
     this.options = options;
@@ -3026,13 +3032,8 @@ class Evaluator {
     this.conversations = {};
     this.registers = {};
 
-    const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
-      ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
-      : evalRecord.config.outputPath?.endsWith('.jsonl')
-        ? [evalRecord.config.outputPath]
-        : [];
-
-    this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+    this.runtime = runtime;
+    this.fileWriters = runtime.createResultWriters(evalRecord.config.outputPath);
 
     // Create rate limit registry for adaptive concurrency control
     this.rateLimitRegistry = createRateLimitRegistry({
@@ -3137,7 +3138,7 @@ class Evaluator {
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
-      await this.evalRecord.addResult(row);
+      await this.runtime.persistResult(this.evalRecord, row);
     } catch (error) {
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
@@ -3148,6 +3149,16 @@ class Evaluator {
 
     for (const writer of this.fileWriters) {
       await writer.write(row);
+    }
+  }
+
+  private async closeResultWriters(): Promise<void> {
+    for (const writer of this.fileWriters) {
+      try {
+        await writer.close();
+      } catch (error) {
+        logger.warn('[Evaluator] Error closing result writer', { error });
+      }
     }
   }
 
@@ -3443,7 +3454,7 @@ class Evaluator {
       timeoutMs,
       error,
     );
-    await this.evalRecord.addResult(timeoutResult);
+    await this.runtime.persistResult(this.evalRecord, timeoutResult);
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -3771,7 +3782,7 @@ class Evaluator {
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
+    this.runtime.updateResumeSignal(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -3798,7 +3809,7 @@ class Evaluator {
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
+    this.runtime.updateResumeSignal(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -4216,7 +4227,7 @@ class Evaluator {
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
     }
-    updateSignalFile(this.evalRecord.id);
+    this.runtime.updateResumeSignal(this.evalRecord.id);
   }
 
   private async addMaxDurationTimeoutResults({
@@ -4238,7 +4249,7 @@ class Evaluator {
       }
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
-      await this.evalRecord.addResult(timeoutResult);
+      await this.runtime.persistResult(this.evalRecord, timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -4613,8 +4624,6 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    await startOtlpReceiverIfNeeded(this.testSuite);
-
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -4623,18 +4632,22 @@ class Evaluator {
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-
-    if (tracingEnabled) {
-      logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-      const otelConfig = getDefaultOtelConfig();
-      initializeOtel(otelConfig);
-    }
+    let tracingInitialized = false;
 
     try {
+      await startOtlpReceiverIfNeeded(this.testSuite);
+      if (tracingEnabled) {
+        logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+        const otelConfig = getDefaultOtelConfig();
+        initializeOtel(otelConfig);
+        tracingInitialized = true;
+      }
       return await this._runEvaluation();
     } finally {
+      await this.closeResultWriters();
+
       // Flush and shutdown OTEL SDK
-      if (tracingEnabled) {
+      if (tracingInitialized) {
         logger.debug('[Evaluator] Flushing OTEL spans...');
         await flushOtel();
         await shutdownOtel();
@@ -4685,7 +4698,8 @@ export function evaluate(
   testSuite: TestSuite,
   evalRecord: Eval,
   options: InternalEvaluateOptions,
+  runtime: EvaluatorRuntime = nodeEvaluatorRuntime,
 ): Promise<Eval> {
-  const ev = new Evaluator(testSuite, evalRecord, options);
+  const ev = new Evaluator(testSuite, evalRecord, options, runtime);
   return ev.evaluate();
 }
