@@ -320,7 +320,7 @@ describe('evaluate SIGINT/abort handling', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
-      tests: [{}, {}],
+      tests: [{ vars: { apiKey: 'sk-abort-vars-should-not-persist', safe: 'keep-me' } }, {}],
     };
 
     try {
@@ -342,8 +342,17 @@ describe('evaluate SIGINT/abort handling', () => {
       expect(rows[0].response.output.http.headers.authorization).toBe(
         'model output should stay intact',
       );
+      expect(rows[0].vars).toEqual({
+        apiKey: '[REDACTED]',
+        safe: 'keep-me',
+      });
+      expect(rows[0].testCase.vars).toEqual({
+        apiKey: '[REDACTED]',
+        safe: 'keep-me',
+      });
       expect(JSON.stringify(rows[0])).not.toContain('session=secret');
       expect(JSON.stringify(rows[0])).not.toContain('req_should_not_persist');
+      expect(JSON.stringify(rows[0])).not.toContain('sk-abort-vars-should-not-persist');
     } finally {
       fs.rmSync(outputPath, { force: true });
     }
