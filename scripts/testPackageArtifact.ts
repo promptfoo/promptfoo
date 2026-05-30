@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { shouldCopyDrizzlePath } from './postbuild';
+
 type PackFile = {
   mode: number;
   path: string;
@@ -98,7 +100,7 @@ function assertPackagedFiles(packResult: PackResult): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
   const missingDrizzleFiles = listFiles(drizzleDir)
-    .filter((file) => !file.endsWith('.md') && !file.includes('AGENTS') && !file.includes('CLAUDE'))
+    .filter(shouldCopyDrizzlePath)
     .map((file) => `dist/${file}`)
     .filter((file) => !packagedPaths.has(file));
   const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
@@ -344,29 +346,10 @@ function main(): void {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    run(
-      process.execPath,
-      [path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'), '--project', 'tsconfig.json'],
-      consumerDir,
-    );
-    run(
-      process.execPath,
-      [
-        path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'),
-        '--project',
-        'tsconfig.legacy.json',
-      ],
-      consumerDir,
-    );
-    run(
-      process.execPath,
-      [
-        path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'),
-        '--project',
-        'tsconfig.node16-cjs.json',
-      ],
-      consumerDir,
-    );
+    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
     assertInstalledWebApp(installedPackageDir);
 
     for (const binName of ['promptfoo', 'pf']) {
