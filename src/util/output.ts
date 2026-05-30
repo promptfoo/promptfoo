@@ -60,6 +60,15 @@ function isFileNotFoundError(error: unknown): boolean {
   return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
 }
 
+function isPermissionDeniedError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error.code === 'EACCES' || error.code === 'EPERM')
+  );
+}
+
 async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   try {
     const stats = await fsPromises.lstat(outputPath);
@@ -101,6 +110,43 @@ async function appendJsonlResults(outputPath: string, evalRecord: Eval): Promise
         .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
         .join(os.EOL) + os.EOL;
     await fsPromises.appendFile(outputPath, text);
+  }
+}
+
+async function rewriteJsonlWithExternalBackup(
+  outputPath: string,
+  outputMode: number | undefined,
+  evalRecord: Eval,
+): Promise<void> {
+  const tempDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'promptfoo-jsonl-'));
+  const backupPath = path.join(tempDirectory, 'backup.jsonl');
+  const replacementPath = path.join(tempDirectory, 'replacement.jsonl');
+  let overwriteAttempted = false;
+
+  try {
+    await fsPromises.copyFile(outputPath, backupPath);
+    if (outputMode === undefined) {
+      await fsPromises.writeFile(replacementPath, '');
+    } else {
+      await fsPromises.writeFile(replacementPath, '', { mode: outputMode });
+    }
+    await appendJsonlResults(replacementPath, evalRecord);
+    overwriteAttempted = true;
+    await fsPromises.copyFile(replacementPath, outputPath);
+    if (outputMode !== undefined) {
+      await fsPromises.chmod(outputPath, outputMode);
+    }
+  } catch (error) {
+    if (overwriteAttempted) {
+      await fsPromises.copyFile(backupPath, outputPath).catch((restoreError) => {
+        logger.error('[Output] Failed to restore JSONL output after rewrite failure', {
+          error: restoreError,
+        });
+      });
+    }
+    throw error;
+  } finally {
+    await fsPromises.rm(tempDirectory, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -514,10 +560,21 @@ export async function writeOutput(
       `.promptfoo-${randomUUID()}.tmp`,
     );
     try {
-      if (outputMode === undefined) {
-        await fsPromises.writeFile(tempOutputPath, '');
-      } else {
-        await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
+      try {
+        if (outputMode === undefined) {
+          await fsPromises.writeFile(tempOutputPath, '');
+        } else {
+          await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
+        }
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          logger.warn(
+            '[Output] Falling back to JSONL rewrite with external backup because the output directory is not writable',
+          );
+          await rewriteJsonlWithExternalBackup(jsonlOutputPath, outputMode, evalRecord);
+          return;
+        }
+        throw error;
       }
       await appendJsonlResults(tempOutputPath, evalRecord);
       if (outputMode !== undefined) {

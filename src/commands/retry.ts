@@ -367,7 +367,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
         ),
       );
       if (outputPaths.length > 0) {
-        await writeMultipleOutputs(outputPaths, retriedEval, null);
+        try {
+          await writeMultipleOutputs(outputPaths, retriedEval, null);
+        } catch (outputError) {
+          logger.warn('Retry results are saved, but JSONL output finalization failed.', {
+            error: outputError,
+          });
+        }
       }
     }
 

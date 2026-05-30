@@ -48,8 +48,10 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  copyFile: vi.fn(),
   chmod: vi.fn(),
   lstat: vi.fn(),
+  mkdtemp: vi.fn(),
   stat: vi.fn(),
   realpath: vi.fn(),
   readlink: vi.fn(),
@@ -77,6 +79,8 @@ describe('writeOutput', () => {
     );
     vi.mocked(fsPromises.rename).mockResolvedValue(undefined);
     vi.mocked(fsPromises.rm).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.copyFile).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdtemp).mockResolvedValue('/tmp/promptfoo-jsonl-test');
     vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
     vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
@@ -1129,17 +1133,64 @@ describe('writeOutput', () => {
     expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
-  it('preserves the existing JSONL artifact when the output directory is not writable', async () => {
+  it('rewrites JSONL through an external backup when the output directory is not writable', async () => {
     const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
-    vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
 
     const outputPath = 'output.jsonl';
-    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('EACCES');
+    await writeOutput(outputPath, new Eval({}), null);
 
     expect(fsPromises.writeFile).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.tmp$/), '');
-    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
-    expect(fsPromises.appendFile).not.toHaveBeenCalled();
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      1,
+      outputPath,
+      '/tmp/promptfoo-jsonl-test/backup.jsonl',
+    );
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/promptfoo-jsonl-test/replacement.jsonl',
+      '',
+    );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/promptfoo-jsonl-test/replacement.jsonl',
+      outputPath,
+    );
     expect(fsPromises.rename).not.toHaveBeenCalled();
+  });
+
+  it('restores the JSONL backup when an external rewrite fails', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const copyError = new Error('copy failed');
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.copyFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(copyError)
+      .mockResolvedValueOnce(undefined);
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('copy failed');
+
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      3,
+      '/tmp/promptfoo-jsonl-test/backup.jsonl',
+      outputPath,
+    );
+  });
+
+  it('preserves the existing JSONL artifact when an external backup cannot be created', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.copyFile).mockRejectedValueOnce(new Error('backup failed'));
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('backup failed');
+
+    expect(fsPromises.copyFile).toHaveBeenCalledTimes(1);
   });
 
   it('writeOutput with json and txt output', async () => {
