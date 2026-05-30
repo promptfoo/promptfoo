@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
+import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -19,6 +20,7 @@ function readPackageJson<T>(relativePath: string): T {
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.34.5';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
+const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   const results: string[] = [];
@@ -72,6 +74,17 @@ function getDependencyRange(
   );
 }
 
+function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: string): string[] {
+  return extractModuleSpecifiers(sourceText, filePath).filter((specifier) => {
+    if (!specifier.startsWith('.')) {
+      return false;
+    }
+
+    const extension = path.posix.extname(specifier);
+    return !extension || TYPESCRIPT_SOURCE_EXTENSIONS.has(extension);
+  });
+}
+
 describe('package manifests', () => {
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
@@ -98,16 +111,28 @@ describe('package manifests', () => {
       path.join(process.cwd(), 'src', 'contracts.ts'),
       ...collectSourceFiles(contractsDir, new Set()),
     ];
-    const extensionlessRelativeImportPattern =
-      /(?:\bfrom|export\s+\*\s+from)\s+['"](\.[^'"]*(?<!\.js))['"]/g;
     const offenders = files.flatMap((file) => {
       const contents = fs.readFileSync(file, 'utf8');
-      return [...contents.matchAll(extensionlessRelativeImportPattern)].map(
-        ([, importPath]) => `${path.relative(process.cwd(), file)}: ${importPath}`,
+      return findExtensionUnsafeRelativeSpecifiers(contents, file).map(
+        (specifier) => `${path.relative(process.cwd(), file)}: ${specifier}`,
       );
     });
 
     expect(offenders).toEqual([]);
+  });
+
+  it('detects extension-unsafe relative specifiers across module syntax', () => {
+    expect(
+      findExtensionUnsafeRelativeSpecifiers(
+        `
+          import './side-effect';
+          export { value } from './exported';
+          import('./dynamic');
+          export { schema } from './schema.json';
+        `,
+        'fixture.ts',
+      ),
+    ).toEqual(['./side-effect', './exported', './dynamic']);
   });
 
   it('keeps TypeScript from emitting into bundler-owned dist', () => {
