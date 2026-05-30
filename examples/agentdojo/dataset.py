@@ -11,6 +11,9 @@ import argparse
 import json
 import sys
 
+AGENTDOJO_DOS_ATTACK = "dos"
+AGENTDOJO_DOS_ATTACK_SUFFIX = "_dos"
+
 
 def generate_tests(config: dict | None = None) -> list[dict]:
     """Promptfoo test adapter - generates test cases at runtime.
@@ -39,8 +42,20 @@ def generate_tests(config: dict | None = None) -> list[dict]:
     version = config.get("version", "v1.2.2")
     max_user_tasks = config.get("max_user_tasks")
     max_injection_tasks = config.get("max_injection_tasks")
+    attack_name = config.get("attack")
 
-    return _generate_dataset(suite_name, version, max_user_tasks, max_injection_tasks)
+    return _generate_dataset(
+        suite_name, version, max_user_tasks, max_injection_tasks, attack_name
+    )
+
+
+def _is_dos_attack_name(attack_name: str | None) -> bool:
+    if not attack_name:
+        return False
+    normalized = attack_name.strip().lower().replace("-", "_")
+    return normalized == AGENTDOJO_DOS_ATTACK or normalized.endswith(
+        AGENTDOJO_DOS_ATTACK_SUFFIX
+    )
 
 
 def _generate_dataset(
@@ -48,6 +63,7 @@ def _generate_dataset(
     version: str = "v1.2.2",
     max_user_tasks: int | None = None,
     max_injection_tasks: int | None = None,
+    attack_name: str | None = None,
 ) -> list[dict]:
     """Generate dataset rows for a suite."""
     # Import here to allow running --help without agentdojo installed
@@ -62,6 +78,8 @@ def _generate_dataset(
         user_task_ids = user_task_ids[:max_user_tasks]
     if max_injection_tasks:
         injection_task_ids = injection_task_ids[:max_injection_tasks]
+    if _is_dos_attack_name(attack_name):
+        injection_task_ids = injection_task_ids[:1]
 
     rows = []
     for user_task_id in user_task_ids:
@@ -93,9 +111,12 @@ def generate_dataset(
     version: str = "v1.2.2",
     max_user_tasks: int | None = None,
     max_injection_tasks: int | None = None,
+    attack_name: str | None = None,
 ) -> list[dict]:
     """Public alias for CLI compatibility."""
-    return _generate_dataset(suite_name, version, max_user_tasks, max_injection_tasks)
+    return _generate_dataset(
+        suite_name, version, max_user_tasks, max_injection_tasks, attack_name
+    )
 
 
 def get_all_suites(version: str = "v1.2.2") -> list[str]:
@@ -133,6 +154,10 @@ def main():
         "--max-injection-tasks",
         type=int,
         help="Limit number of injection tasks (for quick testing)",
+    )
+    parser.add_argument(
+        "--attack",
+        help="Attack name; DoS-style attacks generate only AgentDojo's raw DoS row",
     )
     parser.add_argument(
         "--output",
@@ -178,6 +203,7 @@ def main():
                 args.version,
                 args.max_user_tasks,
                 args.max_injection_tasks,
+                args.attack,
             )
             all_rows.extend(rows)
             print(f"Generated {len(rows)} test cases for {suite}")

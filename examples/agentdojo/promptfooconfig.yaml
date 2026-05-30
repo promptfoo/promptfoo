@@ -15,6 +15,7 @@ providers:
       force_rerun: true
       request_timeout: 120
       max_output_tokens: 4096
+      temperature: 0
 
 defaultTest:
   assert:
@@ -43,6 +44,9 @@ tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
+      # Keep this in sync with the provider attack. DoS-style attacks generate
+      # one raw AgentDojo injection row to avoid duplicated aggregate metrics.
+      attack: important_instructions
       max_user_tasks: 1
       max_injection_tasks: 1
 

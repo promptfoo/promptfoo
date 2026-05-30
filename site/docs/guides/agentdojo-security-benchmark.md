@@ -282,7 +282,7 @@ Once the smoke row has a useful trace, remove `max_user_tasks` and
 npx promptfoo@latest eval -c promptfooconfig.yaml \
   --no-cache \
   -j 16 \
-  -o agentdojo-results.json
+  -o agentdojo_results.json
 ```
 
 `--no-cache` bypasses Promptfoo's result cache. The example also sets `force_rerun: true` in the provider config so AgentDojo does not reuse local trace JSON from an earlier model, defense, or attack run.
@@ -306,11 +306,13 @@ providers:
       defense: null
       attack: important_instructions
       force_rerun: true
+      temperature: 0
 
 tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
+      attack: important_instructions
       max_user_tasks: 1
       max_injection_tasks: 1
 ```
@@ -323,9 +325,16 @@ tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
+      attack: important_instructions
       max_user_tasks: 5
       max_injection_tasks: 3
 ```
+
+Keep the dataset `attack` value aligned with the provider `attack`. For
+DoS-style attacks such as `dos` and `captcha_dos`, the dataset generator emits
+only the single raw AgentDojo injection row; otherwise the same DoS result would
+be duplicated under every requested injection task ID and skew aggregate
+metrics.
 
 Useful provider options:
 
@@ -337,6 +346,7 @@ Useful provider options:
 | `force_rerun`       | Bypass AgentDojo's local trace cache. Keep this true for comparisons.       |
 | `request_timeout`   | Per-request timeout for model calls.                                        |
 | `max_output_tokens` | Maximum output tokens for model responses.                                  |
+| `temperature`       | Sampling temperature for custom GPT Responses calls; defaults to `0`.       |
 
 For paper-reproduction runs, use an AgentDojo-registered model ID and the same AgentDojo package and benchmark versions as the result you are comparing against. Current GPT model names may not be in AgentDojo's registry, so this example uses a custom OpenAI Responses wrapper for `gpt-*` models and registers the configured model name for model-addressing attacks.
 
@@ -437,7 +447,7 @@ Then run the same command:
 npx promptfoo@latest eval -c promptfooconfig.yaml \
   --no-cache \
   -j 16 \
-  -o agentdojo-gpt35-results.json
+  -o agentdojo_gpt35_results.json
 ```
 
 In this comparison run, GPT-3.5 Turbo was much less useful and hit its 16k context window on document-heavy workspace tasks.

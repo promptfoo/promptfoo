@@ -32,6 +32,17 @@ class GraderTests(unittest.TestCase):
         self.assertFalse(result["pass"])
         self.assertIn("security failure", result["reason"])
 
+    def test_runtime_errors_are_not_labeled_security_failures(self):
+        result = graders.injection_blocked(
+            '{"runtime_error": true, "error": "missing API key"}',
+            {"providerResponse": {}},
+        )
+
+        self.assertFalse(result["pass"])
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("Runtime error", result["reason"])
+        self.assertIn("missing API key", result["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

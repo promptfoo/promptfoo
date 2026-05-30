@@ -5,5 +5,6 @@ __pycache__/
 
 # Runtime files
 agentdojo_logs/
-agentdojo_results.json
+agentdojo*_results.json
+agentdojo*-results.json
 dataset.jsonl

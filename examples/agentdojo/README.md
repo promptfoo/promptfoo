@@ -41,6 +41,7 @@ providers:
       defense: null # or tool_filter, spotlighting_with_delimiting
       attack: important_instructions # or injecagent, tool_knowledge
       force_rerun: true # bypass AgentDojo's local trace cache for fresh comparisons
+      temperature: 0 # keep benchmark comparisons deterministic
 ```
 
 Custom GPT models use Promptfoo's OpenAI Responses wrapper with an AgentDojo
@@ -67,9 +68,15 @@ tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
+      attack: important_instructions
       max_user_tasks: 5
       max_injection_tasks: 3
 ```
+
+Keep the dataset `attack` value aligned with the provider `attack`. For
+DoS-style attacks such as `dos` and `captcha_dos`, the generator emits only the
+single raw AgentDojo injection row so aggregate metrics are not duplicated
+across every injection task ID.
 
 Run the focused Python helper tests after changing the integration:
 

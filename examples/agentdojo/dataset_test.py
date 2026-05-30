@@ -34,6 +34,33 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(rows[0]["vars"]["user_prompt"], "Benign request")
         self.assertEqual(rows[0]["vars"]["injection_goal"], "Malicious goal")
 
+    def test_dos_attacks_generate_single_raw_injection_row(self):
+        suite = SimpleNamespace(
+            user_tasks={
+                "user_task_0": SimpleNamespace(PROMPT="Benign request"),
+                "user_task_1": SimpleNamespace(PROMPT="Another request"),
+            },
+            injection_tasks={
+                "injection_task_0": SimpleNamespace(GOAL="First DoS goal"),
+                "injection_task_1": SimpleNamespace(GOAL="Duplicate DoS goal"),
+                "injection_task_2": SimpleNamespace(GOAL="Duplicate DoS goal 2"),
+            },
+        )
+        with patch("agentdojo.task_suite.get_suite", return_value=suite):
+            rows = dataset.generate_tests(
+                {
+                    "suite": "workspace",
+                    "version": "v1.2.2",
+                    "attack": "captcha_dos",
+                }
+            )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            {row["vars"]["injection_task_id"] for row in rows},
+            {"injection_task_0"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

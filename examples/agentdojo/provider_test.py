@@ -16,6 +16,7 @@ class CustomPipelineTests(unittest.TestCase):
             model="gpt-5.4",
             name="gpt-5.4",
             max_output_tokens=128,
+            temperature=0.0,
         )
 
     def pipeline(self, defense: str | None):
@@ -66,6 +67,51 @@ class TokenUsageTests(unittest.TestCase):
         )
 
 
+class ResponsesRequestTests(unittest.TestCase):
+    def test_function_tools_include_explicit_strict_flag(self):
+        class Parameters:
+            def model_json_schema(self):
+                return {"type": "object", "properties": {}}
+
+        func = SimpleNamespace(
+            name="lookup_calendar",
+            description="Look up calendar events",
+            parameters=Parameters(),
+        )
+        llm = provider.OpenAIResponsesLLM(
+            llm_client=None,
+            model="gpt-5.4",
+            name="gpt-5.4",
+            max_output_tokens=128,
+            temperature=0.0,
+        )
+
+        self.assertEqual(llm._tool_to_openai(func)["strict"], False)
+
+    def test_responses_calls_use_configured_deterministic_temperature(self):
+        class Responses:
+            def __init__(self):
+                self.kwargs = None
+
+            def create(self, **kwargs):
+                self.kwargs = kwargs
+                return SimpleNamespace(output=[], usage=None)
+
+        responses = Responses()
+        client = SimpleNamespace(responses=responses)
+        llm = provider.OpenAIResponsesLLM(
+            llm_client=client,
+            model="gpt-5.4",
+            name="gpt-5.4",
+            max_output_tokens=128,
+            temperature=0.0,
+        )
+
+        llm._call_responses_api([], [])
+
+        self.assertEqual(responses.kwargs["temperature"], 0.0)
+
+
 class ResultSelectionTests(unittest.TestCase):
     def settings(
         self,
@@ -82,6 +128,7 @@ class ResultSelectionTests(unittest.TestCase):
             version="v1.2.2",
             request_timeout=120,
             max_output_tokens=128,
+            temperature=0.0,
             force_rerun=True,
             logdir=Path("/tmp/agentdojo-test"),
         )
@@ -139,6 +186,32 @@ class ResultSelectionTests(unittest.TestCase):
         self.assertEqual(
             result["agentdojo_result_injection_task_id"], "injection_task_0"
         )
+
+
+class ErrorResponseTests(unittest.TestCase):
+    def test_runtime_errors_do_not_claim_injection_success(self):
+        settings = provider.ProviderSettings(
+            suite_name="workspace",
+            model="gpt-5.4",
+            defense=None,
+            attack_name="important_instructions",
+            user_task_id="user_task_0",
+            injection_task_id="injection_task_1",
+            version="v1.2.2",
+            request_timeout=120,
+            max_output_tokens=128,
+            temperature=0.0,
+            force_rerun=True,
+            logdir=Path("/tmp/agentdojo-test"),
+        )
+
+        response = provider._error_response(settings, RuntimeError("boom"))
+
+        self.assertEqual(response["error"], "boom")
+        self.assertTrue(response["metadata"]["runtime_error"])
+        self.assertIsNone(response["metadata"]["injection_success"])
+        self.assertIsNone(response["metadata"]["injection_blocked"])
+        self.assertFalse(response["metadata"]["safe_utility"])
 
 
 if __name__ == "__main__":

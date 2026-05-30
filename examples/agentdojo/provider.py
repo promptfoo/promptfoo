@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 DEFAULT_REQUEST_TIMEOUT = 120
+DEFAULT_TEMPERATURE = 0.0
 AGENTDOJO_DOS_ATTACK = "dos"
 AGENTDOJO_DOS_ATTACK_SUFFIX = "_dos"
 
@@ -328,11 +329,13 @@ class OpenAIResponsesLLM(BasePipelineElement):
         model: str,
         name: str,
         max_output_tokens: int,
+        temperature: float | None = DEFAULT_TEMPERATURE,
     ):
         self.client = llm_client
         self.model = model
         self.name = name
         self.max_output_tokens = max_output_tokens
+        self.temperature = temperature
 
     @staticmethod
     def _content_to_text(content: Any) -> str | None:
@@ -393,6 +396,7 @@ class OpenAIResponsesLLM(BasePipelineElement):
             "name": func.name,
             "description": func.description,
             "parameters": func.parameters.model_json_schema(),
+            "strict": False,
         }
 
     @staticmethod
@@ -435,6 +439,7 @@ class OpenAIResponsesLLM(BasePipelineElement):
             tools=tools if tools else NOT_GIVEN,
             tool_choice=tool_choice,
             max_output_tokens=self.max_output_tokens,
+            temperature=self.temperature if self.temperature is not None else NOT_GIVEN,
         )
         _accumulate_tokens(response.usage)
 
@@ -643,6 +648,7 @@ def _get_pipeline(
     defense: str | None,
     request_timeout: float | None = DEFAULT_REQUEST_TIMEOUT,
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    temperature: float | None = DEFAULT_TEMPERATURE,
 ):
     """Get or create cached pipeline.
 
@@ -650,7 +656,7 @@ def _get_pipeline(
     """
     from agentdojo.agent_pipeline import AgentPipeline, PipelineConfig
 
-    key = f"{model}:{defense}:{request_timeout}:{max_output_tokens}"
+    key = f"{model}:{defense}:{request_timeout}:{max_output_tokens}:{temperature}"
     if key not in _pipeline_cache:
         if _is_registered_agentdojo_model(model):
             llm: str | BasePipelineElement = model
@@ -695,6 +701,7 @@ def _get_pipeline(
                 model=model,
                 name=model,
                 max_output_tokens=max_output_tokens,
+                temperature=temperature,
             )
             config = PipelineConfig(
                 llm=llm,
@@ -860,6 +867,7 @@ class ProviderSettings:
     version: str
     request_timeout: float | None
     max_output_tokens: int
+    temperature: float | None
     force_rerun: bool
     logdir: Path
 
@@ -881,6 +889,9 @@ def _settings(options: dict, context: dict) -> ProviderSettings:
     request_timeout = config.get("request_timeout", DEFAULT_REQUEST_TIMEOUT)
     if request_timeout is not None:
         request_timeout = float(request_timeout)
+    temperature = config.get("temperature", DEFAULT_TEMPERATURE)
+    if temperature is not None:
+        temperature = float(temperature)
 
     return ProviderSettings(
         suite_name=vars_.get("suite", config.get("suite", "workspace")),
@@ -894,6 +905,7 @@ def _settings(options: dict, context: dict) -> ProviderSettings:
         max_output_tokens=int(
             config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
         ),
+        temperature=temperature,
         force_rerun=bool(config.get("force_rerun", True)),
         logdir=_resolve_logdir(config, model, defense, attack_name),
     )
@@ -1034,9 +1046,10 @@ def _token_usage_payload() -> dict[str, int] | None:
 def _error_response(settings: ProviderSettings, error: Exception) -> dict:
     result = {
         "error": str(error),
+        "runtime_error": True,
         "user_task_success": False,
-        "injection_blocked": False,
-        "injection_success": True,
+        "injection_blocked": None,
+        "injection_success": None,
         "safe_utility": False,
         "suite": settings.suite_name,
         "user_task_id": settings.user_task_id,
@@ -1072,6 +1085,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
                 settings.defense,
                 request_timeout=settings.request_timeout,
                 max_output_tokens=settings.max_output_tokens,
+                temperature=settings.temperature,
             )
             suite = _get_suite(settings.suite_name, settings.version)
             attack = _get_attack(settings.attack_name, suite, pipeline)
