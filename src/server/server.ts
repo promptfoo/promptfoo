@@ -396,9 +396,9 @@ export async function startServer(
         logger.debug(
           `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
         );
-        io.emit('update', { evalId: updatedEval.id });
-        allPrompts = null;
       }
+      io.emit('update', updatedEval ? { evalId: updatedEval.id } : null);
+      allPrompts = null;
     };
 
     void handleSignalUpdate();

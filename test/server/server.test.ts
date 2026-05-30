@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import http from 'node:http';
 
+import { Server as SocketIOServer } from 'socket.io';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -278,6 +279,21 @@ describe('server', () => {
         expect(logger.debug).toHaveBeenCalledWith('Emitting update for eval: legacy-eval'),
       );
       expect(getResultsCount).not.toHaveBeenCalled();
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should emit an empty update when no evals remain after a mutation', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', null));
 
       triggerSignal('SIGINT');
       await serverPromise;

@@ -308,7 +308,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const latestEvalId = newRecentEvals[0].evalId;
-          const updatedEvalId = data.evalId ?? latestEvalId;
+          const updatedEvalId = ('evalId' in data ? data.evalId : undefined) ?? latestEvalId;
           setDefaultEvalId(latestEvalId);
           setEvalId(updatedEvalId);
           await loadEvalById(updatedEvalId, true);

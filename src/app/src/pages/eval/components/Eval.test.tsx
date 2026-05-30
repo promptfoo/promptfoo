@@ -430,6 +430,26 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
   });
 
+  it('clears the eval state when a socket update reports no remaining evals', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.(null);
+    });
+
+    expect(baseMockTableStore.setTable).toHaveBeenCalledWith(null);
+    expect(baseMockTableStore.setConfig).toHaveBeenCalledWith(null);
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('');
+    expect(baseMockTableStore.setAuthor).toHaveBeenCalledWith(null);
+  });
+
   it('clears a details row hint from a selected eval without rewriting the source URL', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
