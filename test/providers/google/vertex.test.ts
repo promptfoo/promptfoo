@@ -3231,6 +3231,56 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       );
     });
 
+    it('should preserve literal template text inside injected response schemas', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+            enum: ['{{literal}}'],
+          },
+        },
+        required: ['answer'],
+      };
+      provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          responseSchema: '{{ schema | dump | safe }}',
+        },
+      });
+
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: '{"answer":"{{literal}}"}' }] } }],
+          usageMetadata: {
+            promptTokenCount: 12,
+            candidatesTokenCount: 18,
+            totalTokenCount: 30,
+          },
+        },
+      ]);
+
+      await provider.callGeminiApi('Generate a literal answer', {
+        vars: { schema, literal: 'rewritten' },
+        prompt: {
+          raw: 'Generate a literal answer',
+          display: 'Generate a literal answer',
+          label: 'test',
+        },
+      });
+
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            generationConfig: expect.objectContaining({
+              response_schema: schema,
+              response_mime_type: 'application/json',
+            }),
+          }),
+        }),
+      );
+    });
+
     it('should handle responseSchema with variable substitution in schema content', async () => {
       const contextVars = {
         greetingDescription: 'A personalized greeting message',

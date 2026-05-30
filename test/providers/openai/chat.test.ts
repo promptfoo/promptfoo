@@ -722,7 +722,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       const schema = {
         type: 'object' as const,
-        properties: { order_id: { type: 'string' } },
+        properties: {
+          order_id: {
+            type: 'string',
+            description: 'Must include {{literal}} braces',
+            enum: ['{{literal}}'],
+          },
+        },
         required: ['order_id'],
       };
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -747,6 +753,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const requestBody = JSON.parse(call[1].body);
       expect(requestBody.tools[0].function.parameters).toEqual(schema);
+      expect(requestBody.tools[0].function.parameters.properties.order_id.description).toBe(
+        'Must include {{literal}} braces',
+      );
     });
 
     it('should preserve dump-safe schema templates in legacy function parameters', async () => {
@@ -763,7 +772,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       const schema = {
         type: 'object' as const,
-        properties: { order_id: { type: 'string' } },
+        properties: {
+          order_id: {
+            type: 'string',
+            description: 'Must include {{literal}} braces',
+            enum: ['{{literal}}'],
+          },
+        },
         required: ['order_id'],
       };
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -785,6 +800,62 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const requestBody = JSON.parse(call[1].body);
       expect(requestBody.functions[0].parameters).toEqual(schema);
+      expect(requestBody.functions[0].parameters.properties.order_id.description).toBe(
+        'Must include {{literal}} braces',
+      );
+    });
+
+    it.each([
+      '{{ schema }}',
+      '{{ schema | dump | safe }}',
+    ])('should preserve object-valued response_format schemas: %s', async (schemaTemplate) => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: '{"answer":"ok"}' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const schema = {
+        type: 'object' as const,
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+            enum: ['{{literal}}'],
+          },
+        },
+        required: ['answer'],
+        additionalProperties: false as const,
+      };
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'literal_schema',
+              strict: true,
+              schema: schemaTemplate as unknown as typeof schema,
+            },
+          },
+        },
+      });
+
+      await provider.callApi('Extract an answer', {
+        vars: { schema, literal: 'rewritten' },
+        prompt: { raw: 'Extract an answer', label: 'Extract an answer' },
+      });
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.response_format.json_schema.schema).toEqual(schema);
+      expect(requestBody.response_format.json_schema.schema.properties.answer.description).toBe(
+        'Return {{literal}} exactly',
+      );
     });
 
     it('should handle function tool callbacks correctly', async () => {

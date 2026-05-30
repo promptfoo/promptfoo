@@ -446,6 +446,23 @@ export function maybeLoadStructuredConfigFromExternalFileWithVars(
   return maybeLoadFromExternalFile(rendered);
 }
 
+export function maybeLoadResponseSchemaFromExternalFileWithVars(
+  responseSchema: any,
+  vars?: Record<string, VarValue>,
+): any {
+  const rendered = renderVarsInObject(responseSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  const loaded = maybeLoadFromExternalFile(rendered);
+
+  // File-loaded schemas may still intentionally contain runtime vars, but an
+  // object injected directly from vars is already user data and must not be
+  // walked again, otherwise literal "{{...}}" schema text gets rewritten.
+  if (typeof rendered === 'string' && typeof loaded !== 'string') {
+    return renderVarsInObject(loaded, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  }
+
+  return loaded;
+}
+
 /**
  * Loads response_format configuration from an external file with variable rendering.
  *

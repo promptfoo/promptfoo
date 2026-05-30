@@ -236,6 +236,77 @@ describe('OpenAiResponsesProvider response formats', () => {
       expect(body.text.format.strict).toBe(true);
     });
 
+    it.each([
+      '{{ schema }}',
+      '{{ schema | dump | safe }}',
+    ])('should preserve object-valued json_schema templates: %s', async (schemaTemplate) => {
+      const mockApiResponse = {
+        id: 'resp_literal_schema',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"answer": "ok"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const schema = {
+        type: 'object' as const,
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+            enum: ['{{literal}}'],
+          },
+        },
+        required: ['answer'],
+        additionalProperties: false as const,
+      };
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'literal_schema',
+            schema: schemaTemplate as unknown as typeof schema,
+          },
+        },
+      } as any;
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt', {
+        vars: { schema, literal: 'rewritten' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      });
+
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text.format.name).toBe('literal_schema');
+      expect(body.text.format.schema).toEqual(schema);
+      expect(body.text.format.schema.properties.answer.description).toBe(
+        'Return {{literal}} exactly',
+      );
+    });
+
     it('should handle text format correctly', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
