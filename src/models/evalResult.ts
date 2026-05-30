@@ -559,6 +559,19 @@ export default class EvalResult {
     let offset = 0;
 
     while (true) {
+      const nextResult = await db
+        .select({ testIdx: evalResultsTable.testIdx })
+        .from(evalResultsTable)
+        .where(and(eq(evalResultsTable.evalId, evalId), gte(evalResultsTable.testIdx, offset)))
+        .orderBy(evalResultsTable.testIdx)
+        .limit(1)
+        .get();
+
+      if (!nextResult) {
+        break;
+      }
+
+      offset = nextResult.testIdx;
       const results = await db
         .select()
         .from(evalResultsTable)
@@ -570,10 +583,6 @@ export default class EvalResult {
           ),
         )
         .all();
-
-      if (results.length === 0) {
-        break;
-      }
 
       yield results.map((result) => new EvalResult({ ...result, persisted: true }));
       offset += batchSize;

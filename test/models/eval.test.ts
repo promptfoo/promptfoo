@@ -136,6 +136,38 @@ describe('evaluator', () => {
         ['in-memory-2'],
       ]);
     });
+
+    it('advances across sparse test indices for persisted evals', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const results = [150, 275].map((testIdx) => {
+        return new EvalResult({
+          id: `sparse-${eval_.id}-${testIdx}`,
+          evalId: eval_.id,
+          promptIdx: 0,
+          testIdx,
+          testCase: { vars: { testIdx } },
+          prompt: { raw: 'Test prompt', label: 'Test prompt' },
+          provider: { id: 'test-provider' },
+          response: { output: `Result ${testIdx}` },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        });
+      });
+      await eval_.setResults(results);
+
+      const batches: EvalResult[][] = [];
+      for await (const batch of eval_.fetchResultsBatched(100)) {
+        batches.push(batch);
+      }
+
+      expect(batches.map((batch) => batch.map((result) => result.testIdx))).toEqual([[150], [275]]);
+    });
   });
 
   describe('setResults', () => {
