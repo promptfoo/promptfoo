@@ -15,8 +15,8 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 120
-  - id: fireworks:accounts/fireworks/models/qwen2p5-72b-instruct
-    label: 'Qwen 2.5 72B'
+  - id: fireworks:accounts/fireworks/models/mixtral-8x7b-instruct
+    label: 'Mixtral 8x7B'
     config:
       temperature: 0.2
       max_tokens: 120

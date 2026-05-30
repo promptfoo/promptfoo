@@ -723,7 +723,10 @@ export const providerMap: ProviderFactory[] = [
       const { createFireworksProvider } = await import('./fireworks/chat');
       return createFireworksProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        // loadApiProvider merges any provider-level `env` block into
+        // providerOptions.env, so let those overrides win over the suite-level
+        // env from context.
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },

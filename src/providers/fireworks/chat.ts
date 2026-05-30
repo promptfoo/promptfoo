@@ -28,12 +28,26 @@ const FIREWORKS_RESERVED_PROVIDER_SUBTYPES = new Set([
   'responses',
 ]);
 
+type FireworksCostConfig = Pick<OpenAiCompletionOptions, 'cost' | 'inputCost' | 'outputCost'> & {
+  // Fireworks bills prompt-cache hits at a discounted rate (50% of the input
+  // rate by default for text/vision models, per Fireworks's pricing docs).
+  // Callers can override the per-token rate explicitly here.
+  cacheReadInputCost?: number;
+};
+
 export function calculateFireworksCost(
-  config: Pick<OpenAiCompletionOptions, 'cost' | 'inputCost' | 'outputCost'>,
+  config: FireworksCostConfig,
   promptTokens?: number,
   completionTokens?: number,
   cached = false,
+  cachedInputTokens = 0,
 ): number | undefined {
+  // Promptfoo's own response cache: nothing was sent to the provider, so
+  // there's no incremental spend even when token counts are missing.
+  if (cached) {
+    return 0;
+  }
+
   const inputCost = config.inputCost ?? config.cost;
   const outputCost = config.outputCost ?? config.cost;
 
@@ -46,7 +60,18 @@ export function calculateFireworksCost(
     return undefined;
   }
 
-  return cached ? 0 : inputCost * promptTokens + outputCost * completionTokens;
+  // Fireworks's provider-side prompt cache: split the prompt tokens into
+  // freshly-billed and cache-hit halves so the cache-hit half can be priced
+  // at the discounted rate instead of the full input rate.
+  const cacheHitTokens = Math.min(Math.max(cachedInputTokens, 0), promptTokens);
+  const uncachedPromptTokens = promptTokens - cacheHitTokens;
+  const cacheReadCost = config.cacheReadInputCost ?? inputCost * 0.5;
+
+  return (
+    inputCost * uncachedPromptTokens +
+    cacheReadCost * cacheHitTokens +
+    outputCost * completionTokens
+  );
 }
 
 export class FireworksProvider extends OpenAiChatCompletionProvider {
@@ -94,9 +119,14 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
   // The base provider's getApiUrl() consults OPENAI_API_HOST / OPENAI_API_BASE_URL /
   // OPENAI_BASE_URL before config.apiBaseUrl, so an environment configured for
   // another OpenAI-compatible host would silently route fireworks:* requests
-  // there. The constructor already merged FIREWORKS_API_BASE_URL into
-  // config.apiBaseUrl, so we only need to consult that.
+  // there. We still honor an explicitly configured `apiHost` because users
+  // wiring up a Fireworks proxy or gateway via config can reasonably set that
+  // field, and the constructor already merged FIREWORKS_API_BASE_URL into
+  // config.apiBaseUrl as the final fallback.
   override getApiUrl(): string {
+    if (this.config?.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
     return this.config.apiBaseUrl || FIREWORKS_API_BASE_URL;
   }
 
@@ -119,6 +149,7 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
       response.tokenUsage?.prompt,
       response.tokenUsage?.completion,
       response.cached,
+      response.tokenUsage?.completionDetails?.cacheReadInputTokens ?? 0,
     );
 
     return response;

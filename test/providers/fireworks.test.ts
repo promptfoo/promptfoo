@@ -145,6 +145,22 @@ describe('Fireworks AI', () => {
       }
     });
 
+    it('honors an explicit config.apiHost so users can route through a proxy', () => {
+      // OPENAI_API_HOST is still ignored (credential isolation), but a
+      // deliberately configured apiHost must reach the resolved URL.
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_HOST: 'evil-openai-proxy.example.com',
+      });
+      try {
+        const provider = new FireworksProvider(FIREWORKS_MODEL, {
+          config: { apiHost: 'fireworks-proxy.internal.example.com' },
+        });
+        expect(provider.getApiUrl()).toBe('https://fireworks-proxy.internal.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('records explicitly configured token-cost estimates', async () => {
       const provider = new FireworksProvider(FIREWORKS_MODEL, {
         config: { inputCost: 0.001, outputCost: 0.002 },
@@ -166,6 +182,34 @@ describe('Fireworks AI', () => {
       expect(calculateFireworksCost({ inputCost: 0.001 }, 10, 5)).toBeUndefined();
       expect(calculateFireworksCost({ inputCost: 0.001, outputCost: 0.002 }, 10, 5)).toBe(0.02);
       expect(calculateFireworksCost({ cost: 0.003 }, 10, 5, true)).toBe(0);
+    });
+
+    it('returns zero for a Promptfoo cache hit even when token counts are missing', () => {
+      // `getTokenUsage()` only emits `{ cached, total }` for cache hits, so a
+      // strict requirement on `prompt`/`completion` would clobber the
+      // superclass's zero-cost contract on repeated evaluations.
+      expect(
+        calculateFireworksCost({ inputCost: 0.001, outputCost: 0.002 }, undefined, undefined, true),
+      ).toBe(0);
+    });
+
+    it('discounts Fireworks prompt-cache tokens against the input rate', () => {
+      // Default discount mirrors Fireworks's documented 50% off cached input.
+      expect(
+        calculateFireworksCost({ inputCost: 0.001, outputCost: 0.002 }, 100, 5, false, 40),
+      ).toBeCloseTo(0.001 * 60 + 0.0005 * 40 + 0.002 * 5);
+    });
+
+    it('honors an explicit cacheReadInputCost override for Fireworks prompt cache', () => {
+      expect(
+        calculateFireworksCost(
+          { inputCost: 0.001, outputCost: 0.002, cacheReadInputCost: 0.0001 },
+          100,
+          5,
+          false,
+          40,
+        ),
+      ).toBeCloseTo(0.001 * 60 + 0.0001 * 40 + 0.002 * 5);
     });
   });
 
