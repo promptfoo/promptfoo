@@ -17,6 +17,7 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
@@ -119,6 +120,8 @@ type CodexPromptInput = string | CodexPromptInputItem[];
 interface CodexStreamingState {
   items: any[];
   usage: any;
+  turnCompleted: boolean;
+  lastStreamError?: string;
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
@@ -191,6 +194,11 @@ export interface OpenAICodexSDKConfig {
    * Custom base URL for API requests (for proxies)
    */
   base_url?: string;
+
+  /**
+   * Maximum scheduler retry attempts for retryable Codex SDK rate limit failures.
+   */
+  maxRetries?: number;
 
   /**
    * Working directory for Codex to operate in
@@ -338,6 +346,7 @@ const OpenAICodexSDKConfigShape = {
   linkedTargetId: z.string().optional(),
   apiKey: z.string().min(1).optional(),
   base_url: z.string().min(1).optional(),
+  maxRetries: z.number().int().nonnegative().optional(),
   working_dir: z.string().min(1).optional(),
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
@@ -397,6 +406,120 @@ function getMinimalProcessEnv(): Record<string, string> {
     }
   }
   return env;
+}
+
+const CODEX_RATE_LIMIT_CODES = [
+  'rate_limit_exceeded',
+  'insufficient_quota',
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'access_terminated',
+  'quota_exceeded',
+] as const;
+
+// Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
+const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
+
+const CODEX_RATE_LIMIT_PATTERNS = [
+  /\b429\b/,
+  /\brate[\s_-]*limit(?:ed|ing| reached| exceeded)?\b/i,
+  /\btoo many requests\b/i,
+  /\btokens per (?:minute|min)\b/i,
+  /\brequests per (?:minute|min)\b/i,
+  /\bexceeded your current quota\b/i,
+];
+
+function extractCodexRateLimitCode(message: string): string | undefined {
+  const lowerMessage = message.toLowerCase();
+  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
+  if (explicitCode) {
+    return explicitCode;
+  }
+
+  if (
+    /\bexceeded your current quota\b/i.test(message) ||
+    /\bcheck your plan and billing details\b/i.test(message)
+  ) {
+    return 'insufficient_quota';
+  }
+
+  return undefined;
+}
+
+function extractCodexRetryAfterMs(message: string): number | undefined {
+  const match = message.match(
+    /\b(?:please\s+)?(?:try\s+again\s+in|retry(?:\s+again)?\s+(?:after|in))\s+(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)\b/i,
+  );
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return undefined;
+  }
+
+  const unit = match[2].toLowerCase();
+  const multiplier =
+    unit.startsWith('m') && unit !== 'ms' && !unit.startsWith('milli')
+      ? 60_000
+      : unit.startsWith('s')
+        ? 1000
+        : 1;
+  return Math.ceil(amount * multiplier);
+}
+
+function buildCodexRateLimitResponse(
+  error: unknown,
+  message: string,
+): ProviderResponse | undefined {
+  const errorRecord =
+    typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : undefined;
+  const status =
+    typeof errorRecord?.status === 'number'
+      ? errorRecord.status
+      : typeof errorRecord?.statusCode === 'number'
+        ? errorRecord.statusCode
+        : undefined;
+  const rawCode =
+    typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  const code =
+    rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
+      ? rawCode
+      : extractCodexRateLimitCode(message);
+
+  if (
+    status !== 429 &&
+    code === undefined &&
+    !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
+  ) {
+    return undefined;
+  }
+
+  const retryAfterMs = extractCodexRetryAfterMs(message);
+  const rateLimitError = new HttpRateLimitError({
+    status: status ?? 429,
+    retryAfterMs,
+    code,
+  });
+  const schedulerRetryAfterMs =
+    rateLimitError.kind === 'rate_limit'
+      ? (retryAfterMs ?? CODEX_DEFAULT_RATE_LIMIT_WAIT_MS)
+      : undefined;
+  const headers: Record<string, string> =
+    schedulerRetryAfterMs === undefined ? {} : { 'retry-after-ms': String(schedulerRetryAfterMs) };
+
+  return {
+    error: formatRateLimitErrorMessage(rateLimitError, message),
+    metadata: {
+      rateLimitKind: rateLimitError.kind,
+      http: {
+        status: rateLimitError.status,
+        statusText: rateLimitError.statusText,
+        headers,
+      },
+    },
+  };
 }
 
 /**
@@ -907,6 +1030,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         this.handleStreamingEvent(event, state, tracer, eventTime, skillRootPrefixes);
         state.lastEventTime = eventTime;
       }
+
+      if (!state.turnCompleted) {
+        if (state.lastStreamError) {
+          if (!state.activeTurnSpan) {
+            this.startTurnSpan(state, tracer, state.lastEventTime);
+          }
+          this.endTurnSpan(state, state.lastEventTime, undefined, state.lastStreamError);
+          throw new Error(`Codex stream ended after error: ${state.lastStreamError}`);
+        }
+        throw new Error('Codex stream ended before turn completion');
+      }
     } finally {
       this.endUnclosedStreamingSpans(state);
     }
@@ -918,6 +1052,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       items: [],
       usage: undefined,
+      turnCompleted: false,
+      lastStreamError: undefined,
       activeSpans: new Map(),
       itemStartTimes: new Map(),
       lastEventTime: Date.now(),
@@ -953,6 +1089,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return;
       case 'turn.completed':
         state.usage = event.usage;
+        state.turnCompleted = true;
         if (!state.activeTurnSpan) {
           // Some Codex SDK streams emit `turn.completed` without a prior
           // `turn.started`. Lazily synthesize a turn span so the
@@ -969,19 +1106,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex turn failed', { error: errorMsg });
-        throw new Error(`Codex turn failed: ${errorMsg}`);
+        const previousStreamError =
+          state.lastStreamError && state.lastStreamError !== errorMsg
+            ? ` Previous stream error: ${state.lastStreamError}`
+            : '';
+        throw new Error(`Codex turn failed: ${errorMsg}${previousStreamError}`);
       }
       case 'error': {
         const errorMsg =
           typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
-        if (!state.activeTurnSpan) {
-          // Mirror `turn.failed`: a stream error before any `turn.started`
-          // should still surface an errored turn span.
-          this.startTurnSpan(state, tracer, state.lastEventTime);
-        }
-        this.endTurnSpan(state, eventTime, undefined, errorMsg);
-        logger.error('Codex stream error', { error: errorMsg });
-        throw new Error(`Codex stream error: ${errorMsg}`);
+        state.lastStreamError = errorMsg;
+        logger.debug('Codex stream error event received; waiting for terminal event', {
+          error: errorMsg,
+        });
+        return;
       }
       case 'thread.started':
         return;
@@ -2000,9 +2138,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Safely extract error message - error may not be an Error object
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
-      return {
-        error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
-      };
+      return (
+        buildCodexRateLimitResponse(error, errorMessage) ?? {
+          error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
+        }
+      );
     } finally {
       await this.cleanupCodexTurn(resolvedConfig, cacheKey, useLocalInstance, localInstance);
     }

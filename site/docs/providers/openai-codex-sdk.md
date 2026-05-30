@@ -181,6 +181,7 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
 | `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
 | `base_url`               | string   | Custom API base URL                                                                                  | None                 |
+| `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
 | `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
 | `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
 | `model`                  | string   | Model to use                                                                                         | SDK default          |
@@ -202,6 +203,8 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
 | `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
+
+During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
 
 ### Sandbox Modes
 
