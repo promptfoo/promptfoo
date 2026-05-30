@@ -180,48 +180,51 @@ describe('JSONL output with proper line endings', () => {
     expect(fs.readdirSync(tempDir)).toEqual(['test-export.jsonl']);
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'should preserve existing artifact permissions during a rewrite',
-    async () => {
-      fs.writeFileSync(tempFilePath, '{"status":"existing"}\n', { mode: 0o600 });
-      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-        yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
-      });
+  it('should preserve existing artifact permissions during a rewrite', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
 
-      await writeOutput(tempFilePath, mockEval, null);
+    fs.writeFileSync(tempFilePath, '{"status":"existing"}\n', { mode: 0o600 });
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
 
-      expect(fs.statSync(tempFilePath).mode & 0o777).toBe(0o600);
-    },
-  );
+    await writeOutput(tempFilePath, mockEval, null);
 
-  it.skipIf(process.platform === 'win32')(
-    'should preserve an existing artifact symlink during a rewrite',
-    async () => {
-      const targetPath = path.join(tempDir, 'target.jsonl');
-      fs.writeFileSync(targetPath, '{"status":"existing"}\n');
-      fs.symlinkSync(targetPath, tempFilePath);
-      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-        yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
-      });
+    expect(fs.statSync(tempFilePath).mode & 0o777).toBe(0o600);
+  });
 
-      await writeOutput(tempFilePath, mockEval, null);
+  it('should preserve an existing artifact symlink during a rewrite', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
 
-      expect(fs.lstatSync(tempFilePath).isSymbolicLink()).toBe(true);
-      expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
-    },
-  );
+    const targetPath = path.join(tempDir, 'target.jsonl');
+    fs.writeFileSync(targetPath, '{"status":"existing"}\n');
+    fs.symlinkSync(targetPath, tempFilePath);
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
 
-  it.skipIf(process.platform === 'win32')(
-    'should rewrite an artifact with a long valid basename',
-    async () => {
-      const longFilePath = path.join(tempDir, `${'a'.repeat(240)}.jsonl`);
-      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-        yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
-      });
+    await writeOutput(tempFilePath, mockEval, null);
 
-      await writeOutput(longFilePath, mockEval, null);
+    expect(fs.lstatSync(tempFilePath).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
+  });
 
-      expect(fs.readFileSync(longFilePath, 'utf8')).toContain('"output":"replacement"');
-    },
-  );
+  it('should rewrite an artifact with a long valid basename', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const longFilePath = path.join(tempDir, `${'a'.repeat(240)}.jsonl`);
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
+
+    await writeOutput(longFilePath, mockEval, null);
+
+    expect(fs.readFileSync(longFilePath, 'utf8')).toContain('"output":"replacement"');
+  });
 });
