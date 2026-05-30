@@ -23,8 +23,32 @@ providers:
 
 Alternatively, you can set the `FIREWORKS_API_KEY` environment variable to use your API key directly.
 
+The provider keeps Fireworks credentials isolated from OpenAI's: it reads `FIREWORKS_API_KEY` (never `OPENAI_API_KEY`) and never inherits `OPENAI_API_HOST` / `OPENAI_API_BASE_URL` / `OPENAI_ORGANIZATION`, so a stray OpenAI variable in your environment can't leak onto or reroute Fireworks requests.
+
+## Embeddings
+
+Fireworks also serves embedding models on the same key. Use the `fireworks:embedding:` prefix, for example to grade a [`similar` assertion](/docs/configuration/expected-outputs/similar):
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b
+```
+
+## Configuration
+
+| Environment variable     | Description                                                        |
+| ------------------------ | ------------------------------------------------------------------ |
+| `FIREWORKS_API_KEY`      | Your Fireworks API key.                                            |
+| `FIREWORKS_API_BASE_URL` | Override the base URL (defaults to the public Fireworks endpoint). |
+
+You can also set `apiKey`, `apiBaseUrl`, or `apiHost` directly in the provider `config`.
+
 ## API Details
 
 - **Base URL**: `https://api.fireworks.ai/inference/v1`
 - **API format**: OpenAI-compatible
+- **Models**: browse the [serverless model catalogue](https://fireworks.ai/models?deployment=serverless) for currently available ids.
 - Full [API documentation](https://docs.fireworks.ai)

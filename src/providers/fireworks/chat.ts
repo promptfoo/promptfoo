@@ -1,7 +1,11 @@
-import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { FireworksEmbeddingProvider } from './embedding';
+import {
+  buildFireworksProviderConfig,
+  resolveFireworksApiKey,
+  resolveFireworksApiUrl,
+} from './shared';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -12,16 +16,15 @@ import type {
 } from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
-const FIREWORKS_API_BASE_URL = 'https://api.fireworks.ai/inference/v1';
+// `embedding`/`embeddings` route to the dedicated Fireworks embedding provider.
+const FIREWORKS_EMBEDDING_SUBTYPES = new Set(['embedding', 'embeddings']);
 
-// Subtypes that may show up in `fireworks:<subtype>:<model>` paths but should
-// be routed by future dedicated providers rather than silently going through
-// the chat-completions surface here.
+// Other subtypes that may show up in `fireworks:<subtype>:<model>` paths but
+// aren't implemented yet. Fail fast rather than silently dispatching them to the
+// chat-completions surface here.
 const FIREWORKS_RESERVED_PROVIDER_SUBTYPES = new Set([
   'chat',
   'completion',
-  'embedding',
-  'embeddings',
   'image',
   'moderation',
   'realtime',
@@ -29,9 +32,11 @@ const FIREWORKS_RESERVED_PROVIDER_SUBTYPES = new Set([
 ]);
 
 type FireworksCostConfig = Pick<OpenAiCompletionOptions, 'cost' | 'inputCost' | 'outputCost'> & {
-  // Fireworks bills prompt-cache hits at a discounted rate (50% of the input
-  // rate by default for text/vision models, per Fireworks's pricing docs).
-  // Callers can override the per-token rate explicitly here.
+  // Fireworks bills prompt-cache hits at a discounted per-token rate, but the
+  // discount varies widely by model (often 80-95% off the uncached input rate),
+  // so we don't guess one. When this is set, cache-hit prompt tokens are priced
+  // at this rate; otherwise they're billed at the full `inputCost` so the
+  // estimate never silently under- or over-states spend.
   cacheReadInputCost?: number;
 };
 
@@ -62,10 +67,12 @@ export function calculateFireworksCost(
 
   // Fireworks's provider-side prompt cache: split the prompt tokens into
   // freshly-billed and cache-hit halves so the cache-hit half can be priced
-  // at the discounted rate instead of the full input rate.
+  // at the user-configured discounted rate. Without an explicit
+  // `cacheReadInputCost` we fall back to the full input rate rather than
+  // assuming a discount that doesn't match the model's actual pricing.
   const cacheHitTokens = Math.min(Math.max(cachedInputTokens, 0), promptTokens);
   const uncachedPromptTokens = promptTokens - cacheHitTokens;
-  const cacheReadCost = config.cacheReadInputCost ?? inputCost * 0.5;
+  const cacheReadCost = config.cacheReadInputCost ?? inputCost;
 
   return (
     inputCost * uncachedPromptTokens +
@@ -76,18 +83,9 @@ export function calculateFireworksCost(
 
 export class FireworksProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
-    const explicitBaseUrl = providerOptions.config?.apiBaseUrl;
-    const envBaseUrl =
-      (providerOptions.env as Record<string, string | undefined> | undefined)
-        ?.FIREWORKS_API_BASE_URL || getEnvString('FIREWORKS_API_BASE_URL');
-
     super(modelName, {
       ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: explicitBaseUrl || envBaseUrl || FIREWORKS_API_BASE_URL,
-        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'FIREWORKS_API_KEY',
-      },
+      config: buildFireworksProviderConfig(providerOptions.config, providerOptions.env),
     });
   }
 
@@ -102,12 +100,7 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
   // Don't fall through to OPENAI_API_KEY: a misconfigured environment must
   // fail loudly rather than silently send an OpenAI key to Fireworks.
   override getApiKey(): string | undefined {
-    const envar = this.config?.apiKeyEnvar || 'FIREWORKS_API_KEY';
-    return (
-      this.config?.apiKey ||
-      (this.env as EnvOverrides | undefined)?.[envar as keyof EnvOverrides] ||
-      getEnvString(envar as EnvVarKey)
-    );
+    return resolveFireworksApiKey(this.config, this.env as EnvOverrides | undefined);
   }
 
   // OpenAI-Organization is OpenAI-specific; it must not leak onto requests
@@ -116,18 +109,8 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
     return undefined;
   }
 
-  // The base provider's getApiUrl() consults OPENAI_API_HOST / OPENAI_API_BASE_URL /
-  // OPENAI_BASE_URL before config.apiBaseUrl, so an environment configured for
-  // another OpenAI-compatible host would silently route fireworks:* requests
-  // there. We still honor an explicitly configured `apiHost` because users
-  // wiring up a Fireworks proxy or gateway via config can reasonably set that
-  // field, and the constructor already merged FIREWORKS_API_BASE_URL into
-  // config.apiBaseUrl as the final fallback.
   override getApiUrl(): string {
-    if (this.config?.apiHost) {
-      return `https://${this.config.apiHost}/v1`;
-    }
-    return this.config.apiBaseUrl || FIREWORKS_API_BASE_URL;
+    return resolveFireworksApiUrl(this.config);
   }
 
   override async callApi(
@@ -144,13 +127,18 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
-    response.cost = calculateFireworksCost(
+    const cost = calculateFireworksCost(
       config,
       response.tokenUsage?.prompt,
       response.tokenUsage?.completion,
       response.cached,
       readFireworksCachedPromptTokens(response),
     );
+    // Only overwrite when we actually computed a cost; otherwise leave whatever
+    // the superclass derived in place rather than clobbering it with undefined.
+    if (cost !== undefined) {
+      response.cost = cost;
+    }
 
     return response;
   }
@@ -185,12 +173,23 @@ export function createFireworksProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
   const subtype = splits[1];
-  const modelName = splits.slice(1).join(':');
 
-  if (!modelName) {
-    throw new Error(
-      `Fireworks provider needs a model identifier (e.g. "fireworks:accounts/fireworks/models/llama-v3p3-70b-instruct"), got "${providerPath}".`,
-    );
+  const constructorOptions: ProviderOptions = {
+    ...providerOptions.config,
+    env: providerOptions.env,
+  };
+
+  // `fireworks:embedding:<model>` (or `embeddings`) targets the embeddings
+  // endpoint via the dedicated provider; the model is everything after the
+  // subtype so account-scoped ids keep their colons.
+  if (FIREWORKS_EMBEDDING_SUBTYPES.has(subtype)) {
+    const embeddingModel = splits.slice(2).join(':');
+    if (!embeddingModel) {
+      throw new Error(
+        `Fireworks embedding provider needs a model identifier (e.g. "fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b"), got "${providerPath}".`,
+      );
+    }
+    return new FireworksEmbeddingProvider(embeddingModel, constructorOptions);
   }
 
   if (FIREWORKS_RESERVED_PROVIDER_SUBTYPES.has(subtype)) {
@@ -199,8 +198,12 @@ export function createFireworksProvider(
     );
   }
 
-  return new FireworksProvider(modelName, {
-    ...providerOptions.config,
-    env: providerOptions.env,
-  });
+  const modelName = splits.slice(1).join(':');
+  if (!modelName) {
+    throw new Error(
+      `Fireworks provider needs a model identifier (e.g. "fireworks:accounts/fireworks/models/llama-v3p3-70b-instruct"), got "${providerPath}".`,
+    );
+  }
+
+  return new FireworksProvider(modelName, constructorOptions);
 }

@@ -6,6 +6,7 @@ import {
   FireworksProvider,
   readFireworksCachedPromptTokens,
 } from '../../src/providers/fireworks/chat';
+import { FireworksEmbeddingProvider } from '../../src/providers/fireworks/embedding';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { mockProcessEnv } from '../util/utils';
 
@@ -176,6 +177,85 @@ describe('Fireworks AI', () => {
 
       expect(result.cost).toBe(0.02);
     });
+
+    it('preserves the superclass cost when no rates are configured', async () => {
+      const provider = new FireworksProvider(FIREWORKS_MODEL, {});
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { prompt: 10, completion: 5, total: 15 },
+        cached: false,
+        cost: 0.123,
+      });
+
+      const result = await provider.callApi('hello');
+
+      // Without inputCost/outputCost we can't compute a Fireworks cost, so we
+      // must not clobber whatever the base provider derived.
+      expect(result.cost).toBe(0.123);
+    });
+  });
+
+  describe('FireworksEmbeddingProvider', () => {
+    const EMBEDDING_MODEL = 'accounts/fireworks/models/qwen3-embedding-8b';
+
+    it('returns the embedding-prefixed id and string', () => {
+      const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {});
+      expect(provider.id()).toBe(`fireworks:embedding:${EMBEDDING_MODEL}`);
+      expect(provider.toString()).toBe(`[Fireworks AI Embedding Provider ${EMBEDDING_MODEL}]`);
+    });
+
+    it('falls back to the default Fireworks endpoint and key envar', () => {
+      const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {});
+      expect(provider.getApiUrl()).toBe(FIREWORKS_API_BASE);
+    });
+
+    it('does not fall back to OPENAI_API_KEY when FIREWORKS_API_KEY is missing', () => {
+      const restoreEnv = mockProcessEnv({
+        FIREWORKS_API_KEY: undefined,
+        OPENAI_API_KEY: 'sk-fake-openai-must-not-leak',
+      });
+      try {
+        const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {});
+        expect(provider.getApiKey()).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('reads FIREWORKS_API_KEY for embedding calls', () => {
+      const restoreEnv = mockProcessEnv({ FIREWORKS_API_KEY: 'fw-embed-key' });
+      try {
+        const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {});
+        expect(provider.getApiKey()).toBe('fw-embed-key');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not attach an OpenAI organization header', () => {
+      const restoreEnv = mockProcessEnv({ OPENAI_ORGANIZATION: 'org-fake-leak' });
+      try {
+        const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {
+          config: { organization: 'org-from-config' } as any,
+        });
+        expect(provider.getOrganization()).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not route through OPENAI_API_HOST / OPENAI_API_BASE_URL', () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_HOST: 'evil-openai-proxy.example.com',
+        OPENAI_API_BASE_URL: 'https://evil-openai-proxy.example.com/v1',
+      });
+      try {
+        const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {});
+        expect(provider.getApiUrl()).toBe(FIREWORKS_API_BASE);
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('calculateFireworksCost', () => {
@@ -194,11 +274,13 @@ describe('Fireworks AI', () => {
       ).toBe(0);
     });
 
-    it('discounts Fireworks prompt-cache tokens against the input rate', () => {
-      // Default discount mirrors Fireworks's documented 50% off cached input.
+    it('bills cache-hit prompt tokens at the full input rate when no discount is configured', () => {
+      // Without an explicit `cacheReadInputCost` we don't assume a discount, so
+      // a server-side cache hit costs the same as a fresh request and the
+      // cached/uncached split collapses back to `inputCost * promptTokens`.
       expect(
         calculateFireworksCost({ inputCost: 0.001, outputCost: 0.002 }, 100, 5, false, 40),
-      ).toBeCloseTo(0.001 * 60 + 0.0005 * 40 + 0.002 * 5);
+      ).toBeCloseTo(0.001 * 100 + 0.002 * 5);
     });
 
     it('honors an explicit cacheReadInputCost override for Fireworks prompt cache', () => {
@@ -298,10 +380,33 @@ describe('Fireworks AI', () => {
       expect(() => createFireworksProvider('fireworks:')).toThrow(/needs a model identifier/);
     });
 
-    it('rejects endpoint subtypes that this chat-only provider does not implement', () => {
-      expect(() =>
-        createFireworksProvider('fireworks:embedding:nomic-ai/nomic-embed-text-v1.5'),
-      ).toThrow(/fireworks:embedding:\* subtype is reserved/);
+    it('rejects endpoint subtypes that are not implemented yet', () => {
+      expect(() => createFireworksProvider('fireworks:image:some-model')).toThrow(
+        /fireworks:image:\* subtype is reserved/,
+      );
+    });
+
+    it('routes the embedding subtype to the Fireworks embedding provider', () => {
+      const provider = createFireworksProvider(
+        'fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b',
+      );
+      expect(provider).toBeInstanceOf(FireworksEmbeddingProvider);
+      expect(provider.id()).toBe(
+        'fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b',
+      );
+    });
+
+    it('also accepts the plural embeddings subtype', () => {
+      const provider = createFireworksProvider(
+        'fireworks:embeddings:accounts/fireworks/models/qwen3-embedding-8b',
+      );
+      expect(provider).toBeInstanceOf(FireworksEmbeddingProvider);
+    });
+
+    it('throws when the embedding subtype is missing a model', () => {
+      expect(() => createFireworksProvider('fireworks:embedding:')).toThrow(
+        /embedding provider needs a model identifier/,
+      );
     });
 
     it('forwards config and env into the constructed provider', () => {

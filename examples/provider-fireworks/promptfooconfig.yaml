@@ -4,22 +4,37 @@ description: 'Fireworks AI Provider Demo'
 prompts:
   - 'In one sentence, summarise: {{passage}}'
 
+# These are Fireworks serverless models, so a `FIREWORKS_API_KEY` is all you
+# need to run the example. The current serverless catalogue lives at
+# https://fireworks.ai/models?deployment=serverless — swap in any other
+# serverless id if these rotate out. Fireworks's flagship models are reasoning
+# models, so `max_tokens` is set high enough to leave room for the hidden
+# reasoning tokens plus the visible answer.
 providers:
   - id: fireworks:accounts/fireworks/models/gpt-oss-120b
     label: 'GPT-OSS 120B'
     config:
       temperature: 0.2
-      max_tokens: 120
-  - id: fireworks:accounts/fireworks/models/qwen3-235b-a22b-instruct-2507
-    label: 'Qwen 3 235B A22B'
+      max_tokens: 1024
+  - id: fireworks:accounts/fireworks/models/deepseek-v4-pro
+    label: 'DeepSeek V4 Pro'
     config:
       temperature: 0.2
-      max_tokens: 120
-  - id: fireworks:accounts/fireworks/models/kimi-k2-instruct
-    label: 'Kimi K2'
+      max_tokens: 1024
+  - id: fireworks:accounts/fireworks/models/kimi-k2p6
+    label: 'Kimi K2.6'
     config:
       temperature: 0.2
-      max_tokens: 120
+      max_tokens: 1024
+
+# Fireworks also serves embedding models on the same key. Here a `similar`
+# assertion is graded by the serverless Qwen3 embedding model via the
+# `fireworks:embedding:` prefix.
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b
 
 tests:
   - vars:
@@ -33,6 +48,9 @@ tests:
         value: Antikythera
       - type: icontains-any
         value: [mechanism, computer, gears, astronomical]
+      - type: similar
+        value: an ancient Greek geared device that predicted astronomical events and eclipses
+        threshold: 0.4
   - vars:
       passage: |
         Edsger Dijkstra argued that programs should be derived from their specifications through a
