@@ -42,8 +42,8 @@ describe('programmatic JSONL output', () => {
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
       id: () => 'slow-provider',
-      callApi: vi.fn((_prompt, _context, options) => {
-        return new Promise((_resolve, reject) => {
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((_prompt, _context, options) => {
+        return new Promise<never>((_resolve, reject) => {
           options?.abortSignal?.addEventListener(
             'abort',
             () => reject(new Error('Provider call aborted')),
