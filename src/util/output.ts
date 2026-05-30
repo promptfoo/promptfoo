@@ -28,10 +28,15 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateTableOutput } from '../types';
+import type EvalResult from '../models/evalResult';
+import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
+}
+
+function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
+  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 }
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -442,7 +447,7 @@ export async function writeOutput(
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text =
         batchResults
-          .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result)))
+          .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
           .join(os.EOL) + os.EOL;
       await fsPromises.appendFile(outputPath, text);
     }
