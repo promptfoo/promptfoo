@@ -324,6 +324,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.testCase
       ? { testCase: sanitizeForDbWithSecrets(artifactResult.testCase) }
       : {}),
+    ...(artifactResult.vars === undefined
+      ? {}
+      : { vars: sanitizeForDbWithSecrets(artifactResult.vars) }),
     ...(artifactResult.prompt ? { prompt: sanitizeForDbWithSecrets(artifactResult.prompt) } : {}),
     ...(artifactResult.provider
       ? {
