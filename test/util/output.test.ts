@@ -1153,6 +1153,25 @@ describe('writeOutput', () => {
     expect(fsPromises.rename).not.toHaveBeenCalled();
   });
 
+  it('warns when the temporary JSONL backup directory cannot be removed', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.rm).mockRejectedValueOnce(new Error('rm failed'));
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Output] Failed to remove temporary JSONL backup directory',
+      expect.objectContaining({
+        tempDirectory: JSONL_TEMP_DIRECTORY,
+      }),
+    );
+    warnSpy.mockRestore();
+  });
+
   it('rewrites JSONL through an external backup when replacing the output file is not permitted', async () => {
     const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
     vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
@@ -1191,6 +1210,21 @@ describe('writeOutput', () => {
       }),
     );
     warnSpy.mockRestore();
+  });
+
+  it('rewrites the target of a dangling JSONL symlink', async () => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const symlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
   });
 
   it('restores the JSONL backup when an external rewrite fails', async () => {

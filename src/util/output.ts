@@ -616,16 +616,13 @@ export async function writeOutput(
           logger.warn(
             '[Output] Falling back to JSONL rewrite with external backup because replacing the output file is not permitted',
           );
-          try {
-            await rewriteJsonlWithExternalBackup(
-              jsonlOutputPath,
-              outputMode,
-              evalRecord,
-              tempOutputPath,
-            );
-          } finally {
-            await removeTemporaryJsonlOutput(tempOutputPath);
-          }
+          await rewriteJsonlWithExternalBackup(
+            jsonlOutputPath,
+            outputMode,
+            evalRecord,
+            tempOutputPath,
+          );
+          await removeTemporaryJsonlOutput(tempOutputPath);
           return;
         }
         throw error;
