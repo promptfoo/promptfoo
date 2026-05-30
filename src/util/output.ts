@@ -117,6 +117,7 @@ async function rewriteJsonlWithExternalBackup(
   outputPath: string,
   outputMode: number | undefined,
   evalRecord: Eval,
+  preparedReplacementPath?: string,
 ): Promise<void> {
   const tempDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'promptfoo-jsonl-'));
   const backupPath = path.join(tempDirectory, 'backup.jsonl');
@@ -126,12 +127,16 @@ async function rewriteJsonlWithExternalBackup(
 
   try {
     await fsPromises.copyFile(outputPath, backupPath);
-    if (outputMode === undefined) {
-      await fsPromises.writeFile(replacementPath, '');
+    if (preparedReplacementPath) {
+      await fsPromises.copyFile(preparedReplacementPath, replacementPath);
     } else {
-      await fsPromises.writeFile(replacementPath, '', { mode: outputMode });
+      if (outputMode === undefined) {
+        await fsPromises.writeFile(replacementPath, '');
+      } else {
+        await fsPromises.writeFile(replacementPath, '', { mode: outputMode });
+      }
+      await appendJsonlResults(replacementPath, evalRecord);
     }
-    await appendJsonlResults(replacementPath, evalRecord);
     overwriteAttempted = true;
     await fsPromises.copyFile(replacementPath, outputPath);
     if (outputMode !== undefined) {
@@ -147,18 +152,31 @@ async function rewriteJsonlWithExternalBackup(
           backupPath,
           error: restoreError,
         });
-        throw new AggregateError(
-          [error, restoreError],
-          `Failed to rewrite JSONL output and restore backup. Backup retained at ${backupPath}`,
+        throw new Error(
+          `Failed to rewrite JSONL output (${error instanceof Error ? error.message : String(error)}) and restore backup (${restoreError instanceof Error ? restoreError.message : String(restoreError)}). Backup retained at ${backupPath}`,
         );
       }
     }
     throw error;
   } finally {
     if (!preserveTempDirectory) {
-      await fsPromises.rm(tempDirectory, { recursive: true, force: true }).catch(() => {});
+      await fsPromises.rm(tempDirectory, { recursive: true, force: true }).catch((error) => {
+        logger.warn('[Output] Failed to remove temporary JSONL backup directory', {
+          error,
+          tempDirectory,
+        });
+      });
     }
   }
+}
+
+async function removeTemporaryJsonlOutput(tempOutputPath: string): Promise<void> {
+  await fsPromises.rm(tempOutputPath, { force: true }).catch((error) => {
+    logger.warn('[Output] Failed to remove temporary JSONL output', {
+      error,
+      tempOutputPath,
+    });
+  });
 }
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -598,14 +616,22 @@ export async function writeOutput(
           logger.warn(
             '[Output] Falling back to JSONL rewrite with external backup because replacing the output file is not permitted',
           );
-          await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
-          await rewriteJsonlWithExternalBackup(jsonlOutputPath, outputMode, evalRecord);
+          try {
+            await rewriteJsonlWithExternalBackup(
+              jsonlOutputPath,
+              outputMode,
+              evalRecord,
+              tempOutputPath,
+            );
+          } finally {
+            await removeTemporaryJsonlOutput(tempOutputPath);
+          }
           return;
         }
         throw error;
       }
     } catch (error) {
-      await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
+      await removeTemporaryJsonlOutput(tempOutputPath);
       throw error;
     }
   } else if (outputExtension === 'xml') {

@@ -6,6 +6,7 @@ import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
@@ -43,6 +44,9 @@ const mockFileHandle = vi.hoisted(() => ({
   write: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
 }));
+const JSONL_TEMP_DIRECTORY = '/tmp/promptfoo-jsonl-test';
+const JSONL_BACKUP_PATH = path.join(JSONL_TEMP_DIRECTORY, 'backup.jsonl');
+const JSONL_REPLACEMENT_PATH = path.join(JSONL_TEMP_DIRECTORY, 'replacement.jsonl');
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
@@ -80,7 +84,7 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.rename).mockResolvedValue(undefined);
     vi.mocked(fsPromises.rm).mockResolvedValue(undefined);
     vi.mocked(fsPromises.copyFile).mockResolvedValue(undefined);
-    vi.mocked(fsPromises.mkdtemp).mockResolvedValue('/tmp/promptfoo-jsonl-test');
+    vi.mocked(fsPromises.mkdtemp).mockResolvedValue(JSONL_TEMP_DIRECTORY);
     vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
     vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
@@ -1143,21 +1147,9 @@ describe('writeOutput', () => {
     await writeOutput(outputPath, new Eval({}), null);
 
     expect(fsPromises.writeFile).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.tmp$/), '');
-    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
-      1,
-      outputPath,
-      '/tmp/promptfoo-jsonl-test/backup.jsonl',
-    );
-    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
-      2,
-      '/tmp/promptfoo-jsonl-test/replacement.jsonl',
-      '',
-    );
-    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
-      2,
-      '/tmp/promptfoo-jsonl-test/replacement.jsonl',
-      outputPath,
-    );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(1, outputPath, JSONL_BACKUP_PATH);
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(2, JSONL_REPLACEMENT_PATH, '');
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(2, JSONL_REPLACEMENT_PATH, outputPath);
     expect(fsPromises.rename).not.toHaveBeenCalled();
   });
 
@@ -1166,20 +1158,39 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
 
     const outputPath = 'output.jsonl';
-    await writeOutput(outputPath, new Eval({}), null);
+    const eval_ = new Eval({});
+    const fetchResultsBatchedSpy = vi.spyOn(eval_, 'fetchResultsBatched');
+    await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
     expect(fsPromises.rm).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), { force: true });
-    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
-      1,
-      outputPath,
-      '/tmp/promptfoo-jsonl-test/backup.jsonl',
-    );
+    expect(fetchResultsBatchedSpy).toHaveBeenCalledTimes(1);
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(1, outputPath, JSONL_BACKUP_PATH);
     expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
       2,
-      '/tmp/promptfoo-jsonl-test/replacement.jsonl',
-      outputPath,
+      expect.stringMatching(/\.tmp$/),
+      JSONL_REPLACEMENT_PATH,
     );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(3, JSONL_REPLACEMENT_PATH, outputPath);
+  });
+
+  it('warns when a populated JSONL sidecar cannot be removed after an external rewrite', async () => {
+    const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.rm)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('rm failed'));
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Output] Failed to remove temporary JSONL output',
+      expect.objectContaining({
+        tempOutputPath: expect.stringMatching(/\.tmp$/),
+      }),
+    );
+    warnSpy.mockRestore();
   });
 
   it('restores the JSONL backup when an external rewrite fails', async () => {
@@ -1196,11 +1207,7 @@ describe('writeOutput', () => {
     const outputPath = 'output.jsonl';
     await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('copy failed');
 
-    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
-      3,
-      '/tmp/promptfoo-jsonl-test/backup.jsonl',
-      outputPath,
-    );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(3, JSONL_BACKUP_PATH, outputPath);
   });
 
   it('preserves the existing JSONL artifact when an external backup cannot be created', async () => {
@@ -1226,10 +1233,10 @@ describe('writeOutput', () => {
 
     const outputPath = 'output.jsonl';
     await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow(
-      'Backup retained at /tmp/promptfoo-jsonl-test/backup.jsonl',
+      `Backup retained at ${JSONL_BACKUP_PATH}`,
     );
 
-    expect(fsPromises.rm).not.toHaveBeenCalledWith('/tmp/promptfoo-jsonl-test', {
+    expect(fsPromises.rm).not.toHaveBeenCalledWith(JSONL_TEMP_DIRECTORY, {
       recursive: true,
       force: true,
     });
