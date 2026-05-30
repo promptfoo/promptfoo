@@ -127,7 +127,7 @@
     },
     {
       "name": "contracts",
-      "roots": ["src/contracts"],
+      "roots": ["src/contracts", "src/contracts.ts"],
       "allowedDependencies": []
     },
     {

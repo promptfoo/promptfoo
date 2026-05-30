@@ -7,6 +7,7 @@ import {
   extractModuleSpecifiers,
   findUnclassifiedFiles,
   findViolations,
+  getLayerForFile,
   getSourceFiles,
   type LayerConfig,
   readLayerConfig,
@@ -193,6 +194,12 @@ describe('readLayerConfig', () => {
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" must declare allowedDependencies.',
     );
+  });
+});
+
+describe('production layer config', () => {
+  it('classifies the public contracts entrypoint as leaf-safe', () => {
+    expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
   });
 });
 

@@ -8,7 +8,7 @@ model the internal boundaries that would support a future multi-package split.
 | Layer              | Current roots                                                    | Intended role                                   |
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
-| `contracts`        | `src/contracts`                                                  | Leaf-safe shared contracts and schemas          |
+| `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -38,8 +38,8 @@ npm run architecture:check
 
 ## First Leaf Layer
 
-`src/contracts` is the first intentionally leaf-safe surface. It currently owns
-the dependency-free-or-`zod` subset that can plausibly become a future
+`src/contracts` and its `src/contracts.ts` public entrypoint are the first intentionally
+leaf-safe surface. They currently own the dependency-free-or-`zod` subset that can plausibly become a future
 `@promptfoo/schema` package:
 
 - shared token/input contracts
