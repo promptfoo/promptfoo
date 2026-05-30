@@ -39,7 +39,7 @@ describe('ModelAudit JSON Schema', () => {
   it('declares its public Draft 2020-12 identifier', () => {
     expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
     expect(schema.$id).toBe(
-      'https://promptfoo.dev/schemas/modelaudit/v0.2.45/modelaudit-scan-result.schema.json',
+      'https://www.promptfoo.dev/schemas/modelaudit/v0.2.45/modelaudit-scan-result.schema.json',
     );
   });
 

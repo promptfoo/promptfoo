@@ -34,7 +34,7 @@ def build_schema(result_model: Any, version: str) -> dict[str, Any]:
     return {
         "$schema": SCHEMA_DRAFT_URI,
         "$id": (
-            "https://promptfoo.dev/schemas/modelaudit/"
+            "https://www.promptfoo.dev/schemas/modelaudit/"
             f"v{version}/modelaudit-scan-result.schema.json"
         ),
         **schema,
