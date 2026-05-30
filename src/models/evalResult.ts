@@ -237,38 +237,41 @@ function redactHttpHeadersOnMetadata<T>(metadata: T): T {
   }
 
   const m = metadata as Record<string, unknown>;
-  let mutated = false;
-  const nextMetadata: Record<string, unknown> = { ...m };
+  let nextMetadata: Record<string, unknown> | undefined;
 
   const legacyHeaders = m.headers;
   if (legacyHeaders && typeof legacyHeaders === 'object' && !Array.isArray(legacyHeaders)) {
     const redacted = redactSensitiveHeaders(legacyHeaders as Record<string, unknown>);
     if (redacted) {
-      nextMetadata.headers = redacted;
-      mutated = true;
+      nextMetadata = { ...m, headers: redacted };
     }
   }
 
   const http = m.http;
   if (!http || typeof http !== 'object' || Array.isArray(http)) {
-    return (mutated ? nextMetadata : metadata) as T;
+    return (nextMetadata ?? metadata) as T;
   }
 
   const httpRecord = http as Record<string, unknown>;
-  const nextHttp: Record<string, unknown> = { ...httpRecord };
+  let nextHttp: Record<string, unknown> | undefined;
 
   for (const slot of ['headers', 'requestHeaders'] as const) {
     const slotValue = httpRecord[slot];
     if (slotValue && typeof slotValue === 'object' && !Array.isArray(slotValue)) {
       const redacted = redactSensitiveHeaders(slotValue as Record<string, unknown>);
       if (redacted) {
+        nextHttp ??= { ...httpRecord };
         nextHttp[slot] = redacted;
-        mutated = true;
       }
     }
   }
 
-  return (mutated ? { ...nextMetadata, http: nextHttp } : metadata) as T;
+  if (!nextHttp) {
+    return (nextMetadata ?? metadata) as T;
+  }
+  nextMetadata ??= { ...m };
+  nextMetadata.http = nextHttp;
+  return nextMetadata as T;
 }
 
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
