@@ -42,7 +42,7 @@ function normalizeRoutePath(prefix: string, routePath: string) {
 
 function sourceRouteOperations() {
   const routePattern =
-    /(?:app|\w+Router|router)\.(get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\2/g;
+    /(?:app|\w+Router|router)\.(get|post|put|patch|delete|head)\(\s*(['"`])([^'"`]+)\2/g;
 
   return [...ROUTE_PREFIXES.entries()].flatMap(([file, prefix]) => {
     const source = fs.readFileSync(path.resolve(file), 'utf8');
