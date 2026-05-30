@@ -8,11 +8,15 @@ import ts from 'typescript';
 export interface LayerDefinition {
   name: string;
   roots: string[];
+  allowedDependencies: string[];
+  allowedImportPaths?: string[];
 }
 
 export interface LayerConfig {
   publicFacade: string;
   leafLayers?: string[];
+  aliases?: Record<string, string>;
+  ignoredRoots?: string[];
   layers: LayerDefinition[];
 }
 
@@ -33,23 +37,42 @@ export function normalizePath(filePath: string): string {
 
 export function readLayerConfig(repoRoot: string): LayerConfig {
   const configPath = path.join(repoRoot, 'architecture/layers.json');
-  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as LayerConfig;
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LayerConfig;
+  for (const layer of config.layers) {
+    if (!Array.isArray(layer.allowedDependencies)) {
+      throw new Error(`Architecture layer "${layer.name}" must declare allowedDependencies.`);
+    }
+  }
+  return config;
 }
 
-export function getSourceFiles(repoRoot: string, includeApp = true): string[] {
+export function getSourceFiles(
+  repoRoot: string,
+  includeApp = true,
+  ignoredRoots: string[] = [],
+): string[] {
   return globSync('src/**/*.{ts,tsx,mts,cts}', {
     cwd: repoRoot,
-    ignore: includeApp ? ['src/**/*.d.ts'] : ['src/**/*.d.ts', 'src/app/**'],
+    ignore: [
+      'src/**/*.d.ts',
+      'src/**/node_modules/**',
+      ...(includeApp ? [] : ['src/app/**']),
+      ...ignoredRoots.map((root) => `${normalizePath(root)}/**`),
+    ],
     nodir: true,
   }).map(normalizePath);
+}
+
+function isWithinRoot(relativePath: string, root: string): boolean {
+  const normalizedPath = normalizePath(relativePath);
+  const normalizedRoot = normalizePath(root);
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
 }
 
 export function getLayerForFile(relativePath: string, config: LayerConfig): string {
   const normalizedPath = normalizePath(relativePath);
   for (const layer of config.layers) {
-    if (
-      layer.roots.some((root) => normalizedPath === root || normalizedPath.startsWith(`${root}/`))
-    ) {
+    if (layer.roots.some((root) => isWithinRoot(normalizedPath, root))) {
       return layer.name;
     }
   }
@@ -101,6 +124,14 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
       specifiers.push(node.moduleReference.expression.text);
     }
 
+    if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteralLike(node.argument.literal)
+    ) {
+      specifiers.push(node.argument.literal.text);
+    }
+
     if (ts.isCallExpression(node)) {
       addStaticCallSpecifier(node);
     }
@@ -116,14 +147,29 @@ export function resolveInternalModule(
   repoRoot: string,
   importerRelativePath: string,
   specifier: string,
+  aliases: Record<string, string> = {},
 ): string | undefined {
-  if (!specifier.startsWith('.') && specifier !== 'src' && !specifier.startsWith('src/')) {
+  const matchingAlias = Object.keys(aliases)
+    .sort((left, right) => right.length - left.length)
+    .find((alias) => specifier === alias || specifier.startsWith(`${alias}/`));
+  const aliasedPath = matchingAlias
+    ? `${aliases[matchingAlias]}${specifier.slice(matchingAlias.length)}`
+    : undefined;
+
+  if (
+    !specifier.startsWith('.') &&
+    specifier !== 'src' &&
+    !specifier.startsWith('src/') &&
+    !aliasedPath
+  ) {
     return undefined;
   }
 
-  const unresolvedPath = specifier.startsWith('.')
-    ? path.resolve(path.dirname(path.join(repoRoot, importerRelativePath)), specifier)
-    : path.resolve(repoRoot, specifier);
+  const unresolvedPath = aliasedPath
+    ? path.resolve(repoRoot, aliasedPath)
+    : specifier.startsWith('.')
+      ? path.resolve(path.dirname(path.join(repoRoot, importerRelativePath)), specifier)
+      : path.resolve(repoRoot, specifier);
 
   const runtimeExtension = path.extname(unresolvedPath);
   const runtimeSourceCandidates = (
@@ -138,7 +184,13 @@ export function resolveInternalModule(
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return normalizePath(path.relative(repoRoot, candidate));
+      const relativeCandidate = normalizePath(path.relative(repoRoot, candidate));
+      if (
+        relativeCandidate.startsWith('src/') &&
+        TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
+      ) {
+        return relativeCandidate;
+      }
     }
   }
 
@@ -163,17 +215,23 @@ export function getPackageName(specifier: string): string | undefined {
   return packageName;
 }
 
-export type BoundaryViolationKind = 'facade' | 'leaf';
+export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'path';
 
 export interface BoundaryViolation {
   kind: BoundaryViolationKind;
   importer: string;
   importerLayer: string;
   specifier: string;
-  /** Resolved import target. Set for both kinds. */
+  /** Resolved import target. Set for every violation kind. */
   imported: string;
-  /** Layer of the resolved import. Set for both kinds; equals 'facade' when kind === 'facade'. */
+  /** Layer of the resolved import. Set for every violation kind. */
   importedLayer: string;
+}
+
+export function findUnclassifiedFiles(repoRoot: string, config: LayerConfig): string[] {
+  return getSourceFiles(repoRoot, true, config.ignoredRoots).filter(
+    (sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified',
+  );
 }
 
 /**
@@ -185,9 +243,10 @@ export interface BoundaryViolation {
 export function findViolations(repoRoot: string, config: LayerConfig): BoundaryViolation[] {
   const publicFacade = normalizePath(config.publicFacade);
   const leafLayers = new Set(config.leafLayers ?? []);
+  const layersByName = new Map(config.layers.map((layer) => [layer.name, layer]));
   const violations: BoundaryViolation[] = [];
 
-  for (const importer of getSourceFiles(repoRoot)) {
+  for (const importer of getSourceFiles(repoRoot, true, config.ignoredRoots)) {
     if (normalizePath(importer) === publicFacade) {
       continue;
     }
@@ -196,10 +255,12 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
     const importerLayer = getLayerForFile(importer, config);
 
     for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
-      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier);
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
       if (!resolvedImport) {
         continue;
       }
+
+      const importedLayer = getLayerForFile(resolvedImport, config);
 
       if (resolvedImport === publicFacade) {
         violations.push({
@@ -208,12 +269,11 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
           importerLayer,
           specifier,
           imported: resolvedImport,
-          importedLayer: getLayerForFile(resolvedImport, config),
+          importedLayer,
         });
       }
 
       if (leafLayers.has(importerLayer)) {
-        const importedLayer = getLayerForFile(resolvedImport, config);
         if (importedLayer !== importerLayer) {
           violations.push({
             kind: 'leaf',
@@ -224,6 +284,39 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
             importedLayer,
           });
         }
+      }
+
+      const importerConfig = layersByName.get(importerLayer);
+      if (
+        importedLayer !== importerLayer &&
+        resolvedImport !== publicFacade &&
+        !leafLayers.has(importerLayer) &&
+        importerConfig &&
+        !(importerConfig.allowedDependencies ?? []).includes(importedLayer)
+      ) {
+        violations.push({
+          kind: 'layer',
+          importer,
+          importerLayer,
+          specifier,
+          imported: resolvedImport,
+          importedLayer,
+        });
+      }
+
+      if (
+        importedLayer !== importerLayer &&
+        importerConfig?.allowedImportPaths &&
+        !importerConfig.allowedImportPaths.includes(resolvedImport)
+      ) {
+        violations.push({
+          kind: 'path',
+          importer,
+          importerLayer,
+          specifier,
+          imported: resolvedImport,
+          importedLayer,
+        });
       }
     }
   }
