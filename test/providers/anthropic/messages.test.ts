@@ -14,6 +14,14 @@ import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
+type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
+  output_tokens_details?: { thinking_tokens?: number } | null;
+};
+
+type AnthropicTestMessage = Anthropic.Messages.Message & {
+  usage: AnthropicUsageWithOutputDetails;
+};
+
 const mcpMocks = vi.hoisted(() => {
   const initialize = vi.fn();
   const cleanup = vi.fn();
@@ -2311,7 +2319,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      const mockFinalMessage: Anthropic.Messages.Message = {
+      const mockFinalMessage: AnthropicTestMessage = {
         content: [{ type: 'text', text: '{"status":"complete"}', citations: [] }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
