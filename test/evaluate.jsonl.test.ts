@@ -106,6 +106,38 @@ describe('programmatic JSONL output', () => {
     );
   });
 
+  it('preserves top-level token usage when finalizing persisted rows', async () => {
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'token-usage-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: {
+          total: 6,
+          prompt: 4,
+          completion: 2,
+        },
+      }),
+    };
+
+    await evaluate({
+      outputPath,
+      prompts: ['Test prompt'],
+      providers: [provider],
+      tests: [{ vars: {} }],
+      writeLatestResults: true,
+    });
+
+    expect(readJsonl(outputPath)[0].tokenUsage).toEqual({
+      ...createEmptyTokenUsage(),
+      total: 6,
+      prompt: 4,
+      completion: 2,
+      numRequests: 1,
+    });
+  });
+
   it('exports non-persisted rows with sensitive HTTP metadata redacted', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
@@ -167,6 +199,9 @@ describe('programmatic JSONL output', () => {
             headers: {
               'set-cookie': 'session=secret',
             },
+            requestHeaders: {
+              authorization: 'Bearer sk-should-not-persist',
+            },
           },
         },
         tokenUsage: createEmptyTokenUsage(),
@@ -184,6 +219,8 @@ describe('programmatic JSONL output', () => {
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
     expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
     expect(JSON.stringify(result)).not.toContain('session=secret');
+    expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
   });
 });
