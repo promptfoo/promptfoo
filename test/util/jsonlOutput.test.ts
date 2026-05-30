@@ -164,4 +164,19 @@ describe('JSONL output with proper line endings', () => {
 
     expect(multiContent).toBe(expectedContent);
   });
+
+  it('should preserve the existing artifact when a rewrite fails', async () => {
+    fs.writeFileSync(tempFilePath, '{"status":"existing"}\n');
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+      throw new Error('simulated rewrite failure');
+    });
+
+    await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
+      'simulated rewrite failure',
+    );
+
+    expect(fs.readFileSync(tempFilePath, 'utf8')).toBe('{"status":"existing"}\n');
+    expect(fs.readdirSync(tempDir)).toEqual(['test-export.jsonl']);
+  });
 });

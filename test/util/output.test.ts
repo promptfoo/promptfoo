@@ -48,6 +48,8 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  rename: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn(),
   open: vi.fn().mockResolvedValue(mockFileHandle),
 }));
@@ -1113,7 +1115,8 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval(config);
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
-    expect(fsPromises.writeFile).toHaveBeenCalledWith(outputPath, '');
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), '');
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
   it('writeOutput with json and txt output', async () => {

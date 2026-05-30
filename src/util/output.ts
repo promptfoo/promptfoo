@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -458,14 +459,25 @@ export async function writeOutput(
     });
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
-    // Truncate file first for consistent behavior with other formats
-    await fsPromises.writeFile(outputPath, '');
-    for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text =
-        batchResults
-          .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
-          .join(os.EOL) + os.EOL;
-      await fsPromises.appendFile(outputPath, text);
+    const tempOutputPath = path.join(
+      path.dirname(outputPath),
+      `.${path.basename(outputPath)}.${randomUUID()}.tmp`,
+    );
+    try {
+      await fsPromises.writeFile(tempOutputPath, '');
+      for await (const batchResults of evalRecord.fetchResultsBatched()) {
+        const text =
+          batchResults
+            .map((result) =>
+              JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))),
+            )
+            .join(os.EOL) + os.EOL;
+        await fsPromises.appendFile(tempOutputPath, text);
+      }
+      await fsPromises.rename(tempOutputPath, outputPath);
+    } catch (error) {
+      await fsPromises.rm(tempOutputPath, { force: true }).catch(() => {});
+      throw error;
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
