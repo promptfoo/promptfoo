@@ -583,6 +583,100 @@ describe('GoogleAuthManager', () => {
       }
     });
 
+    it('should forward matching metadata warning messages with a different warning type', async () => {
+      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockImplementation(async () => {
+          process.emitWarning(
+            'received unexpected error = All promises were rejected code = UNKNOWN',
+            'DeprecationWarning',
+          );
+          throw new Error('no default credentials');
+        });
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(emitWarningSpy).toHaveBeenCalledWith(
+          'received unexpected error = All promises were rejected code = UNKNOWN',
+          'DeprecationWarning',
+        );
+      } finally {
+        getOAuthClientSpy.mockRestore();
+        emitWarningSpy.mockRestore();
+      }
+    });
+
+    it('should forward Error instance warnings during optional probes', async () => {
+      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const warning = new Error('different warning');
+      warning.name = 'MetadataLookupWarning';
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockImplementation(async () => {
+          process.emitWarning(warning);
+          throw new Error('no default credentials');
+        });
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(emitWarningSpy).toHaveBeenCalledWith(warning);
+      } finally {
+        getOAuthClientSpy.mockRestore();
+        emitWarningSpy.mockRestore();
+      }
+    });
+
+    it('should restore process.emitWarning after an optional probe', async () => {
+      const originalEmitWarning = process.emitWarning;
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockRejectedValue(new Error('no default credentials'));
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(process.emitWarning).toBe(originalEmitWarning);
+      } finally {
+        getOAuthClientSpy.mockRestore();
+      }
+    });
+
+    it('should restore process.emitWarning after overlapping probes settle out of order', async () => {
+      const originalEmitWarning = process.emitWarning;
+      let rejectFirstProbe!: (reason?: unknown) => void;
+      let rejectSecondProbe!: (reason?: unknown) => void;
+      const firstProbeAuthCall = new Promise((_, reject) => {
+        rejectFirstProbe = reject;
+      });
+      const secondProbeAuthCall = new Promise((_, reject) => {
+        rejectSecondProbe = reject;
+      });
+      const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+      getOAuthClientSpy
+        .mockImplementationOnce(() => firstProbeAuthCall as Promise<any>)
+        .mockImplementationOnce(() => secondProbeAuthCall as Promise<any>);
+
+      const firstProbe = GoogleAuthManager.hasDefaultCredentials();
+      GoogleAuthManager.clearCache();
+      const secondProbe = GoogleAuthManager.hasDefaultCredentials();
+
+      try {
+        rejectFirstProbe(new Error('first probe failed'));
+        await expect(firstProbe).resolves.toBe(false);
+        expect(process.emitWarning).not.toBe(originalEmitWarning);
+
+        rejectSecondProbe(new Error('second probe failed'));
+        await expect(secondProbe).resolves.toBe(false);
+        expect(process.emitWarning).toBe(originalEmitWarning);
+      } finally {
+        rejectFirstProbe(new Error('cleanup'));
+        rejectSecondProbe(new Error('cleanup'));
+        await Promise.allSettled([firstProbe, secondProbe]);
+        process.emitWarning = originalEmitWarning;
+        getOAuthClientSpy.mockRestore();
+      }
+    });
+
     it('should clear cached default credential probe results', async () => {
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')

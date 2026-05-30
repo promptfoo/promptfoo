@@ -22,26 +22,42 @@ import type { CompletionOptions } from './types';
 const EXPECTED_GCP_METADATA_LOOKUP_WARNING =
   'received unexpected error = All promises were rejected code = UNKNOWN';
 
+let activeGcpMetadataLookupWarningSuppressions = 0;
+let restoreEmitWarning: (() => void) | undefined;
+
 // The optional ADC probe should stay quiet when gcp-metadata cannot reach its hosts,
 // while explicit Vertex authentication and unrelated process warnings remain visible.
 async function suppressExpectedGcpMetadataLookupWarning<T>(action: () => Promise<T>): Promise<T> {
-  const originalEmitWarning = process.emitWarning;
+  if (activeGcpMetadataLookupWarningSuppressions === 0) {
+    const originalEmitWarning = process.emitWarning;
+    const wrappedEmitWarning = ((warning: string | Error, ...args: unknown[]) => {
+      const message = warning instanceof Error ? warning.message : warning;
+      const type = warning instanceof Error ? warning.name : args[0];
 
-  process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
-    const message = warning instanceof Error ? warning.message : warning;
-    const type = warning instanceof Error ? warning.name : args[0];
+      if (type === 'MetadataLookupWarning' && message === EXPECTED_GCP_METADATA_LOOKUP_WARNING) {
+        return;
+      }
 
-    if (type === 'MetadataLookupWarning' && message === EXPECTED_GCP_METADATA_LOOKUP_WARNING) {
-      return;
-    }
+      Reflect.apply(originalEmitWarning, process, [warning, ...args]);
+    }) as typeof process.emitWarning;
 
-    Reflect.apply(originalEmitWarning, process, [warning, ...args]);
-  }) as typeof process.emitWarning;
+    process.emitWarning = wrappedEmitWarning;
+    restoreEmitWarning = () => {
+      if (process.emitWarning === wrappedEmitWarning) {
+        process.emitWarning = originalEmitWarning;
+      }
+    };
+  }
 
+  activeGcpMetadataLookupWarningSuppressions += 1;
   try {
     return await action();
   } finally {
-    process.emitWarning = originalEmitWarning;
+    activeGcpMetadataLookupWarningSuppressions -= 1;
+    if (activeGcpMetadataLookupWarningSuppressions === 0) {
+      restoreEmitWarning?.();
+      restoreEmitWarning = undefined;
+    }
   }
 }
 
