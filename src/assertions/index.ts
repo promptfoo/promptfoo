@@ -40,6 +40,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
+import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
@@ -119,6 +120,7 @@ const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
+  'agent-rubric',
   'answer-relevance',
   'context-faithfulness',
   'context-recall',
@@ -225,6 +227,7 @@ const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
   (params: AssertionParams) => GradingResult | Promise<GradingResult>
 > = {
+  'agent-rubric': handleAgentRubric,
   'answer-relevance': handleAnswerRelevance,
   bleu: handleBleuScore,
   classifier: handleClassifier,

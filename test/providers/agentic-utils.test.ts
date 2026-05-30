@@ -7,8 +7,11 @@ import {
   cacheResponse,
   getCachedResponse,
   initializeAgenticCache,
+  isAgenticProvider,
   resolveAgenticWorkingDir,
 } from '../../src/providers/agentic-utils';
+
+import type { ApiProvider } from '../../src/types/index';
 
 vi.mock('../../src/cache');
 
@@ -27,6 +30,32 @@ describe('agentic-utils', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('isAgenticProvider', () => {
+    const provider = (id: string): ApiProvider =>
+      ({
+        id: () => id,
+        callApi: vi.fn(),
+      }) as unknown as ApiProvider;
+
+    it.each([
+      'openai:codex-sdk',
+      'openai:codex-sdk:gpt-5.5',
+      'openai:codex-app-server:gpt-5.5',
+      'openai:codex-desktop',
+      'anthropic:claude-agent-sdk',
+      'anthropic:claude-code:sonnet',
+      'opencode',
+      'opencode:sdk',
+    ])('recognizes %s as a coding-agent provider', (id) => {
+      expect(isAgenticProvider(provider(id))).toBe(true);
+    });
+
+    it('does not classify plain model providers as coding-agent runtimes', () => {
+      expect(isAgenticProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
+      expect(isAgenticProvider(provider('anthropic:messages:claude-opus-4-6'))).toBe(false);
+    });
   });
 
   describe('getCachedResponse', () => {
