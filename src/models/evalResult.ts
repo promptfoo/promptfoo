@@ -332,34 +332,65 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
-export function sanitizeResultForJsonlArtifact<T extends EvaluateResult>(result: T): T {
+export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
   const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
   const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
   const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
   const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
 
-  const response = projectProviderResponse(sanitizeResponseForDb(sanitizeForDb(result.response)), {
-    stripMetadata: shouldStripMetadata,
-    stripOutput: shouldStripResponseOutput,
-  });
-  const testCase = projectTestCase(sanitizeForDbWithSecrets(result.testCase), {
-    stripMetadata: shouldStripMetadata,
-    stripVars: shouldStripTestVars,
-  });
+  const artifactResult = result as T & Record<string, unknown>;
+  const response = projectProviderResponse(
+    sanitizeResponseForDb(
+      sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
+    ) ?? undefined,
+    {
+      stripMetadata: shouldStripMetadata,
+      stripOutput: shouldStripResponseOutput,
+    },
+  );
 
   return {
     ...result,
-    testCase,
-    vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(result.vars),
-    prompt: projectPrompt(sanitizeForDbWithSecrets(result.prompt), shouldStripPromptText),
-    provider: sanitizeProvider(result.provider),
+    ...(artifactResult.testCase
+      ? {
+          testCase: projectTestCase(
+            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
+            {
+              stripMetadata: shouldStripMetadata,
+              stripVars: shouldStripTestVars,
+            },
+          ),
+        }
+      : {}),
+    ...(artifactResult.vars === undefined
+      ? {}
+      : {
+          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars),
+        }),
+    ...(artifactResult.prompt
+      ? {
+          prompt: projectPrompt(
+            sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
+            shouldStripPromptText,
+          ),
+        }
+      : {}),
+    ...(artifactResult.provider
+      ? {
+          provider: sanitizeProvider(
+            artifactResult.provider as ApiProvider | ProviderOptions | string,
+          ),
+        }
+      : {}),
     response,
     gradingResult: shouldStripGradingResult
       ? null
-      : sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
-    namedScores: sanitizeForDb(result.namedScores),
-    metadata: shouldStripMetadata ? {} : sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
+      : sanitizeGradingResultForDb(sanitizeForDb(artifactResult.gradingResult)),
+    namedScores: sanitizeForDb(artifactResult.namedScores),
+    metadata: shouldStripMetadata
+      ? {}
+      : sanitizeMetadataForDb(sanitizeForDb(artifactResult.metadata)),
   } as T;
 }
 
@@ -705,8 +736,10 @@ export default class EvalResult {
     if (this.response?.tokenUsage) {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
-    if (this.gradingResult?.tokensUsed) {
+    if (this.gradingResult) {
       tokenUsage.assertions.numRequests = (tokenUsage.assertions.numRequests ?? 0) + 1;
+    }
+    if (this.gradingResult?.tokensUsed) {
       accumulateAssertionTokenUsage(tokenUsage.assertions, this.gradingResult.tokensUsed);
     }
 
