@@ -790,6 +790,35 @@ describe('Eval', () => {
     );
   });
 
+  it('navigates a pinned route to root when its eval is deleted and the recents fetch fails', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'doomed-eval',
+    });
+    // /api/results is unavailable, but the socket told us the pinned eval was deleted — the user
+    // must not be stranded on the now-gone /eval/:id.
+    vi.mocked(callApi).mockResolvedValue({ ok: false } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="doomed-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    mockNavigate.mockClear();
+    baseMockTableStore.setEvalId.mockClear();
+
+    await act(async () => {
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['doomed-eval'] });
+    });
+
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('');
+    expect(mockNavigate).toHaveBeenCalledWith('/eval', { replace: true });
+  });
+
   it('serializes concurrent socket events so an older reload cannot win the table', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,

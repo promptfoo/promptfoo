@@ -24,6 +24,7 @@ vi.mock('../../src/database/signal', async () => {
 
 vi.mock('../../src/models/evalMutation', () => ({
   invalidateEvaluationCache: vi.fn(),
+  invalidateEvaluationCaches: vi.fn(),
 }));
 
 vi.mock('../../src/util/server', () => ({
@@ -52,7 +53,10 @@ vi.mock('../../src/models/eval', () => ({
 import { readSignalFile, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { invalidateEvaluationCache } from '../../src/models/evalMutation';
+import {
+  invalidateEvaluationCache,
+  invalidateEvaluationCaches,
+} from '../../src/models/evalMutation';
 // Import after mocks are set up
 import { ServerError } from '../../src/server/errors';
 import { handleServerError, startServer } from '../../src/server/server';
@@ -277,7 +281,7 @@ describe('server', () => {
       const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
       onSignalChange();
 
-      expect(invalidateEvaluationCache).toHaveBeenCalledWith('eval-12345-abcdef');
+      expect(invalidateEvaluationCaches).toHaveBeenCalledWith(['eval-12345-abcdef']);
 
       await new Promise((resolve) => setImmediate(resolve));
 
@@ -455,8 +459,7 @@ describe('server', () => {
       await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-Y' }));
       await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-Z' }));
       // Every coalesced eval's process-local caches are invalidated, not just the latest.
-      expect(invalidateEvaluationCache).toHaveBeenCalledWith('eval-Y');
-      expect(invalidateEvaluationCache).toHaveBeenCalledWith('eval-Z');
+      expect(invalidateEvaluationCaches).toHaveBeenCalledWith(['eval-Y', 'eval-Z']);
 
       triggerSignal('SIGINT');
       await serverPromise;

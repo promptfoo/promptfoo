@@ -23,7 +23,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
-import { invalidateEvaluationCache } from '../models/evalMutation';
+import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
@@ -405,9 +405,7 @@ export async function startServer(
         // caches before serving the next request. Invalidate every updated eval (not just the
         // latest), or all of them for an unscoped signal.
         if (scopedUpdateIds.length > 0) {
-          for (const id of scopedUpdateIds) {
-            invalidateEvaluationCache(id);
-          }
+          invalidateEvaluationCaches(scopedUpdateIds);
         } else {
           invalidateEvaluationCache(signal.evalId);
         }

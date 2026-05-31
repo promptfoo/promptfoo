@@ -194,6 +194,16 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
     if (!newRecentEvals) {
+      // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
+      // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.
+      if (
+        fetchId &&
+        deletedEvalIds !== undefined &&
+        (deletedEvalIds.length === 0 || deletedEvalIds.includes(fetchId))
+      ) {
+        clearEvalState();
+        navigate(EVAL_ROUTES.ROOT, { replace: true });
+      }
       return;
     }
     if (newRecentEvals.length === 0) {

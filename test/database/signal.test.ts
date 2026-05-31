@@ -346,6 +346,26 @@ describe('signal', () => {
       expect(lastWrittenSignal()).toMatch(/^eval-same-id:\d{4}-\d{2}-\d{2}T/);
     });
 
+    it('treats a coalesced delete as "all deleted" when either side has no ids', () => {
+      // A pending delete-all (no ids) folded with a specific delete must stay "all deleted".
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ type: 'delete', timestamp: new Date().toISOString() }),
+      );
+      updateSignalFileForDeletedEvals(['eval-specific']);
+      expect(JSON.parse(lastWrittenSignal()).deletedEvalIds).toBeUndefined();
+
+      // ...and the reverse: a specific pending delete folded with a delete-all stays "all".
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-pending'],
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      updateSignalFileForDeletedEvals(undefined);
+      expect(JSON.parse(lastWrittenSignal()).deletedEvalIds).toBeUndefined();
+    });
+
     it('carries every pending scoped update into a following delete', () => {
       mockReadFileSync.mockReturnValue(
         JSON.stringify({

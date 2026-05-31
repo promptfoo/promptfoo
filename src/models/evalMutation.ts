@@ -14,6 +14,18 @@ export function invalidateEvaluationCache(evalId?: string): void {
 }
 
 /**
+ * Like {@link invalidateEvaluationCache} but for several evals at once: clears the standalone-eval
+ * LRU once (it has no per-eval granularity, so repeating it per id is wasteful) and the count
+ * cache for each id.
+ */
+export function invalidateEvaluationCaches(evalIds: string[]): void {
+  clearStandaloneEvalCache();
+  for (const id of evalIds) {
+    clearCountCache(id);
+  }
+}
+
+/**
  * Call after creating or mutating an eval's data (results, prompts, ratings). Invalidates
  * this process's caches and writes a scoped update signal so a running `promptfoo view`
  * server refreshes clients viewing this eval (and the root route, which follows the latest).
@@ -30,15 +42,12 @@ export function notifyEvaluationChanged(evalId?: string): void {
  */
 export function notifyEvaluationsDeleted(evalIds?: string[]): void {
   // The eval list changed, so always refresh the standalone-eval cache. Only the deleted evals'
-  // counts go stale, so scope the count-cache clear to them; a full clear is reserved for the
-  // "all evals deleted" case (no ids).
-  clearStandaloneEvalCache();
+  // counts go stale, so scope the count-cache clear to them; a full clear (no id) is reserved
+  // for the "all evals deleted" case.
   if (evalIds) {
-    for (const id of evalIds) {
-      clearCountCache(id);
-    }
+    invalidateEvaluationCaches(evalIds);
   } else {
-    clearCountCache();
+    invalidateEvaluationCache();
   }
   updateSignalFileForDeletedEvals(evalIds);
 }
