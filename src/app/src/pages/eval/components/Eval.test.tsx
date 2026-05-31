@@ -762,6 +762,84 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
   });
 
+  it('reloads a pinned eval on its own scoped update even when the recents fetch fails', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'pinned-eval',
+    });
+    // /api/results is transiently unavailable; the pinned eval's own /eval/:id/table reload
+    // must still run rather than being dropped.
+    vi.mocked(callApi).mockResolvedValue({ ok: false } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    baseMockTableStore.fetchEvalData.mockClear();
+
+    await act(async () => {
+      await mockSocketHandlers.get('update')?.({ evalId: 'pinned-eval' });
+    });
+
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+      'pinned-eval',
+      expect.objectContaining({ skipLoadingState: true }),
+    );
+  });
+
+  it('serializes concurrent socket events so an older reload cannot win the table', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'eval-Y',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'eval-Z' }, { evalId: 'eval-Y' }] }),
+    } as Response);
+
+    const fetchStarts: string[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    baseMockTableStore.fetchEvalData.mockImplementation(async (id: string) => {
+      fetchStarts.push(id);
+      if (fetchStarts.length === 1) {
+        await firstGate;
+      }
+      return { table: mockTable, config: {}, totalCount: 0, filteredCount: 0 };
+    });
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const handler = mockSocketHandlers.get('update');
+    await act(async () => {
+      // Fire two events without awaiting between them (real socket.io listener concurrency).
+      void handler?.({ evalId: 'eval-Y' }); // reloads the current eval; blocked on the gate
+      const second = handler?.({ evalId: 'eval-Z' }); // queued behind the first
+      await vi.advanceTimersByTimeAsync(0);
+      // The second reload has NOT started — it is serialized behind the first.
+      expect(fetchStarts).toEqual(['eval-Y']);
+      releaseFirst();
+      await second;
+    });
+
+    // Once the first completes, the second runs — eval-Z (the latest) is fetched last and wins.
+    expect(fetchStarts).toEqual(['eval-Y', 'eval-Z']);
+  });
+
   it('clears the eval state when a socket update reports no remaining evals', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 

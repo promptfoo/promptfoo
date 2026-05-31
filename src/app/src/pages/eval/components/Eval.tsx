@@ -164,6 +164,34 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
+    const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
+    const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
+
+    // Reload the displayed table in the background, suppressing the page-level loading
+    // flash. Streaming is scoped to the actual reload so signals that don't change the
+    // current view (e.g. a scoped update for a different pinned eval) never toggle the
+    // streaming indicator. loadEvalById sets the eval id itself.
+    const reloadInBackground = async (id: string) => {
+      setIsStreaming(true);
+      try {
+        await loadEvalById(id, true);
+      } finally {
+        setIsStreaming(false);
+      }
+    };
+
+    // Pinned /eval/:id route + a scoped update for THIS eval: reload it directly via
+    // /eval/:id/table. The recent-evals list is only needed for the dropdown, so a transient
+    // /api/results failure must not drop the pinned eval's own refresh.
+    if (fetchId && deletedEvalIds === undefined && scopedEvalId === fetchId) {
+      const recents = await fetchRecentFileEvals({ reportFailure: false });
+      if (recents && recents.length > 0) {
+        setDefaultEvalId(recents[0].evalId);
+      }
+      await reloadInBackground(fetchId);
+      return;
+    }
+
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
     if (!newRecentEvals) {
       return;
@@ -177,23 +205,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const latestEvalId = newRecentEvals[0].evalId;
-    const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
     const displayedEvalId = fetchId ?? currentEvalIdRef.current;
     setDefaultEvalId(latestEvalId);
-
-    // Reload the displayed table in the background, suppressing the page-level loading
-    // flash. Streaming is scoped to the actual reload so signals that don't change the
-    // current view (e.g. a scoped update for a different pinned eval) never toggle the
-    // streaming indicator.
-    const reloadInBackground = async (id: string) => {
-      setIsStreaming(true);
-      try {
-        // loadEvalById sets the eval id itself, so no separate setEvalId is needed here.
-        await loadEvalById(id, true);
-      } finally {
-        setIsStreaming(false);
-      }
-    };
 
     if (deletedEvalIds) {
       if (
@@ -209,7 +222,6 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
-    const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
     const updatedEvalId = scopedEvalId ?? latestEvalId;
     const shouldReload =
       fetchId === null
@@ -425,18 +437,33 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     const socket = SocketIOClient(socketUrl, { path: socketPath });
 
+    // socket.io does not await event handlers, so two quickly-emitted events (e.g. the delete
+    // and update components of one coalesced signal, or several back-to-back scoped updates)
+    // would otherwise run their async table reloads concurrently — and whichever DB response
+    // landed last, possibly an OLDER eval's, would win the table. Serialize the handler runs so
+    // events apply in arrival order. The returned promise lets tests await the queued work.
+    let pending: Promise<void> = Promise.resolve();
+    const enqueue = (data: EvalRefreshSignal): Promise<void> => {
+      pending = pending
+        .then(() => handleResultsFileRef.current(data))
+        .catch((error) => {
+          logger.error('[Eval] Error handling socket update', { error });
+        });
+      return pending;
+    };
+
     socket
-      .on('init', async (data) => {
+      .on('init', (data) => {
         logger.debug('[Eval] Initialized socket connection', { data });
-        await handleResultsFileRef.current(data);
+        return enqueue(data);
       })
       /**
        * The user has run `promptfoo eval` and a new latest eval
        * result has been received.
        */
-      .on('update', async (data) => {
+      .on('update', (data) => {
         logger.debug('[Eval] Received data update', { data });
-        await handleResultsFileRef.current(data);
+        return enqueue(data);
       });
 
     return () => {
