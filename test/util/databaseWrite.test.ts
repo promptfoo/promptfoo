@@ -1,5 +1,6 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
 import { datasetsTable, evalsTable, promptsTable, tagsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import {
@@ -13,6 +14,14 @@ import {
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateSummaryV2 } from '../factories/eval';
 
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
+
 function expectWrittenHistoryCached() {
   expect(getCachedStandaloneEvals(getStandaloneEvalCacheKey())).toBeDefined();
 }
@@ -20,6 +29,10 @@ function expectWrittenHistoryCached() {
 describe('writeResultsToDatabase', () => {
   beforeAll(async () => {
     await runDbMigrations();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   beforeEach(async () => {
@@ -111,5 +124,6 @@ describe('writeResultsToDatabase', () => {
     const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
     expect(afterIds).toContain(firstEvalId);
     expect(afterIds).toContain(secondEvalId);
+    expect(updateSignalFile).toHaveBeenCalledWith(secondEvalId);
   });
 });

@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { updateSignalFile } from '../../src/database/signal';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -12,10 +12,16 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
 import { type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -32,6 +38,7 @@ vi.mock('../../src/database/signal', async () => {
   return {
     ...actual,
     updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
   };
 });
 
@@ -126,9 +133,12 @@ describe('evaluator', () => {
         failureReason: ResultFailureReason.NONE,
       });
 
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
       await eval_.setResults([result]);
 
       const persistedResults = await EvalResult.findManyByEvalId(eval_.id);
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
       expect(persistedResults).toHaveLength(1);
       expect(persistedResults[0]).toEqual(
         expect.objectContaining({
@@ -359,14 +369,19 @@ describe('evaluator', () => {
   describe('delete', () => {
     it('should delete an evaluation', async () => {
       const eval1 = await EvalFactory.create();
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       const eval_ = await Eval.findById(eval1.id);
       expect(eval_).toBeDefined();
+      expect(getCachedStandaloneEvals(cacheKey)).toBeDefined();
 
       await eval1.delete();
 
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+      expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval1.id]);
     });
 
     it('should delete traces and spans for an evaluation', async () => {
@@ -391,6 +406,15 @@ describe('evaluator', () => {
       expect(await Eval.findById(eval1.id)).toBeUndefined();
       await expect(db.select().from(tracesTable).all()).resolves.toHaveLength(0);
       await expect(db.select().from(spansTable).all()).resolves.toHaveLength(0);
+    });
+
+    it('should suppress deletion signals while replacing an evaluation', async () => {
+      const eval1 = await EvalFactory.create();
+
+      await eval1.delete({ notify: false });
+
+      expect(await Eval.findById(eval1.id)).toBeUndefined();
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
     });
   });
 
