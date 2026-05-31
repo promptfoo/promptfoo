@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
 
+import tomllib
 from stage_codex_home import (
     MARKER_NAME,
     prepare_codex_home,
