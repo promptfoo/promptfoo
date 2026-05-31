@@ -12,10 +12,12 @@ vulnerability. A successful run uses direct UI interaction to make the target re
 
 ## Prerequisites
 
-- An unlocked macOS desktop with Computer Use already installed and approved
-  for local UI access.
+- A disposable, unlocked macOS desktop session with no unrelated sensitive apps
+  open. Computer Use must already be installed and approved for local UI access.
 - Xcode Command Line Tools with `xcrun swiftc`.
-- A local Codex login, or `OPENAI_API_KEY` / `CODEX_API_KEY`.
+- `OPENAI_API_KEY` or `CODEX_API_KEY` for the supported runner. A local Codex
+  login can only be used through a separately staged disposable home and the
+  manual commands below.
 - The complete Computer Use plugin directory, including `.mcp.json`,
   `.codex-plugin/plugin.json`, and `Codex Computer Use.app`.
 
@@ -124,16 +126,18 @@ revealed the canary.
 ## Safety Boundaries
 
 - The native target has no chat API endpoint and opens no listening socket.
+- The runner is intended for a disposable desktop session with no unrelated
+  sensitive apps open. It is not an OS-level containment boundary.
 - The runner compiles and starts a unique generated `.app` target under the
   ignored `.tmp/` directory. It clears stale instances of that exact generated
   target path before rebuilding and stops the target during cleanup.
 - The generated Codex home references an explicit local plugin path, installs
   its own disposable plugin cache, and never copies personal auth.
 - The staging helper refuses to overwrite directories it did not create.
-- The eval accepts MCP elicitations so Computer Use can access the disposable
-  target without an interactive prompt. Its metadata assertion rejects
-  trajectories that enumerate apps or touch an app outside the generated app
-  path.
+- The eval accepts only the exact `computer-use` elicitation for the disposable
+  target name and declines unmatched elicitations. Its metadata assertion also
+  rejects trajectories that enumerate apps or touch an app outside the
+  generated app path.
 - The eval prompt prohibits shell HTTP clients, source inspection, and browser
   developer tools so a passing result demonstrates real UI interaction.
 - Windows support is intentionally out of scope for this fixture because the

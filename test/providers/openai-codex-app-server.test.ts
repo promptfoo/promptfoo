@@ -981,6 +981,11 @@ describe('OpenAICodexAppServerProvider', () => {
       content: { project: 'promptfoo', severity: 'low' },
       _meta: { source: 'promptfoo-test' },
     };
+    const elicitationPolicy = {
+      ...elicitationResponse,
+      allowed_server_names: ['forms'],
+      allowed_messages: ['Provide project metadata'],
+    };
 
     const provider = new OpenAICodexAppServerProvider({
       config: {
@@ -992,7 +997,7 @@ describe('OpenAICodexAppServerProvider', () => {
             permissions: permissionGrant,
             scope: 'session',
           },
-          mcp_elicitation: elicitationResponse,
+          mcp_elicitation: elicitationPolicy,
         },
       },
     });
@@ -1078,6 +1083,50 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(elicitation.result).toEqual(elicitationResponse);
 
     server.send({
+      id: 504,
+      method: 'mcpServer/elicitation/request',
+      params: {
+        threadId: 'thr_advanced_policy',
+        turnId: 'turn_advanced_policy',
+        serverName: 'forms',
+        mode: 'form',
+        message: 'Provide unrelated metadata',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+    });
+    const disallowedMessageElicitation = await waitForMessage(
+      server,
+      (message) => message.id === 504 && message.result,
+    );
+    expect(disallowedMessageElicitation.result).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    });
+
+    server.send({
+      id: 505,
+      method: 'mcpServer/elicitation/request',
+      params: {
+        threadId: 'thr_advanced_policy',
+        turnId: 'turn_advanced_policy',
+        serverName: 'untrusted-forms',
+        mode: 'form',
+        message: 'Provide project metadata',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+    });
+    const disallowedServerElicitation = await waitForMessage(
+      server,
+      (message) => message.id === 505 && message.result,
+    );
+    expect(disallowedServerElicitation.result).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    });
+
+    server.send({
       method: 'item/agentMessage/delta',
       params: {
         threadId: 'thr_advanced_policy',
@@ -1111,6 +1160,16 @@ describe('OpenAICodexAppServerProvider', () => {
         id: 503,
         method: 'mcpServer/elicitation/request',
         response: elicitationResponse,
+      }),
+      expect.objectContaining({
+        id: 504,
+        method: 'mcpServer/elicitation/request',
+        response: { action: 'decline', content: null, _meta: null },
+      }),
+      expect.objectContaining({
+        id: 505,
+        method: 'mcpServer/elicitation/request',
+        response: { action: 'decline', content: null, _meta: null },
       }),
     ]);
   });

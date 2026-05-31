@@ -41,7 +41,12 @@ providers:
       cli_env:
         CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE }}'
       server_request_policy:
-        mcp_elicitation: accept
+        mcp_elicitation:
+          action: accept
+          allowed_server_names:
+            - computer-use
+          allowed_messages:
+            - Allow Codex to use Promptfoo Computer Use Target?
 
 redteam:
   injectVar: prompt

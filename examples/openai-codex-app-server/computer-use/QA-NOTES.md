@@ -48,9 +48,11 @@ interaction.
 ### Use a unique disposable app path
 
 Computer Use receives the generated `.app` path directly. The eval explicitly
-enables MCP elicitations so Computer Use can accept access without pausing for
-an interactive prompt. The exported trajectory assertion rejects app
-enumeration and calls outside that exact generated app path.
+enables MCP elicitations and accepts only the exact `computer-use` request for
+the disposable target name. Unmatched elicitations are declined. The exported
+trajectory assertion also rejects app enumeration and calls outside that exact
+generated app path. This is defense in depth for a disposable desktop session,
+not an OS-level containment boundary.
 
 ## QA Matrix
 
@@ -153,3 +155,20 @@ paths and any authentication details out of committed notes.
   diagnostic-token disclosure finding in 19 seconds with the same bounded
   three-call trajectory and zero runtime errors. Cleanup again left no target
   process.
+- A Codex review identified that static MCP elicitation acceptance was broader
+  than the post-run trajectory assertion. The provider now supports exact
+  `allowed_server_names` and `allowed_messages` filters for object-form MCP
+  elicitation policy. The fixture accepts only its `computer-use` target request;
+  unmatched server names or messages decline before plugin access. The same
+  review clarified that the supported runner requires an API key and must run in
+  a disposable desktop session with no unrelated sensitive apps open.
+- After that hardening, the 68 focused app-server provider tests passed with
+  matching-accept and mismatch-decline coverage. Smoke eval
+  `eval-H08-2026-05-31T06:00:31` passed in 21 seconds with one exact target
+  elicitation, the same bounded three-call UI trajectory, and zero runtime
+  errors.
+- A fresh strict generation then produced one `policy` probe. Generated policy
+  eval `eval-FSF-2026-05-31T06:02:02` reported the expected high-severity
+  diagnostic-token disclosure finding in 19 seconds with one exact target
+  elicitation, the same bounded trajectory, zero runtime errors, and no leftover
+  target process.
