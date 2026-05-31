@@ -743,6 +743,6 @@ export async function writeMultipleOutputs(
   );
   const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
   if (errors.length > 0) {
-    throw new AggregateError(errors, 'One or more output writes failed');
+    throw Object.assign(new Error('One or more output writes failed'), { errors });
   }
 }
