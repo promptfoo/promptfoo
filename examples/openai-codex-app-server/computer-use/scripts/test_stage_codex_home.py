@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -74,11 +75,23 @@ class StageCodexHomeTest(unittest.TestCase):
         self.assertIn(
             '[plugins."computer-use@fixture-marketplace"]', config.read_text()
         )
-        self.assertIn("[marketplaces.fixture-marketplace]", config.read_text())
+        self.assertIn('[marketplaces."fixture-marketplace"]', config.read_text())
         self.assertIn(
             f'source = "{self.marketplace_root.resolve()}"', config.read_text()
         )
         self.assertNotIn("auth", config.read_text())
+
+    def test_quotes_dotted_marketplace_names_as_literal_toml_keys(self) -> None:
+        codex_home = self.root / "codex-home"
+        prepare_codex_home(codex_home, force=False)
+
+        config = write_config(
+            codex_home, "fixture.marketplace", self.marketplace_root.resolve()
+        )
+
+        parsed = tomllib.loads(config.read_text())
+        self.assertIn("fixture.marketplace", parsed["marketplaces"])
+        self.assertNotIn("fixture", parsed["marketplaces"])
 
     def test_rejects_incomplete_plugin(self) -> None:
         (self.plugin_dir / "launcher").unlink()

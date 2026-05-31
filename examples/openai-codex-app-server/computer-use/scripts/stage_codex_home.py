@@ -104,7 +104,7 @@ def write_config(
         "plugins = true\n\n"
         f'[plugins."{PLUGIN_NAME}@{marketplace_name}"]\n'
         "enabled = true\n\n"
-        f"[marketplaces.{marketplace_name}]\n"
+        f'[marketplaces."{marketplace_name}"]\n'
         'source_type = "local"\n'
         f"source = {json.dumps(str(marketplace_root))}\n"
     )
