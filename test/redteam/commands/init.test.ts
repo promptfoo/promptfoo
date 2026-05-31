@@ -8,13 +8,10 @@ import select from '@inquirer/select';
 import { Command } from 'commander';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initCommand as redteamInitCommand } from '../../../src/commands/redteam/init';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import {
-  redteamInit,
-  initCommand as redteamInitCommand,
-  renderRedteamConfig,
-} from '../../../src/redteam/commands/init';
+import { redteamInit, renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
 import { ProbeLimitExceededError } from '../../../src/redteam/types';
 
