@@ -1569,7 +1569,7 @@ describe('writeOutput', () => {
 });
 
 describe('filterOutputPathsAfterStreaming', () => {
-  it('keeps streamed JSONL artifacts intact after a row persistence failure', () => {
+  it('finalizes streamed JSONL artifacts through recovery after a row persistence failure', () => {
     const eval_ = new Eval({});
     eval_.resultPersistenceFailed = true;
 
@@ -1580,7 +1580,7 @@ describe('filterOutputPathsAfterStreaming', () => {
         'results.json',
         'results.yaml',
       ]),
-    ).toEqual(['results.json', 'results.yaml']);
+    ).toEqual(['results.jsonl', 'results.JSONL', 'results.json', 'results.yaml']);
   });
 });
 
