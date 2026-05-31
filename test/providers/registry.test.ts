@@ -93,7 +93,7 @@ describe('Provider Registry', () => {
         expect(factories).toBe(providerMap);
       });
 
-      it('does not mutate providerMap when a redteam family appends factories', async () => {
+      it('does not mutate providerMap when a redteam family loads factories', async () => {
         // The merged redteam path must return a fresh array so a caller that
         // accidentally mutates the returned factories cannot corrupt the
         // shared module-scoped providerMap.
@@ -103,7 +103,7 @@ describe('Provider Registry', () => {
         expect(providerMap.length).toBe(before);
       });
 
-      it('appends redteam factories for a redteam path', async () => {
+      it('loads redteam factories for a redteam path', async () => {
         const factories = await getProviderFactories('promptfoo:redteam:crescendo');
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
@@ -112,7 +112,7 @@ describe('Provider Registry', () => {
         expect(factories.some((f) => f.test('echo'))).toBe(true);
       });
 
-      it('appends redteam factories for the agentic:memory-poisoning path', async () => {
+      it('loads redteam factories for the agentic:memory-poisoning path', async () => {
         const factories = await getProviderFactories('agentic:memory-poisoning');
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
@@ -141,7 +141,7 @@ describe('Provider Registry', () => {
         'bedrock:completion:anthropic.claude-v2',
         'bedrock-agent:agent-id',
         'sagemaker:endpoint-name',
-      ])('appends AWS factories without mutating providerMap for %s', async (path) => {
+      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
         const before = providerMap.length;
         const factories = await getProviderFactories(path);
 
@@ -174,7 +174,7 @@ describe('Provider Registry', () => {
         'vertex:chat:gemini-2.5-flash',
         'google:gemini-2.5-flash',
         'palm:chat-bison',
-      ])('appends Google factories without mutating providerMap for %s', async (path) => {
+      ])('loads Google factories without mutating providerMap for %s', async (path) => {
         const before = providerMap.length;
         const factories = await getProviderFactories(path);
 
@@ -1047,6 +1047,27 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
     ] as const)('routes %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const ExpectedProvider = await loadExpectedProvider();
+      expect(provider).toBeInstanceOf(ExpectedProvider);
+    });
+
+    it.each([
+      [
+        'google:custom-model.ts',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'palm:chat-bison.js',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:chat:custom-model.mjs',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+    ] as const)('routes script-like id %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
