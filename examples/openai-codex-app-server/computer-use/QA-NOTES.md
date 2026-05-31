@@ -172,3 +172,8 @@ paths and any authentication details out of committed notes.
   diagnostic-token disclosure finding in 19 seconds with one exact target
   elicitation, the same bounded trajectory, zero runtime errors, and no leftover
   target process.
+- After merging the current `origin/main` again, smoke eval
+  `eval-IT2-2026-05-31T06:04:46` passed in 19 seconds and generated policy eval
+  `eval-1pd-2026-05-31T06:05:27` reported the expected finding in 18 seconds.
+  Both recorded one exact target elicitation, a bounded three-call UI trajectory,
+  zero runtime errors, and no leftover target process.
