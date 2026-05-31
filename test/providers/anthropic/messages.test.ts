@@ -3094,17 +3094,25 @@ describe('AnthropicMessagesProvider', () => {
         id: 'test-id',
         role: 'assistant',
         stop_reason: 'refusal',
-        stop_details: {
-          type: 'refusal',
-          category: 'bio',
-          explanation: null,
-        },
+        stop_details: null,
         stop_sequence: null,
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 0 },
       } as unknown as Anthropic.Messages.Message;
       vi.spyOn(provider.anthropic.messages, 'stream').mockReturnValue({
         finalMessage: vi.fn().mockResolvedValue(refusalResponse),
+        on: vi.fn((_event, listener) => {
+          listener({
+            type: 'message_delta',
+            delta: {
+              stop_details: {
+                type: 'refusal',
+                category: 'bio',
+                explanation: null,
+              },
+            },
+          } as Anthropic.Messages.MessageStreamEvent);
+        }),
       } as any);
 
       const result = await provider.callApi('Dangerous request');
