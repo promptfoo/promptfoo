@@ -411,7 +411,7 @@ export async function startServer(
       }
       allPrompts = null;
 
-      // Emit each component so neither refresh is lost.
+      // Emit each component independently (not else-if) so no coalesced refresh is lost.
       if (hasDeleteComponent(signal)) {
         io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });
       }

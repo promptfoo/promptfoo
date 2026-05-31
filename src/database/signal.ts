@@ -60,10 +60,10 @@ function writeSignalFile(content: string): void {
  * Updates the signal file with the current timestamp and optional eval ID.
  * This is used to notify clients that there are new data available.
  *
- * If another signal is still pending in the watcher's debounce window, this update folds it into
- * a combined JSON payload so no refresh is lost: it accumulates ALL distinct scoped update ids
- * (back-to-back scoped updates would otherwise overwrite each other) and carries forward any
- * pending deletes. When nothing is pending it keeps the compact legacy `evalId:timestamp` text.
+ * If another signal is still pending in the watcher's debounce window, this folds it into a
+ * combined JSON payload so no refresh is lost — scoped updates, a pending unscoped "refresh
+ * latest", and pending deletes all survive coalescing. When nothing is pending it keeps the
+ * compact legacy `evalId:timestamp` text.
  * This read-modify-write is best-effort within a single process; concurrent writes from separate
  * processes can still race the unlocked file, in which case a dropped signal self-heals on the
  * next one.
@@ -120,10 +120,10 @@ export function hasUpdateComponent(signal: DatabaseSignal): boolean {
 }
 
 /**
- * True when the signal asks to refresh the latest eval (an unscoped update component): the explicit
- * `refreshLatest` marker, or a bare update with no scoped ids (e.g. a legacy bare-timestamp signal).
- * The watcher emits {@link Eval.latest} for these so a root `/eval` view follows new evals even when
- * the same coalesced signal also carries scoped updates or a delete.
+ * True when the signal asks to refresh the latest eval (an unscoped update component): the
+ * `refreshLatest` marker, or a bare update with no scoped ids (e.g. a legacy bare timestamp). The
+ * watcher emits {@link Eval.latest} for these, so a root `/eval` view follows new evals even when a
+ * coalesced signal also carries scoped updates or a delete.
  */
 export function hasUnscopedUpdate(signal: DatabaseSignal): boolean {
   return (
@@ -229,8 +229,9 @@ function readPendingSignal(now: number): DatabaseSignal | null {
  * Signals that one or more evals were deleted. Deletions use a JSON payload so the watcher can
  * tell clients exactly which evals to drop (whereas a plain update keeps the legacy
  * `evalId:timestamp` text format unless it has to fold in a pending delete). A delete in the
- * debounce window also carries forward a pending scoped update so neither refresh is lost
- * (same-process best-effort, like {@link updateSignalFile}; cross-process writes can still race).
+ * debounce window also carries forward a pending update — scoped ids or an unscoped "refresh
+ * latest" — so neither refresh is lost (same-process best-effort, like {@link updateSignalFile};
+ * cross-process writes can still race).
  * Pre-PR view servers don't understand this JSON and read it back as "no eval id", falling back
  * to broadcasting the latest eval — a benign degradation, so the view server and CLI should be
  * on matching versions for delete-aware refreshes.
@@ -239,9 +240,9 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
   const now = Date.now();
   const pending = readPendingSignal(now);
   const pendingDelete = pending && hasDeleteComponent(pending) ? pending : null;
-  // Merge the new deletes with any pending deletes in the window. "All evals deleted" — encoded as
-  // undefined by direct callers, or as [] when a delete-all was folded into a pending update —
-  // wins over a specific id list, so a coalescing chain never downgrades a delete-all to one id.
+  // Merge new deletes with any pending in the window. "All evals deleted" — encoded as undefined
+  // by direct callers, or as [] when a delete-all was folded into a pending update — wins over a
+  // specific id list, so a coalescing chain never downgrades a delete-all to one id.
   const mergedDeletedEvalIds = !pendingDelete
     ? deletedEvalIds
     : isAllEvalsDeleted(pendingDelete.deletedEvalIds) || isAllEvalsDeleted(deletedEvalIds)
@@ -299,10 +300,10 @@ export function readSignalFile(): DatabaseSignal {
 }
 
 /**
- * Reads the signal file and returns the scoped eval ID of an update signal, if present.
- * Delete signals (JSON payloads) carry no `evalId` and therefore return undefined here; use
- * {@link readSignalFile} to access the full {@link DatabaseSignal} including `deletedEvalIds`.
- * @returns The eval ID from an update signal, or undefined if not present
+ * Reads the signal file and returns its scoped eval ID, if present. A pure delete signal has no
+ * `evalId` and returns undefined; a delete that coalesced a pending scoped update returns that
+ * carried id. Use {@link readSignalFile} for the full {@link DatabaseSignal} including deletes.
+ * @returns The scoped eval ID from the signal, or undefined if none
  */
 export function readSignalEvalId(): string | undefined {
   return readSignalFile().evalId;
