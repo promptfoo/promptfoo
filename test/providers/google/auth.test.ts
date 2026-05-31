@@ -641,6 +641,25 @@ describe('GoogleAuthManager', () => {
       }
     });
 
+    it('should preserve a newer process.emitWarning owner after an optional probe', async () => {
+      const originalEmitWarning = process.emitWarning;
+      const replacementEmitWarning = vi.fn() as typeof process.emitWarning;
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockImplementation(async () => {
+          process.emitWarning = replacementEmitWarning;
+          throw new Error('no default credentials');
+        });
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(process.emitWarning).toBe(replacementEmitWarning);
+      } finally {
+        process.emitWarning = originalEmitWarning;
+        getOAuthClientSpy.mockRestore();
+      }
+    });
+
     it('should restore process.emitWarning after overlapping probes settle out of order', async () => {
       const originalEmitWarning = process.emitWarning;
       let rejectFirstProbe!: (reason?: unknown) => void;

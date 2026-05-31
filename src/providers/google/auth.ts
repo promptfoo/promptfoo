@@ -19,6 +19,8 @@ import type { GoogleAuthOptions } from 'google-auth-library';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
+// gcp-metadata@8.1.2 emits this exact MetadataLookupWarning contract when optional host probes fail.
+// Keep the match narrow so new metadata errors and unrelated process warnings remain visible.
 const EXPECTED_GCP_METADATA_LOOKUP_WARNING =
   'received unexpected error = All promises were rejected code = UNKNOWN';
 
