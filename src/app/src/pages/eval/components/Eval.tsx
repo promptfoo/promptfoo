@@ -47,6 +47,17 @@ function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null 
   }
 }
 
+/** True when a delete signal removed the displayed eval (or all evals, for a delete-all). */
+function displayedEvalWasDeleted(
+  displayedEvalId: string | undefined,
+  deletedEvalIds: string[],
+): boolean {
+  return (
+    deletedEvalIds.length === 0 ||
+    (displayedEvalId ? deletedEvalIds.includes(displayedEvalId) : false)
+  );
+}
+
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -181,14 +192,16 @@ export default function Eval({ fetchId }: EvalOptions) {
     };
 
     // Pinned /eval/:id route + a scoped update for THIS eval: reload it directly via
-    // /eval/:id/table. The recent-evals list is only needed for the dropdown, so a transient
-    // /api/results failure must not drop the pinned eval's own refresh.
+    // /eval/:id/table. The recent-evals list is only needed for the dropdown, so fetch it
+    // concurrently and don't let a transient /api/results failure drop the pinned eval's refresh.
     if (fetchId && deletedEvalIds === undefined && scopedEvalId === fetchId) {
-      const recents = await fetchRecentFileEvals({ reportFailure: false });
+      const [recents] = await Promise.all([
+        fetchRecentFileEvals({ reportFailure: false }),
+        reloadInBackground(fetchId),
+      ]);
       if (recents && recents.length > 0) {
         setDefaultEvalId(recents[0].evalId);
       }
-      await reloadInBackground(fetchId);
       return;
     }
 
@@ -199,7 +212,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       if (
         fetchId &&
         deletedEvalIds !== undefined &&
-        (deletedEvalIds.length === 0 || deletedEvalIds.includes(fetchId))
+        displayedEvalWasDeleted(fetchId, deletedEvalIds)
       ) {
         clearEvalState();
         navigate(EVAL_ROUTES.ROOT, { replace: true });
@@ -219,10 +232,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId(latestEvalId);
 
     if (deletedEvalIds) {
-      if (
-        deletedEvalIds.length === 0 ||
-        (displayedEvalId && deletedEvalIds.includes(displayedEvalId))
-      ) {
+      if (displayedEvalWasDeleted(displayedEvalId, deletedEvalIds)) {
         if (fetchId) {
           navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
         } else {
