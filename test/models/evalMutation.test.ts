@@ -45,11 +45,23 @@ describe('eval mutation invalidation', () => {
     );
   });
 
-  it('invalidates all cached evaluations before notifying watchers about deletions', () => {
-    notifyEvaluationsDeleted(['eval-123']);
+  it('clears the standalone cache and only the deleted evals counts before notifying watchers', () => {
+    notifyEvaluationsDeleted(['eval-123', 'eval-456']);
 
     expect(clearStandaloneEvalCache).toHaveBeenCalledOnce();
-    expect(clearCountCache).toHaveBeenCalledWith(undefined);
-    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(['eval-123']);
+    // Scoped to the deleted evals — a single delete must not flush every eval's count cache.
+    expect(clearCountCache).toHaveBeenCalledWith('eval-123');
+    expect(clearCountCache).toHaveBeenCalledWith('eval-456');
+    expect(clearCountCache).not.toHaveBeenCalledWith(undefined);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(['eval-123', 'eval-456']);
+  });
+
+  it('flushes every count cache when all evals are deleted (no ids)', () => {
+    notifyEvaluationsDeleted();
+
+    expect(clearStandaloneEvalCache).toHaveBeenCalledOnce();
+    // A single unscoped clearCountCache() call wipes every eval's counts.
+    expect(clearCountCache).toHaveBeenCalledTimes(1);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(undefined);
   });
 });

@@ -104,9 +104,10 @@ describe('evaluate SIGINT/abort handling', () => {
     // This test verifies that per-call timeouts (timeoutMs option) write
     // timeout error rows and continue the normal evaluation flow.
     //
-    // Key difference from user SIGINT: evaluation continues normally and
-    // updateSignalFile is called at the end of the normal flow (not during early return).
-    // Both paths call updateSignalFile, just at different points.
+    // Key difference from user SIGINT: evaluation continues normally rather than returning
+    // early. The evaluator no longer writes the signal file directly — persisted evals emit a
+    // refresh via Eval.addPrompts()/save(); a non-persisted eval (this test) writes no signal,
+    // which is asserted below.
     let longTimer: NodeJS.Timeout | null = null;
 
     const slowProvider = createMockProvider({

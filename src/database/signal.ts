@@ -47,6 +47,9 @@ function writeSignalFile(content: string): void {
  * a combined JSON payload so no refresh is lost: it accumulates ALL distinct scoped update ids
  * (back-to-back scoped updates would otherwise overwrite each other) and carries forward any
  * pending deletes. When nothing is pending it keeps the compact legacy `evalId:timestamp` text.
+ * This read-modify-write is best-effort within a single process; concurrent writes from separate
+ * processes can still race the unlocked file, in which case a dropped signal self-heals on the
+ * next one.
  * @param evalId - Optional eval ID that triggered the update
  */
 export function updateSignalFile(evalId?: string): void {
@@ -103,8 +106,11 @@ export function updateEvalIds(signal: DatabaseSignal): string[] {
   return signal.evalId ? [signal.evalId] : [];
 }
 
-/** Parses signal-file content as a combined JSON payload, or null if it is not one. */
-function parseSignalJson(content: string): (DatabaseSignal & { timestamp?: string }) | null {
+/**
+ * Parses signal-file content as a combined JSON payload, returning the classified signal and
+ * its timestamp (used for the debounce-window check), or null if it is not a JSON signal.
+ */
+function parseSignalJson(content: string): { signal: DatabaseSignal; timestamp?: string } | null {
   try {
     const parsed = JSON.parse(content) as unknown;
     if (
@@ -123,7 +129,7 @@ function parseSignalJson(content: string): (DatabaseSignal & { timestamp?: strin
         'timestamp' in parsed && typeof parsed.timestamp === 'string'
           ? parsed.timestamp
           : undefined;
-      return { type: parsed.type, evalId, updatedEvalIds, deletedEvalIds, timestamp };
+      return { signal: { type: parsed.type, evalId, updatedEvalIds, deletedEvalIds }, timestamp };
     }
   } catch {}
   return null;
@@ -147,14 +153,7 @@ function readPendingSignal(now: number): DatabaseSignal | null {
     const content = fs.readFileSync(getDbSignalPath(), 'utf8').trim();
     const json = parseSignalJson(content);
     if (json) {
-      return withinWindow(json.timestamp)
-        ? {
-            type: json.type,
-            evalId: json.evalId,
-            updatedEvalIds: json.updatedEvalIds,
-            deletedEvalIds: json.deletedEvalIds,
-          }
-        : null;
+      return withinWindow(json.timestamp) ? json.signal : null;
     }
 
     // Legacy text format: `evalId:timestamp` or a bare timestamp.
@@ -172,7 +171,8 @@ function readPendingSignal(now: number): DatabaseSignal | null {
  * Signals that one or more evals were deleted. Deletions use a JSON payload so the watcher can
  * tell clients exactly which evals to drop (whereas a plain update keeps the legacy
  * `evalId:timestamp` text format unless it has to fold in a pending delete). A delete in the
- * debounce window also carries forward a pending scoped update so neither refresh is lost.
+ * debounce window also carries forward a pending scoped update so neither refresh is lost
+ * (same-process best-effort, like {@link updateSignalFile}; cross-process writes can still race).
  * Pre-PR view servers don't understand this JSON and read it back as "no eval id", falling back
  * to broadcasting the latest eval — a benign degradation, so the view server and CLI should be
  * on matching versions for delete-aware refreshes.
@@ -227,12 +227,7 @@ export function readSignalFile(): DatabaseSignal {
     const content = fs.readFileSync(filePath, 'utf8').trim();
     const json = parseSignalJson(content);
     if (json) {
-      return {
-        type: json.type,
-        evalId: json.evalId,
-        updatedEvalIds: json.updatedEvalIds,
-        deletedEvalIds: json.deletedEvalIds,
-      };
+      return json.signal;
     }
     return { type: 'update', evalId: readLegacySignalEvalId(content) };
   } catch {

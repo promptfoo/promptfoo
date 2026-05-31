@@ -827,6 +827,23 @@ describe('EvalResult', () => {
       expect(retrieved?.score).toBe(0.5);
       expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
     });
+
+    it('clears the standalone cache when a new result is inserted via save()', async () => {
+      // persist:false yields an in-memory result, so save() takes the INSERT branch. This pins
+      // the PR's headline behavior — incrementally-added results invalidate the standalone cache.
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult, {
+        persist: false,
+      });
+      expect(result.persisted).toBe(false);
+
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
+
+      await result.save();
+
+      expect(result.persisted).toBe(true);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+    });
   });
 
   describe('toEvaluateResult', () => {

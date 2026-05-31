@@ -29,6 +29,16 @@ export function notifyEvaluationChanged(evalId?: string): void {
  * argument (or omit ids) for "all evals deleted".
  */
 export function notifyEvaluationsDeleted(evalIds?: string[]): void {
-  invalidateEvaluationCache();
+  // The eval list changed, so always refresh the standalone-eval cache. Only the deleted evals'
+  // counts go stale, so scope the count-cache clear to them; a full clear is reserved for the
+  // "all evals deleted" case (no ids).
+  clearStandaloneEvalCache();
+  if (evalIds) {
+    for (const id of evalIds) {
+      clearCountCache(id);
+    }
+  } else {
+    clearCountCache();
+  }
   updateSignalFileForDeletedEvals(evalIds);
 }

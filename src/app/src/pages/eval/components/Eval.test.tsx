@@ -103,7 +103,6 @@ const baseMockTableStore = {
   setAuthor: vi.fn(),
   setVersion: vi.fn(),
   setTable: vi.fn(),
-  setTableFromResultsFile: vi.fn(),
   setConfig: vi.fn(),
   setFilteredResultsCount: vi.fn(),
   setTotalResultsCount: vi.fn(),
@@ -139,7 +138,6 @@ describe('Eval', () => {
     baseMockTableStore.setAuthor.mockClear();
     baseMockTableStore.setVersion.mockClear();
     baseMockTableStore.setTable.mockClear();
-    baseMockTableStore.setTableFromResultsFile.mockClear();
     baseMockTableStore.setConfig.mockClear();
     baseMockTableStore.setFilteredResultsCount.mockClear();
     baseMockTableStore.setTotalResultsCount.mockClear();

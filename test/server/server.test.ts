@@ -492,6 +492,29 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('keeps the server alive when a signal-triggered eval lookup rejects', async () => {
+      // The watcher callback is fire-and-forget; a rejected DB lookup must be caught and logged
+      // rather than becoming an unhandledRejection that tears down the long-running view server.
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'update', evalId: 'boom-eval' });
+      vi.mocked(Eval.findById).mockRejectedValueOnce(new Error('libsql exploded'));
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to handle eval signal update'),
+        ),
+      );
+
+      // The server is still running and shuts down cleanly.
+      triggerSignal('SIGINT');
+      await expect(serverPromise).resolves.toBeUndefined();
+    });
+
     it('should not deadlock the shutdown promise if watcher.close throws', async () => {
       const mockWatcher = {
         close: vi.fn().mockImplementation(() => {
