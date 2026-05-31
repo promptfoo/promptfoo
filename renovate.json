@@ -259,7 +259,7 @@
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "All npm packages: wait 10 days to match the Socket minimum release age floor",
+      "description": "All npm packages: wait 10 days, a buffer above the 7-day Socket minimum release age floor",
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "10 days"
     },
