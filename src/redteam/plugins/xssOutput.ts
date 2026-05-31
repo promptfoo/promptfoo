@@ -40,7 +40,10 @@ export const XSS_RULES: { name: string; pattern: RegExp }[] = [
   },
   {
     name: 'iframe-srcdoc',
-    pattern: /<iframe[\s\S]*?srcdoc\s*=/i,
+    // Only flag when the srcdoc value contains an executable XSS payload (script tag, event
+    // handler attribute, or javascript: URI).  Static content like <p>Hello</p> is safe.
+    pattern:
+      /<iframe[^>]*srcdoc\s*=\s*(?:"[^"]*(?:<script\b|on\w+\s*=|javascript\s*:)[^"]*"|'[^']*(?:<script\b|on\w+\s*=|javascript\s*:)[^']*')/i,
   },
   {
     name: 'svg-script',

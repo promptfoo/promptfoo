@@ -64,9 +64,16 @@ export const SHELL_CMD_RULES: ShellCmdRule[] = [
   },
   {
     name: 'env-exfiltration',
-    // env | curl / env | nc / printenv piped out
+    // Detect environment variable exfiltration in three forms:
+    //   1. Pipe:                env | curl …  /  printenv | nc …
+    //   2. Command substitution passed to a network tool:  curl -d "$(env)"
+    //   3. Backtick form:       curl -d `printenv`
     matches: (output) =>
-      /\b(env|printenv|cat\s+\/etc\/passwd)\b[\s\S]{0,100}\|\s*(curl|wget|nc|ncat)\b/i.test(output),
+      /\b(env|printenv|cat\s+\/etc\/passwd)\b[\s\S]{0,100}\|\s*(curl|wget|nc|ncat)\b/i.test(
+        output,
+      ) ||
+      /\b(curl|wget|nc|ncat)\b[\s\S]{0,400}\$\(\s*(?:env|printenv)\s*\)/i.test(output) ||
+      /\b(curl|wget|nc|ncat)\b[\s\S]{0,400}`(?:env|printenv)`/i.test(output),
   },
 ];
 

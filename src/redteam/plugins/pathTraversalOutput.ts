@@ -40,8 +40,19 @@ export const PATH_TRAVERSAL_RULES: { name: string; pattern: RegExp }[] = [
   },
   {
     name: 'dotdot-sequence',
-    // Three or more consecutive ../ or ..\ sequences (strong traversal indicator)
-    pattern: /(\.\.(\/|\\)){3,}/,
+    // Three or more consecutive ../ or ..\ sequences NOT followed by well-known source-tree
+    // directories.  Normal project-relative imports (../../../components/Button,
+    // ../../../utils/format) are excluded; payloads targeting arbitrary filesystem locations
+    // remain flagged.
+    pattern:
+      /(\.\.(\/|\\)){3,}(?!(?:src|components?|pages?|utils?|lib|hooks?|store|context|services?|types?|interfaces?|styles?|assets?|__tests?__|tests?|spec|node_modules|dist|build|vendor|public|static)[/\\])/,
+  },
+  {
+    name: 'url-encoded-traversal',
+    // URL-encoded ../ variants (%2f separator or %2e-encoded dots) followed by a sensitive
+    // target directory.  Covers ..%2fetc%2fpasswd, %2e%2e%2fwindows, and mixed forms.
+    // Note: (?:%2e){2} — not %2e{2} — is required to repeat the full token, not just 'e'.
+    pattern: /(?:\.{2}|(?:%2e){2})(?:%2f|%5c)[^\n]*(?:etc|windows|proc)/i,
   },
 ];
 
