@@ -21,7 +21,7 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { REDACTED, sanitizeObject } from '../util/sanitizer';
+import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateAssertionTokenUsage,
@@ -217,9 +217,14 @@ function isSensitiveResponseHeader(headerName: string): boolean {
   return SENSITIVE_RESPONSE_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
+function isSensitiveRequestHeader(headerName: string): boolean {
+  return isSensitiveResponseHeader(headerName) || isSecretField(headerName);
+}
+
 function redactSensitiveHeaders(
   headers: Record<string, unknown>,
   sourceHeaders: Record<string, unknown> = headers,
+  isSensitiveHeader: (headerName: string) => boolean = isSensitiveResponseHeader,
 ): Record<string, unknown> | null {
   let mutated = false;
   const next: Record<string, unknown> = {};
@@ -227,7 +232,7 @@ function redactSensitiveHeaders(
     if (
       Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
       isDeepStrictEqual(sourceHeaders[key], value) &&
-      isSensitiveResponseHeader(key)
+      isSensitiveHeader(key)
     ) {
       next[key] = REDACTED;
       mutated = true;
@@ -289,7 +294,14 @@ function redactHttpHeadersOnMetadata<T>(
   for (const slot of ['headers', 'requestHeaders'] as const) {
     const slotValue = httpRecord[slot];
     if (slotValue && typeof slotValue === 'object' && !Array.isArray(slotValue)) {
-      const redacted = redactSensitiveHeaders(slotValue as Record<string, unknown>);
+      const redacted =
+        slot === 'requestHeaders'
+          ? redactSensitiveHeaders(
+              slotValue as Record<string, unknown>,
+              slotValue as Record<string, unknown>,
+              isSensitiveRequestHeader,
+            )
+          : redactSensitiveHeaders(slotValue as Record<string, unknown>);
       if (redacted) {
         nextHttp ??= { ...httpRecord };
         nextHttp[slot] = redacted;

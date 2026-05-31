@@ -289,6 +289,8 @@ describe('programmatic JSONL output', () => {
             },
             requestHeaders: {
               authorization: 'Bearer sk-should-not-persist',
+              'api-key': 'azure-api-key-should-not-persist',
+              'X-API-Key': 'custom-api-key-should-not-persist',
               'x-safe-debug': 'keep-me',
             },
           },
@@ -320,6 +322,8 @@ describe('programmatic JSONL output', () => {
       },
       requestHeaders: {
         authorization: '[REDACTED]',
+        'api-key': '[REDACTED]',
+        'X-API-Key': '[REDACTED]',
         'x-safe-debug': 'keep-me',
       },
     });
@@ -331,6 +335,8 @@ describe('programmatic JSONL output', () => {
     expect(JSON.stringify(result)).not.toContain('req_should_not_persist');
     expect(JSON.stringify(result)).not.toContain('legacy_req_should_not_persist');
     expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
+    expect(JSON.stringify(result)).not.toContain('azure-api-key-should-not-persist');
+    expect(JSON.stringify(result)).not.toContain('custom-api-key-should-not-persist');
     expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-not-persist');
   });
 
