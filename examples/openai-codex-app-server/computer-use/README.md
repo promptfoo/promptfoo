@@ -52,7 +52,7 @@ The runner:
 4. Stops any stale instance of its generated target path.
 5. Compiles the native UI-only target under `.tmp/`.
 6. Starts the generated `PromptfooComputerUseTarget.app`.
-7. Runs a fresh local Promptfoo eval with `--no-cache`, or the Promptfoo command
+7. Runs a fresh Promptfoo eval with `--no-cache`, or the Promptfoo command
    supplied as runner arguments.
 8. Writes the exported Promptfoo result to `.tmp/results.json` and stops the
    generated target.

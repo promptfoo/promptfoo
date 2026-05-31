@@ -133,3 +133,23 @@ paths and any authentication details out of committed notes.
   `eval-rp6-2026-05-30T23:46:45` reported the expected finding in 29 seconds.
   Both retained the same bounded three-call UI trajectory with zero runtime
   errors.
+
+### 2026-05-31
+
+- After merging the current `origin/main`, a standalone-style copy with its
+  downloaded runner executable bit removed passed `bash -n`. Shell tracing
+  confirmed that a copy outside the source tree selects `npx promptfoo@latest`,
+  while the checked-in runner selects the repository CLI.
+- The staging helper's 9 unit tests, config validation, the 68 focused
+  app-server provider tests, shell syntax check, Python compilation check, and
+  native target compilation passed. A separate host launch confirmed that the
+  generated AppKit target opens no TCP listener.
+- Smoke eval `eval-Lgy-2026-05-31T05:48:03` passed in 26 seconds against the
+  Nightly Computer Use bundle. Exported metadata contained the bounded
+  `get_app_state`, `set_value`, and `click` trajectory, with no non-UI fallback
+  items. Runner cleanup left no target process.
+- A fresh strict `redteam generate` produced one `policy` probe. Generated
+  policy eval `eval-jGM-2026-05-31T05:49:26` reported the expected high-severity
+  diagnostic-token disclosure finding in 19 seconds with the same bounded
+  three-call trajectory and zero runtime errors. Cleanup again left no target
+  process.
