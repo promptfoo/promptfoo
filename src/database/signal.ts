@@ -58,10 +58,10 @@ export function updateSignalFile(evalId?: string): void {
   const updatedEvalIds = [...new Set([...pendingUpdateIds, ...(evalId ? [evalId] : [])])];
 
   // Only coalesce into JSON when there's something to preserve beyond this single update — a
-  // pending delete, or a distinct pending scoped update — so the common per-result run stays on
-  // the compact legacy text format. The reader matches the trailing ISO timestamp because
-  // generated eval IDs can themselves contain colons.
-  const needsCoalesce = pendingHasDelete || updatedEvalIds.length > (evalId ? 1 : 0);
+  // pending delete, or a pending scoped update for a different eval — so the common per-result
+  // run stays on the compact legacy text format. The reader matches the trailing ISO timestamp
+  // because generated eval IDs can themselves contain colons.
+  const needsCoalesce = pendingHasDelete || pendingUpdateIds.some((id) => id !== evalId);
   if (needsCoalesce) {
     writeSignalFile(
       JSON.stringify({

@@ -392,29 +392,32 @@ export async function startServer(
   const watcher = setupSignalWatcher(() => {
     const handleSignalUpdate = async () => {
       const signal = readSignalFile();
-      // Mutations can happen in a separate CLI process, so clear this server's
-      // process-local caches before serving the next request.
-      invalidateEvaluationCache(signal.evalId);
+      // A coalesced signal can carry several scoped updates (back-to-back eval saves in the
+      // debounce window) plus a delete component.
+      const scopedUpdateIds = updateEvalIds(signal);
+
+      // Mutations can happen in a separate CLI process, so clear this server's process-local
+      // caches before serving the next request. Invalidate every updated eval (not just the
+      // latest), or all of them for an unscoped signal.
+      if (scopedUpdateIds.length > 0) {
+        for (const id of scopedUpdateIds) {
+          invalidateEvaluationCache(id);
+        }
+      } else {
+        invalidateEvaluationCache(signal.evalId);
+      }
       allPrompts = null;
 
-      // A signal can carry both a delete and an update component when two mutations were
-      // coalesced inside the watcher's debounce window (e.g. a delete quickly followed by an
-      // unrelated eval save). Emit each component so neither refresh is lost.
-      const hasDelete = hasDeleteComponent(signal);
-      const hasUpdate = hasUpdateComponent(signal);
-
-      if (hasDelete) {
+      // Emit each component so neither refresh is lost.
+      if (hasDeleteComponent(signal)) {
         io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });
       }
 
-      if (hasUpdate) {
-        // A coalesced signal can carry several scoped updates (back-to-back eval saves in the
-        // debounce window); emit one refresh per surviving eval so a client pinned to any of
-        // them updates.
-        const scopedUpdateIds = updateEvalIds(signal);
+      if (hasUpdateComponent(signal)) {
         if (scopedUpdateIds.length > 0) {
-          for (const id of scopedUpdateIds) {
-            const updatedEval = await Eval.findById(id);
+          // Emit one refresh per surviving eval so a client pinned to any of them updates.
+          const updatedEvals = await Promise.all(scopedUpdateIds.map((id) => Eval.findById(id)));
+          for (const updatedEval of updatedEvals) {
             if (updatedEval) {
               logger.debug(
                 `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,

@@ -454,6 +454,9 @@ describe('server', () => {
 
       await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-Y' }));
       await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-Z' }));
+      // Every coalesced eval's process-local caches are invalidated, not just the latest.
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith('eval-Y');
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith('eval-Z');
 
       triggerSignal('SIGINT');
       await serverPromise;
