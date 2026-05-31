@@ -403,8 +403,14 @@ export async function startServer(
         );
         io.emit('update', { evalId: updatedEval.id });
       } else if (!updatedEval && !signal.evalId) {
+        // No scoped eval and no evals remain: tell clients to clear their view.
         io.emit('update', null);
       }
+      // Deliberate no-op: an unscoped update signal while evals still exist is only produced
+      // by legacy/mixed-version writers (every in-tree caller passes a concrete evalId). We do
+      // not broadcast the latest eval here because that would yank pinned /eval/:id views to a
+      // different eval on an unrelated mutation. Newly connected clients still receive the
+      // latest eval via the 'init' emit below.
     };
 
     void handleSignalUpdate();

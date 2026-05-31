@@ -30,6 +30,14 @@ export function updateSignalFile(evalId?: string): void {
   writeSignalFile(evalId ? `${evalId}:${now}` : now);
 }
 
+/**
+ * Signals that one or more evals were deleted. Unlike updates (which keep the legacy
+ * `evalId:timestamp` text format), deletions use a JSON payload so the watcher can tell
+ * clients exactly which evals to drop. Pre-PR view servers don't understand this JSON and
+ * read it back as "no eval id", falling back to broadcasting the latest eval — a benign
+ * degradation, so the view server and CLI should be on matching versions for delete-aware
+ * refreshes.
+ */
 export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void {
   writeSignalFile(
     JSON.stringify({

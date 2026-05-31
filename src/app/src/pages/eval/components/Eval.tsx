@@ -142,6 +142,84 @@ export default function Eval({ fetchId }: EvalOptions) {
   }, [setAuthor, setConfig, setEvalId, setTable]);
 
   /**
+   * Populates the table store from a websocket signal. Explicit /eval/:id routes stay
+   * pinned (they only reload when their own eval changes), while the root /eval route
+   * follows the latest eval. Held in a ref (below) so the socket effect never has to tear
+   * down and reopen the connection when this handler's dependencies (e.g. filterMode via
+   * loadEvalById, or fetchId on navigation) change.
+   */
+  const handleResultsFile = async (
+    data: ResultsFile | { deletedEvalIds?: string[]; evalId?: string } | null,
+  ) => {
+    if (!data) {
+      logger.debug('[Eval] No eval data available', {});
+      clearEvalState();
+      return;
+    }
+
+    const newRecentEvals = await fetchRecentFileEvals();
+    if (!newRecentEvals) {
+      return;
+    }
+    if (newRecentEvals.length === 0) {
+      clearEvalState();
+      if (fetchId) {
+        navigate(EVAL_ROUTES.ROOT, { replace: true });
+      }
+      return;
+    }
+
+    const latestEvalId = newRecentEvals[0].evalId;
+    const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
+    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
+    setDefaultEvalId(latestEvalId);
+
+    // Reload the displayed table in the background, suppressing the page-level loading
+    // flash. Streaming is scoped to the actual reload so signals that don't change the
+    // current view (e.g. a scoped update for a different pinned eval) never toggle the
+    // streaming indicator.
+    const reloadInBackground = async (id: string) => {
+      setIsStreaming(true);
+      try {
+        setEvalId(id);
+        await loadEvalById(id, true);
+      } finally {
+        setIsStreaming(false);
+      }
+    };
+
+    if (deletedEvalIds) {
+      if (
+        deletedEvalIds.length === 0 ||
+        (displayedEvalId && deletedEvalIds.includes(displayedEvalId))
+      ) {
+        if (fetchId) {
+          navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
+        } else {
+          await reloadInBackground(latestEvalId);
+        }
+      }
+      return;
+    }
+
+    const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
+    const updatedEvalId = scopedEvalId ?? latestEvalId;
+    const shouldReload =
+      fetchId === null
+        ? scopedEvalId === undefined ||
+          scopedEvalId === currentEvalIdRef.current ||
+          scopedEvalId === latestEvalId
+        : scopedEvalId === fetchId;
+    if (shouldReload) {
+      await reloadInBackground(updatedEvalId);
+    }
+  };
+
+  // Keep the latest handler in a ref so the socket effect can depend only on apiBaseUrl.
+  const handleResultsFileRef = useRef(handleResultsFile);
+  handleResultsFileRef.current = handleResultsFile;
+
+  /**
    * Updates the URL with the selected eval id, triggering a re-render of the Eval component.
    */
   const handleRecentEvalSelection = useCallback(
@@ -297,7 +375,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fetchRecentFileEvals reads current API state without requiring socket reconnection
+  // The websocket only needs to be rebuilt when its connection target (apiBaseUrl) changes.
+  // The message handler is read from handleResultsFileRef, so filterMode / fetchId / eval
+  // navigation update the handler in place instead of tearing down and reopening the socket
+  // (which would otherwise drop signals during the reconnect gap).
   useEffect(() => {
     if (!IS_RUNNING_LOCALLY) {
       return;
@@ -335,75 +416,10 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     const socket = SocketIOClient(socketUrl, { path: socketPath });
 
-    /**
-     * Populates the table store with the most recent eval result by fetching the data by eval ID.
-     * Explicit /eval/:id routes remain pinned while the root /eval route follows the latest eval.
-     */
-    const handleResultsFile = async (
-      data: ResultsFile | { deletedEvalIds?: string[]; evalId?: string } | null,
-    ) => {
-      if (!data) {
-        logger.debug('[Eval] No eval data available', {});
-        clearEvalState();
-        return;
-      }
-
-      setIsStreaming(true);
-
-      const newRecentEvals = await fetchRecentFileEvals();
-      if (!newRecentEvals) {
-        setIsStreaming(false);
-        return;
-      }
-      if (newRecentEvals.length === 0) {
-        clearEvalState();
-        if (fetchId) {
-          navigate(EVAL_ROUTES.ROOT, { replace: true });
-        }
-        setIsStreaming(false);
-        return;
-      }
-
-      const latestEvalId = newRecentEvals[0].evalId;
-      const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
-      const displayedEvalId = fetchId ?? currentEvalIdRef.current;
-      setDefaultEvalId(latestEvalId);
-      if (deletedEvalIds) {
-        if (
-          deletedEvalIds.length === 0 ||
-          (displayedEvalId && deletedEvalIds.includes(displayedEvalId))
-        ) {
-          if (fetchId) {
-            navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
-          } else {
-            setEvalId(latestEvalId);
-            await loadEvalById(latestEvalId, true);
-          }
-        }
-        setIsStreaming(false);
-        return;
-      }
-
-      const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
-      const updatedEvalId = scopedEvalId ?? latestEvalId;
-      const shouldReload =
-        fetchId === null
-          ? scopedEvalId === undefined ||
-            scopedEvalId === currentEvalIdRef.current ||
-            scopedEvalId === latestEvalId
-          : scopedEvalId === fetchId;
-      if (shouldReload) {
-        setEvalId(updatedEvalId);
-        await loadEvalById(updatedEvalId, true);
-      }
-
-      setIsStreaming(false);
-    };
-
     socket
       .on('init', async (data) => {
         logger.debug('[Eval] Initialized socket connection', { data });
-        await handleResultsFile(data);
+        await handleResultsFileRef.current(data);
       })
       /**
        * The user has run `promptfoo eval` and a new latest eval
@@ -411,14 +427,14 @@ export default function Eval({ fetchId }: EvalOptions) {
        */
       .on('update', async (data) => {
         logger.debug('[Eval] Received data update', { data });
-        await handleResultsFile(data);
+        await handleResultsFileRef.current(data);
       });
 
     return () => {
       socket.disconnect();
       setIsStreaming(false);
     };
-  }, [apiBaseUrl, clearEvalState, fetchId, loadEvalById, navigate, setIsStreaming]);
+  }, [apiBaseUrl, setIsStreaming]);
 
   usePageMeta({
     title: config?.description || evalId || 'Eval',

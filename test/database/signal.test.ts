@@ -111,6 +111,110 @@ describe('signal', () => {
         deletedEvalIds: ['eval-deleted-1', 'eval-deleted-2'],
       });
     });
+
+    it('should report a delete with no ids (delete-all) as undefined deletedEvalIds', () => {
+      // updateSignalFileForDeletedEvals() with no args (deleteAllEvals) drops the
+      // undefined key, so JSON.parse yields an object with no deletedEvalIds field.
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ type: 'delete', timestamp: '2026-05-30T22:00:00.000Z' }),
+      );
+
+      expect(readSignalFile()).toEqual({ type: 'delete', deletedEvalIds: undefined });
+    });
+
+    it('should drop non-string entries from deletedEvalIds', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ type: 'delete', deletedEvalIds: ['eval-ok', 42, null, 'eval-ok-2'] }),
+      );
+
+      expect(readSignalFile()).toEqual({
+        type: 'delete',
+        deletedEvalIds: ['eval-ok', 'eval-ok-2'],
+      });
+    });
+
+    it('should fall back to a legacy update for a scoped evalId:timestamp signal', () => {
+      mockReadFileSync.mockReturnValue('eval-abc-2026-05-29T22:43:41:2026-05-29T22:43:42.000Z');
+
+      expect(readSignalFile()).toEqual({
+        type: 'update',
+        evalId: 'eval-abc-2026-05-29T22:43:41',
+      });
+    });
+
+    it('should fall back to an unscoped update for malformed JSON content', () => {
+      // A partially-written delete file (writes are not atomic) must not throw; it should
+      // degrade to an unscoped update rather than crash the watcher.
+      mockReadFileSync.mockReturnValue('{"type":"delete","deletedEvalIds":[');
+
+      expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
+    });
+
+    it('should not treat a JSON update object as a delete (falls through to update)', () => {
+      mockReadFileSync.mockReturnValue(JSON.stringify({ type: 'update', evalId: 'eval-12345678' }));
+
+      // The JSON object is not a delete, so it falls through to the legacy reader. The
+      // legacy reader cannot extract an id from JSON, so the result is an unscoped update.
+      expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
+    });
+
+    it('should fall back to an unscoped update for JSON arrays/primitives', () => {
+      mockReadFileSync.mockReturnValue(JSON.stringify(['eval-1', 'eval-2']));
+      expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
+
+      mockReadFileSync.mockReturnValue('42');
+      expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
+
+      mockReadFileSync.mockReturnValue('null');
+      expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
+    });
+
+    it('should return an unscoped update when the file read fails', () => {
+      mockReadFileSync.mockImplementation(() => {
+        throw new Error('File not found');
+      });
+
+      expect(readSignalFile()).toEqual({ type: 'update' });
+    });
+  });
+
+  describe('mixed-version signal compatibility', () => {
+    // Snapshot of the pre-PR reader (main's readSignalEvalId) so we can pin how an OLD
+    // view server degrades when it reads signals written by a NEW CLI. This guards the
+    // documented mixed-version contract without depending on git history.
+    function legacyReadSignalEvalId(content: string): string | undefined {
+      const trimmed = content.trim();
+      if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) {
+        return undefined;
+      }
+      if (trimmed.includes(':')) {
+        const evalId = trimmed.split(':')[0];
+        if (evalId && evalId.length > 8) {
+          return evalId;
+        }
+      }
+      return undefined;
+    }
+
+    it('old reader degrades a new JSON delete payload to an unscoped update (Eval.latest fallback)', () => {
+      const payload = JSON.stringify({
+        type: 'delete',
+        deletedEvalIds: ['eval-abc-2026-05-29T22:43:41'],
+        timestamp: '2026-05-30T22:00:00.000Z',
+      });
+
+      // split(':')[0] === '{"type"' (7 chars), which fails the length > 8 guard, so the
+      // old server sees no scoped id and falls back to broadcasting the latest eval.
+      expect(legacyReadSignalEvalId(payload)).toBeUndefined();
+    });
+
+    it('new reader correctly parses legacy scoped signals an old CLI would write', () => {
+      mockReadFileSync.mockReturnValue('eval-abc-2026-05-29T22:43:41:2026-05-29T22:43:42.000Z');
+
+      // Regression guard: main's reader truncated colon-containing ids at the first colon
+      // (eval-abc-2026-05-29T22). The new reader recovers the full id.
+      expect(readSignalEvalId()).toBe('eval-abc-2026-05-29T22:43:41');
+    });
   });
 
   describe('readSignalEvalId', () => {
