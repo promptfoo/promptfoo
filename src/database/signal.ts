@@ -10,7 +10,9 @@ import { getDbSignalPath } from './index';
  * (`deletedEvalIds`, or "all evals deleted"). The update component is a SET of scoped eval ids
  * (`updatedEvalIds`) so that back-to-back scoped updates inside the debounce window all survive
  * coalescing; `evalId` is the latest of them, kept for the legacy single-update path and
- * {@link readSignalEvalId}. Use {@link updateEvalIds} / {@link hasUpdateComponent} /
+ * {@link readSignalEvalId}. `refreshLatest` marks an unscoped "refresh to the latest eval" update
+ * (a bare {@link updateSignalFile} call) so it survives alongside scoped ids or a delete when
+ * coalesced. Use {@link updateEvalIds} / {@link hasUpdateComponent} / {@link hasUnscopedUpdate} /
  * {@link hasDeleteComponent} rather than the raw fields to decide what to emit, so a
  * `type:'update'` payload carrying `deletedEvalIds` still drops those evals.
  */
@@ -19,6 +21,8 @@ export interface DatabaseSignal {
   evalId?: string;
   updatedEvalIds?: string[];
   deletedEvalIds?: string[];
+  /** An unscoped "refresh the latest eval" component preserved through coalescing. */
+  refreshLatest?: boolean;
 }
 
 const SIGNAL_WATCHER_DEBOUNCE_MS = 250;
@@ -71,16 +75,23 @@ export function updateSignalFile(evalId?: string): void {
   const pending = readPendingSignal(now);
   const pendingUpdateIds = pending ? updateEvalIds(pending) : [];
   const pendingHasDelete = pending ? hasDeleteComponent(pending) : false;
+  const pendingHasUnscopedUpdate = pending ? hasUnscopedUpdate(pending) : false;
   const updatedEvalIds = [...new Set([...pendingUpdateIds, ...(evalId ? [evalId] : [])])];
+  // This write should also refresh the latest eval if it is itself unscoped, or if it must carry a
+  // pending unscoped "refresh latest" that the legacy text can't encode beside a scoped id.
+  const refreshLatest = evalId === undefined || pendingHasUnscopedUpdate;
 
   // Coalesce into JSON when there's something to preserve beyond this single update — a pending
-  // delete, or a pending scoped update for a different eval — so the common per-result run stays
-  // on the compact legacy `evalId:timestamp` text. A short eval id also forces JSON: the legacy
-  // reader can't recover it (see isLegacyRecoverableEvalId), so it would otherwise degrade to an
-  // unscoped refresh and leave a page pinned to that eval stale. (A bare unscoped update has no id
-  // to preserve, so its "refresh latest" intent is not carried through coalescing — but no in-tree
-  // caller writes one.)
-  const needsCoalesce = pendingHasDelete || pendingUpdateIds.some((id) => id !== evalId);
+  // delete, a pending scoped update for a different eval, or an unscoped "refresh latest" that must
+  // travel alongside a scoped id — so the common per-result run stays on the compact legacy
+  // `evalId:timestamp` text. A short eval id also forces JSON: the legacy reader can't recover it
+  // (see isLegacyRecoverableEvalId), so it would otherwise degrade to an unscoped refresh and leave
+  // a page pinned to that eval stale. A bare unscoped update with nothing pending stays a plain
+  // timestamp — the reader already treats that as "refresh latest".
+  const needsCoalesce =
+    pendingHasDelete ||
+    pendingUpdateIds.some((id) => id !== evalId) ||
+    (refreshLatest && updatedEvalIds.length > 0);
   const evalIdNeedsJson = evalId !== undefined && !isLegacyRecoverableEvalId(evalId);
   if (needsCoalesce || evalIdNeedsJson) {
     writeSignalFile(
@@ -89,6 +100,7 @@ export function updateSignalFile(evalId?: string): void {
         evalId,
         updatedEvalIds: updatedEvalIds.length > 0 ? updatedEvalIds : undefined,
         deletedEvalIds: pendingHasDelete ? (pending?.deletedEvalIds ?? []) : undefined,
+        refreshLatest: refreshLatest ? true : undefined,
         timestamp: nowIso,
       }),
     );
@@ -102,7 +114,21 @@ export function hasUpdateComponent(signal: DatabaseSignal): boolean {
   return (
     signal.type === 'update' ||
     signal.evalId !== undefined ||
-    (signal.updatedEvalIds?.length ?? 0) > 0
+    (signal.updatedEvalIds?.length ?? 0) > 0 ||
+    signal.refreshLatest === true
+  );
+}
+
+/**
+ * True when the signal asks to refresh the latest eval (an unscoped update component): the explicit
+ * `refreshLatest` marker, or a bare update with no scoped ids (e.g. a legacy bare-timestamp signal).
+ * The watcher emits {@link Eval.latest} for these so a root `/eval` view follows new evals even when
+ * the same coalesced signal also carries scoped updates or a delete.
+ */
+export function hasUnscopedUpdate(signal: DatabaseSignal): boolean {
+  return (
+    signal.refreshLatest === true ||
+    (hasUpdateComponent(signal) && updateEvalIds(signal).length === 0)
   );
 }
 
@@ -156,7 +182,12 @@ function parseSignalJson(content: string): { signal: DatabaseSignal; timestamp?:
         'timestamp' in parsed && typeof parsed.timestamp === 'string'
           ? parsed.timestamp
           : undefined;
-      return { signal: { type: parsed.type, evalId, updatedEvalIds, deletedEvalIds }, timestamp };
+      const refreshLatest =
+        'refreshLatest' in parsed && parsed.refreshLatest === true ? true : undefined;
+      return {
+        signal: { type: parsed.type, evalId, updatedEvalIds, deletedEvalIds, refreshLatest },
+        timestamp,
+      };
     }
   } catch {}
   return null;
@@ -219,6 +250,9 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
   // Carry forward every pending scoped update so a quick create/import-then-delete still
   // refreshes clients to the newly written eval(s) rather than only processing the delete.
   const carriedUpdateIds = pending && hasUpdateComponent(pending) ? updateEvalIds(pending) : [];
+  // Carry a pending unscoped "refresh latest" too, so a bare update followed by an unrelated
+  // delete still refreshes a root `/eval` view whose displayed eval was not deleted.
+  const carriedRefreshLatest = pending ? hasUnscopedUpdate(pending) : false;
 
   writeSignalFile(
     JSON.stringify({
@@ -226,6 +260,7 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
       deletedEvalIds: mergedDeletedEvalIds,
       evalId: carriedUpdateIds[carriedUpdateIds.length - 1],
       updatedEvalIds: carriedUpdateIds.length > 0 ? carriedUpdateIds : undefined,
+      refreshLatest: carriedRefreshLatest ? true : undefined,
       timestamp: new Date(now).toISOString(),
     }),
   );

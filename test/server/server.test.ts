@@ -367,6 +367,38 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('emits the latest eval for an unscoped refresh coalesced with a scoped update', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      // A bare unscoped update coalesced with a scoped one (refreshLatest marker): the pinned eval
+      // refreshes AND the root view still follows the latest eval.
+      vi.mocked(readSignalFile).mockReturnValueOnce({
+        type: 'update',
+        evalId: 'eval-scoped',
+        updatedEvalIds: ['eval-scoped'],
+        refreshLatest: true,
+      });
+      vi.mocked(Eval.findById).mockResolvedValueOnce({ id: 'eval-scoped', config: {} } as never);
+      vi.mocked(Eval.latest).mockResolvedValueOnce({ id: 'eval-latest', config: {} } as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-scoped' }),
+      );
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-latest' }),
+      );
+      // An unscoped refresh clears all count caches (the latest eval id is not known at signal time).
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith();
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('should broadcast deleted eval IDs without selecting a surviving eval', async () => {
       const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
       vi.mocked(readSignalFile).mockReturnValueOnce({

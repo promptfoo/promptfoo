@@ -349,6 +349,50 @@ describe('signal', () => {
       expect(written.updatedEvalIds).toEqual(['eval-update-Y', 'eval-update-Z']);
     });
 
+    it('preserves the current unscoped refresh when a scoped update is pending', () => {
+      // A bare updateSignalFile() lands while a scoped update is still pending. The JSON must keep
+      // both the pending scoped id and a refreshLatest marker so a root /eval view still follows
+      // the latest eval rather than only refreshing the pending scoped one.
+      mockReadFileSync.mockReturnValue(`eval-pending-scoped:${new Date().toISOString()}`);
+
+      updateSignalFile();
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'update',
+        updatedEvalIds: ['eval-pending-scoped'],
+        refreshLatest: true,
+      });
+    });
+
+    it('preserves a pending unscoped refresh when a scoped update coalesces', () => {
+      // The reverse: a bare (unscoped) update is pending when a scoped update fires. The scoped
+      // write must keep the unscoped "refresh latest" intent so the root view is not dropped.
+      mockReadFileSync.mockReturnValue(new Date().toISOString());
+
+      updateSignalFile('eval-scoped-1');
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'update',
+        evalId: 'eval-scoped-1',
+        refreshLatest: true,
+      });
+    });
+
+    it('carries a pending unscoped refresh into a following delete', () => {
+      // A bare (unscoped) update is pending when an unrelated delete fires. The delete JSON must
+      // keep a refreshLatest marker so a root /eval view whose eval was not deleted still follows
+      // the latest eval.
+      mockReadFileSync.mockReturnValue(new Date().toISOString());
+
+      updateSignalFileForDeletedEvals(['eval-removed']);
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'delete',
+        deletedEvalIds: ['eval-removed'],
+        refreshLatest: true,
+      });
+    });
+
     it('keeps repeated updates to the same eval on the compact legacy text format', () => {
       // The common per-result run case: same eval signaled twice in the window. Nothing new to
       // preserve, so it stays legacy text rather than ballooning into JSON.

@@ -13,7 +13,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
 import {
   hasDeleteComponent,
-  hasUpdateComponent,
+  hasUnscopedUpdate,
   isAllEvalsDeleted,
   readSignalFile,
   setupSignalWatcher,
@@ -394,16 +394,16 @@ export async function startServer(
     const handleSignalUpdate = async () => {
       const signal = readSignalFile();
       // A coalesced signal can carry several scoped updates (back-to-back eval saves in the
-      // debounce window) plus a delete component.
+      // debounce window), an unscoped "refresh latest" component, and a delete component.
       const scopedUpdateIds = updateEvalIds(signal);
 
       // Mutations can happen in a separate CLI process, so clear this server's process-local caches
-      // before serving the next request. A delete-all or an unscoped update can touch any eval's
-      // cached count, so clear them all; otherwise scope the clear to exactly the evals this signal
-      // updates and/or deletes (a coalesced signal can carry both an update and a delete component).
+      // before serving the next request. A delete-all or an unscoped update (whose latest eval is
+      // not known here) can touch any eval's cached count, so clear them all; otherwise scope the
+      // clear to exactly the evals this signal updates and/or deletes.
       if (
         (hasDeleteComponent(signal) && isAllEvalsDeleted(signal.deletedEvalIds)) ||
-        (hasUpdateComponent(signal) && scopedUpdateIds.length === 0)
+        hasUnscopedUpdate(signal)
       ) {
         invalidateEvaluationCache();
       } else {
@@ -416,25 +416,27 @@ export async function startServer(
         io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });
       }
 
-      if (hasUpdateComponent(signal)) {
-        if (scopedUpdateIds.length > 0) {
-          // Emit one refresh per surviving eval so a client pinned to any of them updates.
-          const updatedEvals = await Promise.all(scopedUpdateIds.map((id) => Eval.findById(id)));
-          for (const updatedEval of updatedEvals) {
-            if (updatedEval) {
-              logger.debug(
-                `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
-              );
-              io.emit('update', { evalId: updatedEval.id });
-            }
-            // Else: a scoped update whose eval no longer exists (e.g. it won the debounce race
-            // against its own delete). Emit nothing — clients reconcile on the next signal.
+      // Emit one refresh per surviving scoped eval so a client pinned to any of them updates.
+      if (scopedUpdateIds.length > 0) {
+        const updatedEvals = await Promise.all(scopedUpdateIds.map((id) => Eval.findById(id)));
+        for (const updatedEval of updatedEvals) {
+          if (updatedEval) {
+            logger.debug(
+              `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
+            );
+            io.emit('update', { evalId: updatedEval.id });
           }
-        } else {
-          // Unscoped update: refresh to the latest eval, or clear the view when none remain.
-          const latestEval = await Eval.latest();
-          io.emit('update', latestEval ? { evalId: latestEval.id } : null);
+          // Else: a scoped update whose eval no longer exists (e.g. it won the debounce race
+          // against its own delete). Emit nothing — clients reconcile on the next signal.
         }
+      }
+
+      // An unscoped update follows the latest eval, so refresh a root `/eval` view to it (or clear
+      // the view when none remain). Emitted after any scoped updates — and possibly alongside them
+      // when coalesced — so the root view ends on the latest eval.
+      if (hasUnscopedUpdate(signal)) {
+        const latestEval = await Eval.latest();
+        io.emit('update', latestEval ? { evalId: latestEval.id } : null);
       }
     };
 
