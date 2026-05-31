@@ -89,6 +89,14 @@ describe('database eval deletion', () => {
     expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval1.id, eval2.id]);
   });
 
+  it('does not emit a delete signal when called with an empty id list', async () => {
+    // An empty deletedEvalIds list is indistinguishable from "all evals deleted" on the
+    // client, so deleting zero evals must be a no-op rather than a spurious clear.
+    await deleteEvals([]);
+
+    expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+  });
+
   it('deletes traces and spans when deleting all evals', async () => {
     const eval1 = await EvalFactory.create();
     const eval2 = await EvalFactory.create();

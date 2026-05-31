@@ -465,6 +465,11 @@ export async function deleteEval(evalId: string) {
  * @param ids - The IDs of the evals to delete.
  */
 export async function deleteEvals(ids: string[]): Promise<void> {
+  // Deleting zero evals must not emit a delete signal: the watcher would broadcast an empty
+  // deletedEvalIds list, which clients interpret as "all evals deleted" and reload/clear.
+  if (ids.length === 0) {
+    return;
+  }
   const db = await getDb();
   await db.transaction(async (tx) => {
     await deleteTraceRecordsForEvals(tx, ids);

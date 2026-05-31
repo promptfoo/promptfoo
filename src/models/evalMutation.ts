@@ -2,16 +2,32 @@ import { updateSignalFile, updateSignalFileForDeletedEvals } from '../database/s
 import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { clearCountCache } from './evalPerformance';
 
+/**
+ * Drops this process's cached eval aggregates so the next read re-queries the DB.
+ * Always clears the standalone-eval LRU (keyed by filter combos, no per-eval granularity)
+ * and the count cache for `evalId` (or every eval's counts when `evalId` is omitted).
+ * Use this for in-process cache coherence only — it does NOT notify the view server.
+ */
 export function invalidateEvaluationCache(evalId?: string): void {
   clearStandaloneEvalCache();
   clearCountCache(evalId);
 }
 
+/**
+ * Call after creating or mutating an eval's data (results, prompts, ratings). Invalidates
+ * this process's caches and writes a scoped update signal so a running `promptfoo view`
+ * server refreshes clients viewing this eval (and the root route, which follows the latest).
+ */
 export function notifyEvaluationChanged(evalId?: string): void {
   invalidateEvaluationCache(evalId);
   updateSignalFile(evalId);
 }
 
+/**
+ * Call after deleting one or more evals. Invalidates this process's caches and writes a
+ * delete signal so the view server can navigate clients off the removed evals. Pass no
+ * argument (or omit ids) for "all evals deleted".
+ */
 export function notifyEvaluationsDeleted(evalIds?: string[]): void {
   invalidateEvaluationCache();
   updateSignalFileForDeletedEvals(evalIds);

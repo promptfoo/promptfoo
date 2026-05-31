@@ -402,10 +402,14 @@ export async function startServer(
           `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
         );
         io.emit('update', { evalId: updatedEval.id });
-      } else if (!updatedEval && !signal.evalId) {
+      } else if (!signal.evalId) {
         // No scoped eval and no evals remain: tell clients to clear their view.
         io.emit('update', null);
       }
+      // Else: a scoped update whose eval no longer exists (e.g. an update signal that won the
+      // debounce race against the eval's own delete). Emit nothing — clients re-fetch the
+      // recent-evals list on the next signal and reconcile then, so a stale pinned view
+      // self-heals without us yanking every client to a different eval here.
     };
 
     void handleSignalUpdate();

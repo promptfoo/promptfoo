@@ -8,7 +8,7 @@ import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
-import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
+import { type ResultLightweightWithLabel } from '@promptfoo/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
@@ -31,6 +31,9 @@ interface EvalOptions {
    */
   fetchId: string | null;
 }
+
+/** Payload the view-server socket emits on its 'init' / 'update' events. */
+type EvalRefreshSignal = { deletedEvalIds?: string[]; evalId?: string } | null;
 
 function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null {
   if (!filtersParam) {
@@ -154,9 +157,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * down and reopen the connection when this handler's dependencies (e.g. filterMode via
    * loadEvalById, or fetchId on navigation) change.
    */
-  const handleResultsFile = async (
-    data: ResultsFile | { deletedEvalIds?: string[]; evalId?: string } | null,
-  ) => {
+  const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
       logger.debug('[Eval] No eval data available', {});
       clearEvalState();
@@ -187,7 +188,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     const reloadInBackground = async (id: string) => {
       setIsStreaming(true);
       try {
-        setEvalId(id);
+        // loadEvalById sets the eval id itself, so no separate setEvalId is needed here.
         await loadEvalById(id, true);
       } finally {
         setIsStreaming(false);
@@ -221,7 +222,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
   };
 
-  // Keep the latest handler in a ref so the socket effect can depend only on apiBaseUrl.
+  // Keep the latest handler in a ref so the socket effect only depends on the connection
+  // target (apiBaseUrl) plus the stable setIsStreaming setter — never on filterMode/fetchId.
   const handleResultsFileRef = useRef(handleResultsFile);
   handleResultsFileRef.current = handleResultsFile;
 
@@ -452,7 +454,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * If and when a table is available, set loaded to true.
    *
    * Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
-   * immediately after `setTableFromResultsFile` is called. Otherwise, `loaded` will be true before
+   * immediately after the table store is populated. Otherwise, `loaded` will be true before
    * the table is defined resulting in a race condition.
    */
   useEffect(() => {

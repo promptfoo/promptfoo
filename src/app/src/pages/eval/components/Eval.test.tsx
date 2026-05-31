@@ -671,6 +671,36 @@ describe('Eval', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/eval', { replace: true });
   });
 
+  it('reloads the latest eval on the root route when a delete reports an empty id list with survivors', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: [] });
+    });
+
+    // An empty id list is treated as "refresh to latest"; with survivors it must not clear.
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+      'latest-eval',
+      expect.objectContaining({ skipLoadingState: true }),
+    );
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
+  });
+
   it('clears the eval state when a socket update reports no remaining evals', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 

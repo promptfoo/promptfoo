@@ -376,6 +376,26 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('should broadcast an empty id list when a delete signal omits ids (delete-all)', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      // delete-all writes `{type:'delete'}` with no deletedEvalIds; the watcher should still
+      // broadcast a delete with an empty list so clients clear/reload.
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'delete' });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { deletedEvalIds: [] }),
+      );
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('should not deadlock the shutdown promise if watcher.close throws', async () => {
       const mockWatcher = {
         close: vi.fn().mockImplementation(() => {

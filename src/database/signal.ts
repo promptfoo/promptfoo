@@ -12,6 +12,13 @@ export interface DatabaseSignal {
 
 const SIGNAL_WATCHER_DEBOUNCE_MS = 250;
 
+/** Returns the string entries of an unknown value, or undefined if it is not an array. */
+function toStringEvalIds(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((evalId): evalId is string => typeof evalId === 'string')
+    : undefined;
+}
+
 function writeSignalFile(content: string): void {
   const filePath = getDbSignalPath();
   try {
@@ -59,7 +66,7 @@ function readPendingDeletedEvalIds(now: number): string[] | undefined | null {
     if (!Array.isArray(parsed.deletedEvalIds)) {
       return null;
     }
-    return parsed.deletedEvalIds.filter((evalId): evalId is string => typeof evalId === 'string');
+    return toStringEvalIds(parsed.deletedEvalIds);
   } catch {
     return null;
   }
@@ -102,6 +109,13 @@ function readLegacySignalEvalId(content: string): string | undefined {
   return evalId && evalId.length > 8 ? evalId : undefined;
 }
 
+/**
+ * Reads and classifies the signal file into a {@link DatabaseSignal}. It understands two
+ * on-disk formats: the legacy `evalId:timestamp` (or bare timestamp) text written by
+ * {@link updateSignalFile}, and the JSON `{type:'delete',deletedEvalIds,timestamp}` payload
+ * written by {@link updateSignalFileForDeletedEvals}. Anything else (malformed/half-written
+ * content, a read error) degrades to an unscoped `{type:'update'}`.
+ */
 export function readSignalFile(): DatabaseSignal {
   const filePath = getDbSignalPath();
   try {
@@ -110,9 +124,7 @@ export function readSignalFile(): DatabaseSignal {
       const parsed = JSON.parse(content) as unknown;
       if (parsed !== null && typeof parsed === 'object' && 'type' in parsed) {
         const deletedEvalIds =
-          'deletedEvalIds' in parsed && Array.isArray(parsed.deletedEvalIds)
-            ? parsed.deletedEvalIds.filter((evalId): evalId is string => typeof evalId === 'string')
-            : undefined;
+          'deletedEvalIds' in parsed ? toStringEvalIds(parsed.deletedEvalIds) : undefined;
         if (parsed.type === 'delete') {
           return { type: 'delete', deletedEvalIds };
         }
@@ -126,8 +138,10 @@ export function readSignalFile(): DatabaseSignal {
 }
 
 /**
- * Reads the signal file and returns the eval ID if present.
- * @returns The eval ID from the signal file, or undefined if not present
+ * Reads the signal file and returns the scoped eval ID of an update signal, if present.
+ * Delete signals (JSON payloads) carry no `evalId` and therefore return undefined here; use
+ * {@link readSignalFile} to access the full {@link DatabaseSignal} including `deletedEvalIds`.
+ * @returns The eval ID from an update signal, or undefined if not present
  */
 export function readSignalEvalId(): string | undefined {
   return readSignalFile().evalId;
