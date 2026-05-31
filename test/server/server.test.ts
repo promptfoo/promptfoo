@@ -316,6 +316,37 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('should invalidate the prompts cache for a delete signal', async () => {
+      // A delete takes a different branch than an update; the prompt cache must still be dropped.
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'delete', deletedEvalIds: ['gone'] });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should invalidate the prompts cache for a delete-all signal', async () => {
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'delete' });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('should scope process-local evaluation cache invalidation to the signaled eval', async () => {
       vi.mocked(readSignalFile).mockReturnValueOnce({
         type: 'update',

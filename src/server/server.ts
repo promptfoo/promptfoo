@@ -386,8 +386,9 @@ export async function startServer(
 
   const watcher = setupSignalWatcher(() => {
     const handleSignalUpdate = async () => {
-      // A new eval signal can change /api/prompts output, so drop the cached prompts for every
-      // signal — before any early return — so the next /api/prompts request re-reads from the DB.
+      // A new eval signal can change /api/prompts output. Invalidate first — before this handler
+      // awaits any DB lookups and regardless of which emit branches below run — so every signal
+      // drops the cache and the next /api/prompts request re-reads it from the DB.
       promptCacheService.invalidate();
 
       const signal = readSignalFile();
