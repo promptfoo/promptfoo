@@ -152,6 +152,8 @@ describe('Provider Registry', () => {
       });
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
+        // All lookups should reuse the factory exported by the cached AWS
+        // family module instead of allocating one factory per request.
         const path = 'bedrock:completion:anthropic.claude-v2';
         const [a, b, c] = await Promise.all([
           getProviderFactories(path),
@@ -586,7 +588,7 @@ describe('Provider Registry', () => {
       const provider = await factory!.create(path, { config }, mockContext);
       expect(provider.constructor.name).toBe(expectedProviderName);
       if (expectedModelType) {
-        expect((provider as any).modelType).toBe(expectedModelType);
+        expect(provider).toHaveProperty('modelType', expectedModelType);
       }
     });
 
@@ -1024,16 +1026,32 @@ describe('Provider Registry', () => {
     };
 
     it.each([
-      ['google:live:gemini-live-2.5-flash-preview', 'GoogleLiveProvider'],
-      ['google:image:imagen-3.0-generate-002', 'GoogleImageProvider'],
-      ['google:video:veo-3.1-generate-preview', 'GoogleVideoProvider'],
-      ['google:gemini-2.5-flash-image', 'GeminiImageProvider'],
-      ['palm:chat-bison', 'AIStudioChatProvider'],
-    ])('routes %s to %s', async (providerPath, expectedProviderName) => {
+      [
+        'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:image:imagen-3.0-generate-002',
+        async () => (await import('../../src/providers/google/image')).GoogleImageProvider,
+      ],
+      [
+        'google:video:veo-3.1-generate-preview',
+        async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
+      ],
+      [
+        'google:gemini-2.5-flash-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'palm:chat-bison',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+    ] as const)('routes %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
-      expect(provider.constructor.name).toBe(expectedProviderName);
+      const ExpectedProvider = await loadExpectedProvider();
+      expect(provider).toBeInstanceOf(ExpectedProvider);
     });
 
     it.each([

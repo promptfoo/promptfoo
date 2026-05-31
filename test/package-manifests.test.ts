@@ -135,7 +135,7 @@ describe('package manifests', () => {
     ).toEqual(['./side-effect', './exported', './dynamic']);
   });
 
-  it('keeps TypeScript from emitting into bundler-owned dist', () => {
+  it('pins root TypeScript compilation to noEmit', () => {
     const tsconfig = readPackageJson<{
       compilerOptions?: {
         noEmit?: boolean;

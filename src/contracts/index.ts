@@ -1,3 +1,4 @@
+// Keep .js specifiers so Node can resolve the emitted ESM declarations and runtime imports.
 export * from './api/common.js';
 export * from './api/user.js';
 export * from './blobs.js';
