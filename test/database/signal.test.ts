@@ -72,6 +72,19 @@ describe('signal', () => {
       expect(content).toMatch(/^eval-123-abc:\d{4}-\d{2}-\d{2}T/);
     });
 
+    it('writes a short eval id as JSON so it survives the round trip', () => {
+      // A short caller-provided id (e.g. an imported `demo`) can't be recovered from the legacy
+      // `evalId:timestamp` text — readSignalFile would read it back as an unscoped refresh — so it
+      // is stored explicitly as JSON instead.
+      updateSignalFile('demo');
+
+      const written = mockWriteFileSync.mock.calls[0][1];
+      expect(JSON.parse(written)).toMatchObject({ type: 'update', evalId: 'demo' });
+
+      mockReadFileSync.mockReturnValue(written);
+      expect(readSignalEvalId()).toBe('demo');
+    });
+
     it('should log warning when write fails', () => {
       mockWriteFileSync.mockImplementation(() => {
         throw new Error('Write failed');
@@ -363,6 +376,24 @@ describe('signal', () => {
         }),
       );
       updateSignalFileForDeletedEvals(undefined);
+      expect(JSON.parse(lastWrittenSignal()).deletedEvalIds).toBeUndefined();
+    });
+
+    it('keeps "all deleted" when a folded delete-all later coalesces with a specific delete', () => {
+      // Three-signal chain: a delete-all is first folded into a pending update as its "all" marker
+      // (deletedEvalIds: []), then a specific delete coalesces with that update. The [] must still
+      // read as "all deleted" so the specific id can't downgrade it to a single removed eval.
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'update',
+          evalId: 'eval-after-delete-all',
+          deletedEvalIds: [],
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      updateSignalFileForDeletedEvals(['eval-specific']);
+
       expect(JSON.parse(lastWrittenSignal()).deletedEvalIds).toBeUndefined();
     });
 

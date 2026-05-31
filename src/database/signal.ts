@@ -23,6 +23,19 @@ export interface DatabaseSignal {
 
 const SIGNAL_WATCHER_DEBOUNCE_MS = 250;
 
+/**
+ * The legacy `evalId:timestamp` text format can't be told apart from a stray short token, so
+ * {@link readLegacySignalEvalId} only recovers eval ids at least this long. Generated ids
+ * (`eval-<rand>-<iso>`) always clear it; a short caller-provided id (e.g. an imported `demo`) is
+ * written as JSON instead, which stores the id explicitly and survives the round trip.
+ */
+const MIN_LEGACY_EVAL_ID_LENGTH = 9;
+
+/** Whether {@link readLegacySignalEvalId} can recover this id from the legacy text format. */
+function isLegacyRecoverableEvalId(evalId: string): boolean {
+  return evalId.length >= MIN_LEGACY_EVAL_ID_LENGTH;
+}
+
 /** Returns the string entries of an unknown value, or undefined if it is not an array. */
 function toStringEvalIds(value: unknown): string[] | undefined {
   return Array.isArray(value)
@@ -60,12 +73,16 @@ export function updateSignalFile(evalId?: string): void {
   const pendingHasDelete = pending ? hasDeleteComponent(pending) : false;
   const updatedEvalIds = [...new Set([...pendingUpdateIds, ...(evalId ? [evalId] : [])])];
 
-  // Only coalesce into JSON when there's something to preserve beyond this single update — a
-  // pending delete, or a pending scoped update for a different eval — so the common per-result
-  // run stays on the compact legacy text format. The reader matches the trailing ISO timestamp
-  // because generated eval IDs can themselves contain colons.
+  // Coalesce into JSON when there's something to preserve beyond this single update — a pending
+  // delete, or a pending scoped update for a different eval — so the common per-result run stays
+  // on the compact legacy `evalId:timestamp` text. A short eval id also forces JSON: the legacy
+  // reader can't recover it (see isLegacyRecoverableEvalId), so it would otherwise degrade to an
+  // unscoped refresh and leave a page pinned to that eval stale. (A bare unscoped update has no id
+  // to preserve, so its "refresh latest" intent is not carried through coalescing — but no in-tree
+  // caller writes one.)
   const needsCoalesce = pendingHasDelete || pendingUpdateIds.some((id) => id !== evalId);
-  if (needsCoalesce) {
+  const evalIdNeedsJson = evalId !== undefined && !isLegacyRecoverableEvalId(evalId);
+  if (needsCoalesce || evalIdNeedsJson) {
     writeSignalFile(
       JSON.stringify({
         type: 'update',
@@ -92,6 +109,16 @@ export function hasUpdateComponent(signal: DatabaseSignal): boolean {
 /** True when the signal carries a delete component (specific ids or "all evals deleted"). */
 export function hasDeleteComponent(signal: DatabaseSignal): boolean {
   return signal.type === 'delete' || signal.deletedEvalIds !== undefined;
+}
+
+/**
+ * True when a delete component means "all evals were deleted" rather than a specific id list.
+ * "All" is encoded as `undefined` by direct delete callers and as `[]` when a pending delete-all
+ * is folded into a JSON update, so both count. Only meaningful for a signal that actually carries
+ * a delete component (see {@link hasDeleteComponent}); an update-only signal has no ids either.
+ */
+export function isAllEvalsDeleted(deletedEvalIds: string[] | undefined): boolean {
+  return deletedEvalIds === undefined || deletedEvalIds.length === 0;
 }
 
 /**
@@ -181,13 +208,14 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
   const now = Date.now();
   const pending = readPendingSignal(now);
   const pendingDelete = pending && hasDeleteComponent(pending) ? pending : null;
-  // Merge the new deletes with any pending deletes in the window (undefined on either side
-  // means "all evals deleted" and wins).
+  // Merge the new deletes with any pending deletes in the window. "All evals deleted" — encoded as
+  // undefined by direct callers, or as [] when a delete-all was folded into a pending update —
+  // wins over a specific id list, so a coalescing chain never downgrades a delete-all to one id.
   const mergedDeletedEvalIds = !pendingDelete
     ? deletedEvalIds
-    : pendingDelete.deletedEvalIds === undefined || deletedEvalIds === undefined
+    : isAllEvalsDeleted(pendingDelete.deletedEvalIds) || isAllEvalsDeleted(deletedEvalIds)
       ? undefined
-      : [...new Set([...pendingDelete.deletedEvalIds, ...deletedEvalIds])];
+      : [...new Set([...(pendingDelete.deletedEvalIds ?? []), ...(deletedEvalIds ?? [])])];
   // Carry forward every pending scoped update so a quick create/import-then-delete still
   // refreshes clients to the newly written eval(s) rather than only processing the delete.
   const carriedUpdateIds = pending && hasUpdateComponent(pending) ? updateEvalIds(pending) : [];
@@ -210,7 +238,7 @@ function readLegacySignalEvalId(content: string): string | undefined {
 
   const legacyScopedSignal = content.match(/^(.*):\d{4}-\d{2}-\d{2}T/);
   const evalId = legacyScopedSignal?.[1];
-  return evalId && evalId.length > 8 ? evalId : undefined;
+  return evalId && isLegacyRecoverableEvalId(evalId) ? evalId : undefined;
 }
 
 /**

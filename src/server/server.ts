@@ -14,6 +14,7 @@ import { getDefaultPort, VERSION } from '../constants';
 import {
   hasDeleteComponent,
   hasUpdateComponent,
+  isAllEvalsDeleted,
   readSignalFile,
   setupSignalWatcher,
   updateEvalIds,
@@ -396,13 +397,17 @@ export async function startServer(
       // debounce window) plus a delete component.
       const scopedUpdateIds = updateEvalIds(signal);
 
-      // Mutations can happen in a separate CLI process, so clear this server's process-local
-      // caches before serving the next request. Invalidate every updated eval (not just the
-      // latest), or all of them for an unscoped signal.
-      if (scopedUpdateIds.length > 0) {
-        invalidateEvaluationCaches(scopedUpdateIds);
+      // Mutations can happen in a separate CLI process, so clear this server's process-local caches
+      // before serving the next request. A delete-all or an unscoped update can touch any eval's
+      // cached count, so clear them all; otherwise scope the clear to exactly the evals this signal
+      // updates and/or deletes (a coalesced signal can carry both an update and a delete component).
+      if (
+        (hasDeleteComponent(signal) && isAllEvalsDeleted(signal.deletedEvalIds)) ||
+        (hasUpdateComponent(signal) && scopedUpdateIds.length === 0)
+      ) {
+        invalidateEvaluationCache();
       } else {
-        invalidateEvaluationCache(signal.evalId);
+        invalidateEvaluationCaches([...scopedUpdateIds, ...(signal.deletedEvalIds ?? [])]);
       }
       allPrompts = null;
 

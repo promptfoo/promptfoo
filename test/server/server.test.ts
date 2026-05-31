@@ -261,7 +261,10 @@ describe('server', () => {
       const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
       onSignalChange();
 
-      expect(invalidateEvaluationCache).toHaveBeenCalledWith(undefined);
+      // The default unscoped update can touch any eval's cached count, so it clears all of them
+      // (no-arg call) rather than scoping the clear to a single id.
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith();
+      expect(invalidateEvaluationCaches).not.toHaveBeenCalled();
 
       await new Promise((resolve) => setImmediate(resolve));
 
@@ -380,6 +383,9 @@ describe('server', () => {
       await vi.waitFor(() =>
         expect(emitSpy).toHaveBeenCalledWith('update', { deletedEvalIds: ['deleted-eval'] }),
       );
+      // The deleted eval's count cache must be cleared so a re-import can't reuse a stale count.
+      expect(invalidateEvaluationCaches).toHaveBeenCalledWith(['deleted-eval']);
+      expect(invalidateEvaluationCache).not.toHaveBeenCalled();
 
       triggerSignal('SIGINT');
       await serverPromise;
@@ -400,6 +406,9 @@ describe('server', () => {
       await vi.waitFor(() =>
         expect(emitSpy).toHaveBeenCalledWith('update', { deletedEvalIds: [] }),
       );
+      // A delete-all can invalidate any eval's count, so it clears every cache (no-arg call).
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith();
+      expect(invalidateEvaluationCaches).not.toHaveBeenCalled();
 
       triggerSignal('SIGINT');
       await serverPromise;
@@ -431,6 +440,9 @@ describe('server', () => {
       await vi.waitFor(() =>
         expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'surviving-eval' }),
       );
+      // Both the surviving update AND the deleted eval are invalidated — the delete component of a
+      // coalesced signal must not leave the removed eval's count cache stale.
+      expect(invalidateEvaluationCaches).toHaveBeenCalledWith(['surviving-eval', 'deleted-eval']);
 
       triggerSignal('SIGINT');
       await serverPromise;
