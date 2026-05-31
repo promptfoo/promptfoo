@@ -934,6 +934,32 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().response).toBe(response);
     });
 
+    it('should count assertion requests when the grading provider omits token usage', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
+        numRequests: 1,
+      });
+    });
+
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
 
