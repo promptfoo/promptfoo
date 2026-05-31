@@ -53,12 +53,17 @@ async function restoreJsonlOutputsAfterPersistenceFailure(
   }
 
   try {
+    // A failed retry must restore the pre-retry database view, not union in
+    // replacement rows that were streamed before persistence failed.
+    evalRecord.resultPersistenceFailed = false;
     await writeMultipleOutputs(jsonlOutputPaths, evalRecord, null);
   } catch (error) {
     logger.warn('Retry results failed to persist, and restoring JSONL output failed.', {
       error,
       jsonlOutputPaths,
     });
+  } finally {
+    evalRecord.resultPersistenceFailed = true;
   }
 }
 
@@ -386,9 +391,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
         try {
           await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
         } catch (outputError) {
-          logger.warn('Retry results are saved, but JSONL output finalization failed.', {
-            error: outputError,
-          });
+          logger.warn(
+            'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
+            {
+              error: outputError,
+              outputPaths: jsonlOutputPaths,
+            },
+          );
         }
       }
     }

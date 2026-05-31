@@ -218,6 +218,23 @@ describe('JSONL output with proper line endings', () => {
     expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
   });
 
+  it('should preserve a dangling artifact symlink and create its target during a rewrite', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const targetPath = path.join(tempDir, 'missing-target.jsonl');
+    fs.symlinkSync(path.basename(targetPath), tempFilePath);
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
+
+    await writeOutput(tempFilePath, mockEval, null);
+
+    expect(fs.lstatSync(tempFilePath).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
+  });
+
   it('should rewrite an artifact with a long valid basename', async () => {
     if (process.platform === 'win32') {
       return;

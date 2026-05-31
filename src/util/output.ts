@@ -642,11 +642,7 @@ export async function writeOutput(
     );
     try {
       try {
-        if (outputMode === undefined) {
-          await fsPromises.writeFile(tempOutputPath, '');
-        } else {
-          await fsPromises.writeFile(tempOutputPath, '', { mode: outputMode });
-        }
+        await fsPromises.writeFile(tempOutputPath, '');
       } catch (error) {
         if (isPermissionDeniedError(error)) {
           logger.warn(
