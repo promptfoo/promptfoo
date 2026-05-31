@@ -1116,6 +1116,57 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledWith(outputPath, '');
   });
 
+  it('keeps newly streamed retry rows ahead of stale persisted rows after a save failure', async () => {
+    const outputPath = 'output.jsonl';
+    const staleResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { error: 'stale persisted error' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const retriedResult: EvaluateResult = {
+      ...staleResult,
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      response: { output: 'fresh streamed retry' },
+    };
+    const eval_ = new Eval({});
+    eval_.recordResultPersistenceFailure(retriedResult);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(staleResult)}\n${JSON.stringify(retriedResult)}\n`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {
+      yield [staleResult as any];
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({
+        failureReason: ResultFailureReason.NONE,
+        response: { output: 'fresh streamed retry' },
+        score: 1,
+        success: true,
+      }),
+    ]);
+  });
+
   it('writeOutput with json and txt output', async () => {
     const outputPath = ['output.json', 'output.txt'];
     const eval_ = new Eval({});

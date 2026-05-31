@@ -9,6 +9,7 @@ import Eval from '../src/models/eval';
 import { evaluate } from '../src/node/evaluate';
 import { ResultFailureReason } from '../src/types';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
+import { mockProcessEnv } from './util/utils';
 
 import type { ApiProvider } from '../src/types';
 
@@ -340,5 +341,56 @@ describe('programmatic JSONL output', () => {
     expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
     expect(JSON.stringify(result)).not.toContain('session=secret');
     expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
+  });
+
+  it('applies strip projections to recovered streamed rows after persistence fails', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_METADATA: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'stripped-recovery-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'response-output-secret',
+        metadata: {
+          debug: 'response-metadata-secret',
+        },
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    vi.spyOn(Eval.prototype, 'addResult').mockRejectedValue(new Error('simulated save failure'));
+
+    try {
+      await evaluate({
+        outputPath,
+        prompts: ['Test prompt'],
+        providers: [provider],
+        tests: [
+          {
+            vars: { customerEmail: 'vars-secret@example.com' },
+            metadata: { debug: 'testcase-metadata-secret' },
+          },
+        ],
+      });
+
+      const [result] = readJsonl(outputPath);
+      expect(result.response).toEqual({
+        output: '[output stripped]',
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      expect(result.vars).toEqual({});
+      expect(result.testCase.vars).toBeUndefined();
+      expect(result.testCase.metadata).toBeUndefined();
+      expect(result.metadata).toEqual({});
+      expect(JSON.stringify(result)).not.toContain('response-output-secret');
+      expect(JSON.stringify(result)).not.toContain('response-metadata-secret');
+      expect(JSON.stringify(result)).not.toContain('vars-secret@example.com');
+      expect(JSON.stringify(result)).not.toContain('testcase-metadata-secret');
+    } finally {
+      restoreEnv();
+    }
   });
 });

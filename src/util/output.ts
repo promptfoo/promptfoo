@@ -89,7 +89,9 @@ async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, ev
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
       const evaluateResult = toEvaluateResult(result);
-      finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+      if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
+        finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+      }
     }
   }
   for (const result of evalRecord.getFinalJsonlResults()) {

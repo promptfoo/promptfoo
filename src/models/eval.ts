@@ -299,6 +299,7 @@ export default class Eval {
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
+  private failedResultKeys = new Set<string>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
@@ -729,6 +730,15 @@ export default class Eval {
 
   getFinalJsonlResults() {
     return Array.from(this.finalJsonlResults.values());
+  }
+
+  recordResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    this.resultPersistenceFailed = true;
+    this.failedResultKeys.add(`${result.testIdx}:${result.promptIdx}`);
+  }
+
+  hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    return this.failedResultKeys.has(`${result.testIdx}:${result.promptIdx}`);
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
