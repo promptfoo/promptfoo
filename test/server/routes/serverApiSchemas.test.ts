@@ -7,6 +7,7 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { promptCacheService } from '../../../src/server/services/promptCacheService';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
@@ -125,9 +126,11 @@ describe('inline server API DTO validation', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    promptCacheService.invalidate();
   });
 
   afterEach(() => {
+    promptCacheService.invalidate();
     vi.resetAllMocks();
   });
 
@@ -253,6 +256,22 @@ describe('inline server API DTO validation', () => {
     expect(prompts.body).toEqual({ data: [{ raw: 'p', label: 'p' }] });
     expect(datasets.status).toBe(200);
     expect(datasets.body).toEqual({ data: [{ vars: { q: 'hello' } }] });
+  });
+
+  it('refreshes the prompt list route after invalidating the singleton cache', async () => {
+    mockedGetPrompts
+      .mockResolvedValueOnce([{ raw: 'first', label: 'first' }] as never)
+      .mockResolvedValueOnce([{ raw: 'second', label: 'second' }] as never);
+
+    const first = await api.get('/api/prompts');
+    promptCacheService.invalidate();
+    const second = await api.get('/api/prompts');
+
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ data: [{ raw: 'first', label: 'first' }] });
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ data: [{ raw: 'second', label: 'second' }] });
+    expect(mockedGetPrompts).toHaveBeenCalledTimes(2);
   });
 
   it('validates share-domain query params', async () => {

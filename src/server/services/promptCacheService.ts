@@ -13,6 +13,7 @@ export class PromptCacheService {
       if (generation === this.generation) {
         this.allPrompts = prompts;
       }
+      // A racing caller may receive a stale result, but invalidation keeps it out of the cache.
       return prompts;
     }
     return this.allPrompts;
