@@ -49,7 +49,7 @@ function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null 
 
 /** True when a delete signal removed the displayed eval (or all evals, for a delete-all). */
 function displayedEvalWasDeleted(
-  displayedEvalId: string | undefined,
+  displayedEvalId: string | null | undefined,
   deletedEvalIds: string[],
 ): boolean {
   return (
