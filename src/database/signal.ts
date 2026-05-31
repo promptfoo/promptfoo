@@ -10,6 +10,8 @@ export interface DatabaseSignal {
   deletedEvalIds?: string[];
 }
 
+const SIGNAL_WATCHER_DEBOUNCE_MS = 250;
+
 function writeSignalFile(content: string): void {
   const filePath = getDbSignalPath();
   try {
@@ -31,6 +33,38 @@ export function updateSignalFile(evalId?: string): void {
   writeSignalFile(evalId ? `${evalId}:${now}` : now);
 }
 
+function readPendingDeletedEvalIds(now: number): string[] | undefined | null {
+  try {
+    const content = fs.readFileSync(getDbSignalPath(), 'utf8').trim();
+    const parsed = JSON.parse(content) as unknown;
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      !('type' in parsed) ||
+      parsed.type !== 'delete' ||
+      !('timestamp' in parsed) ||
+      typeof parsed.timestamp !== 'string'
+    ) {
+      return null;
+    }
+
+    const elapsed = now - Date.parse(parsed.timestamp);
+    if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed > SIGNAL_WATCHER_DEBOUNCE_MS) {
+      return null;
+    }
+
+    if (!('deletedEvalIds' in parsed)) {
+      return undefined;
+    }
+    if (!Array.isArray(parsed.deletedEvalIds)) {
+      return null;
+    }
+    return parsed.deletedEvalIds.filter((evalId): evalId is string => typeof evalId === 'string');
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Signals that one or more evals were deleted. Unlike updates (which keep the legacy
  * `evalId:timestamp` text format), deletions use a JSON payload so the watcher can tell
@@ -40,11 +74,20 @@ export function updateSignalFile(evalId?: string): void {
  * refreshes.
  */
 export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void {
+  const now = Date.now();
+  const pendingDeletedEvalIds = readPendingDeletedEvalIds(now);
+  const mergedDeletedEvalIds =
+    pendingDeletedEvalIds === null
+      ? deletedEvalIds
+      : pendingDeletedEvalIds === undefined || deletedEvalIds === undefined
+        ? undefined
+        : [...new Set([...pendingDeletedEvalIds, ...deletedEvalIds])];
+
   writeSignalFile(
     JSON.stringify({
       type: 'delete',
-      deletedEvalIds,
-      timestamp: new Date().toISOString(),
+      deletedEvalIds: mergedDeletedEvalIds,
+      timestamp: new Date(now).toISOString(),
     }),
   );
 }
@@ -114,7 +157,7 @@ export function setupSignalWatcher(onChange: () => void): fs.FSWatcher {
 
   try {
     const watcher = fs.watch(filePath);
-    watcher.on('change', debounce(onChange, 250));
+    watcher.on('change', debounce(onChange, SIGNAL_WATCHER_DEBOUNCE_MS));
 
     watcher.on('error', (error) => {
       logger.warn(`File watcher error: ${error}`);

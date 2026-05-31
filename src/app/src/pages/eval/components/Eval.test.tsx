@@ -16,6 +16,7 @@ const {
   mockSocketHandlers,
   mockIo,
   mockFilterMode,
+  mockApiConfig,
 } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockShowToast: vi.fn(),
@@ -23,6 +24,7 @@ const {
   mockSocketHandlers: new Map<string, (data: any) => Promise<void>>(),
   mockIo: vi.fn(),
   mockFilterMode: { current: 'all' as string },
+  mockApiConfig: { apiBaseUrl: 'http://localhost' },
 }));
 
 vi.mock('@app/utils/api');
@@ -68,7 +70,7 @@ vi.mock('@app/components/EnterpriseBanner', () => ({
   default: () => null,
 }));
 vi.mock('@app/stores/apiConfig', () => ({
-  default: () => ({ apiBaseUrl: 'http://localhost' }),
+  default: () => mockApiConfig,
 }));
 vi.mock('socket.io-client', () => ({
   io: mockIo,
@@ -149,6 +151,7 @@ describe('Eval', () => {
     mockSocketDisconnect.mockClear();
     mockSocketHandlers.clear();
     mockFilterMode.current = 'all';
+    mockApiConfig.apiBaseUrl = 'http://localhost';
     mockIo.mockReset();
     mockIo.mockImplementation(() => {
       const socket: any = {
@@ -499,7 +502,7 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
   });
 
-  it('preserves the displayed eval when refreshing recent evals fails', async () => {
+  it('keeps a pinned eval visible when its initial background recents refresh fails', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
       evalId: 'selected-eval',
@@ -508,7 +511,7 @@ describe('Eval', () => {
       ok: false,
     } as Response);
 
-    render(
+    const { queryByTestId, queryByText } = render(
       <MemoryRouter>
         <Eval fetchId="selected-eval" />
       </MemoryRouter>,
@@ -516,13 +519,51 @@ describe('Eval', () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
-      await mockSocketHandlers.get('update')?.({ evalId: 'selected-eval' });
     });
 
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
     expect(baseMockTableStore.setTable).not.toHaveBeenCalledWith(null);
     expect(baseMockTableStore.setConfig).not.toHaveBeenCalledWith(null);
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
     expect(mockNavigate).not.toHaveBeenCalledWith('/eval', { replace: true });
+  });
+
+  it('keeps a pinned eval visible when a socket recents refresh fails', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+      } as Response);
+
+    const { queryByTestId, queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+
+    await act(async () => {
+      await mockSocketHandlers.get('update')?.({ evalId: 'background-eval' });
+    });
+
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(baseMockTableStore.fetchEvalData).not.toHaveBeenCalledWith(
+      'background-eval',
+      expect.anything(),
+    );
   });
 
   it('replaces a pinned eval route when that eval is deleted', async () => {
@@ -722,6 +763,42 @@ describe('Eval', () => {
 
     expect(mockIo.mock.calls.length).toBe(ioCallsAfterMount);
     expect(mockSocketDisconnect.mock.calls.length).toBe(disconnectsAfterMount);
+  });
+
+  it('refetches the pinned eval when the API base URL changes', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const fetchCallsAfterMount = baseMockTableStore.fetchEvalData.mock.calls.length;
+
+    mockApiConfig.apiBaseUrl = 'http://other-host';
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(baseMockTableStore.fetchEvalData.mock.calls.length).toBeGreaterThan(
+      fetchCallsAfterMount,
+    );
   });
 
   it('does not toggle the streaming indicator for a scoped update to a different pinned eval', async () => {

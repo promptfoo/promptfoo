@@ -8,7 +8,7 @@ import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
-import { notifyEvaluationChanged } from '../models/evalMutation';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
@@ -465,6 +465,7 @@ export function importCommand(program: Command) {
           `Failed to import eval: ${error instanceof Error ? error.message : String(error)}`,
         );
         if (removedExistingEvalId) {
+          notifyEvaluationsDeleted([removedExistingEvalId]);
           logger.error(
             `The existing eval ${removedExistingEvalId} was deleted for a --force replacement that did not complete. Re-import it from a backup.`,
           );

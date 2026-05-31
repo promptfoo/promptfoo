@@ -82,10 +82,16 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Handlers
   // ================================
 
-  const fetchRecentFileEvals = async () => {
+  const fetchRecentFileEvals = async ({
+    reportFailure = true,
+  }: {
+    reportFailure?: boolean;
+  } = {}) => {
     const resp = await callApi(`/results`, { cache: 'no-store' });
     if (!resp.ok) {
-      setFailed(true);
+      if (reportFailure) {
+        setFailed(true);
+      }
       return;
     }
     const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
@@ -157,7 +163,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
-    const newRecentEvals = await fetchRecentFileEvals();
+    const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
     if (!newRecentEvals) {
       return;
     }
@@ -338,7 +344,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         if (success) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
-          fetchRecentFileEvals();
+          fetchRecentFileEvals({ reportFailure: false });
           // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
@@ -366,6 +372,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setInComparisonMode(false);
     setComparisonEvalIds([]);
   }, [
+    apiBaseUrl,
     clearEvalState,
     fetchId,
     loadEvalById,

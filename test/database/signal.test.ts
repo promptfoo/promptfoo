@@ -94,6 +94,40 @@ describe('signal', () => {
         deletedEvalIds: ['eval-deleted-1', 'eval-deleted-2'],
       });
     });
+
+    it('should coalesce deleted eval IDs across rapid signal writes', () => {
+      let content = '';
+      mockReadFileSync.mockImplementation(() => content);
+      mockWriteFileSync.mockImplementation((_path, nextContent) => {
+        content = nextContent;
+      });
+
+      updateSignalFileForDeletedEvals(['eval-deleted-1']);
+      updateSignalFileForDeletedEvals(['eval-deleted-2']);
+
+      expect(JSON.parse(content)).toMatchObject({
+        type: 'delete',
+        deletedEvalIds: ['eval-deleted-1', 'eval-deleted-2'],
+      });
+    });
+
+    it('should not retain deleted eval IDs beyond the watcher debounce window', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['stale-eval'],
+          timestamp: '2000-01-01T00:00:00.000Z',
+        }),
+      );
+
+      updateSignalFileForDeletedEvals(['fresh-eval']);
+
+      const [, content] = mockWriteFileSync.mock.calls[0];
+      expect(JSON.parse(content)).toMatchObject({
+        type: 'delete',
+        deletedEvalIds: ['fresh-eval'],
+      });
+    });
   });
 
   describe('readSignalFile', () => {
