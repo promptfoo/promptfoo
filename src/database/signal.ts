@@ -6,14 +6,18 @@ import { getDbSignalPath } from './index';
 
 /**
  * A classified signal-file event. `type` is the latest mutation, but a coalesced signal can
- * carry BOTH components regardless of `type`: an update component (`evalId`, or an unscoped
- * update) and a delete component (`deletedEvalIds`, or "all evals deleted"). Use
- * {@link hasUpdateComponent} / {@link hasDeleteComponent} rather than `type` alone to decide
- * what to emit, so a `type:'update'` payload carrying `deletedEvalIds` still drops those evals.
+ * carry BOTH components regardless of `type`: an update component and a delete component
+ * (`deletedEvalIds`, or "all evals deleted"). The update component is a SET of scoped eval ids
+ * (`updatedEvalIds`) so that back-to-back scoped updates inside the debounce window all survive
+ * coalescing; `evalId` is the latest of them, kept for the legacy single-update path and
+ * {@link readSignalEvalId}. Use {@link updateEvalIds} / {@link hasUpdateComponent} /
+ * {@link hasDeleteComponent} rather than the raw fields to decide what to emit, so a
+ * `type:'update'` payload carrying `deletedEvalIds` still drops those evals.
  */
 export interface DatabaseSignal {
   type: 'delete' | 'update';
   evalId?: string;
+  updatedEvalIds?: string[];
   deletedEvalIds?: string[];
 }
 
@@ -39,39 +43,64 @@ function writeSignalFile(content: string): void {
  * Updates the signal file with the current timestamp and optional eval ID.
  * This is used to notify clients that there are new data available.
  *
- * If a delete signal is still pending in the watcher's debounce window, this update folds the
- * pending deletes into a combined JSON payload so the watcher still drops the removed evals
- * (the eval-then-delete / delete-then-eval interleavings would otherwise lose one signal).
+ * If another signal is still pending in the watcher's debounce window, this update folds it into
+ * a combined JSON payload so no refresh is lost: it accumulates ALL distinct scoped update ids
+ * (back-to-back scoped updates would otherwise overwrite each other) and carries forward any
+ * pending deletes. When nothing is pending it keeps the compact legacy `evalId:timestamp` text.
  * @param evalId - Optional eval ID that triggered the update
  */
 export function updateSignalFile(evalId?: string): void {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const pending = readPendingSignal(now);
-  if (pending && hasDeleteComponent(pending)) {
+  const pendingUpdateIds = pending ? updateEvalIds(pending) : [];
+  const pendingHasDelete = pending ? hasDeleteComponent(pending) : false;
+  const updatedEvalIds = [...new Set([...pendingUpdateIds, ...(evalId ? [evalId] : [])])];
+
+  // Only coalesce into JSON when there's something to preserve beyond this single update — a
+  // pending delete, or a distinct pending scoped update — so the common per-result run stays on
+  // the compact legacy text format. The reader matches the trailing ISO timestamp because
+  // generated eval IDs can themselves contain colons.
+  const needsCoalesce = pendingHasDelete || updatedEvalIds.length > (evalId ? 1 : 0);
+  if (needsCoalesce) {
     writeSignalFile(
       JSON.stringify({
         type: 'update',
         evalId,
-        deletedEvalIds: pending.deletedEvalIds ?? [],
+        updatedEvalIds: updatedEvalIds.length > 0 ? updatedEvalIds : undefined,
+        deletedEvalIds: pendingHasDelete ? (pending?.deletedEvalIds ?? []) : undefined,
         timestamp: nowIso,
       }),
     );
     return;
   }
-  // Preserve the legacy evalId:timestamp update format. The reader matches the trailing
-  // ISO timestamp because generated eval IDs can themselves contain colons.
   writeSignalFile(evalId ? `${evalId}:${nowIso}` : nowIso);
 }
 
 /** True when the signal carries an update component (a scoped or unscoped eval refresh). */
 export function hasUpdateComponent(signal: DatabaseSignal): boolean {
-  return signal.type === 'update' || signal.evalId !== undefined;
+  return (
+    signal.type === 'update' ||
+    signal.evalId !== undefined ||
+    (signal.updatedEvalIds?.length ?? 0) > 0
+  );
 }
 
 /** True when the signal carries a delete component (specific ids or "all evals deleted"). */
 export function hasDeleteComponent(signal: DatabaseSignal): boolean {
   return signal.type === 'delete' || signal.deletedEvalIds !== undefined;
+}
+
+/**
+ * The distinct scoped eval ids an update signal refreshes, newest last. Empty for an unscoped
+ * update (which means "refresh to the latest eval"). Prefers the accumulated `updatedEvalIds`
+ * set and falls back to the single `evalId` for legacy/simple signals.
+ */
+export function updateEvalIds(signal: DatabaseSignal): string[] {
+  if (signal.updatedEvalIds && signal.updatedEvalIds.length > 0) {
+    return signal.updatedEvalIds;
+  }
+  return signal.evalId ? [signal.evalId] : [];
 }
 
 /** Parses signal-file content as a combined JSON payload, or null if it is not one. */
@@ -86,13 +115,15 @@ function parseSignalJson(content: string): (DatabaseSignal & { timestamp?: strin
     ) {
       const evalId =
         'evalId' in parsed && typeof parsed.evalId === 'string' ? parsed.evalId : undefined;
+      const updatedEvalIds =
+        'updatedEvalIds' in parsed ? toStringEvalIds(parsed.updatedEvalIds) : undefined;
       const deletedEvalIds =
         'deletedEvalIds' in parsed ? toStringEvalIds(parsed.deletedEvalIds) : undefined;
       const timestamp =
         'timestamp' in parsed && typeof parsed.timestamp === 'string'
           ? parsed.timestamp
           : undefined;
-      return { type: parsed.type, evalId, deletedEvalIds, timestamp };
+      return { type: parsed.type, evalId, updatedEvalIds, deletedEvalIds, timestamp };
     }
   } catch {}
   return null;
@@ -117,7 +148,12 @@ function readPendingSignal(now: number): DatabaseSignal | null {
     const json = parseSignalJson(content);
     if (json) {
       return withinWindow(json.timestamp)
-        ? { type: json.type, evalId: json.evalId, deletedEvalIds: json.deletedEvalIds }
+        ? {
+            type: json.type,
+            evalId: json.evalId,
+            updatedEvalIds: json.updatedEvalIds,
+            deletedEvalIds: json.deletedEvalIds,
+          }
         : null;
     }
 
@@ -152,15 +188,16 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
     : pendingDelete.deletedEvalIds === undefined || deletedEvalIds === undefined
       ? undefined
       : [...new Set([...pendingDelete.deletedEvalIds, ...deletedEvalIds])];
-  // Carry forward a pending scoped update so a quick create/import-then-delete still refreshes
-  // clients to the newly written eval rather than only processing the delete.
-  const carriedEvalId = pending && hasUpdateComponent(pending) ? pending.evalId : undefined;
+  // Carry forward every pending scoped update so a quick create/import-then-delete still
+  // refreshes clients to the newly written eval(s) rather than only processing the delete.
+  const carriedUpdateIds = pending && hasUpdateComponent(pending) ? updateEvalIds(pending) : [];
 
   writeSignalFile(
     JSON.stringify({
       type: 'delete',
       deletedEvalIds: mergedDeletedEvalIds,
-      evalId: carriedEvalId,
+      evalId: carriedUpdateIds[carriedUpdateIds.length - 1],
+      updatedEvalIds: carriedUpdateIds.length > 0 ? carriedUpdateIds : undefined,
       timestamp: new Date(now).toISOString(),
     }),
   );
@@ -180,9 +217,9 @@ function readLegacySignalEvalId(content: string): string | undefined {
  * Reads and classifies the signal file into a {@link DatabaseSignal}. It understands the
  * legacy `evalId:timestamp` (or bare timestamp) text written by {@link updateSignalFile} and
  * the JSON payload written by the delete/combined writers. A JSON payload may carry BOTH an
- * `evalId` (update component) and `deletedEvalIds` (delete component) when two mutations were
- * coalesced inside the watcher's debounce window. Malformed/half-written content or a read
- * error degrades to an unscoped `{type:'update'}`.
+ * update component (`updatedEvalIds` — possibly several ids when scoped updates coalesced) and a
+ * delete component (`deletedEvalIds`) when mutations were coalesced inside the watcher's debounce
+ * window. Malformed/half-written content or a read error degrades to an unscoped `{type:'update'}`.
  */
 export function readSignalFile(): DatabaseSignal {
   const filePath = getDbSignalPath();
@@ -190,7 +227,12 @@ export function readSignalFile(): DatabaseSignal {
     const content = fs.readFileSync(filePath, 'utf8').trim();
     const json = parseSignalJson(content);
     if (json) {
-      return { type: json.type, evalId: json.evalId, deletedEvalIds: json.deletedEvalIds };
+      return {
+        type: json.type,
+        evalId: json.evalId,
+        updatedEvalIds: json.updatedEvalIds,
+        deletedEvalIds: json.deletedEvalIds,
+      };
     }
     return { type: 'update', evalId: readLegacySignalEvalId(content) };
   } catch {

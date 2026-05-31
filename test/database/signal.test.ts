@@ -323,6 +323,47 @@ describe('signal', () => {
       // A future timestamp (negative elapsed) is rejected; the update stays as legacy text.
       expect(lastWrittenSignal()).toMatch(/^eval-fresh:\d{4}-\d{2}-\d{2}T/);
     });
+
+    it('accumulates back-to-back scoped updates so neither eval is dropped', () => {
+      // Regression for the single-update-slot overwrite: a scoped update Y written <250ms ago is
+      // still pending when an update for a DIFFERENT eval Z fires; both ids must survive.
+      mockReadFileSync.mockReturnValue(`eval-update-Y:${new Date().toISOString()}`);
+
+      updateSignalFile('eval-update-Z');
+
+      const written = JSON.parse(lastWrittenSignal());
+      expect(written.type).toBe('update');
+      expect(written.updatedEvalIds).toEqual(['eval-update-Y', 'eval-update-Z']);
+    });
+
+    it('keeps repeated updates to the same eval on the compact legacy text format', () => {
+      // The common per-result run case: same eval signaled twice in the window. Nothing new to
+      // preserve, so it stays legacy text rather than ballooning into JSON.
+      mockReadFileSync.mockReturnValue(`eval-same-id:${new Date().toISOString()}`);
+
+      updateSignalFile('eval-same-id');
+
+      expect(lastWrittenSignal()).toMatch(/^eval-same-id:\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('carries every pending scoped update into a following delete', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'update',
+          evalId: 'eval-update-2',
+          updatedEvalIds: ['eval-update-1', 'eval-update-2'],
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      updateSignalFileForDeletedEvals(['eval-removed']);
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'delete',
+        deletedEvalIds: ['eval-removed'],
+        updatedEvalIds: ['eval-update-1', 'eval-update-2'],
+      });
+    });
   });
 
   describe('mixed-version signal compatibility', () => {

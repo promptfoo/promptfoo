@@ -16,6 +16,7 @@ import {
   hasUpdateComponent,
   readSignalFile,
   setupSignalWatcher,
+  updateEvalIds,
 } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -407,22 +408,27 @@ export async function startServer(
       }
 
       if (hasUpdate) {
-        const updatedEval = signal.evalId
-          ? await Eval.findById(signal.evalId)
-          : await Eval.latest();
-        if (updatedEval) {
-          logger.debug(
-            `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
-          );
-          io.emit('update', { evalId: updatedEval.id });
-        } else if (!signal.evalId) {
-          // No scoped eval and no evals remain: tell clients to clear their view.
-          io.emit('update', null);
+        // A coalesced signal can carry several scoped updates (back-to-back eval saves in the
+        // debounce window); emit one refresh per surviving eval so a client pinned to any of
+        // them updates.
+        const scopedUpdateIds = updateEvalIds(signal);
+        if (scopedUpdateIds.length > 0) {
+          for (const id of scopedUpdateIds) {
+            const updatedEval = await Eval.findById(id);
+            if (updatedEval) {
+              logger.debug(
+                `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
+              );
+              io.emit('update', { evalId: updatedEval.id });
+            }
+            // Else: a scoped update whose eval no longer exists (e.g. it won the debounce race
+            // against its own delete). Emit nothing — clients reconcile on the next signal.
+          }
+        } else {
+          // Unscoped update: refresh to the latest eval, or clear the view when none remain.
+          const latestEval = await Eval.latest();
+          io.emit('update', latestEval ? { evalId: latestEval.id } : null);
         }
-        // Else: a scoped update whose eval no longer exists (e.g. an update signal that won the
-        // debounce race against the eval's own delete). Emit nothing — clients re-fetch the
-        // recent-evals list on the next signal and reconcile then, so a stale pinned view
-        // self-heals without us yanking every client to a different eval here.
       }
     };
 

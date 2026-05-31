@@ -432,6 +432,33 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('emits an update per eval for a coalesced multi-update signal', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      // Two back-to-back scoped updates coalesced in the window must each refresh their clients.
+      vi.mocked(readSignalFile).mockReturnValueOnce({
+        type: 'update',
+        evalId: 'eval-Z',
+        updatedEvalIds: ['eval-Y', 'eval-Z'],
+      });
+      // The watcher resolves the ids in order; mockResolvedValueOnce avoids leaking a persistent
+      // implementation into other (randomly-ordered) tests.
+      vi.mocked(Eval.findById)
+        .mockResolvedValueOnce({ id: 'eval-Y', config: {} } as never)
+        .mockResolvedValueOnce({ id: 'eval-Z', config: {} } as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-Y' }));
+      await vi.waitFor(() => expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'eval-Z' }));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('does not resurrect a deleted eval when a coalesced delete carries its own id', async () => {
       const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
       // Pathological coalescing: the carried update id is also in deletedEvalIds. The delete
