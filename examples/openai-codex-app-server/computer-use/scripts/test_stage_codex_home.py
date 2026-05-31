@@ -8,8 +8,8 @@ from pathlib import Path
 from stage_codex_home import (
     MARKER_NAME,
     prepare_codex_home,
-    resolve_marketplace,
     resolve_launcher,
+    resolve_marketplace,
     write_config,
 )
 
@@ -49,7 +49,10 @@ class StageCodexHomeTest(unittest.TestCase):
                     "plugins": [
                         {
                             "name": "computer-use",
-                            "source": {"source": "local", "path": "./plugins/computer-use"},
+                            "source": {
+                                "source": "local",
+                                "path": "./plugins/computer-use",
+                            },
                         }
                     ],
                 }
@@ -68,9 +71,13 @@ class StageCodexHomeTest(unittest.TestCase):
         prepare_codex_home(codex_home, force=False)
         config = write_config(codex_home, marketplace_name, marketplace_root)
 
-        self.assertIn('[plugins."computer-use@fixture-marketplace"]', config.read_text())
+        self.assertIn(
+            '[plugins."computer-use@fixture-marketplace"]', config.read_text()
+        )
         self.assertIn("[marketplaces.fixture-marketplace]", config.read_text())
-        self.assertIn(f'source = "{self.marketplace_root.resolve()}"', config.read_text())
+        self.assertIn(
+            f'source = "{self.marketplace_root.resolve()}"', config.read_text()
+        )
         self.assertNotIn("auth", config.read_text())
 
     def test_rejects_incomplete_plugin(self) -> None:

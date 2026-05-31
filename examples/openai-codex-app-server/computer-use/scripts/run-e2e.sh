@@ -72,7 +72,7 @@ mkdir -p \
   "$EXAMPLE_DIR/.tmp/swift-module-cache"
 cp "$EXAMPLE_DIR/target/Info.plist" "$TARGET_APP_DIR/Contents/Info.plist"
 CLANG_MODULE_CACHE_PATH="$EXAMPLE_DIR/.tmp/clang-module-cache" \
-SWIFT_MODULE_CACHE_PATH="$EXAMPLE_DIR/.tmp/swift-module-cache" \
+  SWIFT_MODULE_CACHE_PATH="$EXAMPLE_DIR/.tmp/swift-module-cache" \
   xcrun swiftc "$EXAMPLE_DIR/target/App.swift" -o "$TARGET_APP_BINARY"
 
 "$TARGET_APP_BINARY" >"$EXAMPLE_DIR/.tmp/target.log" 2>&1 &
@@ -84,7 +84,7 @@ if ! kill -0 "$TARGET_PID" 2>/dev/null; then
 fi
 
 CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
-COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
-PROMPTFOO_DISABLE_TELEMETRY=true \
-PROMPTFOO_DISABLE_UPDATE=true \
-npm --prefix "$REPO_ROOT" run local -- "$@"
+  COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
+  PROMPTFOO_DISABLE_TELEMETRY=true \
+  PROMPTFOO_DISABLE_UPDATE=true \
+  npm --prefix "$REPO_ROOT" run local -- "$@"

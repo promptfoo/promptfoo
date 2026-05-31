@@ -25,9 +25,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def request(process: subprocess.Popen[str], request_id: int, method: str, params: object) -> None:
+def request(
+    process: subprocess.Popen[str], request_id: int, method: str, params: object
+) -> None:
     assert process.stdin is not None
-    process.stdin.write(json.dumps({"id": request_id, "method": method, "params": params}) + "\n")
+    process.stdin.write(
+        json.dumps({"id": request_id, "method": method, "params": params}) + "\n"
+    )
     process.stdin.flush()
 
 
@@ -37,11 +41,15 @@ def notify(process: subprocess.Popen[str], method: str, params: object) -> None:
     process.stdin.flush()
 
 
-def read_response(process: subprocess.Popen[str], request_id: int, timeout: float) -> dict[str, Any]:
+def read_response(
+    process: subprocess.Popen[str], request_id: int, timeout: float
+) -> dict[str, Any]:
     assert process.stdout is not None
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        readable, _, _ = select.select([process.stdout], [], [], max(0, deadline - time.monotonic()))
+        readable, _, _ = select.select(
+            [process.stdout], [], [], max(0, deadline - time.monotonic())
+        )
         if not readable:
             break
         line = process.stdout.readline()
@@ -107,8 +115,12 @@ def main() -> None:
             },
         )
         notify(process, "initialized", {})
-        effective_config = call("config/read", {"includeLayers": False}).get("config", {})
-        configured_marketplaces = sorted(effective_config.get("marketplaces", {}).keys())
+        effective_config = call("config/read", {"includeLayers": False}).get(
+            "config", {}
+        )
+        configured_marketplaces = sorted(
+            effective_config.get("marketplaces", {}).keys()
+        )
         result = call("plugin/list", {"marketplaceKinds": ["local"]})
         match = find_plugin(result)
         if match is None:
@@ -133,7 +145,9 @@ def main() -> None:
             result = call("plugin/list", {"marketplaceKinds": ["local"]})
             match = find_plugin(result)
             if match is None:
-                raise RuntimeError("computer-use plugin disappeared after plugin/install")
+                raise RuntimeError(
+                    "computer-use plugin disappeared after plugin/install"
+                )
             marketplace, plugin = match
             marketplace_name = marketplace.get("name", "<unnamed>")
         if plugin.get("installed") is not True:
@@ -147,14 +161,20 @@ def main() -> None:
         ).get("plugin", {})
         skill_names = sorted(skill.get("name") for skill in detail.get("skills", []))
         if PLUGIN_SKILL_NAME not in skill_names:
-            raise RuntimeError(f"computer-use plugin does not expose its skill: {detail!r}")
+            raise RuntimeError(
+                f"computer-use plugin does not expose its skill: {detail!r}"
+            )
         if PLUGIN_NAME not in detail.get("mcpServers", []):
-            raise RuntimeError(f"computer-use plugin does not declare its MCP server: {detail!r}")
+            raise RuntimeError(
+                f"computer-use plugin does not declare its MCP server: {detail!r}"
+            )
         mcp_server = find_mcp_server(
             call("mcpServerStatus/list", {"detail": "toolsAndAuthOnly"})
         )
         if mcp_server is None:
-            raise RuntimeError("computer-use MCP server is not visible after plugin/install")
+            raise RuntimeError(
+                "computer-use MCP server is not visible after plugin/install"
+            )
         tools = sorted(mcp_server.get("tools", {}))
         if not tools:
             raise RuntimeError("computer-use MCP server did not expose any tools")

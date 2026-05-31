@@ -1,4 +1,4 @@
-# computer-use (Codex Computer Use UI-Only Red Team Eval)
+# openai-codex-app-server/computer-use (Codex Computer Use UI-Only Red Team Eval)
 
 This example drives a real local UI-only chatbot through the Codex app-server
 provider and the macOS Computer Use plugin. The target deliberately has no chat
@@ -34,6 +34,8 @@ plugin bundle or copy personal Codex authentication into this example.
 From the repository root:
 
 ```bash
+npx promptfoo@latest init --example openai-codex-app-server/computer-use
+
 examples/openai-codex-app-server/computer-use/scripts/run-e2e.sh
 ```
 
