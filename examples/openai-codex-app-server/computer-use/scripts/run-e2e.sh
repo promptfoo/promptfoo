@@ -8,8 +8,8 @@ TARGET_APP_DIR="$EXAMPLE_DIR/.tmp/PromptfooComputerUseTarget.app"
 TARGET_APP_BINARY="$TARGET_APP_DIR/Contents/MacOS/PromptfooComputerUseTarget"
 PROMPTFOO_COMMAND=(npx promptfoo@latest)
 
-if REPO_ROOT="$(git -C "$EXAMPLE_DIR" rev-parse --show-toplevel 2>/dev/null)" \
-  && [[ "$EXAMPLE_DIR" == "$REPO_ROOT/examples/"* ]]; then
+if REPO_ROOT="$(git -C "$EXAMPLE_DIR" rev-parse --show-toplevel 2>/dev/null)" &&
+  [[ "$EXAMPLE_DIR" == "$REPO_ROOT/examples/"* ]]; then
   PROMPTFOO_COMMAND=(npm --prefix "$REPO_ROOT" run local --)
 fi
 
