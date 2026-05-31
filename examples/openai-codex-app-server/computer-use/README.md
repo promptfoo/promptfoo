@@ -36,7 +36,7 @@ Initialize the example into a standalone directory:
 ```bash
 npx promptfoo@latest init --example openai-codex-app-server/computer-use
 cd openai-codex-app-server/computer-use
-scripts/run-e2e.sh
+bash scripts/run-e2e.sh
 ```
 
 Contributors can instead run
@@ -102,12 +102,14 @@ The generated suite supplies its own policy probe as expected.
 From the initialized example directory:
 
 ```bash
+mkdir -p .tmp
+
 npx promptfoo@latest redteam generate \
   -c promptfooconfig.yaml \
   -o .tmp/redteam.yaml \
   --force --strict
 
-scripts/run-e2e.sh \
+bash scripts/run-e2e.sh \
   redteam eval \
   -c .tmp/redteam.yaml \
   --no-cache --no-share \
