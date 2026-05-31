@@ -1337,6 +1337,40 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
   });
 
+  it('waits for every output write before rejecting', async () => {
+    let resolveSlowWrite: () => void;
+    const slowWrite = new Promise<void>((resolve) => {
+      resolveSlowWrite = resolve;
+    });
+    vi.mocked(fsPromises.writeFile).mockImplementation(async (outputPath) => {
+      if (outputPath === 'output.json') {
+        throw new Error('json write failed');
+      }
+      if (outputPath === 'output.txt') {
+        await slowWrite;
+      }
+    });
+
+    let settled = false;
+    const writePromise = writeMultipleOutputs(['output.json', 'output.txt'], new Eval({}), null);
+    void writePromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    await vi.waitFor(() => {
+      expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
+    });
+    expect(settled).toBe(false);
+
+    resolveSlowWrite!();
+    await expect(writePromise).rejects.toThrow('One or more output writes failed');
+  });
+
   it('writeOutput with HTML template escapes special characters', async () => {
     // Use the real fs module to read the template
     const realFs = await vi.importActual<typeof import('fs')>('fs');

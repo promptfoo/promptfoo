@@ -738,7 +738,11 @@ export async function writeMultipleOutputs(
   evalRecord: Eval,
   shareableUrl: string | null,
 ) {
-  await Promise.all(
+  const results = await Promise.allSettled(
     outputPaths.map((outputPath) => writeOutput(outputPath, evalRecord, shareableUrl)),
   );
+  const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'One or more output writes failed');
+  }
 }

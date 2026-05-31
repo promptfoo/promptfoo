@@ -461,7 +461,9 @@ describe('retry command', () => {
         expect(warnSpy).toHaveBeenCalledWith(
           'Retry results failed to persist, and restoring JSONL output failed.',
           expect.objectContaining({
-            error: expect.objectContaining({ message: 'simulated artifact restore failure' }),
+            error: expect.objectContaining({
+              errors: [expect.objectContaining({ message: 'simulated artifact restore failure' })],
+            }),
             jsonlOutputPaths: [jsonlOutputPath],
           }),
         );
