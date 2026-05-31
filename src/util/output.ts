@@ -40,19 +40,62 @@ export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: s
     return outputPaths;
   }
 
-  const filteredPaths = outputPaths.filter(
-    (outputPath) => getOutputFileFormat(outputPath) !== 'jsonl',
-  );
-  if (filteredPaths.length !== outputPaths.length) {
+  if (outputPaths.some((outputPath) => getOutputFileFormat(outputPath) === 'jsonl')) {
     logger.warn(
-      '[Output] Skipping JSONL finalization because one or more streamed rows failed to persist',
+      '[Output] Finalizing JSONL from streamed rows and canonical updates because one or more rows failed to persist',
     );
   }
-  return filteredPaths;
+  return outputPaths;
 }
 
 function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
   return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+}
+
+function getJsonlResultKey(result: EvaluateResult): string {
+  return `${result.testIdx}:${result.promptIdx}`;
+}
+
+async function appendJsonlResults(outputPath: string, results: EvaluateResult[]) {
+  if (results.length === 0) {
+    return;
+  }
+
+  const text =
+    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
+    os.EOL;
+  await fsPromises.appendFile(outputPath, text);
+}
+
+async function readStreamedJsonlResults(outputPath: string) {
+  try {
+    return (await fsPromises.readFile(outputPath, 'utf8'))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as EvaluateResult);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
+  const finalResults = new Map<string, EvaluateResult>();
+  for (const result of await readStreamedJsonlResults(outputPath)) {
+    finalResults.set(getJsonlResultKey(result), result);
+  }
+  for await (const batchResults of evalRecord.fetchResultsBatched()) {
+    for (const result of batchResults) {
+      const evaluateResult = toEvaluateResult(result);
+      finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+    }
+  }
+  for (const result of evalRecord.getFinalJsonlResults()) {
+    finalResults.set(getJsonlResultKey(result), result);
+  }
+  return Array.from(finalResults.values());
 }
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -458,14 +501,17 @@ export async function writeOutput(
     });
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
+    if (evalRecord.resultPersistenceFailed) {
+      const finalResults = await collectJsonlResultsAfterPersistenceFailure(outputPath, evalRecord);
+      await fsPromises.writeFile(outputPath, '');
+      await appendJsonlResults(outputPath, finalResults);
+      return;
+    }
+
     // Truncate file first for consistent behavior with other formats
     await fsPromises.writeFile(outputPath, '');
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text =
-        batchResults
-          .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
-          .join(os.EOL) + os.EOL;
-      await fsPromises.appendFile(outputPath, text);
+      await appendJsonlResults(outputPath, batchResults.map(toEvaluateResult));
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();

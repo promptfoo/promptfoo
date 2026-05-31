@@ -299,6 +299,7 @@ export default class Eval {
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
+  private finalJsonlResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -720,6 +721,14 @@ export default class Eval {
       // Notify watchers that new results are available, passing the eval ID
       updateSignalFile(this.id);
     }
+  }
+
+  recordFinalJsonlResult(result: EvaluateResult) {
+    this.finalJsonlResults.set(`${result.testIdx}:${result.promptIdx}`, result);
+  }
+
+  getFinalJsonlResults() {
+    return Array.from(this.finalJsonlResults.values());
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
