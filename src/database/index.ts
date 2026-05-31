@@ -50,6 +50,21 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   // connection for the lock waits instead of erroring with SQLITE_BUSY.
   await client.execute('PRAGMA busy_timeout = 5000');
 
+  // The test database is a process-wide shared-cache in-memory DB
+  // (`file::memory:?cache=shared`). Shared-cache uses table-level locks, so a
+  // read that overlaps another connection's open write transaction fails
+  // immediately with SQLITE_LOCKED_SHAREDCACHE — and busy_timeout does NOT cover
+  // it (that only applies to SQLITE_BUSY). libsql also opens separate physical
+  // connections for interactive transactions, so the JS-level operation
+  // serialization cannot guarantee the prior writer's table lock is released the
+  // instant its promise settles. read_uncommitted lets readers proceed without
+  // taking a conflicting table lock, which removes the flaky lock errors. It is
+  // shared-cache-only (a no-op for the file-backed production DB) and we never
+  // reach this branch outside tests, so production isolation is unchanged.
+  if (skipWalMode) {
+    await client.execute('PRAGMA read_uncommitted = 1');
+  }
+
   // Configure WAL mode unless explicitly disabled or using in-memory database
   if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
     try {
