@@ -74,6 +74,7 @@
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm --prefix src/app run test --",
     "test:app:browser": "npm --prefix src/app run test:browser --",
+    "test:package-artifact": "tsx scripts/testPackageArtifact.ts",
     "test:site": "npm run test --prefix site",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:vitest": "vitest run",
