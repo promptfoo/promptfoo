@@ -236,7 +236,7 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should leave streamed JSONL output untouched when CLI result persistence fails', async () => {
+  it('should finalize streamed JSONL output through recovery when CLI result persistence fails', async () => {
     const cmdObj = { table: false, write: false, share: false };
     const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
 
@@ -255,7 +255,11 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.json'], expect.any(Eval), null);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['results.jsonl', 'results.json'],
+      expect.any(Eval),
+      null,
+    );
   });
 
   it('should merge runtime tags over config tags', async () => {
