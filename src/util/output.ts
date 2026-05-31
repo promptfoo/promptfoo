@@ -41,15 +41,12 @@ export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: s
     return outputPaths;
   }
 
-  const filteredPaths = outputPaths.filter(
-    (outputPath) => getOutputFileFormat(outputPath) !== 'jsonl',
-  );
-  if (filteredPaths.length !== outputPaths.length) {
+  if (outputPaths.some((outputPath) => getOutputFileFormat(outputPath) === 'jsonl')) {
     logger.warn(
-      '[Output] Skipping JSONL finalization because one or more streamed rows failed to persist',
+      '[Output] Finalizing JSONL from streamed rows and canonical updates because one or more rows failed to persist',
     );
   }
-  return filteredPaths;
+  return outputPaths;
 }
 
 function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
@@ -92,6 +89,52 @@ async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   }
 }
 
+function getJsonlResultKey(result: EvaluateResult): string {
+  return `${result.testIdx}:${result.promptIdx}`;
+}
+
+async function appendJsonlResultBatch(outputPath: string, results: EvaluateResult[]) {
+  if (results.length === 0) {
+    return;
+  }
+
+  const text =
+    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
+    os.EOL;
+  await fsPromises.appendFile(outputPath, text);
+}
+
+async function readStreamedJsonlResults(outputPath: string) {
+  try {
+    return (await fsPromises.readFile(outputPath, 'utf8'))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as EvaluateResult);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
+  const finalResults = new Map<string, EvaluateResult>();
+  for (const result of await readStreamedJsonlResults(outputPath)) {
+    finalResults.set(getJsonlResultKey(result), result);
+  }
+  for await (const batchResults of evalRecord.fetchResultsBatched()) {
+    for (const result of batchResults) {
+      const evaluateResult = toEvaluateResult(result);
+      finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+    }
+  }
+  for (const result of evalRecord.getFinalJsonlResults()) {
+    finalResults.set(getJsonlResultKey(result), result);
+  }
+  return Array.from(finalResults.values());
+}
+
 async function getExistingFileMode(outputPath: string): Promise<number | undefined> {
   try {
     return (await fsPromises.stat(outputPath)).mode & 0o7777;
@@ -103,13 +146,18 @@ async function getExistingFileMode(outputPath: string): Promise<number | undefin
   }
 }
 
-async function appendJsonlResults(outputPath: string, evalRecord: Eval): Promise<void> {
+async function appendJsonlResults(
+  outputPath: string,
+  evalRecord: Eval,
+  recoveredResults?: EvaluateResult[],
+): Promise<void> {
+  if (recoveredResults) {
+    await appendJsonlResultBatch(outputPath, recoveredResults);
+    return;
+  }
+
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
-    const text =
-      batchResults
-        .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(toEvaluateResult(result))))
-        .join(os.EOL) + os.EOL;
-    await fsPromises.appendFile(outputPath, text);
+    await appendJsonlResultBatch(outputPath, batchResults.map(toEvaluateResult));
   }
 }
 
@@ -118,6 +166,7 @@ async function rewriteJsonlWithExternalBackup(
   outputMode: number | undefined,
   evalRecord: Eval,
   preparedReplacementPath?: string,
+  recoveredResults?: EvaluateResult[],
 ): Promise<void> {
   const tempDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'promptfoo-jsonl-'));
   const backupPath = path.join(tempDirectory, 'backup.jsonl');
@@ -135,7 +184,7 @@ async function rewriteJsonlWithExternalBackup(
       } else {
         await fsPromises.writeFile(replacementPath, '', { mode: outputMode });
       }
-      await appendJsonlResults(replacementPath, evalRecord);
+      await appendJsonlResults(replacementPath, evalRecord, recoveredResults);
     }
     overwriteAttempted = true;
     await fsPromises.copyFile(replacementPath, outputPath);
@@ -584,6 +633,9 @@ export async function writeOutput(
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     const outputMode = await getExistingFileMode(jsonlOutputPath);
+    const recoveredResults = evalRecord.resultPersistenceFailed
+      ? await collectJsonlResultsAfterPersistenceFailure(jsonlOutputPath, evalRecord)
+      : undefined;
     const tempOutputPath = path.join(
       path.dirname(jsonlOutputPath),
       `.promptfoo-${randomUUID()}.tmp`,
@@ -600,12 +652,18 @@ export async function writeOutput(
           logger.warn(
             '[Output] Falling back to JSONL rewrite with external backup because the output directory is not writable',
           );
-          await rewriteJsonlWithExternalBackup(jsonlOutputPath, outputMode, evalRecord);
+          await rewriteJsonlWithExternalBackup(
+            jsonlOutputPath,
+            outputMode,
+            evalRecord,
+            undefined,
+            recoveredResults,
+          );
           return;
         }
         throw error;
       }
-      await appendJsonlResults(tempOutputPath, evalRecord);
+      await appendJsonlResults(tempOutputPath, evalRecord, recoveredResults);
       if (outputMode !== undefined) {
         await fsPromises.chmod(tempOutputPath, outputMode);
       }

@@ -1,6 +1,9 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { expect, it, vi } from 'vitest';
 import { FILE_METADATA_KEY } from '../../src/constants';
@@ -471,6 +474,72 @@ describeEvaluator('evaluator metadata', () => {
       'session_url',
       'https://example.com/session/123',
     );
+  });
+
+  it('drops stale provider headers when afterEach replaces response metadata', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const mockExtension = 'file://test-extension.js:afterEach';
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('metadata-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: {
+          headers: {
+            authorization: 'Bearer provider-secret',
+            'x-safe-debug': 'provider-debug',
+          },
+        },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'afterEach') {
+        return context;
+      }
+      const ctx = context as { test: any; result: any };
+      return {
+        ...ctx,
+        result: {
+          ...ctx.result,
+          response: {
+            ...ctx.result.response,
+            metadata: {
+              hook_key: 'hook_value',
+            },
+          },
+        },
+      };
+    });
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: [mockExtension],
+    };
+
+    try {
+      const evalRecord = await Eval.create({ outputPath }, testSuite.prompts, {
+        id: randomUUID(),
+      });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+      const [result] = summary.results;
+      const [artifactResult] = fs
+        .readFileSync(outputPath, 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+
+      expect(result.metadata?.headers).toBeUndefined();
+      expect(result.response?.metadata).toEqual({ hook_key: 'hook_value' });
+      expect(artifactResult.metadata.headers).toBeUndefined();
+      expect(artifactResult.response.metadata).toEqual({ hook_key: 'hook_value' });
+      expect(JSON.stringify({ artifactResult, result })).not.toContain('provider-secret');
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+    }
   });
 
   it('should persist row without hook modifications when afterEach hook throws', async () => {

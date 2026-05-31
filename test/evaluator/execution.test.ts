@@ -10,6 +10,7 @@ import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -103,6 +104,40 @@ describeEvaluator('evaluator execution control', () => {
       expect(output.trim()).not.toBe('');
     } finally {
       closeSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('continues cleanup after a JSONL writer fails to close', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const originalClose = JsonlFileWriter.prototype.close;
+    const closeSpy = vi
+      .spyOn(JsonlFileWriter.prototype, 'close')
+      .mockImplementationOnce(async function (this: JsonlFileWriter) {
+        await originalClose.call(this);
+        throw new Error('simulated close failure');
+      });
+    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalRecord = new Eval({ outputPath });
+      await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow('simulated close failure');
+      expect(shutdownSpy).toHaveBeenCalledOnce();
+    } finally {
+      closeSpy.mockRestore();
+      shutdownSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });
     }
   });
