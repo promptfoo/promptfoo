@@ -73,7 +73,7 @@ Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible eval
 
 The [`computer-use` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-app-server/computer-use) stages an isolated Codex home and runs a real macOS Computer Use plugin against a native UI-only chatbot. Use it as a bounded dogfood fixture when the target has no chat API endpoint.
 
-The example references an explicit installed plugin directory, installs the plugin into a disposable Codex home, verifies the MCP inventory, compiles a disposable AppKit target, and starts it from a unique generated `.app` path before running the eval. The target opens no listening socket. The eval accepts MCP elicitations for that isolated run and asserts that the exported trajectory never enumerates apps or leaves the generated app path. The example also includes a bounded `policy` plugin path for generating and running a real red team against the UI-only target. It does not copy personal Codex auth or proprietary plugin payloads into the repository. It intentionally covers macOS only: Codex Desktop has additional host bootstrap behavior, and Windows Computer Use uses a separate native-pipe path.
+The example references an explicit installed plugin directory, installs the plugin into a disposable Codex home, verifies the MCP inventory, compiles a disposable AppKit target, and starts it from a unique generated `.app` path before running the eval. The target opens no listening socket. The eval accepts only the exact MCP elicitation for that disposable target, declines unmatched elicitations, and asserts that the exported trajectory never enumerates apps or leaves the generated app path. Run it only in a disposable desktop session with no unrelated sensitive apps open. The example also includes a bounded `policy` plugin path for generating and running a real red team against the UI-only target. It does not copy personal Codex auth or proprietary plugin payloads into the repository. It intentionally covers macOS only: Codex Desktop has additional host bootstrap behavior, and Windows Computer Use uses a separate native-pipe path.
 
 ## Basic Usage
 
@@ -228,6 +228,10 @@ providers:
           severity: high
         mcp_elicitation:
           action: accept
+          allowed_server_names:
+            - forms
+          allowed_messages:
+            - Provide project metadata
           content:
             severity: low
           _meta:
@@ -260,6 +264,8 @@ server_request_policy:
 ```
 
 Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled for older app-server versions. Advanced command decision objects are only supported on the modern `item/commandExecution/requestApproval` flow.
+
+`mcp_elicitation.allowed_server_names` and `mcp_elicitation.allowed_messages` are optional exact-match allowlists. When either allowlist is present, Promptfoo declines elicitation requests that do not match it. Use them to keep unattended fixtures narrow.
 
 `permissions.strict_auto_review` maps to the app-server `strictAutoReview` response field and asks Codex to review every subsequent command in the current turn before normal sandboxed execution.
 
