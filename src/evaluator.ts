@@ -3149,6 +3149,12 @@ class Evaluator {
     }
   }
 
+  private trackFinalJsonlResult(row: EvaluateResult): void {
+    if (this.fileWriters.length > 0 && this.evalRecord.resultPersistenceFailed) {
+      this.evalRecord.recordFinalJsonlResult(row);
+    }
+  }
+
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
       await this.evalRecord.addResult(row);
@@ -3458,6 +3464,7 @@ class Evaluator {
       timeoutMs,
       error,
     );
+    this.trackFinalJsonlResult(timeoutResult);
     await this.evalRecord.addResult(timeoutResult);
     this.stats.errors++;
 
@@ -4129,6 +4136,7 @@ class Evaluator {
       wasScore,
       metrics,
     );
+    this.trackFinalJsonlResult(result.toEvaluateResult());
     if (this.evalRecord.persisted) {
       await result.save();
     }
@@ -4155,6 +4163,7 @@ class Evaluator {
       wasScore,
       metrics,
     );
+    this.trackFinalJsonlResult(result.toEvaluateResult());
     if (this.evalRecord.persisted) {
       await result.save();
     }
@@ -4253,6 +4262,7 @@ class Evaluator {
       }
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      this.trackFinalJsonlResult(timeoutResult);
       await this.evalRecord.addResult(timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
@@ -4646,55 +4656,82 @@ class Evaluator {
       initializeOtel(otelConfig);
     }
 
+    let evaluationError: unknown;
     try {
       return await this._runEvaluation();
+    } catch (error) {
+      evaluationError = error;
+      throw error;
     } finally {
-      await Promise.all(this.fileWriters.map((writer) => writer.close()));
+      const writerCloseResults = await Promise.allSettled(
+        this.fileWriters.map((writer) => writer.close()),
+      );
+      const writerCloseErrors = writerCloseResults.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
 
-      // Flush and shutdown OTEL SDK
-      if (tracingEnabled) {
-        logger.debug('[Evaluator] Flushing OTEL spans...');
-        await flushOtel();
-        await shutdownOtel();
-      }
+      let cleanupError: unknown;
+      try {
+        // Flush and shutdown OTEL SDK
+        if (tracingEnabled) {
+          logger.debug('[Evaluator] Flushing OTEL spans...');
+          await flushOtel();
+          await shutdownOtel();
+        }
 
-      if (isOtlpReceiverStarted()) {
-        // Add a delay to allow providers to finish exporting spans
-        logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(3000);
-      }
-      await stopOtlpReceiverIfNeeded();
+        if (isOtlpReceiverStarted()) {
+          // Add a delay to allow providers to finish exporting spans
+          logger.debug('[Evaluator] Waiting for span exports to complete...');
+          await sleep(3000);
+        }
+        await stopOtlpReceiverIfNeeded();
 
-      // Clean up Python worker pools to prevent resource leaks
-      await providerRegistry.shutdownAll();
+        // Clean up Python worker pools to prevent resource leaks
+        await providerRegistry.shutdownAll();
 
-      // Log rate limit metrics for debugging before cleanup
-      if (this.rateLimitRegistry) {
-        const metrics = this.rateLimitRegistry.getMetrics();
-        for (const [key, m] of Object.entries(metrics)) {
-          if (m.totalRequests > 0) {
-            logger.debug(`[Scheduler] Final metrics for ${key}`, {
-              totalRequests: m.totalRequests,
-              completedRequests: m.completedRequests,
-              failedRequests: m.failedRequests,
-              rateLimitHits: m.rateLimitHits,
-              retriedRequests: m.retriedRequests,
-              avgLatencyMs: Math.round(m.avgLatencyMs),
-              p50LatencyMs: Math.round(m.p50LatencyMs),
-              p99LatencyMs: Math.round(m.p99LatencyMs),
-            });
+        // Log rate limit metrics for debugging before cleanup
+        if (this.rateLimitRegistry) {
+          const metrics = this.rateLimitRegistry.getMetrics();
+          for (const [key, m] of Object.entries(metrics)) {
+            if (m.totalRequests > 0) {
+              logger.debug(`[Scheduler] Final metrics for ${key}`, {
+                totalRequests: m.totalRequests,
+                completedRequests: m.completedRequests,
+                failedRequests: m.failedRequests,
+                rateLimitHits: m.rateLimitHits,
+                retriedRequests: m.retriedRequests,
+                avgLatencyMs: Math.round(m.avgLatencyMs),
+                p50LatencyMs: Math.round(m.p50LatencyMs),
+                p99LatencyMs: Math.round(m.p99LatencyMs),
+              });
+            }
+          }
+        }
+
+        // Clean up rate limit registry resources
+        this.rateLimitRegistry?.dispose();
+
+        // Clear registry from redteam provider manager
+        redteamProviderManager.setRateLimitRegistry(undefined);
+
+        // Reset cliState.maxConcurrency to prevent stale state between evaluations
+        cliState.maxConcurrency = undefined;
+      } catch (error) {
+        cleanupError = error;
+        throw error;
+      } finally {
+        if (writerCloseErrors.length > 0) {
+          logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
+          if (evaluationError === undefined && cleanupError === undefined) {
+            throw writerCloseErrors.length === 1
+              ? writerCloseErrors[0]
+              : new AggregateError(
+                  writerCloseErrors,
+                  'Multiple JSONL output writers failed to close',
+                );
           }
         }
       }
-
-      // Clean up rate limit registry resources
-      this.rateLimitRegistry?.dispose();
-
-      // Clear registry from redteam provider manager
-      redteamProviderManager.setRateLimitRegistry(undefined);
-
-      // Reset cliState.maxConcurrency to prevent stale state between evaluations
-      cliState.maxConcurrency = undefined;
     }
   }
 }

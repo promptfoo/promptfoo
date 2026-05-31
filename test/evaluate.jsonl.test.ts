@@ -106,6 +106,92 @@ describe('programmatic JSONL output', () => {
     );
   });
 
+  it('finalizes failed streamed rows together with later timeout rows', async () => {
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'partially-slow-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((prompt, _context, options) => {
+        if (prompt.includes('fast')) {
+          return Promise.resolve({
+            output: 'fast response',
+            tokenUsage: createEmptyTokenUsage(),
+          });
+        }
+        return new Promise<never>((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => reject(new Error('Provider call aborted')),
+            { once: true },
+          );
+        });
+      }),
+    };
+    const originalAddResult = Eval.prototype.addResult;
+    vi.spyOn(Eval.prototype, 'addResult').mockImplementation(async function (this: Eval, result) {
+      if (result.promptIdx === 0) {
+        throw new Error('simulated save failure');
+      }
+      return originalAddResult.call(this, result);
+    });
+
+    await evaluate(
+      {
+        outputPath,
+        prompts: ['fast prompt', 'slow prompt'],
+        providers: [provider],
+        tests: [{ vars: {} }],
+      },
+      { timeoutMs: 10 },
+    );
+
+    const results = readJsonl(outputPath).sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toEqual(expect.objectContaining({ success: true }));
+    expect(results[1]).toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining('timed out'),
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+      }),
+    );
+  });
+
+  it('finalizes failed streamed rows together with later max-score updates', async () => {
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'partially-persisted-max-score-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const originalAddResult = Eval.prototype.addResult;
+    vi.spyOn(Eval.prototype, 'addResult').mockImplementation(async function (this: Eval, result) {
+      if (result.promptIdx === 2) {
+        throw new Error('simulated save failure');
+      }
+      return originalAddResult.call(this, result);
+    });
+
+    await evaluate({
+      outputPath,
+      prompts: ['Prompt A', 'Prompt B', 'Prompt C'],
+      providers: [provider],
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'hello' }, { type: 'max-score' }],
+        },
+      ],
+    });
+
+    const results = readJsonl(outputPath).sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(results).toHaveLength(3);
+    expect(results.filter((result) => result.promptIdx < 2 && !result.success)).toHaveLength(1);
+    expect(results[2]).toEqual(expect.objectContaining({ success: true }));
+  });
+
   it('preserves provider and model-graded assertion token usage when finalizing persisted rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
