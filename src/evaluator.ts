@@ -3184,7 +3184,7 @@ class Evaluator {
     try {
       await this.evalRecord.addResult(row);
     } catch (error) {
-      this.evalRecord.resultPersistenceFailed = true;
+      this.evalRecord.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
         error,

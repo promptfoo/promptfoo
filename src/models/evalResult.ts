@@ -60,6 +60,15 @@ function projectProviderResponse(
   return projectedResponse;
 }
 
+function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
+  return stripPromptText
+    ? {
+        ...prompt,
+        raw: '[prompt stripped]',
+      }
+    : prompt;
+}
+
 function projectTestCase(
   testCase: AtomicTestCase,
   options: { stripMetadata: boolean; stripVars: boolean },
@@ -178,7 +187,8 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
 
 // Headers that may carry credentials, session state, or PII / org-level identifiers
 // when echoed back from OpenAI / edge proxies. We redact these on the persistence
-// boundary only — keep them in-memory so callers / hooks still see real values.
+// and JSONL artifact boundaries only — keep them in-memory so callers / hooks
+// still see real values.
 //
 // Note: `sanitizeForDbWithSecrets` already redacts well-known credential-shaped keys
 // (`set-cookie`, `cookie`, `authorization`, …) via `SECRET_FIELD_NAMES`, and
@@ -379,33 +389,36 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
-export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
-  const artifactResult = result as T & Record<string, unknown>;
+export function sanitizeResultForJsonlArtifact<T extends EvaluateResult>(result: T): T {
+  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+  const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
+  const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
+  const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
+  const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+
+  const response = projectProviderResponse(sanitizeResponseForDb(sanitizeForDb(result.response)), {
+    stripMetadata: shouldStripMetadata,
+    stripOutput: shouldStripResponseOutput,
+  });
+  const testCase = projectTestCase(sanitizeForDbWithSecrets(result.testCase), {
+    stripMetadata: shouldStripMetadata,
+    stripVars: shouldStripTestVars,
+  });
+
   return {
     ...result,
-    ...(artifactResult.testCase
-      ? { testCase: sanitizeForDbWithSecrets(artifactResult.testCase) }
-      : {}),
-    ...(artifactResult.vars === undefined
+    testCase,
+    vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(result.vars),
+    prompt: projectPrompt(sanitizeForDbWithSecrets(result.prompt), shouldStripPromptText),
+    provider: sanitizeProvider(result.provider),
+    response,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
+    namedScores: sanitizeForDb(result.namedScores),
+    metadata: shouldStripMetadata
       ? {}
-      : { vars: sanitizeForDbWithSecrets(artifactResult.vars) }),
-    ...(artifactResult.prompt ? { prompt: sanitizeForDbWithSecrets(artifactResult.prompt) } : {}),
-    ...(artifactResult.provider
-      ? {
-          provider: sanitizeProvider(
-            artifactResult.provider as ApiProvider | ProviderOptions | string,
-          ),
-        }
-      : {}),
-    response: sanitizeResponseForDb(
-      sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    ),
-    gradingResult: sanitizeGradingResultForDb(sanitizeForDb(artifactResult.gradingResult)),
-    namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: sanitizeMetadataForDb(
-      sanitizeForDb(artifactResult.metadata),
-      (artifactResult.response as ProviderResponse | null | undefined)?.metadata,
-    ),
+      : sanitizeMetadataForDb(sanitizeForDb(result.metadata), result.response?.metadata),
   } as T;
 }
 
@@ -744,12 +757,7 @@ export default class EvalResult {
       stripOutput: shouldStripResponseOutput,
     });
 
-    const prompt = shouldStripPromptText
-      ? {
-          ...this.prompt,
-          raw: '[prompt stripped]',
-        }
-      : this.prompt;
+    const prompt = projectPrompt(this.prompt, shouldStripPromptText);
 
     const testCase = projectTestCase(this.testCase, {
       stripMetadata: shouldStripMetadata,
