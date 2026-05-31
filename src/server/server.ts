@@ -391,25 +391,34 @@ export async function startServer(
       invalidateEvaluationCache(signal.evalId);
       allPrompts = null;
 
-      if (signal.type === 'delete') {
+      // A signal can carry both a delete and an update component when two mutations were
+      // coalesced inside the watcher's debounce window (e.g. a delete quickly followed by an
+      // unrelated eval save). Emit each component so neither refresh is lost.
+      const hasDelete = signal.type === 'delete' || signal.deletedEvalIds !== undefined;
+      const hasUpdate = signal.type === 'update' || signal.evalId !== undefined;
+
+      if (hasDelete) {
         io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });
-        return;
       }
 
-      const updatedEval = signal.evalId ? await Eval.findById(signal.evalId) : await Eval.latest();
-      if (updatedEval) {
-        logger.debug(
-          `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
-        );
-        io.emit('update', { evalId: updatedEval.id });
-      } else if (!signal.evalId) {
-        // No scoped eval and no evals remain: tell clients to clear their view.
-        io.emit('update', null);
+      if (hasUpdate) {
+        const updatedEval = signal.evalId
+          ? await Eval.findById(signal.evalId)
+          : await Eval.latest();
+        if (updatedEval) {
+          logger.debug(
+            `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
+          );
+          io.emit('update', { evalId: updatedEval.id });
+        } else if (!signal.evalId) {
+          // No scoped eval and no evals remain: tell clients to clear their view.
+          io.emit('update', null);
+        }
+        // Else: a scoped update whose eval no longer exists (e.g. an update signal that won the
+        // debounce race against the eval's own delete). Emit nothing — clients re-fetch the
+        // recent-evals list on the next signal and reconcile then, so a stale pinned view
+        // self-heals without us yanking every client to a different eval here.
       }
-      // Else: a scoped update whose eval no longer exists (e.g. an update signal that won the
-      // debounce race against the eval's own delete). Emit nothing — clients re-fetch the
-      // recent-evals list on the next signal and reconcile then, so a stale pinned view
-      // self-heals without us yanking every client to a different eval here.
     };
 
     void handleSignalUpdate();

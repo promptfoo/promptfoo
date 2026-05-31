@@ -396,6 +396,37 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('should emit both a delete and an update for a coalesced delete+update signal', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      // A delete that folded in a pending scoped update (two mutations coalesced in the window)
+      // must broadcast the removed eval AND refresh clients to the surviving update.
+      vi.mocked(readSignalFile).mockReturnValueOnce({
+        type: 'delete',
+        deletedEvalIds: ['deleted-eval'],
+        evalId: 'surviving-eval',
+      });
+      vi.mocked(Eval.findById).mockResolvedValueOnce({
+        id: 'surviving-eval',
+        config: {},
+      } as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { deletedEvalIds: ['deleted-eval'] }),
+      );
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'surviving-eval' }),
+      );
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('should not deadlock the shutdown promise if watcher.close throws', async () => {
       const mockWatcher = {
         close: vi.fn().mockImplementation(() => {

@@ -184,12 +184,22 @@ describe('signal', () => {
       expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
     });
 
-    it('should not treat a JSON update object as a delete (falls through to update)', () => {
-      mockReadFileSync.mockReturnValue(JSON.stringify({ type: 'update', evalId: 'eval-12345678' }));
+    it('parses a JSON update object (combined-signal format) into its components', () => {
+      // Combined signals (an update that folded in a pending delete) are written as JSON with
+      // type 'update', so readSignalFile parses both the evalId and any carried deletedEvalIds.
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'update',
+          evalId: 'eval-12345678',
+          deletedEvalIds: ['eval-removed-1'],
+        }),
+      );
 
-      // The JSON object is not a delete, so it falls through to the legacy reader. The
-      // legacy reader cannot extract an id from JSON, so the result is an unscoped update.
-      expect(readSignalFile()).toEqual({ type: 'update', evalId: undefined });
+      expect(readSignalFile()).toEqual({
+        type: 'update',
+        evalId: 'eval-12345678',
+        deletedEvalIds: ['eval-removed-1'],
+      });
     });
 
     it('should fall back to an unscoped update for JSON arrays/primitives', () => {
@@ -209,6 +219,60 @@ describe('signal', () => {
       });
 
       expect(readSignalFile()).toEqual({ type: 'update' });
+    });
+  });
+
+  describe('signal coalescing within the debounce window', () => {
+    function lastWrittenSignal(): string {
+      const calls = mockWriteFileSync.mock.calls;
+      return calls[calls.length - 1]?.[1] as string;
+    }
+
+    it('folds a pending delete into a following update so neither refresh is lost', () => {
+      // A delete written <250ms ago is still pending when an unrelated eval save fires.
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-deleted-1'],
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      updateSignalFile('eval-newly-saved');
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'update',
+        evalId: 'eval-newly-saved',
+        deletedEvalIds: ['eval-deleted-1'],
+      });
+    });
+
+    it('carries a pending scoped update into a following delete', () => {
+      // A legacy `evalId:timestamp` update written <250ms ago is pending when a delete fires.
+      mockReadFileSync.mockReturnValue(`eval-pending-update:${new Date().toISOString()}`);
+
+      updateSignalFileForDeletedEvals(['eval-deleted-2']);
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'delete',
+        deletedEvalIds: ['eval-deleted-2'],
+        evalId: 'eval-pending-update',
+      });
+    });
+
+    it('ignores a stale pending signal outside the debounce window', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-old'],
+          timestamp: new Date(Date.now() - 60_000).toISOString(),
+        }),
+      );
+
+      updateSignalFile('eval-fresh');
+
+      // The stale delete is not folded in; the update stays in the plain legacy text format.
+      expect(lastWrittenSignal()).toMatch(/^eval-fresh:\d{4}-\d{2}-\d{2}T/);
     });
   });
 
