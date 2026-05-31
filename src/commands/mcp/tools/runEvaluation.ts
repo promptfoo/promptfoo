@@ -1,11 +1,11 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../../logger';
+import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
 import { escapeRegExp } from '../../../util/text';
-import { doEval } from '../../eval';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';

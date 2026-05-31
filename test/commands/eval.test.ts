@@ -3,12 +3,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
-import {
-  doEval,
-  EvalRunError,
-  evalCommand,
-  showRedteamProviderLabelMissingWarning,
-} from '../../src/commands/eval';
+import { evalCommand } from '../../src/commands/eval';
 import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -20,6 +15,11 @@ import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import {
+  doEval,
+  EvalRunError,
+  showRedteamProviderLabelMissingWarning,
+} from '../../src/node/doEval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';

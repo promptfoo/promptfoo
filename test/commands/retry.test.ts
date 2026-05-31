@@ -2,16 +2,16 @@ import { randomUUID } from 'crypto';
 
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-} from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+} from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
 

@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createAndDisplayShareableModelAuditUrl,
   createAndDisplayShareableUrl,
-  notCloudEnabledShareInstructions,
   shareCommand,
 } from '../../src/commands/share';
 import * as envars from '../../src/envars';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import ModelAudit from '../../src/models/modelAudit';
+import { notCloudEnabledShareInstructions } from '../../src/node/shareInstructions';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,

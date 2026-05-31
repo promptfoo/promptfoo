@@ -19,7 +19,7 @@
     "app",
     "facade"
   ],
-  "maxStronglyConnectedComponentSize": 8,
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",

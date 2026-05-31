@@ -6,7 +6,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { EvalRunError, evalCommand } from './commands/eval';
+import { evalCommand } from './commands/eval';
 import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
@@ -22,7 +22,6 @@ import { optimizeCommand } from './commands/optimize';
 import { initCommand as redteamInitCommand } from './commands/redteam/init';
 import { redteamReportCommand } from './commands/redteam/report';
 import { redteamSetupCommand } from './commands/redteam/setup';
-import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
@@ -37,6 +36,8 @@ import {
   shutdownGracefully,
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
+import { EvalRunError } from './node/doEval';
+import { setupRetryCommand } from './node/retry';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
