@@ -15,6 +15,7 @@ import {
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
 import {
@@ -33,16 +34,12 @@ import type {
   EvaluateTable,
   EvaluateTestSuite,
   GradingResult,
-  Job,
   PromptMetrics,
   ResultsFile,
   Vars,
 } from '../../types/index';
 
 export const evalRouter = Router();
-
-// Running jobs
-export const evalJobs = new Map<string, Job>();
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -168,14 +165,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
   }
 
   const id = crypto.randomUUID();
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
+  evalJobService.create(id);
 
   evaluateWithSource(
     {
@@ -187,20 +177,14 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
       ...evaluateOptions,
       eventSource: 'web',
       progressCallback: (progress: number, total: number) => {
-        const job = evalJobs.get(id);
-        invariant(job, 'Job not found');
-        job.progress = progress;
-        job.total = total;
+        invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
       },
     },
   )
     .then(async (evalResult) => {
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.result = await evalResult.toEvaluateSummary();
-      job.evalId = evalResult.id;
-      job.status = 'complete';
+      const result = await evalResult.toEvaluateSummary();
+      invariant(evalJobService.complete(id, result, evalResult.id), 'Job not found');
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
@@ -209,12 +193,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
         body: sanitizeObject(testSuite, { context: 'request body' }),
       });
 
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.status = 'error';
-      job.result = null;
-      job.evalId = null;
-      job.logs = [String(error)];
+      invariant(evalJobService.fail(id, [String(error)]), 'Job not found');
     });
 
   res.json(EvalSchemas.CreateJob.Response.parse({ id }));
@@ -228,7 +207,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobs.get(id);
+  const job = evalJobService.get(id);
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
     return;
