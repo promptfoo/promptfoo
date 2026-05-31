@@ -1659,5 +1659,5 @@ export async function getProviderFactories(
       }
     }),
   );
-  return [...providerMap, ...extraFactorySets.flat()];
+  return [...extraFactorySets.flat(), ...providerMap];
 }
