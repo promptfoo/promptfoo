@@ -243,11 +243,11 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
   // Merge new deletes with any pending in the window. "All evals deleted" — encoded as undefined
   // by direct callers, or as [] when a delete-all was folded into a pending update — wins over a
   // specific id list, so a coalescing chain never downgrades a delete-all to one id.
-  const mergedDeletedEvalIds = pendingDelete
-    ? isAllEvalsDeleted(pendingDelete.deletedEvalIds) || isAllEvalsDeleted(deletedEvalIds)
+  const mergedDeletedEvalIds = !pendingDelete
+    ? deletedEvalIds
+    : isAllEvalsDeleted(pendingDelete.deletedEvalIds) || isAllEvalsDeleted(deletedEvalIds)
       ? undefined
-      : [...new Set([...(pendingDelete.deletedEvalIds ?? []), ...(deletedEvalIds ?? [])])]
-    : deletedEvalIds;
+      : [...new Set([...(pendingDelete.deletedEvalIds ?? []), ...(deletedEvalIds ?? [])])];
   // Carry forward every pending scoped update so a quick create/import-then-delete still
   // refreshes clients to the newly written eval(s) rather than only processing the delete.
   const carriedUpdateIds = pending && hasUpdateComponent(pending) ? updateEvalIds(pending) : [];
