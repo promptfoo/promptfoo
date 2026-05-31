@@ -190,6 +190,28 @@ describe('evaluator trace integration', () => {
     expect(mockShutdownOtel).not.toHaveBeenCalled();
   });
 
+  it('flushes and shuts down OTEL after successful tracing initialization', async () => {
+    await evaluate(
+      {
+        providers: [
+          createMockProvider({
+            id: 'mock-provider',
+            response: { output: 'Test response', tokenUsage: {} },
+          }),
+        ],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{}],
+        tracing: { enabled: true },
+      },
+      mockEval,
+      {},
+    );
+
+    expect(mockInitializeOtel).toHaveBeenCalledOnce();
+    expect(mockFlushOtel).toHaveBeenCalledOnce();
+    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+  });
+
   it('should handle assertions gracefully when tracing is disabled', async () => {
     // Mock generateTraceContextIfNeeded to return null when tracing is disabled
     vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue(null);
