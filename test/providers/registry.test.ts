@@ -152,6 +152,8 @@ describe('Provider Registry', () => {
       });
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
+        // All lookups should reuse the factory exported by the cached AWS
+        // family module instead of allocating one factory per request.
         const path = 'bedrock:completion:anthropic.claude-v2';
         const [a, b, c] = await Promise.all([
           getProviderFactories(path),
@@ -586,7 +588,7 @@ describe('Provider Registry', () => {
       const provider = await factory!.create(path, { config }, mockContext);
       expect(provider.constructor.name).toBe(expectedProviderName);
       if (expectedModelType) {
-        expect((provider as any).modelType).toBe(expectedModelType);
+        expect(provider).toHaveProperty('modelType', expectedModelType);
       }
     });
 

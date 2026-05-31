@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
+import { GoogleProvider } from '../../src/providers/google/provider';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import { createMockProvider } from '../factories/provider';
@@ -282,6 +283,48 @@ describe('Google assertions', () => {
       }).toThrow(
         'Call to "getCurrentTemperature":\n{"name":"getCurrentTemperature","args":"{\\"location\\": \\"San Francisco, CA\\"}"}\ndoes not match schema:\n[{"instancePath":"","schemaPath":"#/required","keyword":"required","params":{"missingProperty":"unit"},"message":"must have required property \'unit\'"}]',
       );
+    });
+  });
+
+  describe('Unified GoogleProvider api is-valid-function-call assertion', () => {
+    it('should pass for a direct GoogleProvider instance', async () => {
+      const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
+
+      const provider = new GoogleProvider('foo', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'add',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: {
+                      x: { type: 'NUMBER' },
+                      y: { type: 'NUMBER' },
+                    },
+                    required: ['x', 'y'],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'is-valid-function-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
   });
 

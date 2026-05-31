@@ -216,14 +216,16 @@ describe('OpenAI assertions', () => {
 
   describe('handleIsValidFunctionCall', () => {
     it.each([
-      ['undefined provider', undefined],
-      ['null provider', null],
-      ['missing capability', {}],
-      ['string capability', { validateFunctionToolCall: 'validate' }],
-      ['boolean capability', { validateFunctionToolCall: true }],
-      ['object capability', { validateFunctionToolCall: {} }],
-    ])('rejects %s', (_label, provider) => {
-      expect(hasFunctionToolCallValidator(provider)).toBe(false);
+      ['undefined provider', undefined, false],
+      ['null provider', null, false],
+      ['primitive provider', 'provider', false],
+      ['missing capability', {}, false],
+      ['string capability', { validateFunctionToolCall: 'validate' }, false],
+      ['boolean capability', { validateFunctionToolCall: true }, false],
+      ['object capability', { validateFunctionToolCall: {} }, false],
+      ['function capability', { validateFunctionToolCall: vi.fn() }, true],
+    ])('identifies %s', (_label, provider, expected) => {
+      expect(hasFunctionToolCallValidator(provider)).toBe(expected);
     });
 
     it('should fail when provider does not expose the validator capability', () => {
