@@ -26,7 +26,8 @@ function writeSignalFile(content: string): void {
  */
 export function updateSignalFile(evalId?: string): void {
   const now = new Date().toISOString();
-  // Keep the existing evalId:timestamp wire format.
+  // Preserve the legacy evalId:timestamp update format. The reader matches the trailing
+  // ISO timestamp because generated eval IDs can themselves contain colons.
   writeSignalFile(evalId ? `${evalId}:${now}` : now);
 }
 

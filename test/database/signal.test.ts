@@ -226,12 +226,15 @@ describe('signal', () => {
       expect(result).toBe('eval-12345-abcdef');
     });
 
-    it('should preserve colons in eval IDs from legacy signal files', () => {
-      mockReadFileSync.mockReturnValue('eval-abc-2026-05-29T22:43:41:2026-05-29T22:43:42.000Z');
+    it('should preserve colons in eval IDs through a write-read round trip', () => {
+      const evalId = 'eval-abc-2026-05-29T22:43:41';
+      mockWriteFileSync.mockImplementation((_path, content) => {
+        mockReadFileSync.mockReturnValue(content);
+      });
 
-      const result = readSignalEvalId();
+      updateSignalFile(evalId);
 
-      expect(result).toBe('eval-abc-2026-05-29T22:43:41');
+      expect(readSignalEvalId()).toBe(evalId);
     });
 
     it('should return undefined when signal file contains only timestamp', () => {

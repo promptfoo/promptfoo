@@ -260,6 +260,26 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('should scope process-local evaluation cache invalidation to the signaled eval', async () => {
+      vi.mocked(readSignalFile).mockReturnValueOnce({
+        type: 'update',
+        evalId: 'eval-12345-abcdef',
+      });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      expect(invalidateEvaluationCache).toHaveBeenCalledWith('eval-12345-abcdef');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
     it('should emit scoped updates for legacy evals without normalized result rows', async () => {
       const getResultsCount = vi.fn().mockResolvedValue(0);
       vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'update', evalId: 'legacy-eval' });
