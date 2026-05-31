@@ -153,6 +153,37 @@ describe('Eval Routes - Sharing behavior', () => {
     });
   });
 
+  it('publishes progress updates while a job is running', async () => {
+    let resolveEvaluation: ((value: any) => void) | undefined;
+    mockedEvaluateWithSource.mockImplementationOnce(
+      (_testSuite, options) =>
+        new Promise((resolve) => {
+          options?.progressCallback?.(2, 5, 0, {} as never, {} as never);
+          resolveEvaluation = resolve;
+        }),
+    );
+
+    const createResponse = await postJob(minimalTestSuite);
+    const jobId = createResponse.body.id;
+
+    const inProgressResponse = await api.get(`/api/eval/job/${jobId}`);
+    expect(inProgressResponse.body).toMatchObject({
+      status: 'in-progress',
+      progress: 2,
+      total: 5,
+    });
+
+    resolveEvaluation!({
+      id: 'eval-result-id',
+      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+    });
+
+    await vi.waitFor(async () => {
+      const completedResponse = await api.get(`/api/eval/job/${jobId}`);
+      expect(completedResponse.body.status).toBe('complete');
+    });
+  });
+
   it('flips status to error when toEvaluateSummary rejects', async () => {
     mockedEvaluateWithSource.mockResolvedValueOnce({
       id: 'eval-result-id',
