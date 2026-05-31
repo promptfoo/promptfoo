@@ -80,6 +80,7 @@ class StageCodexHomeTest(unittest.TestCase):
             f'source = "{self.marketplace_root.resolve()}"', config.read_text()
         )
         self.assertNotIn("auth", config.read_text())
+        self.assertEqual(codex_home.stat().st_mode & 0o777, 0o700)
 
     def test_quotes_dotted_marketplace_names_as_literal_toml_keys(self) -> None:
         codex_home = self.root / "codex-home"

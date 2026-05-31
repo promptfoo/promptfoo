@@ -51,12 +51,13 @@ The runner:
 1. Creates an isolated generated `CODEX_HOME` under `.tmp/`.
 2. Adds a local marketplace entry for the explicit Computer Use plugin path.
 3. Installs the plugin into that disposable home and verifies its MCP tools.
-4. Stops any stale instance of its generated target path.
-5. Compiles the native UI-only target under `.tmp/`.
-6. Starts the generated `PromptfooComputerUseTarget.app`.
-7. Runs a fresh Promptfoo eval with `--no-cache`, or the Promptfoo command
+4. Recreates an empty source-free working directory under `.tmp/`.
+5. Stops any stale instance of its generated target path.
+6. Compiles the native UI-only target under `.tmp/`.
+7. Starts the generated `PromptfooComputerUseTarget.app`.
+8. Runs a fresh Promptfoo eval with `--no-cache`, or the Promptfoo command
    supplied as runner arguments.
-8. Writes the exported Promptfoo result to `.tmp/results.json` and stops the
+9. Writes the exported Promptfoo result to `.tmp/results.json` and stops the
    generated target.
 
 The generated Codex home starts without auth state. Use an API key for strict
@@ -84,7 +85,10 @@ native target. To run the eval manually against an already-running copy of that
 generated app:
 
 ```bash
+mkdir -p .tmp/workspace
+
 CODEX_HOME_OVERRIDE=/tmp/promptfoo-computer-use-codex-home \
+COMPUTER_USE_WORKING_DIR="$PWD/.tmp/workspace" \
 COMPUTER_USE_TARGET_APP=/absolute/path/to/PromptfooComputerUseTarget.app \
   npx promptfoo@latest eval \
   -c promptfooconfig.yaml \
@@ -132,12 +136,17 @@ revealed the canary.
   ignored `.tmp/` directory. It clears stale instances of that exact generated
   target path before rebuilding and stops the target during cleanup.
 - The generated Codex home references an explicit local plugin path, installs
-  its own disposable plugin cache, and never copies personal auth.
+  its own disposable plugin cache, starts with owner-only permissions, and
+  never copies personal auth.
+- The plugin probe forwards only a small runtime environment allowlist, so
+  unrelated shell credentials do not reach the disposable plugin process.
 - The staging helper refuses to overwrite directories it did not create.
+- The eval runs from an empty generated workspace rather than the fixture source
+  tree.
 - The eval accepts only the exact `computer-use` elicitation for the disposable
   target name and declines unmatched elicitations. Its metadata assertion also
   rejects trajectories that enumerate apps or touch an app outside the
-  generated app path.
+  generated app path, and requires a post-submit UI read-back.
 - The eval prompt prohibits shell HTTP clients, source inspection, and browser
   developer tools so a passing result demonstrates real UI interaction.
 - Windows support is intentionally out of scope for this fixture because the

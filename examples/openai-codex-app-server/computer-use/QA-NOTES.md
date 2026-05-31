@@ -35,8 +35,11 @@ reliable Computer Use fixture.
 
 The generated Codex home starts auth-free. API-key-backed runs provide the
 strongest isolation. Codex may persist supplied API-key auth into the ignored
-generated home during a run. A local-login fixture must be prepared separately
-and used only through the documented manual commands.
+generated home during a run, so the staging helper creates it with owner-only
+permissions. The plugin probe forwards only a small runtime environment
+allowlist instead of inheriting unrelated shell credentials. A local-login
+fixture must be prepared separately and used only through the documented manual
+commands.
 
 ### Use a native target with no API
 
@@ -44,6 +47,14 @@ The target is a tiny AppKit application compiled into the ignored `.tmp/`
 directory. It opens no listening socket. Chat responses are computed in-process
 after form submission, so successful canary recovery requires rendered UI
 interaction.
+
+### Run from a source-free workspace
+
+The runner recreates an empty `.tmp/workspace` directory for the Codex turn.
+The target source and its literal canary remain outside that working directory.
+The prompt and metadata assertion require an ordered read, type, submit, and
+post-submit read-back sequence, so canary recovery must be grounded in rendered
+UI state.
 
 ### Use a unique disposable app path
 
@@ -62,13 +73,16 @@ not an OS-level containment boundary.
 | Staging   | Rejects an incomplete plugin directory                                   | Pass           |
 | Staging   | Rejects overwrite of an unmarked directory                               | Pass           |
 | Staging   | Rebuilds its own marked generated directory with `--force`               | Pass           |
+| Staging   | Creates the generated Codex home with owner-only permissions             | Pass           |
+| Staging   | Probe environment excludes unrelated shell credentials                   | Pass           |
 | Target    | Compiles as a generated native `.app`                                    | Pass           |
 | Target    | Opens no listening TCP socket                                            | Pass           |
 | Target    | Serves the chatbot UI through AppKit accessibility state                 | Pass           |
 | Promptfoo | Config validation passes                                                 | Pass           |
-| Promptfoo | Existing focused app-server provider tests pass                          | Pass: 67 tests |
+| Promptfoo | Existing focused app-server provider tests pass                          | Pass: 68 tests |
 | Runtime   | Isolated Codex home discovers and installs the Computer Use plugin       | Pass           |
 | Runtime   | Direct MCP read, type, submit, and read-back recover the canary          | Pass           |
+| Runtime   | Codex runs from an empty generated workspace outside fixture source      | Pass           |
 | Runtime   | Real model-driven eval recovers the canary through the UI                | Pass           |
 | Runtime   | Exported metadata stays inside the generated app path                    | Pass           |
 | Runtime   | Runner stops the generated target after the eval                         | Pass           |
@@ -177,3 +191,25 @@ paths and any authentication details out of committed notes.
   `eval-1pd-2026-05-31T06:05:27` reported the expected finding in 18 seconds.
   Both recorded one exact target elicitation, a bounded three-call UI trajectory,
   zero runtime errors, and no leftover target process.
+- A follow-up Codex review found that the generated Codex home should be
+  owner-only, the plugin probe should not inherit unrelated shell credentials,
+  and the Codex turn should not run from the fixture source tree. The staging
+  helper now enforces mode `700`, the probe forwards a small runtime environment
+  allowlist, and the runner recreates an empty `.tmp/workspace`. The prompt and
+  trajectory assertion now require an ordered post-submit UI read-back.
+- The staging and probe helpers' 10 unit tests, config validation, the 68 focused
+  app-server provider tests, shell syntax check, Python compilation check, lint,
+  standalone-copy runner syntax and CLI-selection check, and diff whitespace
+  check passed after that hardening.
+- Smoke eval `eval-C6m-2026-05-31T06:20:56` passed in 27 seconds. Exported
+  metadata contained the bounded `get_app_state`, `set_value`, `click`, and
+  post-submit `get_app_state` sequence with no fallback items. The generated
+  Codex home had mode `700`, the generated workspace stayed empty, and cleanup
+  left no target process.
+- A fresh strict generation produced one `policy` probe. Generated policy eval
+  `eval-Cv9-2026-05-31T06:22:55` reported the expected high-severity
+  diagnostic-token disclosure finding in 25 seconds with zero runtime errors.
+  Its exported metadata contained the bounded `get_app_state`, `type_text`,
+  `click`, and post-submit `get_app_state` sequence with no fallback items. The
+  generated Codex home retained mode `700`, the workspace stayed empty, and
+  cleanup again left no target process.

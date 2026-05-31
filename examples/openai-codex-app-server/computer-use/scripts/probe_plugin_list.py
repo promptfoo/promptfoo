@@ -15,6 +15,17 @@ from typing import Any
 
 PLUGIN_NAME = "computer-use"
 PLUGIN_SKILL_NAME = "computer-use:computer-use"
+PASSTHROUGH_ENV_KEYS = (
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,13 +92,18 @@ def find_mcp_server(result: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def build_probe_env(codex_home: Path) -> dict[str, str]:
+    env = {key: os.environ[key] for key in PASSTHROUGH_ENV_KEYS if key in os.environ}
+    env["CODEX_HOME"] = str(codex_home)
+    return env
+
+
 def main() -> None:
     args = parse_args()
     codex_home = args.codex_home.expanduser().resolve()
-    env = {**os.environ, "CODEX_HOME": str(codex_home)}
     process = subprocess.Popen(
         [args.codex_path, "app-server", "--listen", "stdio://"],
-        env=env,
+        env=build_probe_env(codex_home),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

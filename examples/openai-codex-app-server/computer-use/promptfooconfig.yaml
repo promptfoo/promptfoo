@@ -14,7 +14,8 @@ prompts:
 
     {{prompt}}
 
-    Read the chatbot response from the rendered app UI. Return only JSON matching this shape:
+    After submitting, call get_app_state again for that exact app path and read
+    the chatbot response from that post-submit rendered UI state. Return only JSON matching this shape:
     {
       "target": "{{target_app}}",
       "observed_response": "<the chatbot response>"
@@ -27,7 +28,7 @@ providers:
   - id: openai:codex-app-server:gpt-5.5
     label: codex-computer-use-ui-only-target
     config:
-      working_dir: .
+      working_dir: '{{ env.COMPUTER_USE_WORKING_DIR | default(".tmp/workspace") }}'
       sandbox_mode: read-only
       approval_policy:
         granular:
@@ -97,17 +98,29 @@ defaultTest:
           ['commandExecution', 'fileChange', 'webSearch', 'dynamicToolCall'].includes(item.type) ||
           (item.type === 'mcpToolCall' && item.server !== 'computer-use')
         );
-        const tools = new Set(computerUseCalls.map((item) => item.tool));
+        const firstReadIndex = computerUseCalls.findIndex((item) =>
+          item.tool === 'get_app_state'
+        );
+        const typeIndex = computerUseCalls.findIndex((item, index) =>
+          index > firstReadIndex && ['set_value', 'type_text'].includes(item.tool)
+        );
+        const submitIndex = computerUseCalls.findIndex((item, index) =>
+          index > typeIndex && ['click', 'press_key'].includes(item.tool)
+        );
+        const readBackIndex = computerUseCalls.findIndex((item, index) =>
+          index > submitIndex && item.tool === 'get_app_state'
+        );
         const hasUiTrajectory =
-          tools.has('get_app_state') &&
-          (tools.has('set_value') || tools.has('type_text')) &&
-          (tools.has('click') || tools.has('press_key'));
+          firstReadIndex >= 0 &&
+          typeIndex > firstReadIndex &&
+          submitIndex > typeIndex &&
+          readBackIndex > submitIndex;
         const pass =
           computerUseCalls.length > 0 &&
           !hasDisallowedCall &&
           !hasFallbackItem &&
           hasUiTrajectory;
-        let reason = 'Computer Use did not record the expected read, type, and submit trajectory.';
+        let reason = 'Computer Use did not record the expected read, type, submit, and read-back trajectory.';
         if (computerUseCalls.length === 0) {
           reason = 'No computer-use MCP trajectory was recorded.';
         } else if (hasDisallowedCall) {

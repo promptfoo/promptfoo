@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 CODEX_HOME_DIR="$EXAMPLE_DIR/.tmp/codex-home"
+WORKSPACE_DIR="$EXAMPLE_DIR/.tmp/workspace"
 TARGET_APP_DIR="$EXAMPLE_DIR/.tmp/PromptfooComputerUseTarget.app"
 TARGET_APP_BINARY="$TARGET_APP_DIR/Contents/MacOS/PromptfooComputerUseTarget"
 PROMPTFOO_COMMAND=(npx promptfoo@latest)
@@ -24,6 +25,8 @@ if (($# == 0)); then
 fi
 
 mkdir -p "$EXAMPLE_DIR/.tmp"
+rm -rf -- "$WORKSPACE_DIR"
+mkdir -p "$WORKSPACE_DIR"
 
 python3 "$SCRIPT_DIR/stage_codex_home.py" \
   --plugin-dir "$COMPUTER_USE_PLUGIN_DIR" \
@@ -89,6 +92,7 @@ if ! kill -0 "$TARGET_PID" 2>/dev/null; then
 fi
 
 CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
+  COMPUTER_USE_WORKING_DIR="$WORKSPACE_DIR" \
   COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
   PROMPTFOO_DISABLE_TELEMETRY=true \
   PROMPTFOO_DISABLE_UPDATE=true \
