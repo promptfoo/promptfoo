@@ -6,6 +6,7 @@ import {
   registerTestDatabaseClient,
   resetTestDatabaseClient,
 } from '../../src/database/testing';
+import { sleep } from '../../src/util/time';
 import { mockProcessEnv } from '../util/utils';
 
 // Mirror of the testing database URL in src/database/index.ts. The test database is a
@@ -135,9 +136,9 @@ describe('database test isolation', () => {
   // (busy_timeout only covers SQLITE_BUSY). libsql runs interactive transactions on their
   // own connections, so a prior writer's lock can briefly outlive the JS promise that
   // settled it — which is what made `import`'s collision check (Eval.findById's
-  // `SELECT ... FROM evals`) flake. configureDatabase enables read_uncommitted on the test
-  // DB so reads no longer take a conflicting lock.
-  it('reads while another connection holds a write lock instead of throwing SQLITE_LOCKED', async () => {
+  // `SELECT ... FROM evals`) flake. Top-level statements now retry the transient lock
+  // instead of throwing, riding through the window without weakening isolation.
+  it('retries a read locked by another connection until the lock releases, without dirty reads', async () => {
     const databaseModule = await import('../../src/database/index');
     const db = await databaseModule.getDb();
     await db.run('CREATE TABLE lock_probe (id TEXT PRIMARY KEY)');
@@ -149,15 +150,22 @@ describe('database test isolation', () => {
     const writeTx = await lockHolder.transaction('write');
     await writeTx.execute("INSERT INTO lock_probe VALUES ('uncommitted')");
 
-    try {
-      // Top-level read through the serialized main connection, exactly like Eval.findById.
-      await expect(db.all("SELECT id FROM lock_probe WHERE id = 'committed'")).resolves.toEqual([
-        { id: 'committed' },
-      ]);
-    } finally {
-      await writeTx.rollback();
-      lockHolder.close();
-    }
+    // Top-level read through the serialized main connection (exactly like Eval.findById).
+    // It contends with the held lock; without the retry it rejects immediately with
+    // SQLITE_LOCKED. Capture the outcome so the still-pending read never rejects unhandled.
+    const readOutcome = db
+      .all('SELECT id FROM lock_probe ORDER BY id')
+      .then((rows) => ({ rows }))
+      .catch((error) => ({ error }));
+
+    // Release the lock — discarding the uncommitted row — while the read is still retrying.
+    await sleep(30);
+    await writeTx.rollback();
+    lockHolder.close();
+
+    // The read rode through the lock and observed only the committed row: the retry never
+    // exposed the rolled-back 'uncommitted' write, so isolation stays production-like.
+    expect(await readOutcome).toEqual({ rows: [{ id: 'committed' }] });
 
     await databaseModule.closeDb();
   });
