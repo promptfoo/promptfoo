@@ -4,6 +4,13 @@ import debounce from 'debounce';
 import logger from '../logger';
 import { getDbSignalPath } from './index';
 
+/**
+ * A classified signal-file event. `type` is the latest mutation, but a coalesced signal can
+ * carry BOTH components regardless of `type`: an update component (`evalId`, or an unscoped
+ * update) and a delete component (`deletedEvalIds`, or "all evals deleted"). Use
+ * {@link hasUpdateComponent} / {@link hasDeleteComponent} rather than `type` alone to decide
+ * what to emit, so a `type:'update'` payload carrying `deletedEvalIds` still drops those evals.
+ */
 export interface DatabaseSignal {
   type: 'delete' | 'update';
   evalId?: string;
@@ -58,13 +65,37 @@ export function updateSignalFile(evalId?: string): void {
 }
 
 /** True when the signal carries an update component (a scoped or unscoped eval refresh). */
-function hasUpdateComponent(signal: DatabaseSignal): boolean {
+export function hasUpdateComponent(signal: DatabaseSignal): boolean {
   return signal.type === 'update' || signal.evalId !== undefined;
 }
 
 /** True when the signal carries a delete component (specific ids or "all evals deleted"). */
-function hasDeleteComponent(signal: DatabaseSignal): boolean {
+export function hasDeleteComponent(signal: DatabaseSignal): boolean {
   return signal.type === 'delete' || signal.deletedEvalIds !== undefined;
+}
+
+/** Parses signal-file content as a combined JSON payload, or null if it is not one. */
+function parseSignalJson(content: string): (DatabaseSignal & { timestamp?: string }) | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'type' in parsed &&
+      (parsed.type === 'delete' || parsed.type === 'update')
+    ) {
+      const evalId =
+        'evalId' in parsed && typeof parsed.evalId === 'string' ? parsed.evalId : undefined;
+      const deletedEvalIds =
+        'deletedEvalIds' in parsed ? toStringEvalIds(parsed.deletedEvalIds) : undefined;
+      const timestamp =
+        'timestamp' in parsed && typeof parsed.timestamp === 'string'
+          ? parsed.timestamp
+          : undefined;
+      return { type: parsed.type, evalId, deletedEvalIds, timestamp };
+    }
+  } catch {}
+  return null;
 }
 
 /**
@@ -83,25 +114,12 @@ function readPendingSignal(now: number): DatabaseSignal | null {
 
   try {
     const content = fs.readFileSync(getDbSignalPath(), 'utf8').trim();
-    try {
-      const parsed = JSON.parse(content) as unknown;
-      if (
-        parsed !== null &&
-        typeof parsed === 'object' &&
-        'type' in parsed &&
-        (parsed.type === 'delete' || parsed.type === 'update') &&
-        'timestamp' in parsed &&
-        typeof parsed.timestamp === 'string' &&
-        withinWindow(parsed.timestamp)
-      ) {
-        const evalId =
-          'evalId' in parsed && typeof parsed.evalId === 'string' ? parsed.evalId : undefined;
-        const deletedEvalIds =
-          'deletedEvalIds' in parsed ? toStringEvalIds(parsed.deletedEvalIds) : undefined;
-        return { type: parsed.type, evalId, deletedEvalIds };
-      }
-      return null;
-    } catch {}
+    const json = parseSignalJson(content);
+    if (json) {
+      return withinWindow(json.timestamp)
+        ? { type: json.type, evalId: json.evalId, deletedEvalIds: json.deletedEvalIds }
+        : null;
+    }
 
     // Legacy text format: `evalId:timestamp` or a bare timestamp.
     const legacyTimestamp = content.match(/(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)$/)?.[1];
@@ -115,12 +133,13 @@ function readPendingSignal(now: number): DatabaseSignal | null {
 }
 
 /**
- * Signals that one or more evals were deleted. Unlike updates (which keep the legacy
- * `evalId:timestamp` text format), deletions use a JSON payload so the watcher can tell
- * clients exactly which evals to drop. Pre-PR view servers don't understand this JSON and
- * read it back as "no eval id", falling back to broadcasting the latest eval — a benign
- * degradation, so the view server and CLI should be on matching versions for delete-aware
- * refreshes.
+ * Signals that one or more evals were deleted. Deletions use a JSON payload so the watcher can
+ * tell clients exactly which evals to drop (whereas a plain update keeps the legacy
+ * `evalId:timestamp` text format unless it has to fold in a pending delete). A delete in the
+ * debounce window also carries forward a pending scoped update so neither refresh is lost.
+ * Pre-PR view servers don't understand this JSON and read it back as "no eval id", falling back
+ * to broadcasting the latest eval — a benign degradation, so the view server and CLI should be
+ * on matching versions for delete-aware refreshes.
  */
 export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void {
   const now = Date.now();
@@ -169,22 +188,10 @@ export function readSignalFile(): DatabaseSignal {
   const filePath = getDbSignalPath();
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
-    try {
-      const parsed = JSON.parse(content) as unknown;
-      if (
-        parsed !== null &&
-        typeof parsed === 'object' &&
-        'type' in parsed &&
-        (parsed.type === 'delete' || parsed.type === 'update')
-      ) {
-        const evalId =
-          'evalId' in parsed && typeof parsed.evalId === 'string' ? parsed.evalId : undefined;
-        const deletedEvalIds =
-          'deletedEvalIds' in parsed ? toStringEvalIds(parsed.deletedEvalIds) : undefined;
-        return { type: parsed.type, evalId, deletedEvalIds };
-      }
-    } catch {}
-
+    const json = parseSignalJson(content);
+    if (json) {
+      return { type: json.type, evalId: json.evalId, deletedEvalIds: json.deletedEvalIds };
+    }
     return { type: 'update', evalId: readLegacySignalEvalId(content) };
   } catch {
     return { type: 'update' };

@@ -701,6 +701,67 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
   });
 
+  // The server emits TWO 'update' events for one coalesced delete+update signal (a delete then
+  // the surviving update). The handler runs once per event; these assert it converges correctly.
+  it('reconciles a coalesced delete+update on a pinned route by replacing the deleted eval', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'surviving-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['selected-eval'] });
+      await mockSocketHandlers.get('update')?.({ evalId: 'surviving-eval' });
+    });
+
+    // Event 1 navigates the pinned route off the deleted eval; event 2 (scoped to a different
+    // id than the pinned fetchId) is a no-op, so we never clear or land on the wrong eval.
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/surviving-eval', { replace: true });
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
+  });
+
+  it('reconciles a coalesced delete+update on the root route by loading the survivor', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'surviving-eval' }] }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['selected-eval'] });
+      await mockSocketHandlers.get('update')?.({ evalId: 'surviving-eval' });
+    });
+
+    // Both events converge on the surviving eval; the view is never left cleared.
+    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('surviving-eval');
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+      'surviving-eval',
+      expect.objectContaining({ skipLoadingState: true }),
+    );
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
+  });
+
   it('clears the eval state when a socket update reports no remaining evals', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 

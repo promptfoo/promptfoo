@@ -11,7 +11,12 @@ import path from 'node:path';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
-import { readSignalFile, setupSignalWatcher } from '../database/signal';
+import {
+  hasDeleteComponent,
+  hasUpdateComponent,
+  readSignalFile,
+  setupSignalWatcher,
+} from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -394,8 +399,8 @@ export async function startServer(
       // A signal can carry both a delete and an update component when two mutations were
       // coalesced inside the watcher's debounce window (e.g. a delete quickly followed by an
       // unrelated eval save). Emit each component so neither refresh is lost.
-      const hasDelete = signal.type === 'delete' || signal.deletedEvalIds !== undefined;
-      const hasUpdate = signal.type === 'update' || signal.evalId !== undefined;
+      const hasDelete = hasDeleteComponent(signal);
+      const hasUpdate = hasUpdateComponent(signal);
 
       if (hasDelete) {
         io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });

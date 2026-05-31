@@ -9,13 +9,18 @@ vi.mock('../../src/migrate', () => ({
   runDbMigrations: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../src/database/signal', () => ({
-  readSignalFile: vi.fn().mockReturnValue({ type: 'update' }),
-  setupSignalWatcher: vi.fn().mockReturnValue({
-    close: vi.fn(),
-    on: vi.fn(),
-  }),
-}));
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    // Keep the real (pure) signal classifiers so the watcher's emit decisions are exercised.
+    ...actual,
+    readSignalFile: vi.fn().mockReturnValue({ type: 'update' }),
+    setupSignalWatcher: vi.fn().mockReturnValue({
+      close: vi.fn(),
+      on: vi.fn(),
+    }),
+  };
+});
 
 vi.mock('../../src/models/evalMutation', () => ({
   invalidateEvaluationCache: vi.fn(),
@@ -422,6 +427,36 @@ describe('server', () => {
       await vi.waitFor(() =>
         expect(emitSpy).toHaveBeenCalledWith('update', { evalId: 'surviving-eval' }),
       );
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('does not resurrect a deleted eval when a coalesced delete carries its own id', async () => {
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      // Pathological coalescing: the carried update id is also in deletedEvalIds. The delete
+      // must broadcast, but the update component must NOT emit (findById -> null) — and it must
+      // not fall back to broadcasting the latest eval, since the signal was scoped.
+      vi.mocked(readSignalFile).mockReturnValueOnce({
+        type: 'delete',
+        deletedEvalIds: ['doomed-eval'],
+        evalId: 'doomed-eval',
+      });
+      vi.mocked(Eval.findById).mockResolvedValueOnce(undefined as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() =>
+        expect(emitSpy).toHaveBeenCalledWith('update', { deletedEvalIds: ['doomed-eval'] }),
+      );
+      // Give the async update branch a chance to (not) emit.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(emitSpy).not.toHaveBeenCalledWith('update', { evalId: 'doomed-eval' });
+      expect(emitSpy).not.toHaveBeenCalledWith('update', null);
 
       triggerSignal('SIGINT');
       await serverPromise;

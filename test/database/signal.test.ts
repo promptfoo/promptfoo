@@ -274,6 +274,55 @@ describe('signal', () => {
       // The stale delete is not folded in; the update stays in the plain legacy text format.
       expect(lastWrittenSignal()).toMatch(/^eval-fresh:\d{4}-\d{2}-\d{2}T/);
     });
+
+    it('folds a pending delete-all into a following update as an empty id list', () => {
+      // A pending delete-all has no deletedEvalIds; folding it must produce an empty array,
+      // which clients read as "all evals deleted" (then reload to the freshly written latest).
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({ type: 'delete', timestamp: new Date().toISOString() }),
+      );
+
+      updateSignalFile('eval-after-delete-all');
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'update',
+        evalId: 'eval-after-delete-all',
+        deletedEvalIds: [],
+      });
+    });
+
+    it('folds a pending delete written just inside the window', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-recent'],
+          timestamp: new Date(Date.now() - 200).toISOString(),
+        }),
+      );
+
+      updateSignalFile('eval-x');
+
+      expect(JSON.parse(lastWrittenSignal())).toMatchObject({
+        type: 'update',
+        evalId: 'eval-x',
+        deletedEvalIds: ['eval-recent'],
+      });
+    });
+
+    it('ignores a future-dated pending signal (clock-skew guard)', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          type: 'delete',
+          deletedEvalIds: ['eval-future'],
+          timestamp: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      );
+
+      updateSignalFile('eval-fresh');
+
+      // A future timestamp (negative elapsed) is rejected; the update stays as legacy text.
+      expect(lastWrittenSignal()).toMatch(/^eval-fresh:\d{4}-\d{2}-\d{2}T/);
+    });
   });
 
   describe('mixed-version signal compatibility', () => {
