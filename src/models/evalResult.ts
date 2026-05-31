@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -224,7 +226,7 @@ function redactSensitiveHeaders(
   for (const [key, value] of Object.entries(headers)) {
     if (
       Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
-      sourceHeaders[key] === value &&
+      isDeepStrictEqual(sourceHeaders[key], value) &&
       isSensitiveResponseHeader(key)
     ) {
       next[key] = REDACTED;
@@ -316,7 +318,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   const next: Record<string, unknown> = { ...gr };
 
   if (gr.metadata !== undefined) {
-    const redacted = redactHttpHeadersOnMetadata(gr.metadata, { redactLegacyHeaders: true });
+    const redacted = redactHttpHeadersOnMetadata(gr.metadata);
     if (redacted !== gr.metadata) {
       next.metadata = redacted;
       mutated = true;
@@ -356,7 +358,9 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
 }
 
 function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
-  return redactHttpHeadersOnMetadata(metadata, { legacyHeadersSource: responseMetadata });
+  return redactHttpHeadersOnMetadata(metadata, {
+    legacyHeadersSource: sanitizeForDb(responseMetadata),
+  });
 }
 
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {

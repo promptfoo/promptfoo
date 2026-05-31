@@ -257,7 +257,10 @@ describe('programmatic JSONL output', () => {
         output: 'hello world',
         metadata: {
           headers: {
-            'x-request-id': 'legacy_persisted_req_should_not_persist',
+            'set-cookie': ['legacy_persisted_session_should_not_persist'],
+            'x-request-id': {
+              value: 'legacy_persisted_req_should_not_persist',
+            },
             'x-safe-debug': 'keep-legacy',
           },
         },
@@ -276,9 +279,16 @@ describe('programmatic JSONL output', () => {
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
     expect(result.response.metadata.headers).toEqual({
+      'set-cookie': '[REDACTED]',
       'x-request-id': '[REDACTED]',
       'x-safe-debug': 'keep-legacy',
     });
+    expect(result.metadata.headers).toEqual({
+      'set-cookie': '[REDACTED]',
+      'x-request-id': '[REDACTED]',
+      'x-safe-debug': 'keep-legacy',
+    });
+    expect(JSON.stringify(result)).not.toContain('legacy_persisted_session_should_not_persist');
     expect(JSON.stringify(result)).not.toContain('legacy_persisted_req_should_not_persist');
   });
 

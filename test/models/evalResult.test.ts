@@ -458,6 +458,56 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
       });
 
+      it('preserves arbitrary legacy headers in grading metadata', async () => {
+        const evalId = 'test-eval-preserve-grading-metadata-headers';
+        const gradingMetadataHeaders = {
+          'set-cookie': ['user-authored-grading-cookie'],
+          'x-request-id': {
+            value: 'user-authored-grading-request-id',
+          },
+        };
+        const componentMetadataHeaders = {
+          'x-request-id': 'user-authored-component-request-id',
+        };
+
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              metadata: {
+                headers: gradingMetadataHeaders,
+              },
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: {
+                    headers: componentMetadataHeaders,
+                  },
+                },
+              ],
+            },
+          },
+          { persist: true },
+        );
+
+        expect(result.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
+        expect(result.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
+          componentMetadataHeaders,
+        );
+
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved?.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
+        expect(retrieved?.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
+          componentMetadataHeaders,
+        );
+      });
+
       it('preserves user-controlled `http` keys nested inside response.output, response.metadata, and gradingResult', async () => {
         // Regression: a previous implementation walked any nested `http` key in the
         // response/metadata/gradingResult tree and rewrote `headers` /
