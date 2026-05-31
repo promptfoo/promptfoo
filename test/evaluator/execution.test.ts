@@ -627,6 +627,7 @@ describeEvaluator('evaluator execution control', () => {
         }),
       );
       expect(evalRecord.resultPersistenceFailed).toBe(true);
+      expect(evalRecord.hasResultPersistenceFailure({ promptIdx: 0, testIdx: 0 })).toBe(true);
     } finally {
       mockAddResult.mockRestore();
       errorSpy.mockRestore();

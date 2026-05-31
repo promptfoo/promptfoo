@@ -411,6 +411,8 @@ describe('EvalResult', () => {
                   },
                   requestHeaders: {
                     authorization: 'Bearer sk-should-not-persist',
+                    'api-key': 'azure-api-key-should-not-persist',
+                    'X-API-Key': 'custom-api-key-should-not-persist',
                     'x-safe-debug': 'keep-me',
                   },
                 },
@@ -430,6 +432,8 @@ describe('EvalResult', () => {
         });
         expect(result.response?.metadata?.http?.requestHeaders).toEqual({
           authorization: '[REDACTED]',
+          'api-key': '[REDACTED]',
+          'X-API-Key': '[REDACTED]',
           'x-safe-debug': 'keep-me',
         });
         expect(result.metadata?.http?.headers).toEqual({
@@ -448,6 +452,12 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
         expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
         expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'azure-api-key-should-not-persist',
+        );
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'custom-api-key-should-not-persist',
+        );
         expect(JSON.stringify(retrieved?.metadata)).not.toContain(
           'metadata_proj_should_not_persist',
         );
