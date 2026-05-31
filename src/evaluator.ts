@@ -3149,9 +3149,11 @@ class Evaluator {
     }
   }
 
-  private trackFinalJsonlResult(row: EvaluateResult): void {
+  private trackFinalJsonlResult(row: EvalResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.evalRecord.resultPersistenceFailed) {
-      this.evalRecord.recordFinalJsonlResult(row);
+      this.evalRecord.recordFinalJsonlResult(
+        'toEvaluateResult' in row ? row.toEvaluateResult() : row,
+      );
     }
   }
 
@@ -4136,7 +4138,7 @@ class Evaluator {
       wasScore,
       metrics,
     );
-    this.trackFinalJsonlResult(result.toEvaluateResult());
+    this.trackFinalJsonlResult(result);
     if (this.evalRecord.persisted) {
       await result.save();
     }
@@ -4163,7 +4165,7 @@ class Evaluator {
       wasScore,
       metrics,
     );
-    this.trackFinalJsonlResult(result.toEvaluateResult());
+    this.trackFinalJsonlResult(result);
     if (this.evalRecord.persisted) {
       await result.save();
     }
