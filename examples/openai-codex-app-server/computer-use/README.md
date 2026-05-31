@@ -31,13 +31,18 @@ plugin bundle or copy personal Codex authentication into this example.
 
 ## Run
 
-From the repository root:
+Initialize the example into a standalone directory:
 
 ```bash
 npx promptfoo@latest init --example openai-codex-app-server/computer-use
-
-examples/openai-codex-app-server/computer-use/scripts/run-e2e.sh
+cd openai-codex-app-server/computer-use
+scripts/run-e2e.sh
 ```
+
+Contributors can instead run
+`examples/openai-codex-app-server/computer-use/scripts/run-e2e.sh` from a
+Promptfoo source checkout. The runner uses the local build when it is under the
+repository's `examples/` directory and `npx promptfoo@latest` otherwise.
 
 The runner:
 
@@ -63,12 +68,12 @@ disposable home and use the manual commands below.
 The helper can also be used directly:
 
 ```bash
-python3 examples/openai-codex-app-server/computer-use/scripts/stage_codex_home.py \
+python3 scripts/stage_codex_home.py \
   --plugin-dir "$COMPUTER_USE_PLUGIN_DIR" \
   --codex-home /tmp/promptfoo-computer-use-codex-home \
   --force
 
-python3 examples/openai-codex-app-server/computer-use/scripts/probe_plugin_list.py \
+python3 scripts/probe_plugin_list.py \
   --codex-home /tmp/promptfoo-computer-use-codex-home
 ```
 
@@ -79,8 +84,8 @@ generated app:
 ```bash
 CODEX_HOME_OVERRIDE=/tmp/promptfoo-computer-use-codex-home \
 COMPUTER_USE_TARGET_APP=/absolute/path/to/PromptfooComputerUseTarget.app \
-  npm run local -- eval \
-  -c examples/openai-codex-app-server/computer-use/promptfooconfig.yaml \
+  npx promptfoo@latest eval \
+  -c promptfooconfig.yaml \
   --no-cache --no-share \
   -o /tmp/promptfoo-computer-use-results.json
 ```
@@ -94,19 +99,19 @@ adversarial input reaches the UI-only target.
 Generation prints an informational warning that the fixed smoke test is ignored.
 The generated suite supplies its own policy probe as expected.
 
-From the repository root:
+From the initialized example directory:
 
 ```bash
-npm run local -- redteam generate \
-  -c examples/openai-codex-app-server/computer-use/promptfooconfig.yaml \
-  -o examples/openai-codex-app-server/computer-use/.tmp/redteam.yaml \
+npx promptfoo@latest redteam generate \
+  -c promptfooconfig.yaml \
+  -o .tmp/redteam.yaml \
   --force --strict
 
-examples/openai-codex-app-server/computer-use/scripts/run-e2e.sh \
+scripts/run-e2e.sh \
   redteam eval \
-  -c examples/openai-codex-app-server/computer-use/.tmp/redteam.yaml \
+  -c .tmp/redteam.yaml \
   --no-cache --no-share \
-  -o examples/openai-codex-app-server/computer-use/.tmp/redteam-results.json
+  -o .tmp/redteam-results.json
 ```
 
 The eval is expected to report a finding because the disposable target is

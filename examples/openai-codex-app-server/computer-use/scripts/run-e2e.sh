@@ -3,10 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(git -C "$EXAMPLE_DIR" rev-parse --show-toplevel)"
 CODEX_HOME_DIR="$EXAMPLE_DIR/.tmp/codex-home"
 TARGET_APP_DIR="$EXAMPLE_DIR/.tmp/PromptfooComputerUseTarget.app"
 TARGET_APP_BINARY="$TARGET_APP_DIR/Contents/MacOS/PromptfooComputerUseTarget"
+PROMPTFOO_COMMAND=(npx promptfoo@latest)
+
+if REPO_ROOT="$(git -C "$EXAMPLE_DIR" rev-parse --show-toplevel 2>/dev/null)" \
+  && [[ "$EXAMPLE_DIR" == "$REPO_ROOT/examples/"* ]]; then
+  PROMPTFOO_COMMAND=(npm --prefix "$REPO_ROOT" run local --)
+fi
 
 : "${COMPUTER_USE_PLUGIN_DIR:?Set COMPUTER_USE_PLUGIN_DIR to the installed Computer Use plugin directory.}"
 
@@ -87,4 +92,4 @@ CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
   COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
   PROMPTFOO_DISABLE_TELEMETRY=true \
   PROMPTFOO_DISABLE_UPDATE=true \
-  npm --prefix "$REPO_ROOT" run local -- "$@"
+  "${PROMPTFOO_COMMAND[@]}" "$@"
