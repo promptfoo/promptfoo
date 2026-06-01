@@ -128,6 +128,26 @@ describe('A2AProvider', () => {
     expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
   });
 
+  it('sends standards-compliant default A2A messages', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'agent',
+          parts: [{ kind: 'text', text: 'ok' }],
+        },
+      }),
+    );
+
+    const result = await provider().callApi('hello');
+
+    expect(result.output).toBe('ok');
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
+    expect(requestBody.message).toMatchObject({
+      role: 'user',
+      parts: [{ kind: 'text', text: 'hello' }],
+    });
+  });
+
   it('discovers an HTTP+JSON interface from the agent card', async () => {
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce(
@@ -234,6 +254,98 @@ describe('A2AProvider', () => {
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
   });
 
+  it('does not treat a legacy agent card URL without preferredTransport as HTTP+JSON', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        url: 'https://agent.example.com/jsonrpc',
+      }),
+    );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+      },
+    }).callApi('hello');
+
+    expect(result.error).toContain('does not advertise a supported HTTP+JSON interface');
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the Agent Card protocol version when the main URL is HTTP+JSON', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          preferredTransport: 'HTTP+JSON',
+          protocolVersion: '0.3.0',
+          url: 'https://agent.example.com/a2a/main',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            role: 'agent',
+            parts: [{ text: 'main url response' }],
+          },
+        }),
+      );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+      },
+    }).callApi('hello');
+
+    expect(result.output).toBe('main url response');
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      'https://agent.example.com/a2a/main/message:send',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'A2A-Version': '0.3.0' }),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('does not inherit discovered tenant when config.url overrides Agent Card interface URL', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          supportedInterfaces: [
+            {
+              protocolBinding: 'HTTP+JSON',
+              tenant: 'tenant-a',
+              url: 'https://agent.example.com/a2a/tenant-a',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            role: 'agent',
+            parts: [{ text: 'explicit url response' }],
+          },
+        }),
+      );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+        url: 'https://agent.example.com/a2a/explicit',
+      },
+    }).callApi('hello');
+
+    expect(result.output).toBe('explicit url response');
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body as string);
+    expect(requestBody).not.toHaveProperty('tenant');
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      'https://agent.example.com/a2a/explicit/message:send',
+      expect.any(Object),
+      expect.any(Number),
+    );
+  });
+
   it('applies bearer auth to agent card and operation requests', async () => {
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce(
@@ -337,6 +449,28 @@ describe('A2AProvider', () => {
     expect(result.output).toBe('query auth response');
     expect(fetchWithTimeout).toHaveBeenCalledWith(
       'https://agent.example.com/a2a/v1/message:send?api_key=query-secret',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+    );
+  });
+
+  it('preserves endpoint query strings when appending operation paths', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'agent',
+          parts: [{ text: 'query response' }],
+        },
+      }),
+    );
+
+    const result = await new A2AProvider('a2a:https://agent.example.com/a2a/v1?tenant=a', {
+      config: {},
+    }).callApi('hi');
+
+    expect(result.output).toBe('query response');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://agent.example.com/a2a/v1/message:send?tenant=a',
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
     );
@@ -499,6 +633,34 @@ describe('A2AProvider', () => {
     );
   });
 
+  it('uses the final polled task as raw output for async send responses', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          task: {
+            id: 'task-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'task-1',
+          status: { state: 'TASK_STATE_COMPLETED' },
+          metadata: { structured: true },
+        }),
+      );
+
+    const result = await provider({ polling: { intervalMs: 0, timeoutMs: 1000 } }).callApi('hi');
+
+    expect(result.output).toContain('"structured":true');
+    expect(result.raw).toMatchObject({
+      id: 'task-1',
+      metadata: { structured: true },
+      status: { state: 'TASK_STATE_COMPLETED' },
+    });
+  });
+
   it('includes tenant query parameter when polling tasks', async () => {
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce(
@@ -558,6 +720,7 @@ describe('A2AProvider', () => {
   it.each([
     ['TASK_STATE_FAILED', 'failed'],
     ['TASK_STATE_CANCELED', 'canceled'],
+    ['TASK_STATE_CANCELLED', 'canceled'],
     ['TASK_STATE_REJECTED', 'rejected'],
     ['TASK_STATE_INPUT_REQUIRED', 'requires additional input'],
     ['TASK_STATE_AUTH_REQUIRED', 'requires additional authentication'],
@@ -697,6 +860,44 @@ describe('A2AProvider', () => {
       taskId: 'task-1',
       taskState: 'TASK_STATE_COMPLETED',
     });
+  });
+
+  it('merges appended streaming artifact chunks for the same artifact', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      sseResponse([
+        {
+          task: {
+            id: 'task-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        },
+        {
+          artifactUpdate: {
+            append: false,
+            taskId: 'task-1',
+            artifact: { artifactId: 'artifact-1', parts: [{ text: 'hel' }] },
+          },
+        },
+        {
+          artifactUpdate: {
+            append: true,
+            taskId: 'task-1',
+            artifact: { artifactId: 'artifact-1', parts: [{ text: 'lo' }] },
+          },
+        },
+        {
+          statusUpdate: {
+            taskId: 'task-1',
+            status: { state: 'TASK_STATE_COMPLETED' },
+          },
+        },
+      ]),
+    );
+
+    const result = await provider({ mode: 'stream' }).callApi('hi');
+
+    expect(result.output).toBe('hello');
+    expect(result.raw).toHaveLength(4);
   });
 
   it('returns a provider error for malformed SSE events', async () => {

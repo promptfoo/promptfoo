@@ -38,6 +38,7 @@ import type { A2ATransformResponseContext } from './transforms';
 import type {
   A2AAgentCard,
   A2AAgentInterface,
+  A2AArtifact,
   A2AFinalResponse,
   A2AMessage,
   A2AProviderConfig,
@@ -51,6 +52,7 @@ const TERMINAL_TASK_STATES = new Set([
   'TASK_STATE_COMPLETED',
   'TASK_STATE_FAILED',
   'TASK_STATE_CANCELED',
+  'TASK_STATE_CANCELLED',
   'TASK_STATE_REJECTED',
 ]);
 const ATTENTION_TASK_STATES = new Set(['TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_AUTH_REQUIRED']);
@@ -77,7 +79,9 @@ function normalizeBaseUrl(url: string): string {
 }
 
 function appendPath(url: string, path: string): string {
-  return `${normalizeBaseUrl(url)}${path}`;
+  const parsedUrl = new URL(url);
+  parsedUrl.pathname = `${normalizeBaseUrl(parsedUrl.pathname)}${path}`;
+  return parsedUrl.toString();
 }
 
 function appendQueryParams(url: string, queryParams: Record<string, string>): string {
@@ -202,13 +206,13 @@ function hasDeclaredInterfaces(card: A2AAgentCard): boolean {
 
 function canUseCardUrl(card: A2AAgentCard): boolean {
   const preferredTransport = card.preferredTransport?.toUpperCase();
-  return !preferredTransport || preferredTransport === HTTP_JSON_BINDING;
+  return preferredTransport === HTTP_JSON_BINDING;
 }
 
 function getDefaultMessage(prompt: string): A2AMessage {
   return {
-    role: 'ROLE_USER',
-    parts: [{ text: prompt }],
+    role: 'user',
+    parts: [{ kind: 'text', text: prompt }],
   };
 }
 
@@ -246,6 +250,77 @@ function parseSendPayload(payload: unknown): A2AFinalResponse {
   return { events: [], message, raw, task };
 }
 
+function mergeArtifactParts(
+  existingParts: A2AArtifact['parts'] = [],
+  appendedParts: A2AArtifact['parts'] = [],
+): A2AArtifact['parts'] {
+  if (existingParts.length === 0 || appendedParts.length === 0) {
+    return [...existingParts, ...appendedParts];
+  }
+
+  const mergedParts = [...existingParts];
+  const lastExistingPart = mergedParts[mergedParts.length - 1];
+  const firstAppendedPart = appendedParts[0];
+  if (
+    lastExistingPart &&
+    firstAppendedPart &&
+    typeof lastExistingPart.text === 'string' &&
+    typeof firstAppendedPart.text === 'string'
+  ) {
+    mergedParts[mergedParts.length - 1] = {
+      ...lastExistingPart,
+      text: `${lastExistingPart.text}${firstAppendedPart.text}`,
+    };
+    return [...mergedParts, ...appendedParts.slice(1)];
+  }
+
+  return [...existingParts, ...appendedParts];
+}
+
+function mergeArtifactUpdate(
+  event: NonNullable<A2AStreamResponse['artifactUpdate']>,
+  currentTask?: A2ATask,
+): A2ATask {
+  const existingTask = currentTask ?? { id: event.taskId };
+  const artifact = event.artifact;
+  if (!artifact) {
+    return existingTask;
+  }
+
+  const append = (event as { append?: unknown }).append === true;
+  const artifacts = existingTask.artifacts ?? [];
+  if (!append) {
+    return {
+      ...existingTask,
+      artifacts: [...artifacts, artifact],
+    };
+  }
+
+  const artifactId = artifact.artifactId;
+  const existingIndex = artifactId
+    ? artifacts.findIndex((existingArtifact) => existingArtifact.artifactId === artifactId)
+    : artifacts.length - 1;
+  if (existingIndex < 0) {
+    return {
+      ...existingTask,
+      artifacts: [...artifacts, artifact],
+    };
+  }
+
+  return {
+    ...existingTask,
+    artifacts: artifacts.map((existingArtifact, index) =>
+      index === existingIndex
+        ? {
+            ...existingArtifact,
+            ...artifact,
+            parts: mergeArtifactParts(existingArtifact.parts, artifact.parts),
+          }
+        : existingArtifact,
+    ),
+  };
+}
+
 function mergeStreamEvent(
   event: A2AStreamResponse,
   current: Pick<A2AFinalResponse, 'message' | 'task'>,
@@ -257,13 +332,9 @@ function mergeStreamEvent(
     return { ...current, task: event.task };
   }
   if (event.artifactUpdate?.artifact) {
-    const existingTask = current.task ?? { id: event.artifactUpdate.taskId };
     return {
       ...current,
-      task: {
-        ...existingTask,
-        artifacts: [...(existingTask.artifacts ?? []), event.artifactUpdate.artifact],
-      },
+      task: mergeArtifactUpdate(event.artifactUpdate, current.task),
     };
   }
   if (event.statusUpdate?.status) {
@@ -412,19 +483,26 @@ export class A2AProvider implements ApiProvider {
     const configuredUrl = this.config.url
       ? nonEmptyString(renderString(this.config.url, vars, context))
       : undefined;
-    const url =
-      configuredUrl ?? cardInterface?.url ?? (card && canUseCardUrl(card) ? card.url : undefined);
+    const cardUrl = card && canUseCardUrl(card) ? card.url : undefined;
+    const url = configuredUrl ?? cardInterface?.url ?? cardUrl;
     if (!url) {
       if (card && (hasDeclaredInterfaces(card) || card.url)) {
         throw new Error('A2A Agent Card does not advertise a supported HTTP+JSON interface.');
       }
       throw new Error('Missing A2A endpoint URL. Set config.url or config.agentCardUrl.');
     }
+    const usesDiscoveredInterface = !configuredUrl && cardInterface?.url === url;
+    const usesCardUrl = !configuredUrl && !usesDiscoveredInterface && cardUrl === url;
     return {
       protocolVersion:
-        this.config.protocolVersion ?? cardInterface?.protocolVersion ?? DEFAULT_PROTOCOL_VERSION,
+        this.config.protocolVersion ??
+        (usesDiscoveredInterface ? cardInterface?.protocolVersion : undefined) ??
+        (usesCardUrl ? card?.protocolVersion : undefined) ??
+        DEFAULT_PROTOCOL_VERSION,
       streaming: this.config.mode === 'stream' || card?.capabilities?.streaming === true,
-      tenant: this.config.tenant ?? cardInterface?.tenant,
+      tenant:
+        (this.config.tenant ? renderString(this.config.tenant, vars, context) : undefined) ??
+        (usesDiscoveredInterface ? cardInterface?.tenant : undefined),
       url,
     };
   }
@@ -573,9 +651,11 @@ export class A2AProvider implements ApiProvider {
       !needsCallerAction(final.task) &&
       this.config.polling.enabled
     ) {
+      const task = await this.pollTask(endpoint, final.task.id, vars, context, options);
       return {
         ...final,
-        task: await this.pollTask(endpoint, final.task.id, vars, context, options),
+        raw: task,
+        task,
       };
     }
     this.throwForTaskState(final.task);
@@ -726,7 +806,7 @@ export class A2AProvider implements ApiProvider {
     if (state === 'TASK_STATE_FAILED') {
       throw new Error(`A2A task failed${text ? `: ${text}` : ''}`);
     }
-    if (state === 'TASK_STATE_CANCELED') {
+    if (state === 'TASK_STATE_CANCELED' || state === 'TASK_STATE_CANCELLED') {
       throw new Error(`A2A task was canceled${text ? `: ${text}` : ''}`);
     }
     if (state === 'TASK_STATE_REJECTED') {

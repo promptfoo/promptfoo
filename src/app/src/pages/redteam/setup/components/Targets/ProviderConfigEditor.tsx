@@ -264,6 +264,9 @@ function ProviderConfigEditor({
         errors.push('Provider ID is required');
       }
       if (providerType === 'a2a') {
+        if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {
+          errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
+        }
         const hasUrl = typeof provider.config?.url === 'string' && validateUrl(provider.config.url);
         const hasShorthandUrl = validateUrl(getA2AShorthandUrl(provider.id) ?? '');
         const hasAgentCardUrl =

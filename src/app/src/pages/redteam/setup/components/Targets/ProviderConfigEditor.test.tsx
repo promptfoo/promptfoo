@@ -221,6 +221,41 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(false);
     });
 
+    it('should return false from validate() for an A2A provider with a non-A2A provider ID', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'travel-agent',
+        config: {
+          url: 'https://agent.example.com/a2a/v1',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'A2A Provider ID must be "a2a" or start with "a2a:"',
+      );
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
+    });
+
     it("should return true from validate() for a valid agent framework provider (e.g., providerType is 'langchain', provider.id is 'file://path/to/agent.py')", () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();

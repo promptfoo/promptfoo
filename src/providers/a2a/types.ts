@@ -146,6 +146,7 @@ export const A2AAgentCardSchema = z.looseObject({
   name: z.string().optional(),
   additionalInterfaces: z.array(A2AAgentInterfaceSchema).optional(),
   preferredTransport: z.string().optional(),
+  protocolVersion: z.string().optional(),
   skills: z.array(A2AAgentSkillSchema).optional(),
   supportedInterfaces: z.array(A2AAgentInterfaceSchema).optional(),
   url: z.string().optional(),

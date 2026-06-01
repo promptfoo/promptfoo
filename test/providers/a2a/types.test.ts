@@ -153,6 +153,7 @@ describe('A2A type schemas', () => {
         },
         documentationUrl: 'https://agent.example.com/docs',
         name: 'Travel Agent',
+        protocolVersion: '0.3.0',
         additionalInterfaces: [
           {
             tenant: 'tenant-b',
@@ -183,6 +184,7 @@ describe('A2A type schemas', () => {
     ).toMatchObject({
       capabilities: { streaming: true },
       name: 'Travel Agent',
+      protocolVersion: '0.3.0',
       additionalInterfaces: [{ transport: 'HTTP+JSON' }],
       preferredTransport: 'JSONRPC',
       skills: [{ id: 'book_flight' }],
