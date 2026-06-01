@@ -3,7 +3,7 @@
 # Renovate tracks this file; after bumps, run npm run modelAuditSchema:generate.
 modelaudit==0.2.45
 pydantic==2.13.4
-pydantic-core==2.46.4
+pydantic-core==2.47.0
 annotated-types==0.7.0
 typing-extensions==4.15.0
 typing-inspection==0.4.2
