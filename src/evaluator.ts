@@ -4698,10 +4698,11 @@ class Evaluator {
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
     let otelInitialized = false;
+    let otlpReceiverAcquired = false;
 
     let evaluationError: unknown;
     try {
-      await startOtlpReceiverIfNeeded(this.testSuite);
+      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite);
 
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
@@ -4735,12 +4736,12 @@ class Evaluator {
           await shutdownOtel();
         }
 
-        if (isOtlpReceiverStarted()) {
+        if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
           // Add a delay to allow providers to finish exporting spans
           logger.debug('[Evaluator] Waiting for span exports to complete...');
           await sleep(3000);
         }
-        await stopOtlpReceiverIfNeeded();
+        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired);
 
         // Clean up Python worker pools to prevent resource leaks
         await providerRegistry.shutdownAll();

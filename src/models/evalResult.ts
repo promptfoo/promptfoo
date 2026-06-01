@@ -337,7 +337,7 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 // (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
 // log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
 // `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
-const PROMPTFOO_METADATA_KEY = '__promptfoo';
+export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
