@@ -50,6 +50,13 @@ vi.mock('../../src/models/eval', () => ({
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('../../src/server/services/promptCacheService', () => ({
+  promptCacheService: {
+    getAll: vi.fn().mockResolvedValue([]),
+    invalidate: vi.fn(),
+  },
+}));
+
 import { readSignalFile, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -60,6 +67,7 @@ import {
 // Import after mocks are set up
 import { ServerError } from '../../src/server/errors';
 import { handleServerError, startServer } from '../../src/server/server';
+import { promptCacheService } from '../../src/server/services/promptCacheService';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -267,6 +275,73 @@ describe('server', () => {
       expect(invalidateEvaluationCaches).not.toHaveBeenCalled();
 
       await new Promise((resolve) => setImmediate(resolve));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should invalidate the prompts cache on every signal', async () => {
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should invalidate the prompts cache even when the signal emits no eval update', async () => {
+      // Regression: a signal whose eval has no surviving record (here a scoped update for a
+      // missing eval) emits nothing, but cached `/api/prompts` output must still be dropped so a
+      // later request re-reads the DB. Invalidation must not be gated on a non-empty result/emit.
+      const emitSpy = vi.spyOn(SocketIOServer.prototype, 'emit');
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'update', evalId: 'missing-eval' });
+      vi.mocked(Eval.findById).mockResolvedValueOnce(undefined as never);
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(emitSpy).not.toHaveBeenCalledWith('update', expect.anything());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should invalidate the prompts cache for a delete signal', async () => {
+      // A delete takes a different branch than an update; the prompt cache must still be dropped.
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'delete', deletedEvalIds: ['gone'] });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should invalidate the prompts cache for a delete-all signal', async () => {
+      vi.mocked(readSignalFile).mockReturnValueOnce({ type: 'delete' });
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const onSignalChange = vi.mocked(setupSignalWatcher).mock.calls[0][0];
+      onSignalChange();
+
+      await vi.waitFor(() => expect(promptCacheService.invalidate).toHaveBeenCalledOnce());
 
       triggerSignal('SIGINT');
       await serverPromise;
