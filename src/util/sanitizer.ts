@@ -2,6 +2,8 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
+import { isDeepStrictEqual } from 'node:util';
+
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
@@ -330,6 +332,37 @@ function restoreAzureBlobSasTokensFromMap<T>(
     : { value, restored };
 }
 
+type StoredArrayItemMatch = { matched: true; value: unknown } | { matched: false };
+
+function findStoredArrayItemForRestore(
+  value: unknown,
+  positionalStoredValue: unknown,
+  storedItems: readonly unknown[],
+  canRestorePositionally: boolean,
+): StoredArrayItemMatch {
+  if (
+    canRestorePositionally &&
+    isDeepStrictEqual(value, redactAzureBlobSasTokens(positionalStoredValue))
+  ) {
+    return { matched: true, value: positionalStoredValue };
+  }
+
+  let matchedValue: unknown;
+  let matched = false;
+  for (const storedItem of storedItems) {
+    if (!isDeepStrictEqual(value, redactAzureBlobSasTokens(storedItem))) {
+      continue;
+    }
+    if (matched) {
+      return { matched: false };
+    }
+    matched = true;
+    matchedValue = storedItem;
+  }
+
+  return matched ? { matched: true, value: matchedValue } : { matched: false };
+}
+
 function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
   if (typeof value === 'string') {
     if (typeof storedValue === 'string' && value === redactAzureBlobSasToken(storedValue)) {
@@ -344,17 +377,23 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
     const canRestorePositionally = value.length === storedItems.length;
     let restored = false;
     const restoredItems = value.map((item, index) => {
-      // Preserve unchanged positions first when the array shape is stable so
-      // duplicate redacted URIs remain distinguishable. Then fall back to URI
-      // identity for reordered entries.
-      const positionalResult = canRestorePositionally
-        ? restoreAzureBlobSasTokensWithResult(item, storedItems[index])
+      // Preserve structurally unchanged positions first so duplicate redacted
+      // URIs remain distinguishable. For moved items, use a unique redacted
+      // structural match before falling back to URI identity.
+      const storedItemMatch = findStoredArrayItemForRestore(
+        item,
+        storedItems[index],
+        storedItems,
+        canRestorePositionally,
+      );
+      const structuralResult = storedItemMatch.matched
+        ? restoreAzureBlobSasTokensWithResult(item, storedItemMatch.value)
         : { value: item, restored: false };
       const mappedResult = restoreAzureBlobSasTokensFromMap(
-        positionalResult.value,
+        structuralResult.value,
         storedTokensByRedactedUri,
       );
-      restored ||= positionalResult.restored || mappedResult.restored;
+      restored ||= structuralResult.restored || mappedResult.restored;
       return mappedResult.value;
     });
     return restored ? { value: restoredItems as T, restored } : { value, restored };
