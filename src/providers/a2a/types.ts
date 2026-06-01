@@ -65,13 +65,30 @@ export const A2AAgentInterfaceSchema = z.looseObject({
   url: z.string().optional(),
 });
 
+export const A2AAgentSkillSchema = z.looseObject({
+  description: z.string().optional(),
+  examples: z.array(z.unknown()).optional(),
+  id: z.string().optional(),
+  inputModes: z.array(z.string()).optional(),
+  input_modes: z.array(z.string()).optional(),
+  name: z.string().optional(),
+  outputModes: z.array(z.string()).optional(),
+  output_modes: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+});
+
 export const A2AAgentCardSchema = z.looseObject({
   capabilities: z
     .looseObject({
+      pushNotifications: z.boolean().optional(),
       streaming: z.boolean().optional(),
+      stateTransitionHistory: z.boolean().optional(),
     })
     .optional(),
+  description: z.string().optional(),
+  documentationUrl: z.string().optional(),
   name: z.string().optional(),
+  skills: z.array(A2AAgentSkillSchema).optional(),
   supportedInterfaces: z.array(A2AAgentInterfaceSchema).optional(),
   url: z.string().optional(),
 });
@@ -100,6 +117,7 @@ export const A2AProviderConfigSchema = z
 
 export type A2AAgentCard = z.infer<typeof A2AAgentCardSchema>;
 export type A2AAgentInterface = z.infer<typeof A2AAgentInterfaceSchema>;
+export type A2AAgentSkill = z.infer<typeof A2AAgentSkillSchema>;
 export type A2AArtifact = z.infer<typeof A2AArtifactSchema>;
 export type A2AMessage = z.infer<typeof A2AMessageSchema>;
 export type A2APart = z.infer<typeof A2APartSchema>;

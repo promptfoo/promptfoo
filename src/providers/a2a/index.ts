@@ -287,6 +287,10 @@ export class A2AProvider implements ApiProvider {
     };
   }
 
+  async getAgentCard(): Promise<A2AAgentCard | undefined> {
+    return this.fetchAgentCard({ prompt: '' });
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -345,20 +349,7 @@ export class A2AProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<A2AEndpoint> {
-    let card: A2AAgentCard | undefined;
-    if (this.config.agentCardUrl) {
-      const agentCardUrl = renderString(this.config.agentCardUrl, vars, context);
-      const response = await fetchWithTimeout(
-        agentCardUrl,
-        {
-          headers: this.renderHeaders(vars, context),
-          method: 'GET',
-          signal: options?.abortSignal,
-        },
-        this.getTimeoutMs(),
-      );
-      card = A2AAgentCardSchema.parse(await parseJsonResponse(response));
-    }
+    const card = await this.fetchAgentCard(vars, context, options);
 
     const cardInterface = card ? selectedInterfaceFromCard(card) : undefined;
     const url = this.config.url
@@ -384,6 +375,27 @@ export class A2AProvider implements ApiProvider {
       return 'stream';
     }
     return 'send';
+  }
+
+  private async fetchAgentCard(
+    vars: RequestVars,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<A2AAgentCard | undefined> {
+    if (!this.config.agentCardUrl) {
+      return undefined;
+    }
+    const agentCardUrl = renderString(this.config.agentCardUrl, vars, context);
+    const response = await fetchWithTimeout(
+      agentCardUrl,
+      {
+        headers: this.renderHeaders(vars, context),
+        method: 'GET',
+        signal: options?.abortSignal,
+      },
+      this.getTimeoutMs(),
+    );
+    return A2AAgentCardSchema.parse(await parseJsonResponse(response));
   }
 
   private buildMessage(
