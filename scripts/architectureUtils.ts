@@ -75,7 +75,8 @@ function validateLayerDefinition(
       layer.allowedImportPaths.some(
         (allowedImportPath) =>
           typeof allowedImportPath !== 'string' ||
-          !fs.existsSync(path.join(repoRoot, allowedImportPath)),
+          !fs.existsSync(path.join(repoRoot, allowedImportPath)) ||
+          !fs.statSync(path.join(repoRoot, allowedImportPath)).isFile(),
       ))
   ) {
     throw new Error(
@@ -151,6 +152,11 @@ function validateDagPolicy(config: LayerConfig, layerNames: Set<string>): void {
   }
 
   for (const layer of config.layers) {
+    if (layer.forbiddenDependencies !== undefined && !Array.isArray(layer.forbiddenDependencies)) {
+      throw new Error(
+        `Architecture layer "${layer.name}" forbiddenDependencies must be an array of layer names.`,
+      );
+    }
     for (const forbidden of layer.forbiddenDependencies ?? []) {
       if (typeof forbidden !== 'string' || !layerNames.has(forbidden)) {
         throw new Error(

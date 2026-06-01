@@ -93,7 +93,7 @@ describe('Provider Registry', () => {
         expect(factories).toBe(providerMap);
       });
 
-      it('does not mutate providerMap when a redteam family appends factories', async () => {
+      it('does not mutate providerMap when a redteam family loads factories', async () => {
         // The merged redteam path must return a fresh array so a caller that
         // accidentally mutates the returned factories cannot corrupt the
         // shared module-scoped providerMap.
@@ -103,7 +103,7 @@ describe('Provider Registry', () => {
         expect(providerMap.length).toBe(before);
       });
 
-      it('appends redteam factories for a redteam path', async () => {
+      it('loads redteam factories for a redteam path', async () => {
         const factories = await getProviderFactories('promptfoo:redteam:crescendo');
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
@@ -112,7 +112,7 @@ describe('Provider Registry', () => {
         expect(factories.some((f) => f.test('echo'))).toBe(true);
       });
 
-      it('appends redteam factories for the agentic:memory-poisoning path', async () => {
+      it('loads redteam factories for the agentic:memory-poisoning path', async () => {
         const factories = await getProviderFactories('agentic:memory-poisoning');
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
@@ -141,7 +141,7 @@ describe('Provider Registry', () => {
         'bedrock:completion:anthropic.claude-v2',
         'bedrock-agent:agent-id',
         'sagemaker:endpoint-name',
-      ])('appends AWS factories without mutating providerMap for %s', async (path) => {
+      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
         const before = providerMap.length;
         const factories = await getProviderFactories(path);
 
@@ -152,6 +152,8 @@ describe('Provider Registry', () => {
       });
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
+        // All lookups should reuse the factory exported by the cached AWS
+        // family module instead of allocating one factory per request.
         const path = 'bedrock:completion:anthropic.claude-v2';
         const [a, b, c] = await Promise.all([
           getProviderFactories(path),
@@ -172,7 +174,7 @@ describe('Provider Registry', () => {
         'vertex:chat:gemini-2.5-flash',
         'google:gemini-2.5-flash',
         'palm:chat-bison',
-      ])('appends Google factories without mutating providerMap for %s', async (path) => {
+      ])('loads Google factories without mutating providerMap for %s', async (path) => {
         const before = providerMap.length;
         const factories = await getProviderFactories(path);
 
@@ -496,12 +498,14 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
-      const embeddingProvider = await factory!.create(
-        'bedrock:embedding:amazon.titan-embed-text-v1',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(embeddingProvider).toBeDefined();
+      for (const embeddingAlias of ['embedding', 'embeddings']) {
+        const embeddingProvider = await factory!.create(
+          `bedrock:${embeddingAlias}:amazon.titan-embed-text-v1`,
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(embeddingProvider).toBeDefined();
+      }
 
       // Test backwards compatibility
       const legacyProvider = await factory!.create(
@@ -570,17 +574,22 @@ describe('Provider Registry', () => {
     });
 
     it.each([
-      ['sagemaker:embedding:endpoint-name', 'SageMakerEmbeddingProvider', {}],
-      ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }],
-      ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}],
-      ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}],
-    ])('should handle %s providers correctly', async (path, expectedProviderName, config) => {
+      ['sagemaker:embedding:endpoint-name', 'SageMakerEmbeddingProvider', {}, undefined],
+      ['sagemaker:embeddings:endpoint-name', 'SageMakerEmbeddingProvider', {}, undefined],
+      ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
+      ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+    ])('should handle %s providers correctly', async (path, expectedProviderName, config, expectedModelType) => {
       const factories = await getProviderFactories(path);
       const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
       const provider = await factory!.create(path, { config }, mockContext);
       expect(provider.constructor.name).toBe(expectedProviderName);
+      if (expectedModelType) {
+        expect(provider).toHaveProperty('modelType', expectedModelType);
+      }
     });
 
     it('should handle bedrock Luma Ray video provider with model version', async () => {
@@ -1015,6 +1024,56 @@ describe('Provider Registry', () => {
       basePath: '/test',
       options: bareOptions,
     };
+
+    it.each([
+      [
+        'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:image:imagen-3.0-generate-002',
+        async () => (await import('../../src/providers/google/image')).GoogleImageProvider,
+      ],
+      [
+        'google:video:veo-3.1-generate-preview',
+        async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
+      ],
+      [
+        'google:gemini-2.5-flash-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'palm:chat-bison',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+    ] as const)('routes %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const ExpectedProvider = await loadExpectedProvider();
+      expect(provider).toBeInstanceOf(ExpectedProvider);
+    });
+
+    it.each([
+      [
+        'google:custom-model.ts',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'palm:chat-bison.js',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:chat:custom-model.mjs',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+    ] as const)('routes script-like id %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const ExpectedProvider = await loadExpectedProvider();
+      expect(provider).toBeInstanceOf(ExpectedProvider);
+    });
 
     it.each([
       ['google:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
