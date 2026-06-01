@@ -1,4 +1,5 @@
 import readline from 'readline';
+import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -535,6 +536,33 @@ function logGroupedGradingStatus({
       `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
     );
   }
+}
+
+// When an afterEach hook replaces response.metadata, a legacy top-level metadata.headers that
+// was copied from the OLD transport headers becomes stale — and would persist as stale (and
+// possibly sensitive) headers. Only re-sync when the original top-level headers provably came
+// from the original transport (deep-equal) and the hook left that top-level copy unchanged;
+// otherwise the hook owns metadata.headers and we leave it alone.
+function synchronizeLegacyTransportHeaders(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  hookMetadata: Record<string, unknown> | undefined,
+  hookResponseMetadata: Record<string, unknown> | undefined,
+) {
+  const originalHeaders = originalMetadata?.headers;
+  if (
+    originalHeaders === undefined ||
+    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
+    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
+  ) {
+    return hookMetadata;
+  }
+
+  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
+  if (hookResponseMetadata?.headers === undefined) {
+    return metadataWithoutHeaders;
+  }
+  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
@@ -1304,24 +1332,35 @@ async function transformRunEvalResponse({
   };
 }
 
-function getTraceId(
+export function getTraceId(
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
 ) {
   if (!traceContext?.traceparent) {
     return undefined;
   }
-  // W3C traceparent: `version-traceId-spanId-flags` (4 dash-separated parts).
+  // W3C traceparent: `version-traceId-spanId-flags`. Version 00 has exactly 4 dash-separated
+  // parts; future versions MAY append fields after flags. Validate the required fields before
+  // surfacing linkage so malformed or sentinel IDs never become persisted row metadata.
   const parts = traceContext.traceparent.split('-');
-  if (parts.length !== 4) {
-    logger.warn(
-      `[Evaluator] Malformed traceparent (expected 4 parts, got ${parts.length}); dropping trace linkage on this row.`,
-    );
+  const [version, traceId, parentId, flags] = parts;
+  const validPartCount = version === '00' ? parts.length === 4 : parts.length >= 4;
+  const validTraceId = /^[0-9a-f]{32}$/.test(traceId) && !/^0+$/.test(traceId);
+  const validParentId = /^[0-9a-f]{16}$/.test(parentId) && !/^0+$/.test(parentId);
+  if (
+    !/^[0-9a-f]{2}$/.test(version) ||
+    version === 'ff' ||
+    !validPartCount ||
+    !validTraceId ||
+    !validParentId ||
+    !/^[0-9a-f]{2}$/.test(flags)
+  ) {
+    logger.warn(`[Evaluator] Malformed traceparent; dropping trace linkage on this row.`);
     return undefined;
   }
-  return parts[1];
+  return traceId;
 }
 
-function getTraceLinkage(
+export function getTraceLinkage(
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
   evalId?: string,
 ) {
@@ -3332,6 +3371,8 @@ class Evaluator {
       // so in-place mutations don't corrupt the row on hook failure.
       if (context.testSuite.extensions?.length) {
         try {
+          const originalMetadata = row.metadata;
+          const originalResponseMetadata = row.response?.metadata;
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,
             result: {
@@ -3346,7 +3387,14 @@ class Evaluator {
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          row.metadata = afterEachOut.result.metadata;
+          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
+          // from the old transport would otherwise persist as stale credentials. Re-sync it.
+          row.metadata = synchronizeLegacyTransportHeaders(
+            originalMetadata,
+            originalResponseMetadata,
+            afterEachOut.result.metadata,
+            afterEachOut.result.response?.metadata,
+          );
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;
           }
