@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
-import { matchesPattern } from './traceUtils';
+import { assertFiniteNonNegativeInteger, assertValidRange, matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -73,6 +73,28 @@ function requireNamedTrajectoryMatcher(
   );
 }
 
+function resolveTrajectoryCountBounds(
+  value: Record<string, unknown>,
+  assertionType: string,
+): Pick<TrajectoryCountValue, 'min' | 'max'> {
+  const { min, max } = value;
+  if (min !== undefined) {
+    assertFiniteNonNegativeInteger(min, `${assertionType} assertion min`);
+  }
+  if (max !== undefined) {
+    assertFiniteNonNegativeInteger(max, `${assertionType} assertion max`);
+  }
+  assertValidRange(
+    min as number | undefined,
+    max as number | undefined,
+    `${assertionType} assertion`,
+  );
+  return {
+    min: min as number | undefined,
+    max: max as number | undefined,
+  };
+}
+
 function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
   if (typeof value === 'string' && value.trim()) {
     return { goal: value.trim() };
@@ -125,19 +147,13 @@ function resolveToolMatchers(
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
+    const rawValue = value as Record<string, unknown>;
+    const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher, 'tool');
     return {
       kind: 'count',
       matcher: {
         ...matcher,
-        max:
-          typeof (value as TrajectoryCountValue).max === 'number'
-            ? (value as TrajectoryCountValue).max
-            : undefined,
-        min:
-          typeof (value as TrajectoryCountValue).min === 'number'
-            ? (value as TrajectoryCountValue).min
-            : undefined,
+        ...resolveTrajectoryCountBounds(rawValue, 'trajectory:tool-used'),
       },
     };
   }
@@ -194,7 +210,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   const matcher = expected.matcher;
-  const min = matcher.min ?? 1;
+  const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
   const max = matcher.max;
   if (!matcher.pattern && !matcher.name) {
     throw new Error(
@@ -587,17 +603,11 @@ function resolveStepCountValue(value: unknown): TrajectoryCountValue {
     throw new Error('trajectory:step-count assertion must have an object value');
   }
 
-  const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher);
+  const rawValue = value as Record<string, unknown>;
+  const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher);
   return {
     ...matcher,
-    max:
-      typeof (value as TrajectoryCountValue).max === 'number'
-        ? (value as TrajectoryCountValue).max
-        : undefined,
-    min:
-      typeof (value as TrajectoryCountValue).min === 'number'
-        ? (value as TrajectoryCountValue).min
-        : undefined,
+    ...resolveTrajectoryCountBounds(rawValue, 'trajectory:step-count'),
   };
 }
 

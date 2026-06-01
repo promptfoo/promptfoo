@@ -647,6 +647,32 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('supports max-only count matching with patterns', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: {
+            pattern: 'delete*',
+            max: 0,
+          },
+        },
+        renderedValue: {
+          pattern: 'delete*',
+          max: 0,
+        },
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Matched tool "delete*" 0 time(s) (expected 0-0)',
+        assertion: params.assertion,
+      });
+    });
+
     it('supports inverse assertions', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -793,6 +819,43 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryToolUsed(params)).toThrow(
         'trajectory:tool-used assertion object must include a name or pattern property',
+      );
+    });
+
+    it.each([
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      -1,
+      1.5,
+    ])('rejects invalid tool count bounds (%s)', (min) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: { pattern: 'search*', min },
+        },
+        renderedValue: { pattern: 'search*', min },
+      };
+
+      expect(() => handleTrajectoryToolUsed(params)).toThrow(
+        'trajectory:tool-used assertion min must be a finite non-negative integer',
+      );
+    });
+
+    it('rejects tool max bounds below min bounds', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: { pattern: 'search*', min: 2, max: 1 },
+        },
+        renderedValue: { pattern: 'search*', min: 2, max: 1 },
+      };
+
+      expect(() => handleTrajectoryToolUsed(params)).toThrow(
+        'trajectory:tool-used assertion max must be greater than or equal to min',
       );
     });
   });
@@ -2667,6 +2730,43 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryStepCount(params)).toThrow(
         'trajectory:step-count assertion must have an object value',
+      );
+    });
+
+    it.each([
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      -1,
+      1.5,
+    ])('rejects invalid step count bounds (%s)', (min) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:step-count',
+        assertion: {
+          type: 'trajectory:step-count',
+          value: { type: 'tool', min },
+        },
+        renderedValue: { type: 'tool', min },
+      };
+
+      expect(() => handleTrajectoryStepCount(params)).toThrow(
+        'trajectory:step-count assertion min must be a finite non-negative integer',
+      );
+    });
+
+    it('rejects step max bounds below min bounds', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:step-count',
+        assertion: {
+          type: 'trajectory:step-count',
+          value: { type: 'tool', min: 2, max: 1 },
+        },
+        renderedValue: { type: 'tool', min: 2, max: 1 },
+      };
+
+      expect(() => handleTrajectoryStepCount(params)).toThrow(
+        'trajectory:step-count assertion max must be greater than or equal to min',
       );
     });
   });

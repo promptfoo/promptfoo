@@ -707,7 +707,7 @@ tests:
 
 - A string, such as `search_orders`
 - An array of strings, such as `['search_orders', 'compose_reply']`
-- An object with `pattern`, `min`, and optional `max`
+- An object with `name` or `pattern`, plus optional `min` and `max` count bounds. A max-only object defaults to `min: 0`.
 
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 
@@ -1059,6 +1059,8 @@ Common patterns:
 - `api.*` - Matches spans starting with "api."
 - `*.error` - Matches spans ending with ".error"
 
+Provide at least one of `min` or `max`. Count bounds must be finite non-negative integers, and `max` must be greater than or equal to `min`.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
@@ -1093,7 +1095,7 @@ assert:
 Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
-- `max`: Maximum allowed duration in milliseconds
+- `max`: Maximum allowed duration in milliseconds (a finite non-negative number)
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
 - `method` (optional): Percentile method, either `nearest` (default) or `linear`
 - `requirePresence` (optional): Fail when no matching spans with complete timing data are present
@@ -1142,7 +1144,7 @@ Error detection methods:
 
 Configuration options:
 
-- `max_count`: Maximum number of error spans allowed
+- `max_count`: Maximum number of error spans allowed (a finite non-negative integer)
 - `max_percentage`: Maximum error rate as a percentage (0-100)
 - `pattern`: Filter spans by name pattern
 - `requirePresence`: Fail when no matching spans are present
