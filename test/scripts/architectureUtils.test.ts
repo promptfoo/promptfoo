@@ -7,6 +7,7 @@ import {
   extractModuleSpecifiers,
   findUnclassifiedFiles,
   findViolations,
+  getExternalModuleName,
   getLayerForFile,
   getSourceFiles,
   type LayerConfig,
@@ -243,6 +244,17 @@ describe('readLayerConfig', () => {
     );
   });
 
+  it('rejects an invalid allowedExternal entry', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ allowedExternal: ['zod', ''] })],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" contains an invalid allowedExternal entry.',
+    );
+  });
+
   it('rejects directory entries in allowed import paths', () => {
     writeConfig({
       publicFacade: 'src/index.ts',
@@ -327,16 +339,36 @@ describe('readLayerConfig', () => {
   });
 });
 
+describe('getExternalModuleName', () => {
+  it('names npm packages and scoped packages by their package root', () => {
+    expect(getExternalModuleName('zod')).toBe('zod');
+    expect(getExternalModuleName('zod/v4')).toBe('zod');
+    expect(getExternalModuleName('@scoped/pkg/sub')).toBe('@scoped/pkg');
+  });
+
+  it('names Node builtins with the node: prefix stripped', () => {
+    expect(getExternalModuleName('node:fs')).toBe('fs');
+    expect(getExternalModuleName('fs/promises')).toBe('fs');
+  });
+
+  it('returns undefined for relative, absolute, and subpath-import specifiers', () => {
+    expect(getExternalModuleName('./shared.js')).toBeUndefined();
+    expect(getExternalModuleName('../prompts')).toBeUndefined();
+    expect(getExternalModuleName('/abs/path')).toBeUndefined();
+    expect(getExternalModuleName('#internal')).toBeUndefined();
+  });
+});
+
 describe('production layer config', () => {
   it('classifies the public contracts entrypoint as leaf-safe', () => {
     expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
   });
 
-  it('allows core logic to consume leaf-safe contracts', () => {
-    const config = readLayerConfig(process.cwd());
-    const coreLayer = config.layers.find((layer) => layer.name === 'core');
-
-    expect(coreLayer?.allowedDependencies).toContain('contracts');
+  it('keeps the contracts leaf layer free of disallowed external dependencies', () => {
+    const leafExternal = findViolations(process.cwd(), readLayerConfig(process.cwd())).filter(
+      (violation) => violation.kind === 'leaf-external',
+    );
+    expect(leafExternal).toEqual([]);
   });
 });
 
@@ -363,7 +395,7 @@ describe('findViolations', () => {
       leafLayers,
       layers: [
         { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
-        { name: 'leaf', roots: ['src/leaf'], allowedDependencies: [] },
+        { name: 'leaf', roots: ['src/leaf'], allowedDependencies: [], allowedExternal: ['zod'] },
         { name: 'core', roots: ['src/core'], allowedDependencies: [] },
       ],
     };
@@ -411,6 +443,35 @@ describe('findViolations', () => {
       imported: 'src/core/util.ts',
       importedLayer: 'core',
     });
+  });
+
+  it('flags a leaf-layer file importing a non-allowlisted external package or builtin', () => {
+    write('src/index.ts');
+    write('src/leaf/a.ts', "import fs from 'node:fs';\nimport _ from 'lodash';");
+
+    const violations = findViolations(repoRoot, configWithLeaf());
+    expect(violations.map((v) => v.specifier).sort()).toEqual(['lodash', 'node:fs']);
+    expect(violations.every((v) => v.kind === 'leaf-external')).toBe(true);
+    expect(violations[0]).toMatchObject({ importerLayer: 'leaf', importedLayer: 'external' });
+  });
+
+  it('allows allowlisted externals (ignoring the node: prefix) from a leaf layer', () => {
+    write('src/index.ts');
+    write('src/leaf/a.ts', "import { z } from 'zod';\nimport fs from 'node:fs';");
+
+    // allowedExternal uses the bare name; "node:fs" must match an "fs" allowlist entry.
+    const config = configWithLeaf();
+    config.layers.find((layer) => layer.name === 'leaf')!.allowedExternal = ['zod', 'fs'];
+
+    expect(findViolations(repoRoot, config)).toEqual([]);
+  });
+
+  it('does not apply external allowlisting to non-leaf layers', () => {
+    write('src/index.ts');
+    write('src/core/a.ts', "import fs from 'node:fs';\nimport _ from 'lodash';");
+
+    // 'core' is not a leaf layer, so external imports are unconstrained.
+    expect(findViolations(repoRoot, configWithLeaf())).toEqual([]);
   });
 
   it('does not flag intra-leaf imports', () => {

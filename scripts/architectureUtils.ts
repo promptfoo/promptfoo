@@ -10,6 +10,13 @@ export interface LayerDefinition {
   roots: string[];
   allowedDependencies: string[];
   allowedImportPaths?: string[];
+  /**
+   * Bare module specifiers (npm packages or Node builtins) a LEAF layer is allowed to import.
+   * Only consulted for layers listed in {@link LayerConfig.leafLayers}: a leaf layer may import
+   * relative siblings plus these externals, and nothing else. `node:` prefixes are ignored when
+   * matching, so `"fs"` and `"node:fs"` are equivalent.
+   */
+  allowedExternal?: string[];
 }
 
 export interface LayerConfig {
@@ -61,6 +68,15 @@ function validateLayerDefinition(
   ) {
     throw new Error(
       `Architecture layer "${layer.name}" contains an invalid allowedImportPaths entry.`,
+    );
+  }
+  if (
+    layer.allowedExternal &&
+    (!Array.isArray(layer.allowedExternal) ||
+      layer.allowedExternal.some((entry) => typeof entry !== 'string' || entry.length === 0))
+  ) {
+    throw new Error(
+      `Architecture layer "${layer.name}" contains an invalid allowedExternal entry.`,
     );
   }
 
@@ -296,25 +312,33 @@ export function resolveInternalModule(
   return undefined;
 }
 
-export function getPackageName(specifier: string): string | undefined {
+/**
+ * The bare module name a specifier resolves to: its package root (`@scope/pkg`) or builtin name,
+ * with any `node:` prefix stripped. Returns undefined for relative/absolute/`#` subpath specifiers,
+ * which are not external dependencies. Unlike {@link getPackageName} this also names Node builtins,
+ * so a leaf-layer external check cannot let `node:fs` slip through.
+ */
+export function getExternalModuleName(specifier: string): string | undefined {
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('#')) {
     return undefined;
   }
 
   const withoutNodePrefix = specifier.replace(/^node:/, '');
   const segments = withoutNodePrefix.split('/');
-  const packageName = withoutNodePrefix.startsWith('@')
+  const moduleName = withoutNodePrefix.startsWith('@')
     ? segments.slice(0, 2).join('/')
     : segments[0];
 
-  if (!packageName || BUILTIN_MODULES.has(packageName)) {
-    return undefined;
-  }
-
-  return packageName;
+  return moduleName || undefined;
 }
 
-export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'path';
+/** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
+export function getPackageName(specifier: string): string | undefined {
+  const moduleName = getExternalModuleName(specifier);
+  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+}
+
+export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
 
 export interface BoundaryViolation {
   kind: BoundaryViolationKind;
@@ -352,10 +376,34 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
 
     const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
     const importerLayer = getLayerForFile(importer, config);
+    const importerIsLeaf = leafLayers.has(importerLayer);
+    const allowedExternal = importerIsLeaf
+      ? new Set(
+          (layersByName.get(importerLayer)?.allowedExternal ?? []).map((entry) =>
+            entry.replace(/^node:/, ''),
+          ),
+        )
+      : null;
 
     for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
       const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
       if (!resolvedImport) {
+        // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
+        // A leaf layer may import only its allowlisted external packages and Node builtins; flag
+        // any other bare specifier.
+        if (importerIsLeaf) {
+          const externalName = getExternalModuleName(specifier);
+          if (externalName && !allowedExternal!.has(externalName)) {
+            violations.push({
+              kind: 'leaf-external',
+              importer,
+              importerLayer,
+              specifier,
+              imported: specifier,
+              importedLayer: 'external',
+            });
+          }
+        }
         continue;
       }
 
