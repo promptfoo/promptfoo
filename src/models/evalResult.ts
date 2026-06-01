@@ -293,9 +293,13 @@ function redactHttpHeadersOnMetadata<T>(
     typeof legacyHeadersSource === 'object' &&
     !Array.isArray(legacyHeadersSource)
   ) {
+    // The legacy slot mirrors transport request/response headers, so use the request-header
+    // matcher (a strict superset) — otherwise api-key / x-auth-token / bearer would be redacted
+    // in metadata.http.requestHeaders but leak in cleartext here.
     const redacted = redactSensitiveHeaders(
       legacyHeaders as Record<string, unknown>,
       legacyHeadersSource as Record<string, unknown>,
+      isSensitiveRequestHeader,
     );
     if (redacted) {
       nextMetadata = { ...m, headers: redacted };
