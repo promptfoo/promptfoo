@@ -303,9 +303,7 @@ jobs:
         run: npm ci
 
       - name: Install ModelAudit schema dependencies
-        run: |
-          python3 -m pip install --disable-pip-version-check --no-deps \
-            -r scripts/modelaudit_schema_requirements.txt
+        run: python3 -m pip install --disable-pip-version-check --no-deps -r scripts/modelaudit_schema_requirements.txt
 
       - name: Generate JSON Schemas
         run: |

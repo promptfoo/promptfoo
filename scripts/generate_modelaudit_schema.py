@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate checked-in JSON Schema artifacts for the latest ModelAudit release.
+"""Generate checked-in JSON Schema artifacts for the current ModelAudit release.
 
 Use Python 3.10-3.13 and install the pinned release before running this script:
 
@@ -10,7 +10,6 @@ Use Python 3.10-3.13 and install the pinned release before running this script:
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -129,16 +128,10 @@ def write_text_atomic(path: Path, contents: str) -> None:
 
 def main() -> None:
     """Generate the ModelAudit schema and example artifacts."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--example", type=Path, help="Override the example result path")
-    args = parser.parse_args()
-
     validate_python_version()
-    modelaudit_version = expected_modelaudit_version()
-    result_model = load_result_model(modelaudit_version)
-    example_path = args.example or EXAMPLE_PATH
+    result_model = load_result_model(expected_modelaudit_version())
 
-    example = json.loads(example_path.read_text(encoding="utf-8"))
+    example = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
     result_model.model_validate(example)
 
     write_text_atomic(SCHEMA_PATH, render_json(build_schema(result_model)))

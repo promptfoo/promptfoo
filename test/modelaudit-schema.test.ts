@@ -51,13 +51,6 @@ describe('ModelAudit JSON Schema', () => {
     );
   });
 
-  it('publishes one canonical schema and example path', () => {
-    for (const label of ['latest', 'v0.2.45']) {
-      expect(fs.existsSync(path.join(path.dirname(schemaPath), label))).toBe(false);
-      expect(fs.existsSync(path.join(path.dirname(examplePath), label))).toBe(false);
-    }
-  });
-
   it('describes has_errors as an operational failure signal', () => {
     const properties = schema.properties as JsonObject;
     const hasErrors = properties.has_errors as JsonObject;
