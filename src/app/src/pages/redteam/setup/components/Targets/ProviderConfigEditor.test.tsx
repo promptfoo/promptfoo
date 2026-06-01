@@ -16,6 +16,9 @@ vi.mock('./WebSocketEndpointConfiguration', () => ({
 vi.mock('./CustomTargetConfiguration', () => ({
   default: () => <div data-testid="custom-config" />,
 }));
+vi.mock('./A2AEndpointConfiguration', () => ({
+  default: () => <div data-testid="a2a-config" />,
+}));
 vi.mock('./BrowserAutomationConfiguration', () => ({
   default: () => <div data-testid="browser-config" />,
 }));

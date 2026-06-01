@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -356,6 +357,16 @@ function ProviderConfigEditor({
         />
       )}
 
+      {providerType === 'a2a' && (
+        <A2AEndpointConfiguration
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson={rawConfigJson}
+          setRawConfigJson={setRawConfigJson}
+          bodyError={bodyError}
+        />
+      )}
+
       {/* Foundation model providers */}
       {[
         'openai',
@@ -437,7 +448,7 @@ function ProviderConfigEditor({
       )}
 
       {/* Custom providers */}
-      {['a2a', 'javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
+      {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
