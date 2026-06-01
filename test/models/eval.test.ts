@@ -15,7 +15,7 @@ import Eval, {
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
-import { type Prompt, ResultFailureReason } from '../../src/types/index';
+import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
@@ -614,6 +614,31 @@ describe('evaluator', () => {
         evaluationId: 'create-evaluation-id',
         metadata: { source: 'create-path' },
       });
+    });
+
+    it('surfaces trace linkage without leaking the reserved namespace through toEvaluateSummary (export path)', async () => {
+      // output.ts serializes JSON/JSONL/CSV via toEvaluateSummary(); assert that path surfaces
+      // traceId/evaluationId at the top level and never emits the internal `__promptfoo` key.
+      const tracedResult = createEvaluateResult({
+        traceId: 'export-trace-id',
+        evaluationId: 'export-evaluation-id',
+        metadata: { source: 'export-path' },
+      });
+
+      const evaluation = await Eval.create({ description: 'Trace linkage export coverage' }, [], {
+        results: [tracedResult as unknown as EvalResult],
+      });
+
+      const summary = await evaluation.toEvaluateSummary();
+      expect('results' in summary).toBe(true);
+      const [exportedRow] = (summary as { results: EvaluateResult[] }).results;
+      expect(exportedRow).toMatchObject({
+        traceId: 'export-trace-id',
+        evaluationId: 'export-evaluation-id',
+        metadata: { source: 'export-path' },
+      });
+      expect(exportedRow.metadata).not.toHaveProperty('__promptfoo');
+      expect(JSON.stringify(summary)).not.toContain('__promptfoo');
     });
   });
 
