@@ -241,6 +241,24 @@ describe('PluginConfigDialog - OSS', () => {
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
 
+    it('shows gradingGuidance alongside privacy-policy-consistency config', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy-policy-consistency"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('Privacy Policy File')).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText('file:///absolute/path/to/privacy-policy.md'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
     it('shows gradingGuidance for plugins without specific config', () => {
       render(
         <PluginConfigDialog

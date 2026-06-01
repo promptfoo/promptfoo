@@ -460,6 +460,32 @@ export async function redteamInit(directory: string | undefined) {
     } as RedteamPluginObject);
   }
 
+  if (plugins.includes('privacy-policy-consistency')) {
+    plugins = plugins.filter((p) => p !== 'privacy-policy-consistency');
+
+    recordOnboardingStep('collect privacy policy reference');
+    const privacyPolicy = await input({
+      message:
+        'You selected the `privacy-policy-consistency` plugin. Enter a file:// reference to your privacy policy.',
+      validate: (value: string) => {
+        const trimmedValue = value.trim();
+        if (trimmedValue === '') {
+          return 'Privacy Policy Consistency requires a file:// reference to your privacy policy.';
+        }
+        if (!trimmedValue.startsWith('file://')) {
+          return 'Use a file:// reference, for example file://privacy-policy.md.';
+        }
+        return true;
+      },
+    });
+    recordOnboardingStep('choose privacy policy', { value: privacyPolicy.length });
+
+    plugins.push({
+      id: 'privacy-policy-consistency',
+      config: { privacyPolicy: privacyPolicy.trim() },
+    } as RedteamPluginObject);
+  }
+
   if (plugins.includes('indirect-prompt-injection')) {
     recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));

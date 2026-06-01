@@ -89,6 +89,8 @@ describe('Plugins', () => {
         'politics',
         'policy',
         'prompt-extraction',
+        'privacy-policy-consistency',
+        'privacy:rights-request-workflow-integrity',
         'rbac',
         'shell-injection',
         'sql-injection',
@@ -153,6 +155,53 @@ describe('Plugins', () => {
       const policyPlugin = Plugins.find((p) => p.key === 'policy');
       expect(() => policyPlugin?.validate?.({})).toThrow(
         'Invariant failed: One of the policy plugins is invalid. The `config` property of a policy plugin must be `{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }` or `{ "policy": "<policy_text>" }`. Received: {}',
+      );
+    });
+
+    it('should validate privacy policy consistency plugin config', async () => {
+      const privacyPolicyConsistencyPlugin = Plugins.find(
+        (p) => p.key === 'privacy-policy-consistency',
+      );
+      expect(() => privacyPolicyConsistencyPlugin?.validate?.({})).toThrow(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
+      );
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'We use account data to provide support.',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'file://privacy-policy.md',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'https://example.com/privacy-policy.md',
+        }),
+      ).toThrow(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` URI references to use the file:// scheme.',
+      );
+    });
+
+    it('should validate privacy rights request workflow integrity plugin config', async () => {
+      const privacyRightsPlugin = Plugins.find(
+        (p) => p.key === 'privacy:rights-request-workflow-integrity',
+      );
+      expect(() => privacyRightsPlugin?.validate?.({})).not.toThrow();
+      expect(() =>
+        privacyRightsPlugin?.validate?.({
+          rightsRequestPolicy: 'Agents must route privacy requests to the DSR workflow.',
+          privacyPolicy: 'Users may submit privacy rights requests.',
+          frameworks: ['gdpr'],
+        }),
+      ).not.toThrow();
+      expect(() =>
+        privacyRightsPlugin?.validate?.({
+          rightsRequestPolicy: 'https://example.com/privacy-rights-workflow.md',
+        }),
+      ).toThrow(
+        'Privacy Rights Request Workflow Integrity plugin requires file-backed URI references to use the file:// scheme.',
       );
     });
 

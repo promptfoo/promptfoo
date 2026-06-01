@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -103,6 +104,30 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   }
 
   return undefined;
+}
+
+function sanitizePluginConfigForMetadata(
+  pluginId: string,
+  pluginConfig: Record<string, any> | undefined,
+): Record<string, any> | undefined {
+  if (
+    pluginId !== 'privacy-policy-consistency' &&
+    pluginId !== 'privacy:rights-request-workflow-integrity'
+  ) {
+    return pluginConfig;
+  }
+
+  const {
+    privacyPolicy: _privacyPolicy,
+    privacyPolicyContent: _privacyPolicyContent,
+    privacyPolicyFileName: _privacyPolicyFileName,
+    rightsRequestPolicy: _rightsRequestPolicy,
+    rightsRequestPolicyContent: _rightsRequestPolicyContent,
+    rightsRequestPolicyFileName: _rightsRequestPolicyFileName,
+    ...safePluginConfig
+  } = pluginConfig || {};
+
+  return safePluginConfig;
 }
 
 async function rematerializeStrategyInputVars(
@@ -330,17 +355,18 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
     const value = config[key];
     if (typeof value === 'string' && value.startsWith('file://')) {
       const filePath = value.slice('file://'.length);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
 
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filePath}`);
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File not found: ${resolvedPath}`);
       }
 
-      if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (resolvedPath.endsWith('.yaml') || resolvedPath.endsWith('.yml')) {
+        config[key] = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+      } else if (resolvedPath.endsWith('.json')) {
+        config[key] = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
       } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
+        config[key] = fs.readFileSync(resolvedPath, 'utf8');
       }
     }
   }
@@ -535,6 +561,14 @@ function addLanguageToPluginMetadata(
       undefined,
     testGenerationInstructions,
   });
+  const resolvedPluginConfig = sanitizePluginConfigForMetadata(
+    plugin.id,
+    resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+  );
+  const testPluginConfig = sanitizePluginConfigForMetadata(
+    plugin.id,
+    (test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {},
+  );
 
   return {
     ...test,
@@ -543,8 +577,8 @@ function addLanguageToPluginMetadata(
       pluginId: plugin.id,
       ...(includePluginConfig && {
         pluginConfig: {
-          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-          ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
+          ...resolvedPluginConfig,
+          ...testPluginConfig,
         },
       }),
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),

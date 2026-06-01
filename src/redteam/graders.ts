@@ -87,6 +87,8 @@ import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
 import { PolicyViolationGrader } from './plugins/policy/index';
 import { PoliticsGrader } from './plugins/politics';
+import { PrivacyPolicyConsistencyGrader } from './plugins/privacyPolicyConsistency';
+import { PrivacyRightsRequestWorkflowIntegrityGrader } from './plugins/privacyRightsRequestWorkflowIntegrity';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
 import { RagSourceAttributionGrader } from './plugins/ragSourceAttribution';
@@ -277,6 +279,9 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:policy': new PolicyViolationGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
+  'promptfoo:redteam:privacy-policy-consistency': new PrivacyPolicyConsistencyGrader(),
+  'promptfoo:redteam:privacy:rights-request-workflow-integrity':
+    new PrivacyRightsRequestWorkflowIntegrityGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:rag-source-attribution': new RagSourceAttributionGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),

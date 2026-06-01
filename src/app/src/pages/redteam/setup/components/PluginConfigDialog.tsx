@@ -203,6 +203,57 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'privacy-policy-consistency':
+        specificConfig = (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The Privacy Policy Consistency plugin tries to get your app or agent to behave in ways
+              that deviate from your actual privacy policy. Provide a file:// reference so grading
+              can compare responses, claimed actions, and tool behavior against the policy.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="privacy-policy">Privacy Policy File</Label>
+              <Input
+                id="privacy-policy"
+                placeholder="file:///absolute/path/to/privacy-policy.md"
+                value={(localConfig.privacyPolicy as string) || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
+              />
+            </div>
+          </div>
+        );
+        break;
+      case 'privacy:rights-request-workflow-integrity':
+        specificConfig = (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The Privacy Rights Request Workflow Integrity plugin tests whether users can prompt
+              your app or agent into mishandling privacy-rights requests. Add workflow or policy
+              files when you want generation and grading grounded in your actual process.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="rights-request-policy">Privacy Rights Workflow File</Label>
+              <Input
+                id="rights-request-policy"
+                placeholder="file:///absolute/path/to/privacy-rights-workflow.md"
+                value={(localConfig.rightsRequestPolicy as string) || ''}
+                onChange={(e) =>
+                  setLocalConfig({ ...localConfig, rightsRequestPolicy: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="privacy-rights-policy">Privacy Policy File</Label>
+              <Input
+                id="privacy-rights-policy"
+                placeholder="file:///absolute/path/to/privacy-policy.md"
+                value={(localConfig.privacyPolicy as string) || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
+              />
+            </div>
+          </div>
+        );
+        break;
       case 'bfla':
       case 'bola':
       case 'ssrf':

@@ -58,6 +58,14 @@ import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy/index';
 import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
+import {
+  PrivacyPolicyConsistencyPlugin,
+  validatePrivacyPolicyConsistencyConfig,
+} from './privacyPolicyConsistency';
+import {
+  PrivacyRightsRequestWorkflowIntegrityPlugin,
+  validatePrivacyRightsRequestWorkflowIntegrityConfig,
+} from './privacyRightsRequestWorkflowIntegrity';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
@@ -508,6 +516,16 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
+  createPluginFactory<{ privacyPolicy?: string; privacyPolicyContent?: string }>(
+    PrivacyPolicyConsistencyPlugin,
+    'privacy-policy-consistency',
+    validatePrivacyPolicyConsistencyConfig,
+  ),
+  createPluginFactory(
+    PrivacyRightsRequestWorkflowIntegrityPlugin,
+    'privacy:rights-request-workflow-integrity',
+    validatePrivacyRightsRequestWorkflowIntegrityConfig,
+  ),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),

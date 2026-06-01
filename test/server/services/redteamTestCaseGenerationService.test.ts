@@ -142,4 +142,52 @@ describe('redteamTestCaseGenerationService', () => {
       await expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
     });
   });
+
+  describe('getPluginConfigurationError', () => {
+    it('should return plugin validator errors for privacy policy consistency config', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: { privacyPolicy: 'https://example.com/privacy-policy.md' },
+        }),
+      ).toBe(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` URI references to use the file:// scheme.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: { privacyPolicyContent: '   ' },
+        }),
+      ).toBe(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
+      );
+    });
+
+    it('should return plugin validator errors for privacy rights workflow config', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { rightsRequestPolicy: 'https://example.com/privacy-rights-workflow.md' },
+        }),
+      ).toBe(
+        'Privacy Rights Request Workflow Integrity plugin requires file-backed URI references to use the file:// scheme.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { frameworks: [42] },
+        }),
+      ).toBe(
+        'Privacy Rights Request Workflow Integrity plugin requires `config.frameworks` to be a string or array of strings when provided.',
+      );
+    });
+  });
 });

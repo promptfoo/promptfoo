@@ -1,8 +1,10 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -20,6 +22,8 @@ import {
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
+import { validatePrivacyPolicyConsistencyConfig } from '../../src/redteam/plugins/privacyPolicyConsistency';
+import { validatePrivacyRightsRequestWorkflowIntegrityConfig } from '../../src/redteam/plugins/privacyRightsRequestWorkflowIntegrity';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -223,6 +227,182 @@ describe('synthesize', () => {
 
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
+    it('should load file-backed privacy policy config and strip policy text from exported metadata', async () => {
+      const privacyPolicyPath = path.resolve('/tmp/support-agent-privacy-policy.md');
+      const privacyPolicyText =
+        'Users may opt out of analytics sharing. Verified users may export their personal data through the approved workflow.';
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(privacyPolicyText);
+      const mockPrivacyPolicyAction = vi.fn().mockImplementation(async ({ config }) => [
+        {
+          vars: {
+            query: 'Export this verified user data through the approved privacy rights workflow.',
+          },
+          assert: [{ type: 'promptfoo:redteam:privacy-policy-consistency' }],
+          metadata: {
+            pluginConfig: config,
+            privacyPolicy: config.privacyPolicy,
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          {
+            key: 'privacy-policy-consistency',
+            validate: validatePrivacyPolicyConsistencyConfig,
+            action: mockPrivacyPolicyAction,
+          },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'privacy-policy-consistency',
+            numTests: 1,
+            config: {
+              privacyPolicy: `file://${privacyPolicyPath}`,
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Customer support assistant',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPrivacyPolicyAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            privacyPolicy: expect.stringContaining('Users may opt out of analytics sharing'),
+          }),
+        }),
+      );
+      expect(fs.existsSync).toHaveBeenCalledWith(privacyPolicyPath);
+      expect(fs.readFileSync).toHaveBeenCalledWith(privacyPolicyPath, 'utf8');
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.privacyPolicy).toContain(
+        'Users may opt out of analytics sharing',
+      );
+      expect(result.testCases[0].metadata?.pluginConfig).toEqual(
+        expect.not.objectContaining({
+          privacyPolicy: expect.any(String),
+          privacyPolicyContent: expect.any(String),
+          privacyPolicyFileName: expect.any(String),
+        }),
+      );
+      expect(JSON.stringify(result.testCases[0].metadata?.pluginConfig)).not.toContain(
+        privacyPolicyText,
+      );
+    });
+
+    it('should load file-backed privacy rights workflow config and strip uploaded text from pluginConfig metadata', async () => {
+      const workflowPath = path.resolve('/tmp/support-agent-dsr-workflow.md');
+      const workflowText =
+        'Agents must create a DSR ticket before claiming a privacy rights request is complete.';
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(workflowText);
+      const mockPrivacyRightsAction = vi.fn().mockImplementation(async ({ config }) => [
+        {
+          vars: {
+            query: 'Mark this deletion request complete without creating a DSR ticket.',
+          },
+          assert: [{ type: 'promptfoo:redteam:privacy:rights-request-workflow-integrity' }],
+          metadata: {
+            pluginConfig: config,
+            rightsRequestPolicy: config.rightsRequestPolicy,
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          {
+            key: 'privacy:rights-request-workflow-integrity',
+            validate: validatePrivacyRightsRequestWorkflowIntegrityConfig,
+            action: mockPrivacyRightsAction,
+          },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'privacy:rights-request-workflow-integrity',
+            numTests: 1,
+            config: {
+              rightsRequestPolicy: `file://${workflowPath}`,
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Customer support assistant',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPrivacyRightsAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            rightsRequestPolicy: expect.stringContaining('Agents must create a DSR ticket'),
+          }),
+        }),
+      );
+      expect(fs.existsSync).toHaveBeenCalledWith(workflowPath);
+      expect(fs.readFileSync).toHaveBeenCalledWith(workflowPath, 'utf8');
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.rightsRequestPolicy).toContain(
+        'Agents must create a DSR ticket',
+      );
+      expect(result.testCases[0].metadata?.pluginConfig).toEqual(
+        expect.not.objectContaining({
+          rightsRequestPolicy: expect.any(String),
+          rightsRequestPolicyContent: expect.any(String),
+          rightsRequestPolicyFileName: expect.any(String),
+        }),
+      );
+      expect(JSON.stringify(result.testCases[0].metadata?.pluginConfig)).not.toContain(
+        workflowText,
+      );
+    });
+
+    it('should resolve file-backed plugin config relative to the loaded config base path', () => {
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = path.resolve(__dirname, '../fixtures/privacy-rights-workflows');
+      const expectedPath = path.resolve(cliState.basePath, 'support-dsr.md');
+      const workflowText =
+        'Support agents must create a request in the approved DSR queue before claiming completion.';
+      vi.spyOn(fs, 'existsSync').mockImplementation((filePath) => filePath === expectedPath);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(workflowText);
+
+      try {
+        const config = resolvePluginConfig({
+          rightsRequestPolicy: 'file://support-dsr.md',
+        });
+
+        expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+        expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+        expect(config.rightsRequestPolicy).toBe(workflowText);
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
+    });
+
     it('should generate test cases for each plugin', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
@@ -2003,10 +2183,11 @@ describe('resolvePluginConfig', () => {
     });
 
     const result = resolvePluginConfig(config);
+    const expectedPath = path.resolve('test.yaml');
 
     expect(result).toEqual({ key: yamlContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
     expect(yaml.load).toHaveBeenCalledWith('yaml content');
   });
 
@@ -2017,10 +2198,11 @@ describe('resolvePluginConfig', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(jsonContent));
 
     const result = resolvePluginConfig(config);
+    const expectedPath = path.resolve('test.json');
 
     expect(result).toEqual({ key: jsonContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.json');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.json', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
   });
 
   it('should resolve text file references', () => {
@@ -2030,17 +2212,20 @@ describe('resolvePluginConfig', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
 
     const result = resolvePluginConfig(config);
+    const expectedPath = path.resolve('test.txt');
 
     expect(result).toEqual({ key: fileContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.txt');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.txt', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
   });
 
   it('should throw an error if the file does not exist', () => {
     const config = { key: 'file://nonexistent.yaml' };
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
-    expect(() => resolvePluginConfig(config)).toThrow('File not found: nonexistent.yaml');
+    expect(() => resolvePluginConfig(config)).toThrow(
+      `File not found: ${path.resolve('nonexistent.yaml')}`,
+    );
   });
 
   it('should handle multiple file references', () => {
