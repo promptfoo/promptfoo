@@ -38,7 +38,7 @@ providers:
     config:
       auth:
         type: bearer
-        token: '{{A2A_API_KEY}}'
+        token: '{{ env.A2A_API_KEY }}'
 ```
 
 The `a2a:<url>` shorthand sets `config.url`. Promptfoo appends the operation paths, such as
@@ -56,7 +56,7 @@ providers:
       agentCardUrl: https://agent.example.com/.well-known/agent-card.json
       auth:
         type: bearer
-        token: '{{A2A_API_KEY}}'
+        token: '{{ env.A2A_API_KEY }}'
       mode: auto
 ```
 
@@ -90,8 +90,8 @@ context, similar to how the MCP provider uses discovered tools.
 ## Authentication
 
 Use `auth` for common authentication schemes. Promptfoo applies it to both Agent Card discovery
-requests and A2A operation requests. Values support Nunjucks variables, so you can use environment
-variables or team secrets.
+requests and A2A operation requests. Values support Nunjucks variables, so use the `env` global for
+environment variables, such as `{{ env.A2A_API_KEY }}`.
 
 ### Bearer Token
 
@@ -101,7 +101,7 @@ providers:
     config:
       auth:
         type: bearer
-        token: '{{A2A_API_KEY}}'
+        token: '{{ env.A2A_API_KEY }}'
 ```
 
 ### Basic Auth
@@ -112,8 +112,8 @@ providers:
     config:
       auth:
         type: basic
-        username: '{{A2A_USERNAME}}'
-        password: '{{A2A_PASSWORD}}'
+        username: '{{ env.A2A_USERNAME }}'
+        password: '{{ env.A2A_PASSWORD }}'
 ```
 
 ### API Key
@@ -128,7 +128,7 @@ providers:
       auth:
         type: api_key
         keyName: X-API-Key
-        value: '{{A2A_API_KEY}}'
+        value: '{{ env.A2A_API_KEY }}'
 ```
 
 ```yaml
@@ -139,7 +139,7 @@ providers:
         type: api_key
         placement: query
         keyName: api_key
-        value: '{{A2A_API_KEY}}'
+        value: '{{ env.A2A_API_KEY }}'
 ```
 
 ### OAuth 2.0
@@ -155,8 +155,8 @@ providers:
         type: oauth
         grantType: client_credentials
         tokenUrl: https://auth.example.com/oauth/token
-        clientId: '{{A2A_CLIENT_ID}}'
-        clientSecret: '{{A2A_CLIENT_SECRET}}'
+        clientId: '{{ env.A2A_CLIENT_ID }}'
+        clientSecret: '{{ env.A2A_CLIENT_SECRET }}'
         scopes:
           - a2a.send
 ```
@@ -395,7 +395,7 @@ providers:
       agentCardUrl: https://travel-agent.example.com/.well-known/agent-card.json
       auth:
         type: bearer
-        token: '{{A2A_API_KEY}}'
+        token: '{{ env.A2A_API_KEY }}'
 
 redteam:
   purpose: |
