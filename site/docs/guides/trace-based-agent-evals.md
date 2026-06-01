@@ -889,7 +889,7 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 
 **Hardening checklist for shared environments.**
 
-- Bind the OTLP receiver to `127.0.0.1` for a single-machine eval. The config default is `0.0.0.0`, so set loopback explicitly when you want the receiver reachable only from the local host. The receiver has no in-process auth, rate limiting, mTLS, or audit logging — those belong at a higher layer.
+- Keep the default `127.0.0.1` OTLP receiver bind for a single-machine eval. Opt into a non-loopback host only when another machine or container must reach the receiver. The receiver has no in-process auth, rate limiting, mTLS, or audit logging — those belong at a higher layer.
 - For any non-loopback deployment (multi-tenant CI runners, sibling containers, public hosts), put a reverse proxy in front of the receiver. Run nginx, Caddy, or your service mesh to terminate TLS, enforce mTLS or OAuth, rate-limit by source, and forward authenticated traffic to `127.0.0.1:4318`. The proxy is the right boundary for those concerns; application-layer auth on this receiver does not replace a deployment boundary.
 
 - Use `tracing.otlp.http.redactAttributes` to redact sensitive attribute keys at the receiver, before they hit the SQLite store or the UI. Substring match is case-insensitive:
