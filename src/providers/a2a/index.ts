@@ -250,7 +250,7 @@ function splitSseFrames(buffer: string): { frames: string[]; remainder: string }
   const parts = normalized.split('\n\n');
   return {
     frames: parts.slice(0, -1),
-    remainder: parts.at(-1) ?? '',
+    remainder: parts.length > 0 ? parts[parts.length - 1] : '',
   };
 }
 

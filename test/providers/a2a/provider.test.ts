@@ -23,6 +23,7 @@ vi.mock('../../../src/util/time', async () => {
 import { loadApiProvider } from '../../../src/providers';
 import { A2AProvider } from '../../../src/providers/a2a';
 import { fetchWithProxy, fetchWithTimeout } from '../../../src/util/fetch/index';
+import { sleep } from '../../../src/util/time';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -58,7 +59,8 @@ function provider(config: Record<string, unknown> = {}) {
 
 describe('A2AProvider', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(sleep).mockResolvedValue(undefined);
   });
 
   it('loads from the provider registry with a bare id and shorthand url', async () => {
