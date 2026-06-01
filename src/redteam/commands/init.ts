@@ -533,7 +533,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('collect automated decision response profiles');
     const decisioningPlugin = await configureAutomatedDecisionResponseIntegrityPlugin();
     recordOnboardingStep('choose automated decision response profiles', {
-      value: decisioningPlugin.config?.profiles,
+      value: decisioningPlugin.config?.profiles ?? [],
     });
     plugins.push(decisioningPlugin);
   }
