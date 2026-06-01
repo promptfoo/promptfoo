@@ -55,6 +55,7 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
@@ -148,11 +149,6 @@ export function combineFilterConditions(
   }, filterConditions[0].condition);
 }
 
-// Reserved internal namespace under `metadata.*`. Mirrors the constant in
-// `evalResult.ts` (which writes/reads it). Kept in sync to hide the namespace
-// from the metadata-discovery API.
-const RESERVED_METADATA_NAMESPACE = '__promptfoo';
-
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = await getDb();
@@ -242,7 +238,7 @@ export class EvalQueries {
       const results = await db.all<MetadataKeyResult>(query);
       // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
       // it through the metadata-keys API — pair this with the value-side filter below.
-      return results.map((r) => r.key).filter((key) => key !== RESERVED_METADATA_NAMESPACE);
+      return results.map((r) => r.key).filter((key) => key !== PROMPTFOO_METADATA_KEY);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
@@ -267,8 +263,8 @@ export class EvalQueries {
     // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
     // it through the metadata-values API even though it lives in the same JSON column.
     if (
-      trimmedKey === RESERVED_METADATA_NAMESPACE ||
-      trimmedKey.startsWith(`${RESERVED_METADATA_NAMESPACE}.`)
+      trimmedKey === PROMPTFOO_METADATA_KEY ||
+      trimmedKey.startsWith(`${PROMPTFOO_METADATA_KEY}.`)
     ) {
       return [];
     }
