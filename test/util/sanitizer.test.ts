@@ -269,15 +269,15 @@ describe('sanitizeObject', () => {
       });
     });
 
-    it('leaves ambiguous same-length edited duplicate Azure Blob SAS URIs redacted', () => {
+    it('restores same-index duplicate Azure Blob SAS URIs after unrelated edits', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
         restoreAzureBlobSasTokens(
           {
             tests: [
-              { suite: 'edited-a', file: redactedUri },
-              { suite: 'edited-b', file: redactedUri },
+              { suite: 'a', description: 'edited', file: redactedUri },
+              { suite: 'b', file: redactedUri },
             ],
           },
           {
@@ -295,8 +295,50 @@ describe('sanitizeObject', () => {
         ),
       ).toEqual({
         tests: [
-          { suite: 'edited-a', file: redactedUri },
+          {
+            suite: 'a',
+            description: 'edited',
+            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          },
+          {
+            suite: 'b',
+            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+          },
+        ],
+      });
+    });
+
+    it('leaves ambiguous moved and edited duplicate Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'edited-b', file: redactedUri },
+              { suite: 'a', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
           { suite: 'edited-b', file: redactedUri },
+          {
+            suite: 'a',
+            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          },
         ],
       });
     });
