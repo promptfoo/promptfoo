@@ -42,6 +42,7 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -579,6 +580,8 @@ export default class Eval {
       }
     });
 
+    clearStandaloneEvalCache();
+
     return new Eval(config, {
       id: evalId,
       author,
@@ -680,6 +683,7 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    clearStandaloneEvalCache();
     this.persisted = true;
   }
 
@@ -1279,6 +1283,7 @@ export default class Eval {
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       updateSignalFile(this.id);
+      clearStandaloneEvalCache();
     }
   }
 
@@ -1296,6 +1301,7 @@ export default class Eval {
           })),
         )
         .run();
+      clearStandaloneEvalCache();
     }
     this._resultsLoaded = true;
   }
@@ -1613,6 +1619,8 @@ export default class Eval {
       }
     });
 
+    clearStandaloneEvalCache();
+
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,
       targetEvalId: newEvalId,
@@ -1637,13 +1645,13 @@ export default class Eval {
  *
  * @param datasetId - An optional dataset ID to filter by.
  * @param type - An optional eval type to filter by.
- * @param includeProviders - An optional flag to include providers in the summary.
+ * @param _includeProviders - Retained for API compatibility. Provider summaries are always included.
  * @returns A list of eval summaries.
  */
 export async function getEvalSummaries(
   datasetId?: string,
   type?: 'redteam' | 'eval',
-  includeProviders: boolean = false,
+  _includeProviders: boolean = false,
 ): Promise<EvalSummary[]> {
   const db = await getDb();
 
@@ -1669,9 +1677,13 @@ export async function getEvalSummaries(
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: evalsTable.isRedteam,
       prompts: evalsTable.prompts,
-      // Configs can contain very large embedded test definitions. Only materialize them
-      // for the report surface that requests provider labels.
-      config: includeProviders ? evalsTable.config : sql<Partial<UnifiedConfig> | null>`NULL`,
+      // Configs can contain very large embedded test definitions. Select only the
+      // provider subset so every summary surface keeps provider IDs and labels.
+      providers: sql<string | null>`CASE
+        WHEN json_valid(${evalsTable.config})
+        THEN json_extract(${evalsTable.config}, '$.providers')
+        ELSE NULL
+      END`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -1712,47 +1724,46 @@ export async function getEvalSummaries(
     const testRunCount = testCount * (result.prompts?.length ?? 0);
 
     // Construct an array of providers
-    const deserializedProviders = [];
-    const providers = result.config?.providers;
-
-    if (includeProviders) {
-      if (typeof providers === 'string') {
-        // `providers: string`
-        deserializedProviders.push({
-          id: providers,
-          label: null,
-        });
-      } else if (Array.isArray(providers)) {
-        providers.forEach((p) => {
-          if (typeof p === 'string') {
-            // `providers: string[]`
-            deserializedProviders.push({
-              id: p,
-              label: null,
-            });
-          } else if (typeof p === 'object' && p) {
-            // Check if it's a declarative provider (record format)
-            // e.g., { 'openai:gpt-4': { config: {...} } }
-            const keys = Object.keys(p);
-            if (keys.length === 1 && !('id' in p)) {
-              // This is a declarative provider
-              const providerId = keys[0];
-              // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-              const providerConfig = (p as any)[providerId];
-              deserializedProviders.push({
-                id: providerId,
-                label: providerConfig.label ?? null,
-              });
-            } else {
-              // `providers: ProviderOptions[]` with explicit id
-              deserializedProviders.push({
-                id: p.id ?? 'unknown',
-                label: p.label ?? null,
-              });
-            }
-          }
-        });
+    let providers: unknown = result.providers;
+    if (typeof providers === 'string') {
+      try {
+        providers = JSON.parse(providers);
+      } catch {
+        // SQLite returns scalar JSON strings without quotes.
       }
+    }
+
+    const deserializedProviders: EvalSummary['providers'] = [];
+    if (typeof providers === 'string') {
+      deserializedProviders.push({
+        id: providers,
+        label: null,
+      });
+    } else if (Array.isArray(providers)) {
+      providers.forEach((provider) => {
+        if (typeof provider === 'string') {
+          deserializedProviders.push({
+            id: provider,
+            label: null,
+          });
+        } else if (typeof provider === 'object' && provider) {
+          const explicitProvider = provider as { id?: string; label?: string };
+          const keys = Object.keys(provider);
+          if (keys.length === 1 && !('id' in provider)) {
+            const providerId = keys[0];
+            const providerConfig = (provider as Record<string, { label?: string }>)[providerId];
+            deserializedProviders.push({
+              id: providerId,
+              label: providerConfig?.label ?? null,
+            });
+          } else {
+            deserializedProviders.push({
+              id: explicitProvider.id ?? 'unknown',
+              label: explicitProvider.label ?? null,
+            });
+          }
+        }
+      });
     }
 
     return {

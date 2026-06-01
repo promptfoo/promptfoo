@@ -341,7 +341,7 @@ describe('evaluator', () => {
           [{ raw: 'Test prompt', label: 'Test prompt' }],
         );
 
-        const summaries = await getEvalSummaries(undefined, undefined, true);
+        const summaries = await getEvalSummaries();
         const summary = summaries.find((s) => s.evalId === evaluation.id);
 
         expect(summary).toBeDefined();

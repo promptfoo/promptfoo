@@ -1914,6 +1914,52 @@ describe('HttpProvider - File Auth', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('should revalidate shared file auth tokens before returning them to waiters', async () => {
+    const firstRefreshStarted = createDeferred<void>();
+    const firstRefreshContinue = createDeferred<void>();
+    const authFn = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        firstRefreshStarted.resolve(undefined);
+        await firstRefreshContinue.promise;
+        return {
+          token: 'near-expiry-token',
+          expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS - 1,
+        };
+      })
+      .mockResolvedValueOnce({
+        token: 'fresh-token',
+        expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS + 60_000,
+      });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    const firstRequest = provider.callApi('same prompt');
+    await firstRefreshStarted.promise;
+    const waitingRequest = provider.callApi('same prompt');
+    firstRefreshContinue.resolve(undefined);
+
+    await Promise.all([firstRequest, waitingRequest]);
+
+    expect(authFn).toHaveBeenCalledTimes(2);
+    const authHeaders = vi
+      .mocked(fetchWithCache)
+      .mock.calls.map((call) => (call[1]?.headers as Record<string, string>).authorization);
+    expect(authHeaders).toEqual(['Bearer near-expiry-token', 'Bearer fresh-token']);
+  });
+
   it('should make file auth values available to transformRequest before the request is rendered', async () => {
     const authFn = vi.fn().mockResolvedValue({
       token: 'transform-token',

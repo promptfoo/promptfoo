@@ -174,7 +174,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/browser.test.ts',
   'providers/cloudflare-ai.test.ts',
   'providers/cloudflare-gateway.test.ts',
-  'providers/functionCallbackUtils.test.ts',
   'providers/github/defaults.test.ts',
   'providers/google/ai.studio.test.ts',
   'providers/google/auth.test.ts',
