@@ -238,4 +238,21 @@ describe('readLayerConfig DAG policy validation', () => {
     });
     expect(() => readLayerConfig(repoRoot)).toThrow('both allows and forbids dependency "facade"');
   });
+
+  it('rejects a non-array forbiddenDependencies value', () => {
+    writeConfig({
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        {
+          name: 'core',
+          roots: ['src/core'],
+          allowedDependencies: [],
+          forbiddenDependencies: 'facade',
+        },
+      ],
+    });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'forbiddenDependencies must be an array of layer names',
+    );
+  });
 });
