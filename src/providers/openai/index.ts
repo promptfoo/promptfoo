@@ -58,8 +58,14 @@ export class OpenAiGenericProvider implements ApiProvider {
       // Leave malformed custom URLs to the request path to validate.
     }
 
+    const hasOriginatorOverride = Object.keys(customHeaders ?? {}).some(
+      (key) => key.toLowerCase() === OPENAI_ORIGINATOR_HEADER.toLowerCase(),
+    );
+
     return {
-      ...(sendsToOpenAiApi ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
+      ...(!hasOriginatorOverride && sendsToOpenAiApi
+        ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR }
+        : {}),
       ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
       ...customHeaders,
     };
