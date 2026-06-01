@@ -936,6 +936,7 @@ describe('EvalResult', () => {
         success: true,
         score: 1,
         response: { output: 'hello' },
+        gradingResult: null,
         provider: mockProvider,
         failureReason: ResultFailureReason.NONE,
         namedScores: {},
