@@ -33,7 +33,12 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateResult, EvaluateTableOutput } from '../types';
+import type {
+  EvaluateResult,
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  EvaluateTableOutput,
+} from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
@@ -342,12 +347,28 @@ export function createOutputMetadata(evalRecord: Eval) {
   };
 }
 
+// Redact credential-bearing headers from a summary's result rows before it is serialized to a
+// file artifact (json/yaml/txt/html/xml). For non-persisted evals the in-memory results are not
+// header-redacted (redaction happens at the DB / JSONL boundary), so without this an export would
+// leak Authorization / Set-Cookie / api-key headers from response/grading/test metadata. This is
+// the summary-level equivalent of the per-row JSONL artifact boundary.
+function redactSummaryResultsForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
+  summary: T,
+): T {
+  if (Array.isArray(summary.results)) {
+    summary.results = (summary.results as object[]).map((result) =>
+      sanitizeResultForJsonlArtifact(result),
+    ) as T['results'];
+  }
+  return summary;
+}
+
 export async function createOutputData(
   evalRecord: Eval,
   shareableUrl: string | null,
   options: OutputOptions = {},
 ): Promise<OutputFile> {
-  const summary = await evalRecord.toEvaluateSummary();
+  const summary = redactSummaryResultsForArtifact(await evalRecord.toEvaluateSummary());
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
   let traces;
   try {
@@ -511,7 +532,7 @@ export async function writeOutput(
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = redactSummaryResultsForArtifact(await evalRecord.toEvaluateSummary());
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
@@ -578,7 +599,7 @@ export async function writeOutput(
       }
     });
   } else if (outputExtension === 'xml') {
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = redactSummaryResultsForArtifact(await evalRecord.toEvaluateSummary());
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors

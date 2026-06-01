@@ -265,6 +265,76 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
+  ])('redacts credential headers and secret vars from non-persisted $extension output', async ({
+    extension,
+    parse,
+  }) => {
+    // A non-persisted eval (new Eval) holds raw in-memory rows; header redaction normally
+    // happens at the DB / JSONL boundary, so the file export must redact at its own boundary.
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: {
+        output: 'Test output',
+        metadata: {
+          headers: {
+            'x-request-id': 'legacy_should_not_persist',
+            'x-safe-debug': 'keep-legacy',
+          },
+          http: {
+            headers: {
+              'set-cookie': 'session=secret',
+              'x-request-id': 'req_should_not_persist',
+            },
+            requestHeaders: {
+              authorization: 'Bearer sk-should-not-persist',
+              'api-key': 'azure-api-key-should-not-persist',
+              'x-safe-debug': 'keep-me',
+            },
+          },
+        },
+      },
+      vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' } },
+      promptId: 'prompt',
+    });
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = parse(written);
+    const result = parsed.results.results[0];
+    expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+    expect(result.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+    expect(result.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+    expect(result.vars.apiKey).toBe('[REDACTED]');
+    expect(result.vars.safe).toBe('keep-me');
+    expect(written).not.toContain('session=secret');
+    expect(written).not.toContain('sk-should-not-persist');
+    expect(written).not.toContain('azure-api-key-should-not-persist');
+    expect(written).not.toContain('sk-var-should-not-persist');
+  });
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
   ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
     extension,
     parse,
