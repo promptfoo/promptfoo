@@ -266,6 +266,24 @@ export class OTLPReceiver {
     return redactAttributePatterns.some((pattern) => lowered.includes(pattern));
   }
 
+  private redactAttributeValue(value: unknown, redactAttributePatterns: string[]): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.redactAttributeValue(item, redactAttributePatterns));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [
+        key,
+        this.shouldRedactAttribute(key, redactAttributePatterns)
+          ? '[REDACTED]'
+          : this.redactAttributeValue(nestedValue, redactAttributePatterns),
+      ]),
+    );
+  }
+
   redactAttributes(
     attributes: Record<string, unknown> | undefined,
     redactAttributePatterns = this.redactAttributePatterns,
@@ -277,7 +295,7 @@ export class OTLPReceiver {
     for (const [key, value] of Object.entries(attributes)) {
       redacted[key] = this.shouldRedactAttribute(key, redactAttributePatterns)
         ? '[REDACTED]'
-        : value;
+        : this.redactAttributeValue(value, redactAttributePatterns);
     }
     return redacted;
   }

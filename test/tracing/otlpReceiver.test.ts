@@ -617,6 +617,17 @@ describe('OTLPReceiver', () => {
                         },
                         { key: 'http.password', value: { stringValue: 'pw123' } },
                         { key: 'AUTHORIZATION', value: { stringValue: 'Bearer xyz' } },
+                        {
+                          key: 'request.context',
+                          value: {
+                            kvlistValue: {
+                              values: [
+                                { key: 'user.password', value: { stringValue: 'nested-pw' } },
+                                { key: 'safe', value: { stringValue: 'visible' } },
+                              ],
+                            },
+                          },
+                        },
                         { key: 'tool.result', value: { stringValue: 'ok' } },
                       ],
                     },
@@ -635,6 +646,10 @@ describe('OTLPReceiver', () => {
             attributes: expect.objectContaining({
               AUTHORIZATION: '[REDACTED]',
               'http.password': '[REDACTED]',
+              'request.context': {
+                'user.password': '[REDACTED]',
+                safe: 'visible',
+              },
               'tool.arguments': '[REDACTED]',
               'tool.result': 'ok',
             }),
