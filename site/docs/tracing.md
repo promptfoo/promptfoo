@@ -118,6 +118,7 @@ tracing:
   otlp:
     http:
       enabled: true # Required to start the built-in OTLP receiver
+      host: '127.0.0.1' # Keep a local receiver bound to loopback
 ```
 
 ### 2. Instrument Your Provider
@@ -137,7 +138,7 @@ const provider = new NodeTracerProvider({
   spanProcessors: [
     new SimpleSpanProcessor(
       new OTLPTraceExporter({
-        url: 'http://localhost:4318/v1/traces',
+        url: 'http://127.0.0.1:4318/v1/traces',
       }),
     ),
   ],
@@ -236,6 +237,54 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 Trace span assertions match a subset of spans by pattern. Empty matches pass by default for budget-style checks such as duration or error thresholds; set `requirePresence: true` when the matching work must be present. For inverse `not-trace-*` assertions, an empty default match means the positive budget was satisfied and therefore fails the inverse assertion instead of proving forbidden traced work occurred. When `requirePresence` is true, missing matching work fails both positive and inverse assertions.
 
+### Turn marker spans {#per-llm-turn-spans}
+
+Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
+
+| Provider                         | Turn span name pattern                     | What a counted span represents                                                                                                          |
+| -------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round (includes subagent rounds — see the caveat below)                    |
+| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round (cache hits emit no turn span — see the caveat below)     |
+| `openai:agents` (TypeScript)     | `response *` (preferred) or `generation *` | `openai-agents-js` emits `response <id>` per LLM round; `generation *` is also produced when the SDK includes a `generation`-typed span |
+| `openai-agents` Python (example) | `turn *` (preferred) or `response *`       | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                       |
+| Google ADK (via `google.adk`)    | `call_llm`                                 | Emitted by ADK's built-in OpenTelemetry instrumentation                                                                                 |
+| `openai:codex-sdk`               | `gen_ai.turn *`                            | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                              |
+| `openai:codex-app-server`        | `gen_ai.turn *`                            | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                          |
+
+For providers whose rows above identify an internal LLM round, counting these spans tells you how many model round-trips an agent took. Note that a tool-using task normally spans **at least two** rounds — one generation emits the tool calls and a later generation folds the results into the answer — so a low total turn count alone does **not** prove the tools were batched.
+
+To assert that tools were **batched** into one generation (rather than issued across sequential rounds), check that the tool calls share a single `gen_ai.turn.index`. Every tool span for a `gen_ai.turn` provider carries that 1-based tag, so pair [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) with a JavaScript assertion:
+
+```yaml
+assert:
+  - type: trajectory:tool-sequence
+    value:
+      mode: exact
+      steps: [search_orders, search_orders]
+  - type: javascript
+    value: |
+      // Both tool calls must have been emitted by the same LLM generation.
+      const turns = context.trace.spans
+        .filter((s) => s.attributes['tool.name'] && s.attributes['gen_ai.turn.index'] != null)
+        .map((s) => s.attributes['gen_ai.turn.index']);
+      return turns.length >= 2 && new Set(turns).size === 1;
+```
+
+This is more robust than counting total `gen_ai.turn` spans: it stays correct regardless of how many follow-up answer rounds the agent takes, and (because subagent tool spans get the subagent turn's index) it does not conflate main-agent batching with subagent activity.
+
+Codex SDK and app-server turn markers are still useful for correlating item spans and token usage to a provider turn, but they cannot distinguish batched from sequential tool calls within that turn because those APIs do not expose internal model-generation boundaries.
+
+:::note Caveats
+
+- **Subagents emit their own turns.** For `anthropic:claude-agent-sdk`, every `assistant` message — including subagent rounds — emits a `gen_ai.turn` span and tags its tool spans with that subagent turn's index. Subagent turns carry `gen_ai.turn.is_subagent: true` (plus `gen_ai.turn.parent_tool_use_id` and `gen_ai.turn.subagent_type`); filter on those attributes when you need to reason about main-agent rounds only.
+- **Cache hits emit no turn span.** A cached response (e.g. `azure:foundry-agent` with caching enabled) still emits the parent `chat <model>` span, but performs no LLM round and therefore emits zero `gen_ai.turn` spans. Run with `--no-cache`, or scope `min`/`max` assertions to fresh responses, when counting turns.
+
+:::
+
+For providers emitting `gen_ai.turn` spans, each tool span is additionally tagged with `gen_ai.turn.index` (1-based), so JavaScript assertions can group tool calls by the generation that emitted them.
+
+External providers that wrap their own agent loops can adopt the same convention: emit one OpenTelemetry span per LLM round, with name starting `gen_ai.turn ` and the attribute `gen_ai.turn.index`.
+
 ## Configuration Reference
 
 ### Basic Configuration
@@ -243,13 +292,28 @@ Trace span assertions match a subset of spans by pattern. Empty matches pass by 
 ```yaml
 tracing:
   enabled: true # Enable/disable tracing
+  # Fail the evaluation instead of continuing without local HTTP ingestion if startup fails
+  failOnReceiverStartFailure: true
+  # Treat additional tool names as command trajectory steps
+  commandToolNames: ['bash']
   otlp:
     http:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
       # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
+      # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
+  storage:
+    # Remove trace and span records older than this many days
+    retentionDays: 30
 ```
+
+`redactAttributes` is matched case-insensitively against attribute keys. For traces
+created by an evaluation, Promptfoo stores the evaluation's redaction and
+`commandToolNames` policy with that trace so overlapping evaluations do not change
+one another's results. Traces created only when spans arrive at the receiver use the
+active receiver's startup defaults. Similarly, `acceptFormats` configures the active
+HTTP receiver endpoint and is not changed by an overlapping evaluation.
 
 ### Supported Formats
 
@@ -271,7 +335,7 @@ You can also configure tracing via environment variables:
 export PROMPTFOO_TRACING_ENABLED=true
 
 # Configure OTLP endpoint (for providers)
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
 
 # Set service name
 export OTEL_SERVICE_NAME="my-rag-application"
@@ -318,7 +382,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 
 # Setup - uses protobuf format by default
 provider = TracerProvider()
-exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+exporter = OTLPSpanExporter(endpoint="http://127.0.0.1:4318/v1/traces")
 provider.add_span_processor(SimpleSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
@@ -508,7 +572,7 @@ const extractedContext = trace.propagation.extract(context.active(), request.hea
 ### Traces Not Appearing
 
 1. **Check tracing is enabled**: Verify `tracing.enabled: true` in config
-2. **Verify OTLP endpoint**: Ensure providers are sending to `http://localhost:4318/v1/traces`
+2. **Verify OTLP endpoint**: Ensure providers are sending to `http://127.0.0.1:4318/v1/traces`
 3. **Check trace context**: Log the `traceparent` value to ensure it's being passed
 4. **Review provider logs**: Look for connection errors or failed exports
 

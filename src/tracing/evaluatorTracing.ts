@@ -9,6 +9,9 @@ import type { InternalEvaluateOptions } from '../types/internal';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
+let otlpReceiverStartPromise: Promise<void> | null = null;
+let otlpReceiverStopPromise: Promise<void> | null = null;
+let otlpReceiverUsers = 0;
 const DEFAULT_OTLP_ACCEPT_FORMATS = ['json', 'protobuf'] as const;
 
 function normalizeOtlpAcceptFormats(
@@ -28,6 +31,9 @@ function normalizeOtlpAcceptFormats(
  */
 export function resetTracingState(): void {
   otlpReceiverStarted = false;
+  otlpReceiverStartPromise = null;
+  otlpReceiverStopPromise = null;
+  otlpReceiverUsers = 0;
   logger.debug('[EvaluatorTracing] Tracing state reset');
 }
 
@@ -66,10 +72,20 @@ export function isOtlpReceiverStarted(): boolean {
   return otlpReceiverStarted;
 }
 
+function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
+  return (
+    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+    testSuite.tracing?.enabled === true ||
+    (typeof testSuite.defaultTest === 'object' &&
+      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true
+  );
+}
+
 /**
  * Start the OTLP receiver if tracing is enabled and it hasn't been started yet
  */
-export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<void> {
+export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<boolean> {
   logger.debug(`[EvaluatorTracing] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
   logger.debug(`[EvaluatorTracing] testSuite keys: ${Object.keys(testSuite)}`);
   logger.debug(
@@ -78,23 +94,48 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
 
   const httpTracing = testSuite.tracing?.otlp?.http;
   const commandToolNames = testSuite.tracing?.commandToolNames;
-  if (testSuite.tracing?.enabled) {
+  const tracingEnabled = isTracingEnabledForSuite(testSuite);
+  if (tracingEnabled) {
     await pruneTraceStoreIfNeeded(testSuite);
   }
 
-  if (testSuite.tracing?.enabled && httpTracing?.enabled) {
+  if (tracingEnabled && httpTracing?.enabled) {
     const acceptFormats = normalizeOtlpAcceptFormats(httpTracing.acceptFormats);
     const redactAttributes = httpTracing.redactAttributes;
 
+    if (otlpReceiverStopPromise !== null) {
+      await otlpReceiverStopPromise;
+    }
+
     if (otlpReceiverStarted) {
-      logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
-      return;
+      otlpReceiverUsers += 1;
+      logger.debug(
+        `[EvaluatorTracing] OTLP receiver already started; preserving active receiver defaults for ${otlpReceiverUsers} active evaluations`,
+      );
+      return true;
+    }
+
+    while (otlpReceiverStartPromise !== null) {
+      const pendingStart = otlpReceiverStartPromise;
+      try {
+        await pendingStart;
+      } catch {
+        // The initiating evaluation applies its failure policy. A waiter may retry below.
+      }
+
+      if (otlpReceiverStarted) {
+        otlpReceiverUsers += 1;
+        logger.debug(
+          `[EvaluatorTracing] OTLP receiver already started; preserving active receiver defaults for ${otlpReceiverUsers} active evaluations`,
+        );
+        return true;
+      }
     }
 
     telemetry.record('feature_used', {
       feature: 'tracing',
     });
-    try {
+    const startPromise = (async () => {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
       const port = httpTracing.port || 4318;
@@ -107,9 +148,15 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       );
       await startOTLPReceiver(port, host, acceptFormats, { commandToolNames, redactAttributes });
       otlpReceiverStarted = true;
+      otlpReceiverUsers += 1;
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
       );
+    })();
+    otlpReceiverStartPromise = startPromise;
+
+    try {
+      await startPromise;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
@@ -122,7 +169,13 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
         );
       }
       logger.error(`[EvaluatorTracing] Failed to start OTLP receiver: ${message}`);
+      return false;
+    } finally {
+      if (otlpReceiverStartPromise === startPromise) {
+        otlpReceiverStartPromise = null;
+      }
     }
+    return true;
   } else {
     if (otlpReceiverStarted) {
       logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
@@ -134,6 +187,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       );
     }
   }
+  return false;
 }
 
 async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
@@ -160,16 +214,40 @@ async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
 /**
  * Stop the OTLP receiver if it was started
  */
-export async function stopOtlpReceiverIfNeeded(): Promise<void> {
-  if (otlpReceiverStarted) {
-    try {
+export async function stopOtlpReceiverIfNeeded(receiverAcquired: boolean = true): Promise<void> {
+  if (!receiverAcquired) {
+    return;
+  }
+
+  if (otlpReceiverUsers > 0) {
+    otlpReceiverUsers -= 1;
+  }
+  if (otlpReceiverUsers > 0) {
+    logger.debug(
+      `[EvaluatorTracing] Preserving OTLP receiver for ${otlpReceiverUsers} active evaluations`,
+    );
+    return;
+  }
+
+  if (otlpReceiverStarted && !otlpReceiverStopPromise) {
+    otlpReceiverStarted = false;
+    const stopPromise = (async () => {
       logger.debug('[EvaluatorTracing] Stopping OTLP receiver');
       const { stopOTLPReceiver } = await import('./otlpReceiver');
       await stopOTLPReceiver();
-      otlpReceiverStarted = false;
       logger.info('[EvaluatorTracing] OTLP receiver stopped successfully');
+    })();
+    otlpReceiverStopPromise = stopPromise;
+
+    try {
+      await stopPromise;
     } catch (error) {
+      otlpReceiverStarted = true;
       logger.error(`[EvaluatorTracing] Failed to stop OTLP receiver: ${error}`);
+    } finally {
+      if (otlpReceiverStopPromise === stopPromise) {
+        otlpReceiverStopPromise = null;
+      }
     }
   }
 }

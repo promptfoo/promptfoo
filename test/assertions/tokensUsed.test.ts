@@ -265,6 +265,22 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 50');
   });
 
+  it('uses provider token components when a positive response total is incomplete', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 150, source: 'response' } },
+      renderedValue: { max: 150, source: 'response' },
+      providerResponse: {
+        output: 'o',
+        tokenUsage: { total: 100, prompt: 100, completion: 100 },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 200');
+  });
+
   it('falls back to providerResponse.tokenUsage when trace data has no spans', () => {
     const params: AssertionParams = {
       ...baseParams,
@@ -434,12 +450,20 @@ describe('handleTokensUsed', () => {
       assertion: { type: 'tokens-used', value: { max: 1000 } },
       renderedValue: { max: 1000, pattern: 123 } as unknown as { max: number },
     };
+    const blankPatternParams: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1000 } },
+      renderedValue: { max: 1000, pattern: '  ' },
+    };
 
     expect(() => handleTokensUsed(invalidSourceParams)).toThrow(
       'tokens-used source must be "trace", "response", or "auto"',
     );
     expect(() => handleTokensUsed(invalidPatternParams)).toThrow(
-      'tokens-used pattern must be a string',
+      'tokens-used pattern must be a non-empty string',
+    );
+    expect(() => handleTokensUsed(blankPatternParams)).toThrow(
+      'tokens-used pattern must be a non-empty string',
     );
   });
 

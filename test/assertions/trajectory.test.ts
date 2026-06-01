@@ -164,6 +164,60 @@ describe('trajectory utilities', () => {
     });
   });
 
+  it('does not classify a chat span carrying gen_ai.tool.definitions as a tool', () => {
+    // pydantic-ai (and other GenAI-convention tracers) put the list of *available* tools on
+    // each chat span as a JSON array under gen_ai.tool.definitions; that must not be read as
+    // a tool call. Real tool calls use gen_ai.tool.name. Regression for #9523.
+    const toolDefinitions = JSON.stringify([
+      { type: 'function', name: 'orders', description: 'List orders' },
+      { type: 'function', name: 'order_rows', description: 'List order rows' },
+    ]);
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'chat-1',
+          name: 'chat gpt-4o-mini',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'gen_ai.tool.definitions': toolDefinitions },
+        },
+        {
+          spanId: 'exec-1',
+          name: 'execute_tool',
+          startTime: 1200,
+          endTime: 1300,
+          attributes: { 'gen_ai.tool.name': 'order_rows' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'span', name: 'chat gpt-4o-mini' },
+      { type: 'tool', name: 'order_rows' },
+    ]);
+  });
+
+  it('still reads a plain string tool name from a generic tool attribute', () => {
+    // The structured-value guard must not break scalar tool-name fallbacks.
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'custom-tool',
+          name: 'invoke',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'app.tool': 'lookup_customer' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'tool', name: 'lookup_customer' },
+    ]);
+  });
+
   it('only treats a generic query attribute as search when the span looks search-like', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,
@@ -594,6 +648,32 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('supports max-only count matching with patterns', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: {
+            pattern: 'delete*',
+            max: 0,
+          },
+        },
+        renderedValue: {
+          pattern: 'delete*',
+          max: 0,
+        },
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Matched tool "delete*" 0 time(s) (expected 0-0)',
+        assertion: params.assertion,
+      });
+    });
+
     it('supports inverse assertions', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -740,6 +820,43 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryToolUsed(params)).toThrow(
         'trajectory:tool-used assertion object must include a name or pattern property',
+      );
+    });
+
+    it.each([
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      -1,
+      1.5,
+    ])('rejects invalid tool count bounds (%s)', (min) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: { pattern: 'search*', min },
+        },
+        renderedValue: { pattern: 'search*', min },
+      };
+
+      expect(() => handleTrajectoryToolUsed(params)).toThrow(
+        'trajectory:tool-used assertion min must be a finite non-negative integer',
+      );
+    });
+
+    it('rejects tool max bounds below min bounds', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: { pattern: 'search*', min: 2, max: 1 },
+        },
+        renderedValue: { pattern: 'search*', min: 2, max: 1 },
+      };
+
+      expect(() => handleTrajectoryToolUsed(params)).toThrow(
+        'trajectory:tool-used assertion max must be greater than or equal to min',
       );
     });
   });
@@ -1061,6 +1178,46 @@ describe('trajectory assertions', () => {
       expect(result.reason).toContain('fetch_document');
     });
 
+    it('renders templates in object-form tool sets', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertionValueContext: {
+          ...baseSetParams.assertionValueContext,
+          vars: { expectedTool: 'search_corpus' },
+        },
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: { tools: ['{{ expectedTool }}', 'rerank', 'fetch_document'], mode: 'exact' },
+        },
+      };
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('search_corpus');
+    });
+
+    it('renders templates when the provided object-form rendered value is still unresolved', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertionValueContext: {
+          ...baseSetParams.assertionValueContext,
+          vars: { expected_tool: 'search_corpus' },
+        },
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: {
+            tools: ['rerank', '{{ expected_tool }}', 'fetch_document'],
+            mode: 'exact',
+          },
+        },
+        renderedValue: {
+          tools: ['rerank', '{{ expected_tool }}', 'fetch_document'],
+          mode: 'exact',
+        },
+      };
+
+      expect(handleTrajectoryToolSet(params).pass).toBe(true);
+    });
+
     it('inverts the result for not-trajectory:tool-set', () => {
       const params: AssertionParams = {
         ...baseSetParams,
@@ -1129,9 +1286,39 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "search_orders" matched expected arguments (partial) on tool:search_orders. Args: {"order_id":"123","include_history":false}',
+          'Tool "search_orders" matched expected arguments (partial) on tool:search_orders. Args: [redacted]',
         assertion: params.assertion,
       });
+    });
+
+    it('renders nested expected argument templates before matching', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          vars: { order_id: '123' },
+        },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            args: {
+              order_id: '{{ order_id }}',
+            },
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: {
+            order_id: '{{ order_id }}',
+          },
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('Args: [redacted]');
     });
 
     it('supports partial array matching for argument subsets', () => {
@@ -1160,7 +1347,7 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
+          'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1195,7 +1382,7 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
+          'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1265,7 +1452,7 @@ describe('trajectory assertions', () => {
         pass: false,
         score: 0,
         reason:
-          'No call to tool "search_orders" matched expected arguments (partial): {"order_id":"999"}. Observed args: {"order_id":"123","include_history":false}',
+          'No call to tool "search_orders" matched expected arguments (partial): [redacted]. Observed args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1376,7 +1563,7 @@ describe('trajectory assertions', () => {
         pass: false,
         score: 0,
         reason:
-          'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: {"order_id":"123","include_history":false}',
+          'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: [redacted]',
         assertion: params.assertion,
       });
     });
@@ -1413,7 +1600,7 @@ describe('trajectory assertions', () => {
       });
     });
 
-    it('redacts args in failure reasons when redactArgsInFailures is true', () => {
+    it('redacts args in assertion reasons by default', () => {
       const params: AssertionParams = {
         ...defaultParams,
         assertionValueContext: {
@@ -1444,14 +1631,12 @@ describe('trajectory assertions', () => {
             name: 'lookup_user',
             args: { tenant: 'private' },
             mode: 'partial',
-            redactArgsInFailures: true,
           },
         },
         renderedValue: {
           name: 'lookup_user',
           args: { tenant: 'private' },
           mode: 'partial',
-          redactArgsInFailures: true,
         },
       };
 
@@ -1462,6 +1647,30 @@ describe('trajectory assertions', () => {
       expect(result.reason).not.toContain('private');
       expect(result.reason).not.toContain('public');
       expect(result.reason).toContain('[redacted]');
+    });
+
+    it('shows non-sensitive args in reasons only when redaction is explicitly disabled', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            redactArgsInFailures: false,
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: { order_id: '123' },
+          redactArgsInFailures: false,
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('{"order_id":"123","include_history":false}');
     });
 
     it('rejects values without args', () => {
@@ -1550,6 +1759,1058 @@ describe('trajectory assertions', () => {
       expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
         'trajectory:tool-args-match assertion object must include a name or pattern property',
       );
+    });
+
+    describe('defaults', () => {
+      it('passes in exact mode when an unexpected actual key matches a declared default', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+              redactArgsInFailures: false,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+            redactArgsInFailures: false,
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result).toEqual({
+          pass: true,
+          score: 1,
+          reason:
+            'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: {"order_id":"123","include_history":false}. Ignored default argument(s): include_history',
+          assertion: params.assertion,
+        });
+      });
+
+      it('fails in exact mode when an actual key value differs from the declared default', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: true },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: true },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain(
+          'No call to tool "search_orders" matched expected arguments',
+        );
+      });
+
+      it('passes in exact mode when actual contains multiple keys all matching declared defaults', () => {
+        const allDefaultsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-all-defaults',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"page_size":5}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: allDefaultsTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('passes in exact mode when actual omits a key listed in defaults', () => {
+        const traceWithoutDefault: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-no-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q"}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: traceWithoutDefault,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('fails in exact mode when actual contains a hallucinated key not in args or defaults', () => {
+        const hallucinatedTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-hallucinated',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"delete_database":true}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: hallucinatedTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+              redactArgsInFailures: false,
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+            redactArgsInFailures: false,
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('delete_database');
+      });
+
+      it('treats empty defaults the same as no defaults', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: {},
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: {},
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('supports defaults with structured values via deep equality', () => {
+        const structuredTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-structured',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","sort":{"field":"created","order":"desc"}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: structuredTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { sort: { field: 'created', order: 'desc' } },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { sort: { field: 'created', order: 'desc' } },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('still passes in partial mode when defaults are set', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('rejects malformed defaults (array)', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: ['include_history'] as unknown as Record<string, unknown>,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: ['include_history'] as unknown as Record<string, unknown>,
+          },
+        };
+
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+        );
+      });
+
+      it('matches the documented outcome table row "status:Q, page:1" using the example config', () => {
+        const docsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-docs-row-2',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('matches the documented outcome table row "status:Q, page:2" using the example config', () => {
+        const docsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-docs-row-4',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":2}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('strips a null default value when actual emits null for that key', () => {
+        const nullTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-null-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","cursor":null}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: nullTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { cursor: null },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { cursor: null },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('strips a key listed in defaults even when args also declares it (defaults applied first)', () => {
+        const collisionTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-collision',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: collisionTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q', page: 2 },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q', page: 2 },
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('does not recurse into nested objects when stripping defaults (top-level only)', () => {
+        const nestedTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-nested-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","pagination":{"page":1}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: nestedTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('inverts correctly when defaults allow an otherwise-forbidden match', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          inverse: true,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'not-trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('Forbidden argument match');
+      });
+
+      it('surfaces the stripped keys in the pass reason when multiple defaults are tolerated', () => {
+        const allDefaultsTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-reason-defaults',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"page_size":5}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: {
+            ...defaultParams.assertionValueContext,
+            trace: allDefaultsTrace,
+          },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+              redactArgsInFailures: false,
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+            redactArgsInFailures: false,
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored default argument(s): page, page_size');
+      });
+
+      it('does not append the ignored-defaults note when nothing was stripped', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'partial',
+              args: { order_id: '123' },
+              defaults: { include_history: true },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'partial',
+            args: { order_id: '123' },
+            defaults: { include_history: true },
+          },
+        };
+
+        // The observed call has include_history:false, which does not equal the
+        // declared default (true), so nothing is stripped and no note is added.
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+        expect(result.reason).not.toContain('Ignored default');
+      });
+
+      it('does not let a hallucinated __proto__ argument escape exact matching when defaults are set', () => {
+        const protoTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-proto-default',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","__proto__":{"polluted":true}}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: protoTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
+        };
+
+        // A non-default __proto__ key must be preserved through stripping so exact
+        // mode still rejects it as a hallucinated extra (matching no-defaults behavior).
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+        // The prototype must not have been mutated by the stripping rebuild.
+        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      });
+
+      it('fails in partial mode when a key in both args and defaults is stripped to nothing', () => {
+        const collisionTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-partial-collision',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: collisionTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              // partial (default) mode; page is listed in BOTH args and defaults
+              args: { status: 'Q', page: 1 },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            args: { status: 'Q', page: 1 },
+            defaults: { page: 1 },
+          },
+        };
+
+        // Documented footgun: stripping removes page before the subset check, so the
+        // explicitly-asserted page:1 can no longer be satisfied.
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(false);
+      });
+
+      it('applies defaults when the expected payload uses the arguments alias', () => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              arguments: { order_id: '123' },
+              defaults: { include_history: false },
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            arguments: { order_id: '123' },
+            defaults: { include_history: false },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats defaults as a no-op when the actual payload is a top-level array', () => {
+        const arrayTrace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'span-array-args',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '[1,2,3]',
+              },
+            },
+          ],
+        };
+        const params: AssertionParams = {
+          ...defaultParams,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace: arrayTrace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: [1, 2, 3],
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: [1, 2, 3],
+            defaults: { page: 1 },
+          },
+        };
+
+        const result = handleTrajectoryToolArgsMatch(params);
+        expect(result.pass).toBe(true);
+      });
+
+      it.each([
+        ['null', null],
+        ['string', 'include_history'],
+        ['number', 1],
+      ])('rejects malformed defaults (%s)', (_label, malformed) => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-args-match',
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: malformed as unknown as Record<string, unknown>,
+            },
+          },
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: malformed as unknown as Record<string, unknown>,
+          },
+        };
+
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+        );
+      });
+    });
+
+    describe('ignore', () => {
+      const makeIgnoreParams = (
+        toolArgs: Record<string, unknown> | unknown[] | string,
+        value: Record<string, unknown>,
+        inverse = false,
+      ): AssertionParams => {
+        const argsJson = typeof toolArgs === 'string' ? toolArgs : JSON.stringify(toolArgs);
+        const trace: TraceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'ignore-tool-call',
+              name: 'tool.call',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: { 'tool.name': 'search_orders', 'tool.arguments': argsJson },
+            },
+          ],
+        };
+        return {
+          ...defaultParams,
+          inverse,
+          assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+          baseType: 'trajectory:tool-args-match',
+          assertion: { type: 'trajectory:tool-args-match', value },
+          renderedValue: value,
+        } as AssertionParams;
+      };
+
+      it('drops an ignored key regardless of value in exact mode', () => {
+        const value = {
+          name: 'search_orders',
+          mode: 'exact',
+          args: { status: 'Q' },
+          ignore: ['request_id'],
+        };
+
+        expect(
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value))
+            .pass,
+        ).toBe(true);
+        expect(
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value))
+            .pass,
+        ).toBe(true);
+      });
+
+      it('accepts a bare string ignore value', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: 'request_id' },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('still fails on a non-ignored hallucinated argument', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc', delete_database: true },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request_id'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('strips the ignored key from the expected payload too', () => {
+        // request_id is declared in args but ignored, so the agent omitting it still passes.
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q', request_id: 'expected' },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('composes with defaults and reports both in the pass reason', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', page: 1, request_id: 'abc' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+              ignore: ['request_id'],
+              redactArgsInFailures: false,
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored argument(s): request_id');
+        expect(result.reason).toContain('Ignored default argument(s): page');
+      });
+
+      it('redacts ignored and default argument diagnostics when requested', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', page: 1, request_id: 'sensitive-request-id' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+              ignore: ['request_id'],
+              redactArgsInFailures: true,
+            },
+          ),
+        );
+
+        expect(result.pass).toBe(true);
+        expect(result.reason).toBe(
+          'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: [redacted]',
+        );
+        expect(result.reason).not.toContain('request_id');
+        expect(result.reason).not.toContain('page');
+        expect(result.reason).not.toContain('sensitive-request-id');
+      });
+
+      it('works in partial mode', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            {
+              name: 'search_orders',
+              mode: 'partial',
+              args: { status: 'Q' },
+              ignore: ['request_id'],
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('inverts correctly', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'abc' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request_id'] },
+            true,
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('does not let a hallucinated __proto__ argument escape exact matching', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams('{"status":"Q","__proto__":{"polluted":true},"request_id":"abc"}', {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            ignore: ['request_id'],
+          }),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('treats ignore as a no-op when the actual payload is a top-level array', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams('["a","b"]', {
+            name: 'search_orders',
+            mode: 'exact',
+            args: ['a', 'b'],
+            ignore: ['request_id'],
+          }),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats entries containing glob characters as key patterns', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1', order_id: 'b2' },
+            {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              ignore: ['*_id'],
+              redactArgsInFailures: false,
+            },
+          ),
+        );
+        expect(result.pass).toBe(true);
+        expect(result.reason).toContain('Ignored argument(s): request_id, order_id');
+      });
+
+      it('still fails when a glob pattern does not cover a hallucinated key', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1', delete_database: true },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['*_id'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it('supports single-character ? glob patterns', () => {
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', v1: 'x' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['v?'] },
+          ),
+        );
+        expect(result.pass).toBe(true);
+      });
+
+      it('treats a plain entry as an exact match, not a substring or pattern', () => {
+        // "request" must not strip "request_id"; only an exact key or glob does.
+        const result = handleTrajectoryToolArgsMatch(
+          makeIgnoreParams(
+            { status: 'Q', request_id: 'a1' },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['request'] },
+          ),
+        );
+        expect(result.pass).toBe(false);
+      });
+
+      it.each([
+        ['number', [5]],
+        ['empty string', ['']],
+        ['null', [null]],
+        ['object', [{ request_id: true }]],
+      ])('rejects malformed ignore entries (%s)', (_label, malformed) => {
+        const params = makeIgnoreParams(
+          { status: 'Q' },
+          {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            ignore: malformed as unknown as string[],
+          },
+        );
+        expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+          'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings',
+        );
+      });
     });
   });
 
@@ -1697,6 +2958,43 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryStepCount(params)).toThrow(
         'trajectory:step-count assertion must have an object value',
+      );
+    });
+
+    it.each([
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      -1,
+      1.5,
+    ])('rejects invalid step count bounds (%s)', (min) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:step-count',
+        assertion: {
+          type: 'trajectory:step-count',
+          value: { type: 'tool', min },
+        },
+        renderedValue: { type: 'tool', min },
+      };
+
+      expect(() => handleTrajectoryStepCount(params)).toThrow(
+        'trajectory:step-count assertion min must be a finite non-negative integer',
+      );
+    });
+
+    it('rejects step max bounds below min bounds', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:step-count',
+        assertion: {
+          type: 'trajectory:step-count',
+          value: { type: 'tool', min: 2, max: 1 },
+        },
+        renderedValue: { type: 'tool', min: 2, max: 1 },
+      };
+
+      expect(() => handleTrajectoryStepCount(params)).toThrow(
+        'trajectory:step-count assertion max must be greater than or equal to min',
       );
     });
   });

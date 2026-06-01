@@ -127,9 +127,7 @@ Open the eval row, then switch between **Evaluation** and **Traces** in the deta
 
 ![Evaluation tab showing raw trace assertions: rag_agent_workflow span count of 1, three retrieve_document_* spans, 95th-percentile retrieval latency under 350 ms, and zero error spans](/img/docs/tracing/trace-guide-assertions-raw.png)
 
-Scroll further and you can see the trajectory assertions proving the behavioral path:
-
-![Evaluation tab showing trajectory assertions: search_corpus tool used three times, compose_answer once, no issue_refund call, search_corpus arguments matched, search_corpus precedes compose_answer, four reasoning steps, and a goal-success judge score of 0.98](/img/docs/tracing/trace-guide-assertions-trajectory.png)
+Scroll further and you can see the trajectory assertions proving the behavioral path. Tool-argument assertion reasons are redacted by default, so use the trace API or Traces tab when you need to inspect captured attributes while debugging instrumentation.
 
 The Traces tab shows the timeline that powered those assertions:
 
@@ -494,7 +492,7 @@ Use `trajectory:tool-args-match` when the tool call is only correct with specifi
     mode: partial
 ```
 
-`mode: partial` checks that the expected object is a subset of the captured arguments. `mode: exact` requires deep equality. Use `partial` unless the full payload is part of the contract. Use `not-trajectory:tool-args-match` to forbid a sensitive or unsafe argument pattern.
+`mode: partial` checks that the expected object is a subset of the captured arguments. `mode: exact` requires deep equality. Use `partial` unless the full payload is part of the contract. Use `not-trajectory:tool-args-match` to forbid a sensitive or unsafe argument pattern. Assertion reasons hide the expected and captured payloads by default; set `redactArgsInFailures: false` only when the values are known to be non-sensitive and reason-level diagnostics are required.
 
 When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason. That keeps them out of failure reasons in `output.json`; it does not redact the original span attributes already stored in traces.
 
@@ -766,7 +764,7 @@ tracing:
 
 ### Time-box the judge
 
-`trajectory:goal-success` makes one model call per row. If the judge stalls, the row stalls. Set `timeoutMs` on the assertion value — Promptfoo races the judge against the timer and fails the row with a clear reason if the judge does not return in time:
+`trajectory:goal-success` makes one model call per row. Set `timeoutMs` on the assertion value to time-box that call: Promptfoo races the judge against the timer, propagates an abort signal to compatible providers, and fails the row with a clear reason if the judge does not return in time:
 
 ```yaml
 - type: trajectory:goal-success
@@ -806,7 +804,7 @@ Agents that loop have unbounded cost. Use the built-in `tokens-used` assertion t
     source: auto # auto (default) | trace | response
 ```
 
-`source: auto` uses trace token attributes when matched spans include them. If the default `pattern: '*'` sees spans but none of them carry token-usage attributes, it falls back to `providerResponse.tokenUsage`; with a custom `pattern`, it stays on the trace path so the filter is not silently ignored. For each matched span, Promptfoo prefers an aggregate total such as `gen_ai.usage.total_tokens`, `llm.usage.total_tokens`, or `tokens.used`; otherwise it sums one matching input/output token family. When matched parent and child spans both carry totals, only the leaf token-bearing spans count so repeated hierarchy totals are not double-counted. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
+`source: auto` uses trace token attributes when matched spans include them. If the default `pattern: '*'` sees spans but none of them carry token-usage attributes, it falls back to `providerResponse.tokenUsage`; with a custom `pattern`, it stays on the trace path so the filter is not silently ignored. For each matched span, Promptfoo prefers an aggregate total such as `gen_ai.usage.total_tokens`, `llm.usage.total_tokens`, or `tokens.used`; otherwise it sums one matching input/output token family. When matched parents and descendants both carry totals, Promptfoo uses the larger of the parent aggregate and the covered descendant total for each token-bearing subtree. This avoids double-counting repeated hierarchy totals without discarding a broader parent aggregate. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
 
 Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
 
@@ -851,10 +849,10 @@ Anything you put on a span travels to:
 
 - Promptfoo's SQLite trace store (default `~/.promptfoo/promptfoo.db`)
 - the Web UI Traces tab
-- assertion failure reasons inside `output.json` — full `tool.arguments` JSON appears verbatim in `trajectory:tool-args-match` and `not-trajectory:tool-args-match` reasons
+- assertion failure reasons inside `output.json` — `trajectory:tool-args-match` and `not-trajectory:tool-args-match` redact captured arguments by default, but other assertions may still expose attribute values they report
 - any external trace backend you forward to from your own provider
 
-Treat span attributes as you would log lines: redact at the source, not in the viewer.
+Treat span attributes as you would log lines: redact at the source, not only in the viewer or assertion output.
 
 **What Promptfoo redacts automatically.** Promptfoo's GenAI provider tracer sanitizes API-key-like and token-like patterns from the request and response bodies it captures itself. The Codex SDK provider also applies best-effort redaction to text it attaches to Codex item spans from streaming events. Neither path redacts attributes you attach to your own spans. Spans that arrive over OTLP from your app, an external SDK, or a native runtime should be treated as emitted unless you redact them at the source or configure receiver-side redaction.
 
@@ -953,7 +951,7 @@ A few common mistakes pass schema validation but undermine the eval. Watch for t
 
 **Asserting on free-text query strings.** A search agent might paraphrase `quantum computing classical computing` as `compare quantum and classical computing`. Both are correct; only the first matches `trajectory:tool-args-match`. Assert on causally load-bearing arguments (tenant_id, user_id, document_id, action_type) and treat free-text fields as evidence the model is responsive, not as a contract.
 
-**Using `percentile: 95` on a small batch.** With three retrieval spans, p95 returns the slowest of three — identical to `max`. Aggregate latency assertions across many test rows or skip the percentile and use `max`.
+**Using `percentile: 95` on a small batch.** With three retrieval spans, p95 returns the slowest of three — identical to `max`. Use `max` for a small fixed batch. When you need a suite-level percentile across rows, compare exported artifacts in a separate CI step.
 
 **Using `mode: exact` on a reactive agent.** Real agents retry, branch, and self-correct. `mode: exact` on `trajectory:tool-sequence` fails the row whenever the model legitimately re-issues a search. Reserve `exact` for short safety-critical sequences (`verify_user → authorize → execute`) and use `in_order` everywhere else.
 
@@ -987,7 +985,7 @@ Trace-based evals are most reliable when you design for the current assertion su
 - `trace-span-duration` and `trace-error-spans` pass when no spans match by default. Set `requirePresence: true` or add `trace-span-count` when span presence is required.
 - Inverse `not-trace-*` forms exist (see [Assertion matrix](#assertion-matrix)) and invert that base verdict too. If you need proof that spans existed before judging the inverse condition, pair the assertion with `requirePresence: true` or a `trace-span-count` presence check. For a simple "must not occur", use `trace-span-count` with `max: 0`.
 - `trajectory:tool-args-match` depends on captured structured arguments. Add `tool.arguments`, `tool.args`, or framework-specific tool-call argument attributes.
-- Use stable literal expected arguments in structured examples. If you need row-specific values inside nested argument objects, verify the rendered assertion value in the assertion reason.
+- Structured trajectory assertion values render row variables recursively before matching. Use row-specific templates inside nested argument objects, tool sets, sequences, counts, and goals when the expected value varies by test case.
 - `trajectory:goal-success` adds a judge model call, cost, latency, and nondeterminism. Keep it for high-level task success and use deterministic assertions for critical gates.
 - Exported eval JSON includes assertion reasons, scores, `traceId`, and `evaluationId` per row, but not every raw span. Inspect full traces in the web UI or through the trace API when debugging instrumentation — see the curl recipe in [Write a complete trace eval](#write-a-complete-trace-eval).
 - Trace schemas differ across frameworks. Normalize tool names, arguments, commands, searches, and reasoning spans explicitly when you own the instrumentation.

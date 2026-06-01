@@ -545,6 +545,70 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     expect(cacheKeys.join('\n')).not.toContain('test-client-id');
   });
 
+  it('should return refreshed OAuth tokens when concurrent keys exceed the cache limit', async () => {
+    let releaseRefreshes!: () => void;
+    const refreshesBlocked = new Promise<void>((resolve) => {
+      releaseRefreshes = resolve;
+    });
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: '{{ clientSecret }}',
+        },
+      },
+    });
+
+    const apiAuthHeaders = new Set<string>();
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo, options: any) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        tokenRefreshCallCount += 1;
+        await refreshesBlocked;
+        const clientSecret = new URLSearchParams(String(options.body)).get('client_secret');
+        return {
+          data: JSON.stringify({
+            access_token: `token-${clientSecret}`,
+            expires_in: 3600,
+          }),
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        };
+      }
+
+      apiAuthHeaders.add(options.headers.authorization);
+      return {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+    });
+
+    const requests = Array.from({ length: 257 }, (_, index) =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { clientSecret: `secret-${index}` },
+      }),
+    );
+
+    await vi.waitFor(() => expect(tokenRefreshCallCount).toBe(257));
+    releaseRefreshes();
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(257);
+    expect(apiAuthHeaders.size).toBe(257);
+    expect((provider as any).authTokenCache.size).toBe(256);
+  });
+
   it('should not cross-use OAuth tokens across concurrent raw requests', async () => {
     let releaseFirstTransform!: () => void;
     let resolveFirstTransformStarted!: () => void;
@@ -1682,6 +1746,52 @@ describe('HttpProvider - File Auth', () => {
     expect(cachedTokens).toContain('token-for-user-259');
   });
 
+  it('should return refreshed file auth tokens when concurrent keys exceed the cache limit', async () => {
+    let releaseRefreshes!: () => void;
+    const refreshesBlocked = new Promise<void>((resolve) => {
+      releaseRefreshes = resolve;
+    });
+    const authFn = vi.fn(async (authContext: any) => {
+      await refreshesBlocked;
+      return {
+        token: `token-for-${authContext.vars.userId}`,
+      };
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    const requests = Array.from({ length: 257 }, (_, index) =>
+      provider.callApi('same prompt', {
+        prompt: { raw: 'same prompt', label: 'same prompt' },
+        vars: { userId: `user-${index}` },
+      }),
+    );
+
+    await vi.waitFor(() => expect(authFn).toHaveBeenCalledTimes(257));
+    releaseRefreshes();
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(257);
+    const authHeaders = new Set(
+      vi
+        .mocked(fetchWithCache)
+        .mock.calls.map((call) => (call[1]?.headers as Record<string, string>).authorization),
+    );
+    expect(authHeaders.size).toBe(257);
+    expect((provider as any).authTokenCache.size).toBe(256);
+  });
+
   it('should refresh a file auth token when it is within the oauth refresh buffer', async () => {
     const authFn = vi
       .fn()
@@ -1802,6 +1912,52 @@ describe('HttpProvider - File Auth', () => {
           message === '[HTTP Provider Auth]: Token refresh already in progress, waiting...',
       ).length,
     ).toBeGreaterThan(0);
+  });
+
+  it('should revalidate shared file auth tokens before returning them to waiters', async () => {
+    const firstRefreshStarted = createDeferred<void>();
+    const firstRefreshContinue = createDeferred<void>();
+    const authFn = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        firstRefreshStarted.resolve(undefined);
+        await firstRefreshContinue.promise;
+        return {
+          token: 'near-expiry-token',
+          expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS - 1,
+        };
+      })
+      .mockResolvedValueOnce({
+        token: 'fresh-token',
+        expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS + 60_000,
+      });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    const firstRequest = provider.callApi('same prompt');
+    await firstRefreshStarted.promise;
+    const waitingRequest = provider.callApi('same prompt');
+    firstRefreshContinue.resolve(undefined);
+
+    await Promise.all([firstRequest, waitingRequest]);
+
+    expect(authFn).toHaveBeenCalledTimes(2);
+    const authHeaders = vi
+      .mocked(fetchWithCache)
+      .mock.calls.map((call) => (call[1]?.headers as Record<string, string>).authorization);
+    expect(authHeaders).toEqual(['Bearer near-expiry-token', 'Bearer fresh-token']);
   });
 
   it('should make file auth values available to transformRequest before the request is rendered', async () => {

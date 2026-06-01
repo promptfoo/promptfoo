@@ -8,6 +8,7 @@ import {
   isTracingEnabled,
   resetTracingState,
   startOtlpReceiverIfNeeded,
+  stopOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
@@ -15,6 +16,8 @@ import { mockProcessEnv } from '../util/utils';
 import type { TestCase, TestSuite } from '../../src/types/index';
 
 const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockStopOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
 const mockCreateTrace = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
@@ -36,7 +39,8 @@ vi.mock('../../src/tracing/store', () => ({
 
 vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: mockStartOTLPReceiver,
-  stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+  stopOTLPReceiver: mockStopOTLPReceiver,
+  updateOTLPReceiverOptions: mockUpdateOTLPReceiverOptions,
 }));
 
 describe('evaluatorTracing', () => {
@@ -44,6 +48,9 @@ describe('evaluatorTracing', () => {
     vi.clearAllMocks();
     mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
+    mockStopOTLPReceiver.mockReset();
+    mockStopOTLPReceiver.mockResolvedValue(undefined);
+    mockUpdateOTLPReceiverOptions.mockReset();
     mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
@@ -325,7 +332,7 @@ describe('evaluatorTracing', () => {
         },
       } as unknown as TestSuite;
 
-      await expect(startOtlpReceiverIfNeeded(testSuite)).resolves.toBeUndefined();
+      await expect(startOtlpReceiverIfNeeded(testSuite)).resolves.toBe(false);
       expect(isOtlpReceiverStarted()).toBe(false);
     });
 
@@ -380,6 +387,25 @@ describe('evaluatorTracing', () => {
         prompts: [],
         tracing: {
           enabled: true,
+          storage: { type: 'sqlite', retentionDays: 7 },
+        },
+      } as unknown as TestSuite);
+
+      expect(deleteOldTraces).toHaveBeenCalledWith(7);
+      expect(mockStartOTLPReceiver).not.toHaveBeenCalled();
+    });
+
+    it('should prune the trace store when tracing is enabled by environment', async () => {
+      const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(getTraceStore).mockReturnValue({
+        deleteOldTraces,
+      } as unknown as ReturnType<typeof getTraceStore>);
+      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
           storage: { type: 'sqlite', retentionDays: 7 },
         },
       } as unknown as TestSuite);
@@ -517,6 +543,145 @@ describe('evaluatorTracing', () => {
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(deleteOldTraces).toHaveBeenCalledWith(7);
+    });
+
+    it('should not mutate receiver defaults when another traced evaluation is already running', async () => {
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite);
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
+    });
+
+    it('should preserve the first receiver defaults during overlapping startup', async () => {
+      let resolveStart!: () => void;
+      mockStartOTLPReceiver.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveStart = resolve;
+          }),
+      );
+
+      const firstStart = startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+      const secondStart = startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['shell'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['protobuf'],
+              redactAttributes: ['cookie'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+
+      await vi.waitFor(() => expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1));
+      resolveStart();
+      await Promise.all([firstStart, secondStart]);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json'], {
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
+    });
+
+    it('should keep the receiver live until every overlapping evaluation releases its lease', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite;
+
+      const firstLease = await startOtlpReceiverIfNeeded(testSuite);
+      const secondLease = await startOtlpReceiverIfNeeded(testSuite);
+
+      await stopOtlpReceiverIfNeeded(firstLease);
+      expect(mockStopOTLPReceiver).not.toHaveBeenCalled();
+      expect(isOtlpReceiverStarted()).toBe(true);
+
+      await stopOtlpReceiverIfNeeded(secondLease);
+      expect(mockStopOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(isOtlpReceiverStarted()).toBe(false);
+    });
+
+    it('should wait for an in-flight shutdown before starting a new receiver', async () => {
+      let resolveStop!: () => void;
+      mockStopOTLPReceiver.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveStop = resolve;
+          }),
+      );
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite;
+
+      const lease = await startOtlpReceiverIfNeeded(testSuite);
+      const stopping = stopOtlpReceiverIfNeeded(lease);
+      const restarting = startOtlpReceiverIfNeeded(testSuite);
+
+      await vi.waitFor(() => expect(mockStopOTLPReceiver).toHaveBeenCalledTimes(1));
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+
+      resolveStop();
+      await Promise.all([stopping, restarting]);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(2);
     });
   });
 });

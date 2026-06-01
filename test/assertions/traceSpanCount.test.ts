@@ -382,4 +382,48 @@ describe('handleTraceSpanCount', () => {
       'trace-span-count assertion must have a value object with pattern property',
     );
   });
+
+  it('should throw error when no count bounds are provided', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-count', value: { pattern: '*' } },
+      renderedValue: { pattern: '*' },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanCount(params)).toThrow(
+      'trace-span-count assertion must include a min or max property',
+    );
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    1.5,
+  ])('should reject invalid count bounds (%s)', (min) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-count', value: { pattern: '*', min } },
+      renderedValue: { pattern: '*', min },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanCount(params)).toThrow(
+      'trace-span-count assertion min must be a finite non-negative integer',
+    );
+  });
+
+  it('should reject max bounds below min bounds', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-count', value: { pattern: '*', min: 2, max: 1 } },
+      renderedValue: { pattern: '*', min: 2, max: 1 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanCount(params)).toThrow(
+      'trace-span-count assertion max must be greater than or equal to min',
+    );
+  });
 });

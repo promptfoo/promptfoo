@@ -75,6 +75,36 @@ function failConfigResolution(message: string, options?: ConfigResolutionErrorOp
   throw new ConfigResolutionError(message, options);
 }
 
+function normalizeConfiguredCommandLineOptions(
+  commandLineOptions: Partial<CommandLineOptions> | undefined,
+  configDescription: string,
+): Partial<CommandLineOptions> | undefined {
+  if (commandLineOptions === undefined) {
+    return undefined;
+  }
+
+  const validationResult = CommandLineOptionsSchema.partial().safeParse(commandLineOptions);
+  if (!validationResult.success) {
+    failConfigResolution(
+      `Invalid commandLineOptions in ${configDescription}:\n${z.prettifyError(validationResult.error)}`,
+    );
+  }
+
+  return Object.fromEntries(
+    Object.entries(validationResult.data).filter(([key]) => key in commandLineOptions),
+  );
+}
+
+function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
+  const tupleSeed = `${seed}:${scenarioIndex}`;
+  let state = 2166136261;
+  for (let i = 0; i < tupleSeed.length; i++) {
+    state = Math.imul(state ^ tupleSeed.charCodeAt(i), 16777619);
+  }
+
+  return state >>> 0;
+}
+
 /**
  * Type guard to check if a test case has vars property
  */
@@ -306,6 +336,14 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // This allows env vars to be used in paths and other config values.
     // Runtime templates like {{ vars.x }} are preserved for later evaluation.
     const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
+    const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
+      renderedConfig.commandLineOptions,
+      `configuration file ${configPath}`,
+    );
+    const normalizedConfig =
+      normalizedCommandLineOptions === undefined
+        ? renderedConfig
+        : { ...renderedConfig, commandLineOptions: normalizedCommandLineOptions };
 
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     // We create a relaxed schema for validation that makes prompts optional
@@ -325,13 +363,13 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
         message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
       },
     );
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(normalizedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = renderedConfig;
+    ret = normalizedConfig;
   } else if (isJavascriptFile(configPath)) {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const imported = await importModule(configPath);
@@ -339,14 +377,22 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // Render environment variable templates for JS configs too.
     // This ensures consistent behavior across config file types.
     const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
+    const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
+      renderedConfig.commandLineOptions,
+      `configuration file ${configPath}`,
+    );
+    const normalizedConfig =
+      normalizedCommandLineOptions === undefined
+        ? renderedConfig
+        : { ...renderedConfig, commandLineOptions: normalizedCommandLineOptions };
 
-    const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
+    const validationResult = UnifiedConfigSchema.safeParse(normalizedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = renderedConfig;
+    ret = normalizedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -405,45 +451,36 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   }
 }
 
-function hasFunctionValue(value: unknown, seen: WeakSet<object> = new WeakSet()): boolean {
-  if (typeof value === 'function') {
-    return true;
-  }
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  if (seen.has(value)) {
-    return false;
-  }
-  seen.add(value);
-  return Reflect.ownKeys(value).some((key) =>
-    hasFunctionValue((value as Record<PropertyKey, unknown>)[key], seen),
-  );
-}
-
 /**
- * Build a dedupe key for a provider entry. Returns `undefined` when no stable
- * key is possible (an object that holds function values JSON.stringify would
- * silently drop, an ApiProvider instance whose identity lives on the prototype,
- * or a value JSON.stringify refuses to serialize).
+ * Build a dedupe key for a provider entry. Provider functions and instances
+ * whose behavior is identity-sensitive use reference identity. Provider option
+ * objects that contain functions serialize those function references into the
+ * key because config normalization may clone the surrounding object.
  *
- * Functions are keyed by reference so the same fn ref listed twice still
- * dedupes to one entry, while distinct fns are preserved.
+ * This allows repeated executable configs to dedupe while preserving configs
+ * that differ only by their transform or other function fields.
  */
-function providerDedupeKey(provider: unknown): unknown {
+function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>): unknown {
   if (typeof provider === 'string') {
     return provider;
   }
-  if (typeof provider === 'function') {
+  if (typeof provider === 'function' || isApiProvider(provider)) {
     return provider;
   }
-  if (isApiProvider(provider) || hasFunctionValue(provider)) {
-    return undefined;
-  }
   try {
-    return JSON.stringify(provider);
+    return JSON.stringify(provider, (_key, value) => {
+      if (typeof value !== 'function') {
+        return value;
+      }
+      let id = functionIds.get(value);
+      if (id === undefined) {
+        id = functionIds.size;
+        functionIds.set(value, id);
+      }
+      return { __promptfooFunctionReference: id };
+    });
   } catch {
-    return undefined;
+    return provider;
   }
 }
 
@@ -475,6 +512,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
+  const functionIds = new Map<Function, number>();
   configs.forEach((config) => {
     invariant(
       typeof config.providers !== 'function',
@@ -487,11 +525,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        const key = providerDedupeKey(provider);
-        if (key === undefined) {
-          providers.push(provider);
-          return;
-        }
+        const key = providerDedupeKey(provider, functionIds);
         if (!seenProviders.has(key)) {
           providers.push(provider);
           seenProviders.add(key);
@@ -628,7 +662,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     providers,
     prompts,
     tests,
-    scenarios: configs.flatMap((config) => config.scenarios || []),
+    scenarios: configs.some((config) => config.scenarios !== undefined)
+      ? configs.flatMap((config) => config.scenarios || [])
+      : undefined,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
@@ -748,6 +784,10 @@ export async function resolveConfigs(
 
   // Use base path in cases where path was supplied in the config file
   const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+  let commandLineOptions = normalizeConfiguredCommandLineOptions(
+    fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
+    configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
+  );
 
   cliState.basePath = basePath;
 
@@ -887,18 +927,22 @@ export async function resolveConfigs(
   );
 
   // Parse testCases for each scenario
-  if (
-    fileConfig.scenarios &&
-    (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
-  ) {
-    fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+  if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
+    config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
-    fileConfig.scenarios = fileConfig.scenarios.flat();
-    // Update config.scenarios with the flattened array
-    config.scenarios = fileConfig.scenarios;
+    config.scenarios = config.scenarios.flat().map((scenario) =>
+      typeof scenario === 'object'
+        ? {
+            ...scenario,
+            tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
+          }
+        : scenario,
+    );
   }
-  if (Array.isArray(fileConfig.scenarios)) {
-    for (const scenario of fileConfig.scenarios) {
+  if (Array.isArray(config.scenarios)) {
+    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
@@ -920,7 +964,11 @@ export async function resolveConfigs(
           firstN: cmdObj.filterFirstN,
           pattern: cmdObj.filterPattern,
           failing: cmdObj.filterFailing,
-          sample: cmdObj.filterSample,
+          sample: filterSample,
+          sampleSeed:
+            filterSampleSeed === undefined
+              ? undefined
+              : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');
@@ -998,8 +1046,6 @@ export async function resolveConfigs(
   cliState.config = config;
 
   // Extract commandLineOptions from either explicit config files or default config
-  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
-
   // Resolve relative envPath(s) against the config file directory
   if (commandLineOptions?.envPath && basePath) {
     const envPaths = Array.isArray(commandLineOptions.envPath)

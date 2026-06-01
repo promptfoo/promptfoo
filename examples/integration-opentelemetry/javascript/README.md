@@ -12,6 +12,8 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
+The base config intentionally fails its one-second all-span duration ceiling so you can inspect a blocking trace assertion alongside passing checks. Use the trajectory variant below for a fully passing offline run.
+
 To run the trajectory assertion variant from this directory, use:
 
 ```bash
@@ -67,7 +69,7 @@ tracing:
     http:
       enabled: true
       port: 4318
-      host: '0.0.0.0'
+      host: '127.0.0.1'
 ```
 
 ## Instrumenting Your Provider
@@ -180,7 +182,7 @@ After running an evaluation, view traces in the web UI:
 npx promptfoo@latest view
 ```
 
-Click on any test result to see the "Trace Timeline" section showing:
+Open any test result and switch to the **Traces** tab to see the timeline showing:
 
 - Hierarchical span visualization
 - Duration bars showing relative timing
@@ -202,19 +204,11 @@ export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 export PROMPTFOO_TRACING_ENABLED=true
 ```
 
-## Forward to External Collectors
+## Export to External Collectors
 
-Send traces to Jaeger, Honeycomb, or other OTLP-compatible backends:
-
-```yaml
-tracing:
-  enabled: true
-  forwarding:
-    enabled: true
-    endpoint: 'http://jaeger:4318'
-    headers:
-      'api-key': '${JAEGER_API_KEY}'
-```
+Promptfoo's built-in receiver stores traces for evals. To also send traces to Jaeger,
+Honeycomb, or another OTLP-compatible backend, configure an additional exporter in
+your provider SDK or route spans through a collector that fans out to both backends.
 
 ## Troubleshooting
 

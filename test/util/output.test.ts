@@ -6,11 +6,17 @@ import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
-import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
+import {
+  createOutputMetadata,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+  writeOutput,
+} from '../../src/util/output';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -43,6 +49,10 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
+  stat: vi.fn().mockResolvedValue({ mode: 0o644 }),
+  chmod: vi.fn(),
   mkdir: vi.fn(),
   open: vi.fn().mockResolvedValue(mockFileHandle),
 }));
@@ -62,9 +72,14 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
+    // Restore the stat implementation that vi.resetAllMocks() clears; the atomic JSONL rewrite
+    // reads the destination's mode through it before renaming the temp file into place.
+    vi.mocked(fsPromises.stat).mockResolvedValue({ mode: 0o644 } as Awaited<
+      ReturnType<typeof fsPromises.stat>
+    >);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -85,7 +100,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -150,6 +165,7 @@ describe('writeOutput', () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
       description: 'Test config',
+      tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
@@ -177,6 +193,7 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
+    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
   });
 
   it.each([
@@ -1056,7 +1073,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -1084,7 +1101,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -1106,7 +1123,127 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval(config);
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
-    expect(fsPromises.writeFile).toHaveBeenCalledWith(outputPath, '');
+    // JSONL is rebuilt in a temp file then atomically renamed over the destination, so the
+    // empty truncation lands on the temp path and the swap targets the real output path.
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringContaining(outputPath), '');
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+  });
+
+  it('preserves the existing output file permissions across the atomic JSONL rewrite', async () => {
+    const outputPath = 'output.jsonl';
+    vi.mocked(fsPromises.stat).mockResolvedValueOnce({ mode: 0o600 } as Awaited<
+      ReturnType<typeof fsPromises.stat>
+    >);
+
+    const eval_ = new Eval({});
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    // The temp file is chmod'd to the destination's prior mode before the rename, so a
+    // restricted (0600) reused path is not silently widened to the umask default.
+    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringContaining(outputPath), 0o600);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+  });
+
+  it('skips the chmod when the JSONL output file does not yet exist', async () => {
+    const outputPath = 'output.jsonl';
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
+    );
+
+    const eval_ = new Eval({});
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    expect(fsPromises.chmod).not.toHaveBeenCalled();
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+  });
+
+  it('keeps newly streamed retry rows ahead of stale persisted rows after a save failure', async () => {
+    const outputPath = 'output.jsonl';
+    const staleResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { error: 'stale persisted error' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const retriedResult: EvaluateResult = {
+      ...staleResult,
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      response: { output: 'fresh streamed retry' },
+    };
+    const eval_ = new Eval({});
+    eval_.recordResultPersistenceFailure(retriedResult);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(staleResult)}\n${JSON.stringify(retriedResult)}\n`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {
+      yield [staleResult as any];
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({
+        failureReason: ResultFailureReason.NONE,
+        response: { output: 'fresh streamed retry' },
+        score: 1,
+        success: true,
+      }),
+    ]);
+  });
+
+  it('skips a malformed (truncated) streamed JSONL row during recovery instead of aborting', async () => {
+    const outputPath = 'output.jsonl';
+    const goodResult: EvaluateResult = {
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 10,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { output: 'recovered streamed row' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+    // A complete row followed by a truncated final row, as a killed/crashed run can leave.
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(goodResult)}\n{"testIdx":1,"promptIdx":0,"resp`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {});
+
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({ testIdx: 0, response: { output: 'recovered streamed row' } }),
+    ]);
   });
 
   it('writeOutput with json and txt output', async () => {
@@ -1130,6 +1267,7 @@ describe('writeOutput', () => {
     expect(templateContent).toContain('{{ cell.text | escape }}');
     expect(templateContent).toContain('{{ cell.reason | escape }}');
     expect(templateContent).toContain('{{ cell.error | escape }}');
+    expect(templateContent).toContain('{{ cell.description | escape }}');
 
     // Ensure structured output content and derived search fields are escaped.
     expect(templateContent).toContain('data-search="{{ cell.statusLabel | escape }}');
@@ -1170,7 +1308,7 @@ describe('writeOutput', () => {
       vars: { input: 'one' },
       promptIdx: 0,
       testIdx: 0,
-      testCase: { vars: { input: 'one' } },
+      testCase: { vars: { input: 'one' }, description: 'Passing <test> description' },
       promptId: 'prompt',
       gradingResult: {
         pass: true,
@@ -1212,6 +1350,8 @@ describe('writeOutput', () => {
     expect(html).toContain('Score 0.00');
     expect(html).toContain('Passing output');
     expect(html).toContain('Failing output');
+    expect(html).toContain('Passing &lt;test&gt; description');
+    expect(html).not.toContain('Passing <test> description');
     expect(html).toContain('Passing reason');
     expect(html).toContain('Failing reason');
     expect(html).toContain('View detail');
@@ -1394,6 +1534,45 @@ describe('writeOutput', () => {
     const columnKeys = Object.keys(rows[0]);
     expect(columnKeys).toContain('[openai:gpt-4] Test Prompt');
     expect(columnKeys).toContain('[anthropic:claude-3] Test Prompt');
+  });
+});
+
+describe('warnOnDegradedJsonlRecovery', () => {
+  it('warns once when a row failed to persist and a JSONL artifact is being reconciled', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+
+    warnOnDegradedJsonlRecovery(eval_, [
+      'results.jsonl',
+      'results.JSONL',
+      'results.json',
+      'results.yaml',
+    ]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when no row failed to persist', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+
+    warnOnDegradedJsonlRecovery(eval_, ['results.jsonl', 'results.json']);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when the persistence failure does not touch a JSONL artifact', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+
+    warnOnDegradedJsonlRecovery(eval_, ['results.json', 'results.yaml']);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 

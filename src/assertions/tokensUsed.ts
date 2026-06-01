@@ -1,4 +1,4 @@
-import { matchesPattern } from './traceUtils';
+import { assertFiniteNonNegativeNumber, matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -161,7 +161,11 @@ function tokensFromProviderResponse(params: AssertionParams): number {
       ? undefined
       : (prompt ?? 0) + (completion ?? 0);
   const total = nonNegativeTokenValue(usage.total);
-  if (total !== undefined && (total > 0 || !componentTotal)) {
+  if (total !== undefined && componentTotal !== undefined) {
+    return Math.max(total, componentTotal);
+  }
+
+  if (total !== undefined) {
     return total;
   }
 
@@ -207,9 +211,7 @@ function validateTokenBudgetBound(boundName: 'min' | 'max', value: unknown): num
   if (value === undefined) {
     return undefined;
   }
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new Error(`tokens-used ${boundName} must be a finite non-negative number`);
-  }
+  assertFiniteNonNegativeNumber(value, `tokens-used ${boundName}`);
   return value;
 }
 
@@ -232,8 +234,8 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
     throw new Error('tokens-used source must be "trace", "response", or "auto"');
   }
 
-  if (value.pattern !== undefined && typeof value.pattern !== 'string') {
-    throw new Error('tokens-used pattern must be a string');
+  if (value.pattern !== undefined && (typeof value.pattern !== 'string' || !value.pattern.trim())) {
+    throw new Error('tokens-used pattern must be a non-empty string');
   }
 
   const min = validateTokenBudgetBound('min', value.min);

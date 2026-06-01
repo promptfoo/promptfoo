@@ -129,4 +129,5 @@ tracing:
     http:
       enabled: true
       port: 4318
+      host: '127.0.0.1'
       acceptFormats: ['json']
