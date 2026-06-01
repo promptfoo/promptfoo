@@ -308,6 +308,54 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('restores same-index edited duplicates when other array items move', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'b', file: redactedUri },
+              { suite: 'a', file: redactedUri },
+              { suite: 'c', description: 'edited', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+              {
+                suite: 'c',
+                file: 'az://account/container/tests.yaml?sp=r&sig=third-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'b',
+            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+          },
+          {
+            suite: 'a',
+            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          },
+          {
+            suite: 'c',
+            description: 'edited',
+            file: 'az://account/container/tests.yaml?sp=r&sig=third-secret',
+          },
+        ],
+      });
+    });
+
     it('leaves ambiguous moved and edited duplicate Azure Blob SAS URIs redacted', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
