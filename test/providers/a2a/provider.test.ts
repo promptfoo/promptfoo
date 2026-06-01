@@ -148,6 +148,172 @@ describe('A2AProvider', () => {
     });
   });
 
+  it('adds image strategy media to default A2A messages', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'image ok' }],
+        },
+      }),
+    );
+
+    const result = await provider().callApi('Please answer the question in the image.', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      test: {
+        metadata: {
+          imageInjectVar: 'image',
+          originalText: 'Hidden prompt from the generated image',
+          strategyId: 'image',
+        },
+      },
+      vars: {
+        image: 'base64-image',
+        question: 'Please answer the question in the image.',
+      },
+    });
+
+    expect(result.output).toBe('image ok');
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
+    expect(requestBody.message).toMatchObject({
+      role: 'ROLE_USER',
+      parts: [
+        { text: 'Please answer the question in the image.' },
+        {
+          filename: 'promptfoo-image.png',
+          mediaType: 'image/png',
+          raw: 'base64-image',
+        },
+      ],
+    });
+    expect(JSON.stringify(requestBody.message)).not.toContain(
+      'Hidden prompt from the generated image',
+    );
+  });
+
+  it('adds audio strategy media without echoing base64 as text', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'audio ok' }],
+        },
+      }),
+    );
+
+    const result = await provider().callApi('base64-audio', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      test: {
+        metadata: {
+          audioInjectVar: 'audio',
+          strategyId: 'audio',
+        },
+      },
+      vars: {
+        audio: 'base64-audio',
+      },
+    });
+
+    expect(result.output).toBe('audio ok');
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
+    expect(requestBody.message).toMatchObject({
+      role: 'ROLE_USER',
+      parts: [
+        {
+          filename: 'promptfoo-audio.mp3',
+          mediaType: 'audio/mpeg',
+          raw: 'base64-audio',
+        },
+      ],
+    });
+  });
+
+  it('uses legacy A2A file parts for multimodal default messages on 0.3 agent cards', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          preferredTransport: 'HTTP+JSON',
+          protocolVersion: '0.3.0',
+          url: 'https://agent.example.com/a2a/main',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            role: 'agent',
+            parts: [{ text: 'legacy image ok' }],
+          },
+        }),
+      );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+      },
+    }).callApi('Please answer the question in the image.', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      test: {
+        metadata: {
+          strategyId: 'image',
+        },
+      },
+      vars: {
+        image: 'data:image/jpeg;base64,base64-image',
+        question: 'Please answer the question in the image.',
+      },
+    });
+
+    expect(result.output).toBe('legacy image ok');
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body as string);
+    expect(requestBody.message).toMatchObject({
+      role: 'user',
+      parts: [
+        { kind: 'text', text: 'Please answer the question in the image.' },
+        {
+          file: {
+            fileWithBytes: 'base64-image',
+            mimeType: 'image/jpeg',
+            name: 'promptfoo-image.png',
+          },
+          kind: 'file',
+        },
+      ],
+    });
+  });
+
+  it('does not add strategy media when message config is explicit', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'custom ok' }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      message: {
+        parts: [{ text: 'Custom {{question}}' }],
+        role: 'ROLE_USER',
+      },
+    }).callApi('Please answer the question in the image.', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      test: {
+        metadata: {
+          strategyId: 'image',
+        },
+      },
+      vars: {
+        image: 'base64-image',
+        question: 'question text',
+      },
+    });
+
+    expect(result.output).toBe('custom ok');
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
+    expect(requestBody.message.parts).toEqual([{ text: 'Custom question text' }]);
+  });
+
   it('discovers an HTTP+JSON interface from the agent card', async () => {
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce(

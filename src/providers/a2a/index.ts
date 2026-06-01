@@ -41,6 +41,7 @@ import type {
   A2AArtifact,
   A2AFinalResponse,
   A2AMessage,
+  A2APart,
   A2AProviderConfig,
   A2AStreamResponse,
   A2ATask,
@@ -48,6 +49,7 @@ import type {
 
 const DEFAULT_PROTOCOL_VERSION = '1.0';
 const HTTP_JSON_BINDING = 'HTTP+JSON';
+const BASE64_PREVIEW_LENGTH = 64;
 const TERMINAL_TASK_STATES = new Set([
   'TASK_STATE_COMPLETED',
   'TASK_STATE_FAILED',
@@ -57,6 +59,28 @@ const TERMINAL_TASK_STATES = new Set([
 ]);
 const ATTENTION_TASK_STATES = new Set(['TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_AUTH_REQUIRED']);
 const AGENT_ROLES = new Set(['agent', 'assistant', 'model', 'role_agent']);
+const MEDIA_STRATEGY_DEFAULTS = {
+  audio: {
+    fallbackVarName: 'audio',
+    filename: 'promptfoo-audio.mp3',
+    injectVarMetadataKey: 'audioInjectVar',
+    mediaType: 'audio/mpeg',
+  },
+  image: {
+    fallbackVarName: 'image',
+    filename: 'promptfoo-image.png',
+    injectVarMetadataKey: 'imageInjectVar',
+    mediaType: 'image/png',
+  },
+  video: {
+    fallbackVarName: 'video',
+    filename: 'promptfoo-video.mp4',
+    injectVarMetadataKey: 'videoInjectVar',
+    mediaType: 'video/mp4',
+  },
+} as const;
+
+type MediaStrategyId = keyof typeof MEDIA_STRATEGY_DEFAULTS;
 
 interface A2AEndpoint {
   protocolVersion: string;
@@ -213,7 +237,149 @@ function usesLegacyMessageShape(protocolVersion: string): boolean {
   return protocolVersion.startsWith('0.3');
 }
 
-function getDefaultMessage(prompt: string, protocolVersion: string): A2AMessage {
+function getTestMetadata(context?: CallApiContextParams): Record<string, unknown> {
+  const metadata = context?.test?.metadata;
+  return metadata && typeof metadata === 'object' ? metadata : {};
+}
+
+function getMediaStrategyId(context?: CallApiContextParams): MediaStrategyId | undefined {
+  const strategyId = getTestMetadata(context).strategyId;
+  return strategyId === 'audio' || strategyId === 'image' || strategyId === 'video'
+    ? strategyId
+    : undefined;
+}
+
+function parseBase64DataUrl(value: string): { mediaType: string; raw: string } | undefined {
+  const match = value.match(/^data:([^;,]+);base64,(.+)$/s);
+  if (!match) {
+    return undefined;
+  }
+  return {
+    mediaType: match[1],
+    raw: match[2],
+  };
+}
+
+function maybeBase64Payload(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.length > 100 && /^[A-Za-z0-9+/=\s]+$/.test(trimmed);
+}
+
+function promptContainsMediaPayload(prompt: string, mediaValue: string): boolean {
+  const preview = mediaValue.slice(0, Math.min(BASE64_PREVIEW_LENGTH, mediaValue.length));
+  return preview.length > 0 && prompt.includes(preview);
+}
+
+function shouldUsePromptAsText(prompt: string, mediaValue?: string): boolean {
+  if (!nonEmptyString(prompt) || prompt.startsWith('data:') || maybeBase64Payload(prompt)) {
+    return false;
+  }
+  if (mediaValue && (prompt === mediaValue || promptContainsMediaPayload(prompt, mediaValue))) {
+    return false;
+  }
+  return true;
+}
+
+function getContextVar(vars: Record<string, unknown>, key: string): string | undefined {
+  return nonEmptyString(vars[key]);
+}
+
+function getMediaVarName(
+  strategyId: MediaStrategyId,
+  vars: Record<string, unknown>,
+  context?: CallApiContextParams,
+): string | undefined {
+  const defaults = MEDIA_STRATEGY_DEFAULTS[strategyId];
+  const metadataInjectVar = getTestMetadata(context)[defaults.injectVarMetadataKey];
+  if (typeof metadataInjectVar === 'string' && getContextVar(vars, metadataInjectVar)) {
+    return metadataInjectVar;
+  }
+  if (getContextVar(vars, defaults.fallbackVarName)) {
+    return defaults.fallbackVarName;
+  }
+  if (getContextVar(vars, 'prompt')) {
+    return 'prompt';
+  }
+  return undefined;
+}
+
+function getDefaultTextPart(
+  prompt: string,
+  protocolVersion: string,
+  contextVars: Record<string, unknown>,
+  mediaValue?: string,
+): A2APart | undefined {
+  const text =
+    getContextVar(contextVars, 'question') ??
+    (shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined);
+  if (!text) {
+    return undefined;
+  }
+  return usesLegacyMessageShape(protocolVersion) ? { kind: 'text', text } : { text };
+}
+
+function getDefaultMediaPart(
+  protocolVersion: string,
+  contextVars: Record<string, unknown>,
+  context?: CallApiContextParams,
+): A2APart | undefined {
+  const strategyId = getMediaStrategyId(context);
+  if (!strategyId) {
+    return undefined;
+  }
+  const varName = getMediaVarName(strategyId, contextVars, context);
+  const mediaValue = varName ? getContextVar(contextVars, varName) : undefined;
+  if (!mediaValue) {
+    return undefined;
+  }
+
+  const defaults = MEDIA_STRATEGY_DEFAULTS[strategyId];
+  const parsedDataUrl = parseBase64DataUrl(mediaValue);
+  const raw = parsedDataUrl?.raw ?? mediaValue;
+  const mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
+
+  if (usesLegacyMessageShape(protocolVersion)) {
+    return {
+      file: {
+        fileWithBytes: raw,
+        mimeType: mediaType,
+        name: defaults.filename,
+      },
+      kind: 'file',
+    };
+  }
+
+  return {
+    filename: defaults.filename,
+    mediaType,
+    raw,
+  };
+}
+
+function getDefaultMessage(
+  prompt: string,
+  protocolVersion: string,
+  contextVars: Record<string, unknown> = {},
+  context?: CallApiContextParams,
+): A2AMessage {
+  const mediaPart = getDefaultMediaPart(protocolVersion, contextVars, context);
+  if (mediaPart) {
+    const mediaValue =
+      typeof mediaPart.raw === 'string'
+        ? mediaPart.raw
+        : typeof mediaPart.file === 'object' &&
+            mediaPart.file &&
+            'fileWithBytes' in mediaPart.file &&
+            typeof mediaPart.file.fileWithBytes === 'string'
+          ? mediaPart.file.fileWithBytes
+          : undefined;
+    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, mediaValue);
+    return {
+      role: usesLegacyMessageShape(protocolVersion) ? 'user' : 'ROLE_USER',
+      parts: textPart ? [textPart, mediaPart] : [mediaPart],
+    };
+  }
+
   if (usesLegacyMessageShape(protocolVersion)) {
     return {
       role: 'user',
@@ -436,13 +602,20 @@ export class A2AProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
+      const contextVars = { ...(context?.vars ?? {}) };
       const vars = {
-        ...context?.vars,
+        ...contextVars,
         prompt,
       } as RequestVars;
       const endpoint = await this.resolveEndpoint(vars, context, options);
       const mode = this.resolveMode(endpoint);
-      const message = this.buildMessage(prompt, endpoint.protocolVersion, vars, context);
+      const message = this.buildMessage(
+        prompt,
+        endpoint.protocolVersion,
+        vars,
+        context,
+        contextVars,
+      );
       const body = {
         ...(endpoint.tenant ? { tenant: endpoint.tenant } : {}),
         message,
@@ -558,10 +731,11 @@ export class A2AProvider implements ApiProvider {
     protocolVersion: string,
     vars: RequestVars,
     context?: CallApiContextParams,
+    contextVars: Record<string, unknown> = context?.vars ?? {},
   ): A2AMessage {
     const configuredMessage = this.config.message
       ? renderTemplate(this.config.message, vars, context)
-      : getDefaultMessage(prompt, protocolVersion);
+      : getDefaultMessage(prompt, protocolVersion, contextVars, context);
     const message = A2AMessageSchema.parse(configuredMessage);
     return {
       ...message,
