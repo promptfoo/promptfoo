@@ -1725,5 +1725,15 @@ export async function getProviderFactories(
       }
     }),
   );
-  return [...providerMap, ...extraFactorySets.flat()];
+  // Family factories take precedence over the module-scoped providerMap so a
+  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:, redteam) is
+  // not first intercepted by a broader providerMap entry — notably the generic
+  // JS/TS-file factory (`isJavascriptFile`), which is a prefix-agnostic suffix
+  // match and would otherwise hijack any AWS path whose final segment ends in
+  // .js/.cjs/.mjs/.ts/.cts/.mts and try to load it as a custom module. Each
+  // family is gated by `canHandle`, and the family prefixes are disjoint from
+  // one another and from every concrete providerMap prefix, so prepending only
+  // changes precedence against that file-suffix catch-all — which is the bug we
+  // are fixing — and is otherwise order-neutral.
+  return [...extraFactorySets.flat(), ...providerMap];
 }
