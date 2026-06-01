@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithProxy } from '../../util/fetch';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 

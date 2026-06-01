@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { fetchWithProxy } from './fetch/index';
+import { fetchWithProxy } from './fetch';
 
 /**
  * Buffer time before token expiry to trigger proactive refresh (60 seconds)

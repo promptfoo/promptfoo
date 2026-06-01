@@ -17,7 +17,7 @@ import type {
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
-vi.mock('../../../src/util/fetch/index', () => ({
+vi.mock('../../../src/util/fetch', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
 
