@@ -13,7 +13,11 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { sanitizeResultForJsonlArtifact } from '../models/evalResult';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -29,28 +33,26 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
 }
 
-export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: string[]): string[] {
+// Every output path is always finalized post-run now (JSONL included), so nothing is
+// filtered. This only emits a heads-up when a row failed to persist, so operators know the
+// JSONL artifact was reconciled from the streamed rows and the eval record (the degraded
+// recovery path in `writeOutput`) rather than rebuilt cleanly from the database.
+export function warnOnDegradedJsonlRecovery(evalRecord: Eval, outputPaths: string[]): void {
   if (!evalRecord.resultPersistenceFailed) {
-    return outputPaths;
+    return;
   }
 
   if (outputPaths.some((outputPath) => getOutputFileFormat(outputPath) === 'jsonl')) {
     logger.warn(
-      '[Output] Finalizing JSONL from streamed rows and canonical updates because one or more rows failed to persist',
+      '[Output] Reconciling JSONL from streamed rows and the eval record because one or more rows failed to persist',
     );
   }
-  return outputPaths;
-}
-
-function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 }
 
 function isFileNotFoundError(error: unknown): boolean {
@@ -89,10 +91,6 @@ async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   }
 }
 
-function getJsonlResultKey(result: EvaluateResult): string {
-  return `${result.testIdx}:${result.promptIdx}`;
-}
-
 async function appendJsonlResultBatch(outputPath: string, results: EvaluateResult[]) {
   if (results.length === 0) {
     return;
@@ -104,35 +102,62 @@ async function appendJsonlResultBatch(outputPath: string, results: EvaluateResul
   await fsPromises.appendFile(outputPath, text);
 }
 
-async function readStreamedJsonlResults(outputPath: string) {
+async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateResult[]> {
+  let contents: string;
   try {
-    return (await fsPromises.readFile(outputPath, 'utf8'))
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as EvaluateResult);
+    contents = await fsPromises.readFile(outputPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];
     }
     throw error;
   }
+
+  // Parse each line defensively. This recovery path exists precisely for runs that were
+  // interrupted (crash / kill / partial flush), so the streamed file may end in a
+  // truncated row. Skipping a malformed line — rather than aborting the whole
+  // finalization — keeps the recoverable rows; the eval record and `getFinalJsonlResults()`
+  // backfill the rest in `collectJsonlResultsAfterPersistenceFailure`.
+  const results: EvaluateResult[] = [];
+  const lines = contents.split(/\r?\n/).filter(Boolean);
+  for (const [index, line] of lines.entries()) {
+    try {
+      results.push(JSON.parse(line) as EvaluateResult);
+    } catch (error) {
+      logger.warn(
+        `[Output] Skipping malformed streamed JSONL row at ${outputPath}:${index + 1} during recovery: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return results;
 }
 
+// Rebuild the JSONL rows after a mid-run persistence failure by merging three sources,
+// keyed by `testIdx:promptIdx` with later sources winning:
+//   1. the rows already streamed to disk (the base, including any that failed to persist),
+//   2. the canonical database rows (skipping keys that failed to persist — the DB copy is
+//      missing or stale for those), then
+//   3. the in-memory final rows captured after the failure (timeout / deferred-grading
+//      updates that never streamed), which are authoritative.
 async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
   const finalResults = new Map<string, EvaluateResult>();
+  const put = (result: EvaluateResult) => finalResults.set(getResultIndexKey(result), result);
+
   for (const result of await readStreamedJsonlResults(outputPath)) {
-    finalResults.set(getJsonlResultKey(result), result);
+    put(result);
   }
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
-      const evaluateResult = toEvaluateResult(result);
+      const evaluateResult = asEvaluateResult(result);
       if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
-        finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+        put(evaluateResult);
       }
     }
   }
   for (const result of evalRecord.getFinalJsonlResults()) {
-    finalResults.set(getJsonlResultKey(result), result);
+    put(result);
   }
   return Array.from(finalResults.values());
 }
@@ -159,7 +184,7 @@ async function appendJsonlResults(
   }
 
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
-    await appendJsonlResultBatch(outputPath, batchResults.map(toEvaluateResult));
+    await appendJsonlResultBatch(outputPath, batchResults.map(asEvaluateResult));
   }
 }
 

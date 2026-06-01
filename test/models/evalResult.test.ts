@@ -10,6 +10,11 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
@@ -506,6 +511,7 @@ describe('EvalResult', () => {
           { persist: true },
         );
 
+        // Grading metadata has no transport provenance, so its arbitrary `headers` must be kept.
         expect(result.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
         expect(result.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
           componentMetadataHeaders,
@@ -872,12 +878,32 @@ describe('EvalResult', () => {
 
     it('should update existing results', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       result.score = 0.5;
       await result.save();
 
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+    });
+
+    it('clears the standalone cache when a new result is inserted via save()', async () => {
+      // persist:false yields an in-memory result, so save() takes the INSERT branch. This pins
+      // the PR's headline behavior — incrementally-added results invalidate the standalone cache.
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult, {
+        persist: false,
+      });
+      expect(result.persisted).toBe(false);
+
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
+
+      await result.save();
+
+      expect(result.persisted).toBe(true);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
     });
   });
 
@@ -958,6 +984,26 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
         numRequests: 1,
       });
+    });
+
+    it('counts a provider request for a response that reports no token usage', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: { output: 'hello' },
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.numRequests).toBe(1);
     });
 
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {

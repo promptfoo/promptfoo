@@ -13,7 +13,7 @@ import { type EvaluateResult, ResultFailureReason } from '../../src/types/index'
 import { createJunitXml } from '../../src/util/junit';
 import {
   createOutputMetadata,
-  filterOutputPathsAfterStreaming,
+  warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
@@ -1277,6 +1277,34 @@ describe('writeOutput', () => {
     });
   });
 
+  it('preserves the existing output file permissions across the atomic JSONL rewrite', async () => {
+    const outputPath = 'output.jsonl';
+    vi.mocked(fsPromises.stat).mockResolvedValueOnce({ mode: 0o600 } as Awaited<
+      ReturnType<typeof fsPromises.stat>
+    >);
+
+    const eval_ = new Eval({});
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    // The temp file is chmod'd to the destination's prior mode before the rename, so a
+    // restricted (0600) reused path is not silently widened to the umask default.
+    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), 0o600);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+  });
+
+  it('skips the chmod when the JSONL output file does not yet exist', async () => {
+    const outputPath = 'output.jsonl';
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
+    );
+
+    const eval_ = new Eval({});
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    expect(fsPromises.chmod).not.toHaveBeenCalled();
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+  });
+
   it('keeps newly streamed retry rows ahead of stale persisted rows after a save failure', async () => {
     const outputPath = 'output.jsonl';
     const staleResult: EvaluateResult = {
@@ -1325,6 +1353,44 @@ describe('writeOutput', () => {
         score: 1,
         success: true,
       }),
+    ]);
+  });
+
+  it('skips a malformed (truncated) streamed JSONL row during recovery instead of aborting', async () => {
+    const outputPath = 'output.jsonl';
+    const goodResult: EvaluateResult = {
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 10,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { output: 'recovered streamed row' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+    // A complete row followed by a truncated final row, as a killed/crashed run can leave.
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(goodResult)}\n{"testIdx":1,"promptIdx":0,"resp`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {});
+
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({ testIdx: 0, response: { output: 'recovered streamed row' } }),
     ]);
   });
 
@@ -1653,19 +1719,42 @@ describe('writeOutput', () => {
   });
 });
 
-describe('filterOutputPathsAfterStreaming', () => {
-  it('finalizes streamed JSONL artifacts through recovery after a row persistence failure', () => {
+describe('warnOnDegradedJsonlRecovery', () => {
+  it('warns once when a row failed to persist and a JSONL artifact is being reconciled', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const eval_ = new Eval({});
     eval_.resultPersistenceFailed = true;
 
-    expect(
-      filterOutputPathsAfterStreaming(eval_, [
-        'results.jsonl',
-        'results.JSONL',
-        'results.json',
-        'results.yaml',
-      ]),
-    ).toEqual(['results.jsonl', 'results.JSONL', 'results.json', 'results.yaml']);
+    warnOnDegradedJsonlRecovery(eval_, [
+      'results.jsonl',
+      'results.JSONL',
+      'results.json',
+      'results.yaml',
+    ]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when no row failed to persist', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+
+    warnOnDegradedJsonlRecovery(eval_, ['results.jsonl', 'results.json']);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when the persistence failure does not touch a JSONL artifact', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+
+    warnOnDegradedJsonlRecovery(eval_, ['results.json', 'results.yaml']);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateSignalFile } from '../src/database/signal';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { JsonlFileWriter } from '../src/util/exportToFile/writeToFile';
 import { createMockProvider } from './factories/provider';
 
 import type { ApiProvider, TestSuite } from '../src/types';
@@ -19,7 +20,6 @@ vi.mock('../src/database/signal', () => ({
 
 import { evaluate } from '../src/evaluator';
 import { ResultFailureReason } from '../src/types';
-import { JsonlFileWriter } from '../src/util/exportToFile/writeToFile';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
 describe('evaluate SIGINT/abort handling', () => {
@@ -98,8 +98,8 @@ describe('evaluate SIGINT/abort handling', () => {
     expect(result).toBeDefined();
     expect(result.id).toBe('test-eval-abort-123');
 
-    // When user aborts (not timeout), should update signal file for resume
-    expect(updateSignalFile).toHaveBeenCalledWith('test-eval-abort-123');
+    // Non-persisted evals are not visible to database watchers.
+    expect(updateSignalFile).not.toHaveBeenCalled();
 
     // Should persist vars and prompts before early return
     expect(mockSetVars).toHaveBeenCalled();
@@ -110,9 +110,10 @@ describe('evaluate SIGINT/abort handling', () => {
     // This test verifies that per-call timeouts (timeoutMs option) write
     // timeout error rows and continue the normal evaluation flow.
     //
-    // Key difference from user SIGINT: evaluation continues normally and
-    // updateSignalFile is called at the end of the normal flow (not during early return).
-    // Both paths call updateSignalFile, just at different points.
+    // Key difference from user SIGINT: evaluation continues normally rather than returning
+    // early. The evaluator no longer writes the signal file directly — persisted evals emit a
+    // refresh via Eval.addPrompts()/save(); a non-persisted eval (this test) writes no signal,
+    // which is asserted below.
     let longTimer: NodeJS.Timeout | null = null;
 
     const slowProvider = createMockProvider({
@@ -278,8 +279,8 @@ describe('evaluate SIGINT/abort handling', () => {
     // Should have added at least one result before abort
     expect(resultsAdded.length).toBeGreaterThanOrEqual(1);
 
-    // Signal file should be updated for resume capability
-    expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
+    // Non-persisted evals are not visible to database watchers.
+    expect(updateSignalFile).not.toHaveBeenCalled();
   });
 
   it('should redact streamed JSONL rows when user aborts before final export', async () => {
@@ -320,6 +321,8 @@ describe('evaluate SIGINT/abort handling', () => {
         throw new Error('Operation cancelled');
       }),
     });
+    // Abort right after the first row streams to disk, so finalization never runs and the
+    // on-disk artifact is the streamed (write-time-sanitized) row.
     const originalWrite = JsonlFileWriter.prototype.write;
     const writeSpy = vi
       .spyOn(JsonlFileWriter.prototype, 'write')

@@ -476,6 +476,39 @@ describeEvaluator('evaluator metadata', () => {
     );
   });
 
+  it('should persist row without hook modifications when afterEach hook throws', async () => {
+    const mockExtension = 'file://test-extension.js:afterEach';
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, _context) => {
+      if (hookName === 'afterEach') {
+        throw new Error('Hook exploded');
+      }
+      return _context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: {},
+          assert: [{ type: 'equals', value: 'Test output' }],
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    // Row should still be persisted despite hook failure
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.stats.successes).toBe(1);
+  });
+
   it('drops stale provider headers when afterEach replaces response metadata', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
     const mockExtension = 'file://test-extension.js:afterEach';
@@ -532,6 +565,8 @@ describeEvaluator('evaluator metadata', () => {
         .filter(Boolean)
         .map((line) => JSON.parse(line));
 
+      // The hook replaced response.metadata, so the legacy top-level metadata.headers copied
+      // from the original transport is stale and must be dropped (not persisted).
       expect(result.metadata?.headers).toBeUndefined();
       expect(result.response?.metadata).toEqual({ hook_key: 'hook_value' });
       expect(artifactResult.metadata.headers).toBeUndefined();
@@ -540,38 +575,5 @@ describeEvaluator('evaluator metadata', () => {
     } finally {
       fs.rmSync(outputPath, { force: true });
     }
-  });
-
-  it('should persist row without hook modifications when afterEach hook throws', async () => {
-    const mockExtension = 'file://test-extension.js:afterEach';
-
-    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, _context) => {
-      if (hookName === 'afterEach') {
-        throw new Error('Hook exploded');
-      }
-      return _context;
-    });
-
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {},
-          assert: [{ type: 'equals', value: 'Test output' }],
-        },
-      ],
-      extensions: [mockExtension],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
-
-    // Row should still be persisted despite hook failure
-    expect(summary.results).toHaveLength(1);
-    expect(summary.results[0].success).toBe(true);
-    expect(summary.stats.successes).toBe(1);
   });
 });

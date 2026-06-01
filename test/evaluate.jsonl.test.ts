@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as comparison from '../src/matchers/comparison';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { evaluate } from '../src/node/evaluate';
@@ -44,7 +45,7 @@ describe('programmatic JSONL output', () => {
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
       id: () => 'slow-provider',
-      callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((_prompt, _context, options) => {
         return new Promise<never>((_resolve, reject) => {
           options?.abortSignal?.addEventListener(
             'abort',
@@ -189,8 +190,72 @@ describe('programmatic JSONL output', () => {
 
     const results = readJsonl(outputPath).sort((a, b) => a.promptIdx - b.promptIdx);
     expect(results).toHaveLength(3);
-    expect(results.filter((result) => result.promptIdx < 2 && !result.success)).toHaveLength(1);
-    expect(results[2]).toEqual(expect.objectContaining({ success: true }));
+    // max-score over three equal outputs keeps only the lowest index as the winner. The row
+    // that failed to persist (promptIdx 2) is graded over the full output set and demoted to
+    // a loser, not emitted in its stale, pre-comparison success state.
+    expect(results[0]).toEqual(expect.objectContaining({ success: true }));
+    expect(results[1]).toEqual(expect.objectContaining({ success: false }));
+    expect(results[2]).toEqual(expect.objectContaining({ success: false }));
+  });
+
+  it('composes select-best then max-score grading for a row that failed to persist', async () => {
+    // Regression: when a test has BOTH select-best and max-score, the failed-to-persist row
+    // used to be rehydrated from its stale pre-comparison state for each pass. select-best
+    // would demote it, then max-score (which can make it the winner) rehydrated the stale row
+    // and overwrote the finalized artifact — erasing the select-best failure and reporting
+    // success: true. The reconstructed row must be reused across passes so grading composes.
+    const selectBestSpy = vi.spyOn(comparison, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: true, score: 1, reason: 'Selected as best' },
+      // The row that failed to persist (promptIdx 2) loses the select-best comparison.
+      { pass: false, score: 0, reason: 'Not selected as best' },
+    ]);
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    // Only the failed row's output contains "hello", so real max-score makes it the unique
+    // winner — without composition it would be re-promoted to success.
+    const provider: ApiProvider = {
+      id: () => 'compose-comparison-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((prompt) =>
+        Promise.resolve({
+          output: prompt.includes('Prompt C') ? 'hello world' : 'goodbye',
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      ),
+    };
+    const originalAddResult = Eval.prototype.addResult;
+    vi.spyOn(Eval.prototype, 'addResult').mockImplementation(async function (this: Eval, result) {
+      if (result.promptIdx === 2) {
+        throw new Error('simulated save failure');
+      }
+      return originalAddResult.call(this, result);
+    });
+
+    await evaluate({
+      outputPath,
+      prompts: ['Prompt A', 'Prompt B', 'Prompt C'],
+      providers: [provider],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'select-best', value: 'choose the best one' },
+            { type: 'max-score' },
+          ],
+        },
+      ],
+    });
+
+    const results = readJsonl(outputPath).sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(results).toHaveLength(3);
+    // The later max-score pass must not erase the select-best failure for the failed row.
+    expect(results[2].success).toBe(false);
+    const selectBestComponent = results[2].gradingResult?.componentResults?.find(
+      (component: any) => component.assertion?.type === 'select-best',
+    );
+    expect(selectBestComponent?.pass).toBe(false);
+
+    selectBestSpy.mockRestore();
   });
 
   it('preserves provider and model-graded assertion token usage when finalizing persisted rows', async () => {
@@ -278,6 +343,7 @@ describe('programmatic JSONL output', () => {
         metadata: {
           headers: {
             'x-request-id': 'legacy_req_should_not_persist',
+            'api-key': 'legacy-api-key-should-not-persist',
             'x-safe-debug': 'keep-legacy',
           },
           http: {
@@ -309,8 +375,12 @@ describe('programmatic JSONL output', () => {
 
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
+    // Legacy top-level response metadata headers are redacted (they echo the transport)
+    // — including api-key-style names via the request-header matcher — while a
+    // non-sensitive header survives.
     expect(result.response.metadata.headers).toEqual({
       'x-request-id': '[REDACTED]',
+      'api-key': '[REDACTED]',
       'x-safe-debug': 'keep-legacy',
     });
     expect(result.response.metadata.http).toEqual({
@@ -329,12 +399,14 @@ describe('programmatic JSONL output', () => {
       },
     });
     expect(result.provider).toEqual({ id: 'metadata-provider' });
+    // A user-controlled `http` key nested in model output must NOT be redacted.
     expect(result.response.output.http.headers.authorization).toBe(
       'model output should stay intact',
     );
     expect(JSON.stringify(result)).not.toContain('session=secret');
     expect(JSON.stringify(result)).not.toContain('req_should_not_persist');
     expect(JSON.stringify(result)).not.toContain('legacy_req_should_not_persist');
+    expect(JSON.stringify(result)).not.toContain('legacy-api-key-should-not-persist');
     expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
     expect(JSON.stringify(result)).not.toContain('azure-api-key-should-not-persist');
     expect(JSON.stringify(result)).not.toContain('custom-api-key-should-not-persist');
@@ -376,6 +448,7 @@ describe('programmatic JSONL output', () => {
       'x-request-id': '[REDACTED]',
       'x-safe-debug': 'keep-legacy',
     });
+    // The result-level metadata.headers echoes the transport, so it is redacted too.
     expect(result.metadata.headers).toEqual({
       'set-cookie': '[REDACTED]',
       'x-request-id': '[REDACTED]',
@@ -413,6 +486,7 @@ describe('programmatic JSONL output', () => {
     });
 
     const [result] = readJsonl(outputPath);
+    // No transport provenance for these headers, so the provenance guard must preserve them.
     expect(result.metadata.headers).toEqual({
       'x-request-id': 'user-defined-reporting-id',
     });
@@ -501,6 +575,37 @@ describe('programmatic JSONL output', () => {
       expect(JSON.stringify(result)).not.toContain('response-metadata-secret');
       expect(JSON.stringify(result)).not.toContain('vars-secret@example.com');
       expect(JSON.stringify(result)).not.toContain('testcase-metadata-secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('applies prompt-text and grading-result strip projections to finalized JSONL', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+    });
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'strip-prompt-grading-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    try {
+      await evaluate({
+        outputPath,
+        prompts: ['Prompt {{topic}}'],
+        providers: [provider],
+        tests: [{ vars: { topic: 'alpha' }, assert: [{ type: 'contains', value: 'hello' }] }],
+      });
+
+      const [result] = readJsonl(outputPath);
+      expect(result.prompt.raw).toBe('[prompt stripped]');
+      expect(result.gradingResult).toBeNull();
     } finally {
       restoreEnv();
     }

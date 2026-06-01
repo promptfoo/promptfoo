@@ -186,6 +186,7 @@ describe('JSONL output with proper line endings', () => {
     }
 
     fs.writeFileSync(tempFilePath, '{"status":"existing"}\n', { mode: 0o644 });
+    fs.chmodSync(tempFilePath, 0o644);
     mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
     });
