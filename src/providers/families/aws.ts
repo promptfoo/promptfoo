@@ -27,11 +27,12 @@ export const awsProviderFactories: ProviderFactory[] = [
       // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
       if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
         const { LumaRayVideoProvider } = await import('../bedrock/luma-ray');
-        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
-        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        // For bedrock:video:luma.ray-v2:0 the id is already in modelName; for
+        // bedrock:luma.ray-v2:0 reconstruct it from splits[1:] (modelType holds the
+        // id, which is non-empty here since this branch required it to contain 'luma.ray').
         const videoModelName = modelName.includes('luma.ray')
           ? modelName
-          : splits.slice(1).join(':') || 'luma.ray-v2:0';
+          : splits.slice(1).join(':');
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 

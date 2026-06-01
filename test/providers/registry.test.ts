@@ -536,6 +536,7 @@ describe('Provider Registry', () => {
         { config: { knowledgeBaseId: 'knowledge-base-id' } },
         mockContext,
       );
+      expect(provider.constructor.name).toBe('AwsBedrockKnowledgeBaseProvider');
       expect(provider.id()).toBe('bedrock:kb:knowledge-base-id');
     });
 
