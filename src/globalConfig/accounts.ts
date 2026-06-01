@@ -195,7 +195,7 @@ export async function checkEmailStatus(options?: {
 
     const host = cloudConfig.isEnabled()
       ? cloudConfig.getApiHost()
-      : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+      : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')?.replace(/\/+$/, '');
 
     const resp = await fetchWithTimeout(
       `${host}/api/users/status?email=${encodeURIComponent(userEmail)}${validateParam}`,
