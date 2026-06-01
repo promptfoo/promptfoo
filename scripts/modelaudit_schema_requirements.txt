@@ -1,5 +1,6 @@
 # Keep this file in sync with the current ModelAudit JSON output contract.
 # Install with --no-deps so CI uses only the transitive pins listed here.
+# Renovate tracks this file; after bumps, run npm run modelAuditSchema:generate.
 modelaudit==0.2.45
 pydantic==2.13.4
 pydantic-core==2.46.4
