@@ -452,7 +452,7 @@ describe('ResultsView Share Button', () => {
     await userEvent.click(screen.getByText('Eval actions'));
     await userEvent.click(screen.getByText('Edit and re-run'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+    expect(mockNavigate).toHaveBeenCalledWith('/setup?sourceEvalId=fallback-eval-id', {
       state: { sourceEvalId: 'fallback-eval-id' },
     });
   });
