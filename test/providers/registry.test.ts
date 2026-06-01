@@ -1165,6 +1165,11 @@ describe('Provider Registry', () => {
         'google:gemini-2.5-flash-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],
+      // Bare google:<model> default chat route (no service-type segment).
+      [
+        'google:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
       [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
@@ -1173,8 +1178,19 @@ describe('Provider Registry', () => {
         'vertex:chat:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
+      // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
+      // (distinct from the vertex:chat: branch, which slices from index 2).
+      [
+        'vertex:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
       [
         'vertex:embedding:gemini-embedding-001',
+        async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
+      ],
+      // Plural `embeddings` alias must route to the same Vertex embedding provider.
+      [
+        'vertex:embeddings:gemini-embedding-001',
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
@@ -1195,6 +1211,16 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       expect((provider as any).config?.vertexai).toBe(true);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it('applies provider id but omits vertexai config for google:video routes', async () => {
+      const providerPath = 'google:video:veo-3.1-generate-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      // Unlike the vertex:video branch, the google:video branch must not inject vertexai.
+      expect((provider as any).config?.vertexai).toBeUndefined();
       expect(provider.id()).toBe(providerPath);
     });
 
