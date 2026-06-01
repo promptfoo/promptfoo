@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./coverage/coverage-final.json
           flags: backend
@@ -435,7 +435,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./site/coverage/coverage-final.json
           flags: site
@@ -481,7 +481,7 @@ jobs:
         run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
