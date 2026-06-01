@@ -3,7 +3,6 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import chokidar from 'chokidar';
-import { InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
@@ -40,7 +39,12 @@ import {
   resolveConfigs,
 } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import {
+  printBorder,
+  setupEnv,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+} from '../util/index';
 import invariant from '../util/invariant';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -53,6 +57,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
+import { collectKeyValueOption, normalizeTagOption } from './options';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
@@ -75,22 +80,6 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
-
-function collectKeyValueOption(
-  optionName: string,
-  value: string,
-  previous: Record<string, string> | undefined,
-): Record<string, string> {
-  const separatorIndex = value.indexOf('=');
-  const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
-  const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
-
-  if (!key || val === undefined) {
-    throw new InvalidArgumentError(`${optionName} must be specified in key=value format.`);
-  }
-
-  return { ...previous, [key]: val };
-}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -524,6 +513,7 @@ export async function doEval(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
@@ -540,13 +530,26 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
-    const shouldApplyRangeToImplicitDefaultTest =
-      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const hasActiveTestFilter =
+      filterRange !== undefined ||
+      cmdObj.filterFailing !== undefined ||
+      cmdObj.filterFailingOnly !== undefined ||
+      cmdObj.filterErrorsOnly !== undefined ||
+      cmdObj.filterFirstN !== undefined ||
+      cmdObj.filterMetadata !== undefined ||
+      cmdObj.filterPattern !== undefined ||
+      filterSample !== undefined;
+    const shouldApplyFiltersToImplicitDefaultTest =
+      hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
-      if (shouldApplyRangeToImplicitDefaultTest) {
-        testSuite.tests = [{}];
+      if (shouldApplyFiltersToImplicitDefaultTest) {
+        const defaultMetadata =
+          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
+        testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
@@ -556,15 +559,14 @@ export async function doEval(
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
-        sample: cmdObj.filterSample,
+        sample: filterSample,
+        sampleSeed: filterSampleSeed,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
-      if (
-        filterRange !== undefined &&
-        !hasScenarios &&
-        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
-        testSuite.tests.length === 0
-      ) {
+      const shouldSuppressImplicitDefaultTest =
+        testSuite.tests.length === 0 &&
+        ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
+      if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
       }
     }
@@ -889,9 +891,11 @@ export async function doEval(
 
     const { outputPath } = config;
 
-    // We're removing JSONL from paths since we already wrote to that during the evaluation
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
+      (p): p is string => typeof p === 'string' && p.length > 0,
     );
 
     const isRedteam = Boolean(config.redteam);
@@ -990,6 +994,7 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
+    warnOnDegradedJsonlRecovery(evalRecord, paths);
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
@@ -1223,6 +1228,7 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
+    .option('--filter-sample-seed <number>', 'Numeric seed used to make --filter-sample repeatable')
     .option(
       '--filter-failing <path or id>',
       'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
@@ -1286,10 +1292,9 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        const optsWithAliases = {
-          ...opts,
-          tags: (opts as EvalCommandOptions & { tag?: Record<string, string> }).tag ?? opts.tags,
-        };
+        const optsWithAliases = normalizeTagOption(
+          opts as EvalCommandOptions & { tag?: Record<string, string> },
+        );
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`

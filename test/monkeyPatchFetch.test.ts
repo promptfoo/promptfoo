@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../src/constants';
 import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
 import logger, { logRequestResponse } from '../src/logger';
@@ -43,6 +43,10 @@ describe('monkeyPatchFetch', () => {
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
     vi.mocked(logRequestResponse).mockClear();
     mockOriginalFetch.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should log successful requests and responses', async () => {
@@ -194,6 +198,30 @@ describe('monkeyPatchFetch', () => {
     expect(logger.debug).toHaveBeenCalledWith(
       expect.stringContaining('Connection error, please check your network connectivity'),
     );
+  });
+
+  it('should redact credentials in connection error target and proxy URLs', async () => {
+    const connectionError = new TypeError('fetch failed');
+    connectionError.cause = {
+      stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple',
+    };
+    mockOriginalFetch.mockRejectedValue(connectionError);
+    vi.stubEnv('HTTP_PROXY', 'https://proxy-user:proxy-password@proxy.example.com?token=proxy-key');
+
+    const url =
+      'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+
+    await expect(monkeyPatchFetch(url)).rejects.toThrow('fetch failed');
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).toContain('proxy.example.com');
+    expect(debugLogs).not.toContain('webhook-user');
+    expect(debugLogs).not.toContain('webhook-password');
+    expect(debugLogs).not.toContain('webhook-secret');
+    expect(debugLogs).not.toContain('proxy-user');
+    expect(debugLogs).not.toContain('proxy-password');
+    expect(debugLogs).not.toContain('proxy-key');
   });
 
   it('should not log errors for excluded endpoints', async () => {

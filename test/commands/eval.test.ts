@@ -29,6 +29,7 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -95,32 +96,40 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
 }));
+vi.mock('../../src/util/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/index')>()),
+  writeMultipleOutputs: vi.fn(),
+}));
 vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/util/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/provider')>()),
   checkProviderApiKeys: vi.fn(() => new Map<string, string[]>()),
 }));
 vi.mock('../../src/database/index', async (importOriginal) => {
+  const dbMock = {
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({
+        onConflictDoNothing: vi.fn(() => ({
+          run: vi.fn(),
+        })),
+        run: vi.fn(),
+      })),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({
+          run: vi.fn(),
+        })),
+      })),
+    })),
+  };
+
   return {
     ...(await importOriginal()),
 
     getDb: vi.fn(() => ({
-      transaction: vi.fn((fn) => fn()),
-      insert: vi.fn(() => ({
-        values: vi.fn(() => ({
-          onConflictDoNothing: vi.fn(() => ({
-            run: vi.fn(),
-          })),
-          run: vi.fn(),
-        })),
-      })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => ({
-            run: vi.fn(),
-          })),
-        })),
-      })),
+      ...dbMock,
+      transaction: vi.fn((fn) => fn(dbMock)),
     })),
   };
 });
@@ -202,6 +211,55 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+  });
+
+  it('should finalize streamed JSONL output after a successful CLI evaluation', async () => {
+    const cmdObj = { table: false, write: false, share: false };
+    const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['results.jsonl', 'results.json'],
+      expect.any(Eval),
+      null,
+    );
+  });
+
+  it('should finalize streamed JSONL output through recovery when CLI result persistence fails', async () => {
+    const cmdObj = { table: false, write: false, share: false };
+    const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      evalRecord.resultPersistenceFailed = true;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['results.jsonl', 'results.json'],
+      expect.any(Eval),
+      null,
+    );
   });
 
   it('should merge runtime tags over config tags', async () => {

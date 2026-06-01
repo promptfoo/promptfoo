@@ -17,7 +17,7 @@ describe('evalPerformance', () => {
   });
 
   beforeEach(async () => {
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -266,7 +266,7 @@ describe('evalPerformance', () => {
       expect(await getCachedResultsCount(evalA.id)).toBe(2);
       expect(await getCachedResultsCount(evalB.id)).toBe(3);
 
-      deleteEvals([evalA.id, evalB.id]);
+      await deleteEvals([evalA.id, evalB.id]);
 
       expect(await getCachedResultsCount(evalA.id)).toBe(0);
       expect(await getCachedResultsCount(evalB.id)).toBe(0);

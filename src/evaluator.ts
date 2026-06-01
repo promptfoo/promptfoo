@@ -16,11 +16,15 @@ import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
-import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -54,6 +58,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -70,10 +75,15 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import {
+  buildConfiguredProviderMap,
+  resolveConfiguredProviderReference,
+} from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
+import { getOutputFileFormat } from './util/outputFormats';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -87,6 +97,7 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGradingRequest,
   accumulateResponseTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
@@ -541,11 +552,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage.assertions) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
-  row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
-
-  if (checkResult.tokensUsed) {
-    accumulateAssertionTokenUsage(row.tokenUsage.assertions, checkResult.tokensUsed);
-  }
+  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed);
   row.gradingResult = checkResult;
 }
 
@@ -1990,6 +1997,51 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
   return promptIndexMap;
 }
 
+function resolveAssertionProviderReferences(
+  assertion: AssertionOrSet,
+  providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
+): AssertionOrSet {
+  if (assertion.type === 'assert-set') {
+    const resolvedAssertions = assertion.assert.map(
+      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
+    );
+    if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
+      return assertion;
+    }
+    return { ...assertion, assert: resolvedAssertions };
+  }
+
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
+  return provider === assertion.provider ? assertion : { ...assertion, provider };
+}
+
+function resolveRuntimeGradingProviderReferences(
+  testCase: AtomicTestCase,
+  providerMap: Record<string, ApiProvider>,
+  env?: EnvOverrides,
+): void {
+  if (testCase.options?.provider) {
+    const provider = resolveConfiguredProviderReference(
+      testCase.options.provider,
+      providerMap,
+      env,
+    );
+    if (provider !== testCase.options.provider) {
+      testCase.options = { ...testCase.options, provider };
+    }
+  }
+
+  if (testCase.assert) {
+    const assertions = testCase.assert.map((assertion) =>
+      resolveAssertionProviderReferences(assertion, providerMap, env),
+    );
+    if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
+      testCase.assert = assertions;
+    }
+  }
+}
+
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
@@ -2136,6 +2188,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const promptIdCache = new Map<Prompt, string>();
+  const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
   for (const prompt of testSuite.prompts) {
     promptIdCache.set(prompt, generateIdFromPrompt(prompt));
   }
@@ -2144,6 +2197,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -2612,10 +2666,12 @@ async function filterCompletedResumeSteps(runEvalOptions: RunEvalOptions[], eval
 function adjustConcurrencyForSerialFeatures({
   concurrency,
   prompts,
+  providers,
   tests,
 }: {
   concurrency: number;
   prompts: CompletedPrompt[];
+  providers: ApiProvider[];
   tests: AtomicTestCase[];
 }) {
   const usesConversationVar = prompts.some(promptUsesConversationVariable);
@@ -2624,6 +2680,9 @@ function adjustConcurrencyForSerialFeatures({
   }
 
   const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
+  const usesPersistentBrowserSession = providers.some(
+    (provider) => provider.id() === 'browser-provider' && provider.config?.persistSession === true,
+  );
   if (usesConversationVar) {
     logger.info(
       `Setting concurrency to 1 because the ${chalk.cyan(CONVERSATION_VAR_NAME)} variable is used.`,
@@ -2632,6 +2691,10 @@ function adjustConcurrencyForSerialFeatures({
   }
   if (usesStoreOutputAs) {
     logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
+    return { concurrency: 1, usesConversationVar };
+  }
+  if (usesPersistentBrowserSession) {
+    logger.info(`Setting concurrency to 1 because browser persistSession is enabled.`);
     return { concurrency: 1, usesConversationVar };
   }
   return { concurrency, usesConversationVar };
@@ -2975,12 +3038,15 @@ class Evaluator {
     this.registers = {};
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
-      ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
-      : evalRecord.config.outputPath?.endsWith('.jsonl')
+      ? evalRecord.config.outputPath.filter((p) => getOutputFileFormat(p) === 'jsonl')
+      : evalRecord.config.outputPath &&
+          getOutputFileFormat(evalRecord.config.outputPath) === 'jsonl'
         ? [evalRecord.config.outputPath]
         : [];
 
-    this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+    this.fileWriters = jsonlFiles.map(
+      (p) => new JsonlFileWriter(p, { append: Boolean(cliState.resume) }),
+    );
 
     // Create rate limit registry for adaptive concurrency control
     this.rateLimitRegistry = createRateLimitRegistry({
@@ -3083,10 +3149,22 @@ class Evaluator {
     }
   }
 
+  // Buffer the authoritative copy of a row only once a DB persistence failure has been
+  // observed. Before any failure, rows are recoverable from the streamed JSONL file and
+  // the database during finalization; after a failure we can no longer trust the DB, so
+  // we keep the in-memory copy of every subsequent row (timeout / deferred-grading rows
+  // that never stream) to override stale entries in the recovery merge.
+  private trackFinalJsonlResult(row: EvalResult | EvaluateResult): void {
+    if (this.fileWriters.length > 0 && this.evalRecord.resultPersistenceFailed) {
+      this.evalRecord.recordFinalJsonlResult(asEvaluateResult(row));
+    }
+  }
+
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
       await this.evalRecord.addResult(row);
     } catch (error) {
+      this.evalRecord.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
         error,
@@ -3095,7 +3173,7 @@ class Evaluator {
     }
 
     for (const writer of this.fileWriters) {
-      await writer.write(row);
+      await writer.write(sanitizeResultForJsonlArtifact(row));
     }
   }
 
@@ -3391,6 +3469,7 @@ class Evaluator {
       timeoutMs,
       error,
     );
+    this.trackFinalJsonlResult(timeoutResult);
     await this.evalRecord.addResult(timeoutResult);
     this.stats.errors++;
 
@@ -3719,7 +3798,6 @@ class Evaluator {
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -3746,7 +3824,6 @@ class Evaluator {
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -4018,10 +4095,24 @@ class Evaluator {
     }
   }
 
-  private async getResultsToCompare(testIdx: number) {
-    return this.evalRecord.persisted
-      ? this.evalRecord.fetchResultsByTestIdx(testIdx)
+  private async getResultsToCompare(testIdx: number): Promise<EvalResult[]> {
+    const base = this.evalRecord.persisted
+      ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
       : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+    if (!this.evalRecord.resultPersistenceFailed) {
+      return base;
+    }
+    // A row that failed to persist is absent from the database (and from `results`), so it
+    // would otherwise be excluded from the comparison — skewing the winner for its siblings
+    // and leaving the failed row with stale, pre-comparison grading. Merge it back in.
+    const failed = await this.evalRecord.getFailedResultsByTestIdx(testIdx);
+    if (failed.length === 0) {
+      return base;
+    }
+    const seen = new Set(base.map(getResultIndexKey));
+    return [...base, ...failed.filter((r) => !seen.has(getResultIndexKey(r)))].sort(
+      (a, b) => a.promptIdx - b.promptIdx,
+    );
   }
 
   private getComparisonCallApiContext(
@@ -4041,6 +4132,38 @@ class Evaluator {
     };
   }
 
+  // Shared tail for the comparison graders: record the pass/score transition, capture the
+  // canonical row for JSONL finalization, and persist (unless this row already failed to
+  // persist, in which case re-saving would just re-throw). `wasSuccess`/`wasScore` must be
+  // captured by the caller before its merge mutates `result`.
+  private async finalizeComparisonGrading({
+    gradingResult,
+    metrics,
+    result,
+    wasSuccess,
+    wasScore,
+  }: {
+    gradingResult: GradingResult;
+    metrics: CompletedPrompt['metrics'] | undefined;
+    result: EvalResult;
+    wasSuccess: boolean;
+    wasScore: number;
+  }) {
+    this.updateComparisonStats(
+      result,
+      gradingResult.pass,
+      gradingResult.reason || '',
+      gradingResult.tokensUsed,
+      wasSuccess,
+      wasScore,
+      metrics,
+    );
+    this.trackFinalJsonlResult(result);
+    if (this.evalRecord.persisted && !this.evalRecord.hasResultPersistenceFailure(result)) {
+      await result.save();
+    }
+  }
+
   private async applySelectBestGradingResult({
     gradingResult,
     metrics,
@@ -4053,18 +4176,7 @@ class Evaluator {
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeSelectBestGradingResult(result, gradingResult, this.stats.tokenUsage);
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-    );
-    if (this.evalRecord.persisted) {
-      await result.save();
-    }
+    await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
   private async applyMaxScoreGradingResult({
@@ -4079,18 +4191,7 @@ class Evaluator {
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeMaxScoreGradingResult(result, gradingResult);
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-    );
-    if (this.evalRecord.persisted) {
-      await result.save();
-    }
+    await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
   private async finalizeEvaluation({
@@ -4164,7 +4265,6 @@ class Evaluator {
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
     }
-    updateSignalFile(this.evalRecord.id);
   }
 
   private async addMaxDurationTimeoutResults({
@@ -4186,6 +4286,7 @@ class Evaluator {
       }
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      this.trackFinalJsonlResult(timeoutResult);
       await this.evalRecord.addResult(timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
@@ -4202,10 +4303,7 @@ class Evaluator {
     }
 
     const allResults = await this.evalRecord.getResults();
-    const resultsForExtension: EvaluateResult[] = allResults.map(
-      (result): EvaluateResult =>
-        'toEvaluateResult' in result ? result.toEvaluateResult() : result,
-    );
+    const resultsForExtension: EvaluateResult[] = allResults.map(asEvaluateResult);
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
@@ -4369,6 +4467,11 @@ class Evaluator {
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
+    // Preserve configured/transformed variable order before concurrent rows finish.
+    // Result-only variables discovered at runtime are appended as they appear.
+    for (const varName of varNames) {
+      vars.add(varName);
+    }
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     const runEvalOptions = await buildRunEvalOptions({
       concurrency,
@@ -4389,6 +4492,7 @@ class Evaluator {
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
       prompts,
+      providers: runEvalOptions.map((evalOption) => evalOption.provider),
       tests,
     });
     concurrency = concurrencySettings.concurrency;
@@ -4573,53 +4677,88 @@ class Evaluator {
       initializeOtel(otelConfig);
     }
 
+    let evaluationError: unknown;
     try {
       return await this._runEvaluation();
+    } catch (error) {
+      evaluationError = error;
+      throw error;
     } finally {
-      // Flush and shutdown OTEL SDK
-      if (tracingEnabled) {
-        logger.debug('[Evaluator] Flushing OTEL spans...');
-        await flushOtel();
-        await shutdownOtel();
-      }
+      // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
+      // teardown below, so the streamed file is fully flushed before the post-run rewrite
+      // reads it back and the file handle is released promptly. allSettled so one writer's
+      // close failure neither blocks cleanup nor masks another writer's error.
+      const writerCloseResults = await Promise.allSettled(
+        this.fileWriters.map((writer) => writer.close()),
+      );
+      const writerCloseErrors = writerCloseResults.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
 
-      if (isOtlpReceiverStarted()) {
-        // Add a delay to allow providers to finish exporting spans
-        logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(3000);
-      }
-      await stopOtlpReceiverIfNeeded();
+      let cleanupError: unknown;
+      try {
+        // Flush and shutdown OTEL SDK
+        if (tracingEnabled) {
+          logger.debug('[Evaluator] Flushing OTEL spans...');
+          await flushOtel();
+          await shutdownOtel();
+        }
 
-      // Clean up Python worker pools to prevent resource leaks
-      await providerRegistry.shutdownAll();
+        if (isOtlpReceiverStarted()) {
+          // Add a delay to allow providers to finish exporting spans
+          logger.debug('[Evaluator] Waiting for span exports to complete...');
+          await sleep(3000);
+        }
+        await stopOtlpReceiverIfNeeded();
 
-      // Log rate limit metrics for debugging before cleanup
-      if (this.rateLimitRegistry) {
-        const metrics = this.rateLimitRegistry.getMetrics();
-        for (const [key, m] of Object.entries(metrics)) {
-          if (m.totalRequests > 0) {
-            logger.debug(`[Scheduler] Final metrics for ${key}`, {
-              totalRequests: m.totalRequests,
-              completedRequests: m.completedRequests,
-              failedRequests: m.failedRequests,
-              rateLimitHits: m.rateLimitHits,
-              retriedRequests: m.retriedRequests,
-              avgLatencyMs: Math.round(m.avgLatencyMs),
-              p50LatencyMs: Math.round(m.p50LatencyMs),
-              p99LatencyMs: Math.round(m.p99LatencyMs),
-            });
+        // Clean up Python worker pools to prevent resource leaks
+        await providerRegistry.shutdownAll();
+
+        // Log rate limit metrics for debugging before cleanup
+        if (this.rateLimitRegistry) {
+          const metrics = this.rateLimitRegistry.getMetrics();
+          for (const [key, m] of Object.entries(metrics)) {
+            if (m.totalRequests > 0) {
+              logger.debug(`[Scheduler] Final metrics for ${key}`, {
+                totalRequests: m.totalRequests,
+                completedRequests: m.completedRequests,
+                failedRequests: m.failedRequests,
+                rateLimitHits: m.rateLimitHits,
+                retriedRequests: m.retriedRequests,
+                avgLatencyMs: Math.round(m.avgLatencyMs),
+                p50LatencyMs: Math.round(m.p50LatencyMs),
+                p99LatencyMs: Math.round(m.p99LatencyMs),
+              });
+            }
+          }
+        }
+
+        // Clean up rate limit registry resources
+        this.rateLimitRegistry?.dispose();
+
+        // Clear registry from redteam provider manager
+        redteamProviderManager.setRateLimitRegistry(undefined);
+
+        // Reset cliState.maxConcurrency to prevent stale state between evaluations
+        cliState.maxConcurrency = undefined;
+      } catch (error) {
+        cleanupError = error;
+        throw error;
+      } finally {
+        if (writerCloseErrors.length > 0) {
+          logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
+          // Only surface a writer-close failure when nothing else failed, so the original
+          // evaluation/cleanup error is never masked by a secondary I/O error.
+          if (evaluationError === undefined && cleanupError === undefined) {
+            throw writerCloseErrors.length === 1
+              ? writerCloseErrors[0]
+              : new AggregateError(
+                  writerCloseErrors,
+                  'Multiple JSONL output writers failed to close',
+                );
           }
         }
       }
-
-      // Clean up rate limit registry resources
-      this.rateLimitRegistry?.dispose();
-
-      // Clear registry from redteam provider manager
-      redteamProviderManager.setRateLimitRegistry(undefined);
-
-      // Reset cliState.maxConcurrency to prevent stale state between evaluations
-      cliState.maxConcurrency = undefined;
     }
   }
 }
