@@ -45,7 +45,7 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 
 describe('evaluatorTracing', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
     mockStopOTLPReceiver.mockReset();
