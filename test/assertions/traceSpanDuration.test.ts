@@ -485,6 +485,23 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+  ])('should reject invalid max values (%s)', (max) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max } },
+      renderedValue: { max },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion max must be a finite non-negative number',
+    );
+  });
+
   it('should invert the result for not-trace-span-duration when latency budget is met', () => {
     const params: AssertionParams = {
       ...defaultParams,

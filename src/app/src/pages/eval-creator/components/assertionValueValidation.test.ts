@@ -225,6 +225,16 @@ describe('structured value assertions', () => {
         make({ type: 'trajectory:step-count', value: { min: 1 } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-count', value: { min: -1 } as any }),
+      ),
+    ).toMatch(/whole numbers/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-count', value: { min: 2, max: 1 } as any }),
+      ),
+    ).toMatch(/Maximum trajectory step count/);
   });
 
   it('rejects an empty trajectory:tool-sequence', () => {
@@ -265,6 +275,11 @@ describe('structured value assertions', () => {
         make({ type: 'tokens-used', value: { max: 100, source: 'response' } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'tokens-used', value: { max: 100, pattern: '  ' } as any }),
+      ),
+    ).toMatch(/non-empty text/);
   });
 
   it('validates trajectory:tool-set matcher lists and modes', () => {
@@ -305,6 +320,39 @@ describe('structured value assertions', () => {
         make({ type: 'trace-span-duration', value: { pattern: 'fetch*', max: 250 } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: 'fetch*', min: -1 } as any }),
+      ),
+    ).toMatch(/whole numbers/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: 'fetch*' } as any }),
+      ),
+    ).toMatch(/minimum or maximum/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-duration', value: { max: -1 } as any }),
+      ),
+    ).toMatch(/maximum trace span duration/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-duration', value: { max: 250, pattern: '  ' } as any }),
+      ),
+    ).toMatch(/non-empty text/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-duration', value: { max: 250, requirePresence: 'yes' } as any }),
+      ),
+    ).toMatch(/true or false/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trace-span-duration',
+          value: { max: 250, percentile: 95, method: 'approximate' },
+        } as any),
+      ),
+    ).toMatch(/nearest.*linear/);
   });
 });
 
@@ -389,6 +437,42 @@ describe('skill-used object values', () => {
     expect(
       getRunnableAssertionValueError(
         make({ type: 'not-skill-used', value: { pattern: 'web.*', max: 0 } as any }),
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('trajectory object values', () => {
+  it('requires finite non-negative integer trajectory tool count limits', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: { name: 'search', min: 1.5 } as any }),
+      ),
+    ).toMatch(/whole numbers/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: { name: 'search', min: 2, max: 1 } as any }),
+      ),
+    ).toMatch(/Maximum trajectory tool count/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: { name: 'search', min: 1, max: 2 } as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('requires positive trajectory goal timeouts', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:goal-success', value: { goal: 'find answer', timeoutMs: 0 } }),
+      ),
+    ).toMatch(/positive trajectory goal timeout/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'find answer', timeoutMs: 1_000 },
+        }),
       ),
     ).toBeUndefined();
   });

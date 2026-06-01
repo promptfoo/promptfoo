@@ -210,6 +210,68 @@ describe('sanitizeObject', () => {
       ).toEqual({ tests: [redactedUri] });
     });
 
+    it('restores unchanged duplicate Azure Blob SAS URIs by position', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [redactedUri, redactedUri] },
+          {
+            tests: [
+              'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          'az://account/container/tests.yaml?sp=r&sig=second-secret',
+        ],
+      });
+    });
+
+    it('combines positional and identity restoration within the same array item', () => {
+      const stored = {
+        tests: [
+          {
+            primary: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            secondary: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+          },
+          {
+            primary: 'az://account/container/c.yaml?sp=r&sig=secret-c',
+          },
+        ],
+      };
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              {
+                primary: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+                secondary: 'az://account/container/c.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+              {
+                primary: 'inline suite',
+              },
+            ],
+          },
+          stored,
+        ),
+      ).toEqual({
+        tests: [
+          {
+            primary: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            secondary: 'az://account/container/c.yaml?sp=r&sig=secret-c',
+          },
+          {
+            primary: 'inline suite',
+          },
+        ],
+      });
+    });
+
     it('restores nested array SAS tokens when unrelated object fields are edited', () => {
       const stored = {
         tests: [

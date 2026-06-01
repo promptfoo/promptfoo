@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import { renderVarsInObject } from '../util/render';
-import { matchesPattern } from './traceUtils';
+import { assertFiniteNonNegativeInteger, assertValidRange, matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -59,6 +59,13 @@ function formatStepList(stepLabels: string[]): string {
   return stepLabels.length > 0 ? stepLabels.join(', ') : '(none)';
 }
 
+function getRenderedTrajectoryValue(params: AssertionParams): unknown {
+  return renderVarsInObject(
+    params.renderedValue ?? params.assertion.value,
+    params.assertionValueContext.vars,
+  );
+}
+
 function requireNamedTrajectoryMatcher(
   matcher: TrajectoryStepMatcher,
   assertionType: string,
@@ -72,6 +79,28 @@ function requireNamedTrajectoryMatcher(
   throw new Error(
     `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
   );
+}
+
+function resolveTrajectoryCountBounds(
+  value: Record<string, unknown>,
+  assertionType: string,
+): Pick<TrajectoryCountValue, 'min' | 'max'> {
+  const { min, max } = value;
+  if (min !== undefined) {
+    assertFiniteNonNegativeInteger(min, `${assertionType} assertion min`);
+  }
+  if (max !== undefined) {
+    assertFiniteNonNegativeInteger(max, `${assertionType} assertion max`);
+  }
+  assertValidRange(
+    min as number | undefined,
+    max as number | undefined,
+    `${assertionType} assertion`,
+  );
+  return {
+    min: min as number | undefined,
+    max: max as number | undefined,
+  };
 }
 
 function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
@@ -126,19 +155,13 @@ function resolveToolMatchers(
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
+    const rawValue = value as Record<string, unknown>;
+    const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher, 'tool');
     return {
       kind: 'count',
       matcher: {
         ...matcher,
-        max:
-          typeof (value as TrajectoryCountValue).max === 'number'
-            ? (value as TrajectoryCountValue).max
-            : undefined,
-        min:
-          typeof (value as TrajectoryCountValue).min === 'number'
-            ? (value as TrajectoryCountValue).min
-            : undefined,
+        ...resolveTrajectoryCountBounds(rawValue, 'trajectory:tool-used'),
       },
     };
   }
@@ -151,7 +174,7 @@ function resolveToolMatchers(
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const steps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const expected = resolveToolMatchers(params.renderedValue ?? params.assertion.value);
+  const expected = resolveToolMatchers(getRenderedTrajectoryValue(params));
 
   if (expected.kind === 'list') {
     if (expected.matchers.length === 0) {
@@ -195,7 +218,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   const matcher = expected.matcher;
-  const min = matcher.min ?? 1;
+  const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
   const max = matcher.max;
   if (!matcher.pattern && !matcher.name) {
     throw new Error(
@@ -263,7 +286,7 @@ function resolveToolSetValue(value: unknown): TrajectoryToolSetValue {
 export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const value = resolveToolSetValue(params.renderedValue ?? params.assertion.value);
+  const value = resolveToolSetValue(getRenderedTrajectoryValue(params));
 
   if (value.tools.length === 0) {
     throw new Error('trajectory:tool-set assertion requires at least one expected tool');
@@ -537,7 +560,7 @@ function resolveToolArgsMatchValue(value: unknown) {
 export const handleTrajectoryToolSequence = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
+  const value = resolveSequenceValue(getRenderedTrajectoryValue(params));
   const expectedMatchers = value.steps.map((step, index) => {
     const matcher = normalizeTrajectoryMatcher(step, 'tool');
     requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-sequence', index);
@@ -608,13 +631,8 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const assertionValue = params.renderedValue ?? params.assertion.value;
-  const renderedAssertionValue =
-    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
-      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
-      : assertionValue;
   const { matcher, expectedArgs, mode, redactArgsInFailures, defaults, ignore } =
-    resolveToolArgsMatchValue(renderedAssertionValue);
+    resolveToolArgsMatchValue(getRenderedTrajectoryValue(params));
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
@@ -679,24 +697,18 @@ function resolveStepCountValue(value: unknown): TrajectoryCountValue {
     throw new Error('trajectory:step-count assertion must have an object value');
   }
 
-  const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher);
+  const rawValue = value as Record<string, unknown>;
+  const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher);
   return {
     ...matcher,
-    max:
-      typeof (value as TrajectoryCountValue).max === 'number'
-        ? (value as TrajectoryCountValue).max
-        : undefined,
-    min:
-      typeof (value as TrajectoryCountValue).min === 'number'
-        ? (value as TrajectoryCountValue).min
-        : undefined,
+    ...resolveTrajectoryCountBounds(rawValue, 'trajectory:step-count'),
   };
 }
 
 export const handleTrajectoryStepCount = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const steps = extractTrajectorySteps(trace);
-  const matcher = resolveStepCountValue(params.renderedValue ?? params.assertion.value);
+  const matcher = resolveStepCountValue(getRenderedTrajectoryValue(params));
 
   const { min, max } = matcher;
   if (min === undefined && max === undefined) {
@@ -780,18 +792,12 @@ export const handleTrajectoryGoalSuccess = async (
   params: AssertionParams,
 ): Promise<GradingResult> => {
   const trace = getTraceOrThrow(params);
-  // Imported lazily so the trajectory assertion module doesn't pull the scheduler/render
-  // (and transitively the DB) into its import graph for the non-goal-success handlers.
-  const { renderVarsInObject } = await import('../util/render');
+  // Imported lazily so non-model-graded trajectory assertions don't pull the scheduler
+  // (and transitively the DB) into their import graph.
   const { getProviderCallExecutionContext, withProviderCallExecutionContext } = await import(
     '../scheduler/providerCallExecutionContext'
   );
-  const assertionValue = params.renderedValue ?? params.assertion.value;
-  const { goal, timeoutMs } = resolveGoalSuccessValue(
-    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
-      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
-      : assertionValue,
-  );
+  const { goal, timeoutMs } = resolveGoalSuccessValue(getRenderedTrajectoryValue(params));
   const trajectory = summarizeTrajectoryForJudge(trace);
   const runJudge = () =>
     matchesTrajectoryGoalSuccess(

@@ -1,4 +1,4 @@
-import { matchesPattern } from './traceUtils';
+import { assertFiniteNonNegativeNumber, matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -86,6 +86,13 @@ export const handleTraceSpanDuration = ({
   }
 
   const { pattern = '*', max, percentile, method = 'nearest', requirePresence = false } = value;
+  assertFiniteNonNegativeNumber(max, 'trace-span-duration assertion max');
+  if (typeof pattern !== 'string' || !pattern) {
+    throw new Error('trace-span-duration assertion pattern must be a non-empty string');
+  }
+  if (typeof requirePresence !== 'boolean') {
+    throw new Error('trace-span-duration assertion requirePresence must be a boolean');
+  }
   // `method` and `percentile` only affect the percentile path, so validate them only when a
   // percentile is requested (avoids rejecting a valid plain max-duration config over an
   // unused method).

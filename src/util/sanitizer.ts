@@ -341,12 +341,20 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
     const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
+    const canRestoreByPosition = value.length === storedItems.length;
     let restored = false;
-    const restoredItems = value.map((item) => {
+    const restoredItems = value.map((item, index) => {
+      let itemValue = item;
+      if (canRestoreByPosition) {
+        const positionalResult = restoreAzureBlobSasTokensWithResult(item, storedItems[index]);
+        restored ||= positionalResult.restored;
+        itemValue = positionalResult.value;
+      }
+
       // Array positions are not stable across edits. Restore by URI identity so
       // reorders and deletions keep the matching secret while ambiguous URIs
       // remain redacted.
-      const result = restoreAzureBlobSasTokensFromMap(item, storedTokensByRedactedUri);
+      const result = restoreAzureBlobSasTokensFromMap(itemValue, storedTokensByRedactedUri);
       restored ||= result.restored;
       return result.value;
     });

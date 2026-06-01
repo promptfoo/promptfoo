@@ -450,12 +450,20 @@ describe('handleTokensUsed', () => {
       assertion: { type: 'tokens-used', value: { max: 1000 } },
       renderedValue: { max: 1000, pattern: 123 } as unknown as { max: number },
     };
+    const blankPatternParams: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1000 } },
+      renderedValue: { max: 1000, pattern: '  ' },
+    };
 
     expect(() => handleTokensUsed(invalidSourceParams)).toThrow(
       'tokens-used source must be "trace", "response", or "auto"',
     );
     expect(() => handleTokensUsed(invalidPatternParams)).toThrow(
-      'tokens-used pattern must be a string',
+      'tokens-used pattern must be a non-empty string',
+    );
+    expect(() => handleTokensUsed(blankPatternParams)).toThrow(
+      'tokens-used pattern must be a non-empty string',
     );
   });
 

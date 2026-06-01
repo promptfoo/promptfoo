@@ -279,6 +279,23 @@ function isNonNegativeInteger(value: unknown): value is number {
   );
 }
 
+function getNonNegativeIntegerRangeError(
+  value: Record<string, unknown>,
+  label: string,
+): string | undefined {
+  const { min, max } = value;
+  if (
+    (min !== undefined && !isNonNegativeInteger(min)) ||
+    (max !== undefined && !isNonNegativeInteger(max))
+  ) {
+    return `Enter ${label} as whole numbers, 0 or greater.`;
+  }
+  if (typeof min === 'number' && typeof max === 'number' && max < min) {
+    return `Maximum ${label} cannot be less than minimum ${label}.`;
+  }
+  return undefined;
+}
+
 function getTrajectoryToolSequenceSteps(value: unknown): unknown[] | undefined {
   if (Array.isArray(value)) {
     return value;
@@ -401,18 +418,26 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  if (
-    (value.min !== undefined && (typeof value.min !== 'number' || !Number.isFinite(value.min))) ||
-    (value.max !== undefined && (typeof value.max !== 'number' || !Number.isFinite(value.max)))
-  ) {
-    return 'Enter numeric trace span count limits.';
+  if (value.min === undefined && value.max === undefined) {
+    return 'Enter JSON with a minimum or maximum trace span count.';
   }
-  return undefined;
+  return getNonNegativeIntegerRangeError(value, 'trace span count limits');
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
-  if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
+  if (
+    !isRecord(value) ||
+    typeof value.max !== 'number' ||
+    !Number.isFinite(value.max) ||
+    value.max < 0
+  ) {
     return 'Enter JSON with a maximum trace span duration.';
+  }
+  if (value.pattern !== undefined && !hasNonBlankString(value.pattern)) {
+    return 'Enter the optional trace span duration pattern as non-empty text.';
+  }
+  if (value.requirePresence !== undefined && typeof value.requirePresence !== 'boolean') {
+    return 'Set trace span duration requirePresence to true or false.';
   }
   if (
     value.percentile !== undefined &&
@@ -422,6 +447,14 @@ function getTraceSpanDurationValueError(value: unknown): string | undefined {
       value.percentile > 100)
   ) {
     return 'Enter a trace span percentile from 0 to 100.';
+  }
+  if (
+    value.percentile !== undefined &&
+    value.method !== undefined &&
+    value.method !== 'nearest' &&
+    value.method !== 'linear'
+  ) {
+    return 'Set trace span duration method to "nearest" or "linear".';
   }
   return undefined;
 }
@@ -440,10 +473,10 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
 }
 
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
-  if (!isRecord(value) || (typeof value.min !== 'number' && typeof value.max !== 'number')) {
+  if (!isRecord(value) || (value.min === undefined && value.max === undefined)) {
     return 'Enter JSON with a minimum or maximum trajectory step count.';
   }
-  return undefined;
+  return getNonNegativeIntegerRangeError(value, 'trajectory step count limits');
 }
 
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
@@ -478,8 +511,8 @@ function getTokensUsedValueError(value: unknown): string | undefined {
   if (source !== undefined && source !== 'trace' && source !== 'response' && source !== 'auto') {
     return 'Set token usage source to "trace", "response", or "auto".';
   }
-  if (pattern !== undefined && typeof pattern !== 'string') {
-    return 'Enter the optional token usage span pattern as text.';
+  if (pattern !== undefined && !hasNonBlankString(pattern)) {
+    return 'Enter the optional token usage span pattern as non-empty text.';
   }
 
   return undefined;
@@ -653,6 +686,17 @@ function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
     return 'Enter the goal that the agent should achieve.';
   }
 
+  if (
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
+    isRecord(assertion.value) &&
+    assertion.value.timeoutMs !== undefined &&
+    (typeof assertion.value.timeoutMs !== 'number' ||
+      !Number.isFinite(assertion.value.timeoutMs) ||
+      assertion.value.timeoutMs <= 0)
+  ) {
+    return 'Enter a positive trajectory goal timeout in milliseconds.';
+  }
+
   return undefined;
 }
 
@@ -678,14 +722,9 @@ function getSkillCountValueError(assertion: Assertion): string | undefined {
     hasMatcherName(assertion.value)
   ) {
     const { min, max } = assertion.value;
-    if (
-      (min !== undefined && !isNonNegativeInteger(min)) ||
-      (max !== undefined && !isNonNegativeInteger(max))
-    ) {
-      return 'Enter skill count limits as whole numbers, 0 or greater.';
-    }
-    if (typeof min === 'number' && typeof max === 'number' && max < min) {
-      return 'Maximum skill count cannot be less than minimum skill count.';
+    const countError = getNonNegativeIntegerRangeError(assertion.value, 'skill count limits');
+    if (countError) {
+      return countError;
     }
     if (
       assertion.type === 'not-skill-used' &&
@@ -698,6 +737,18 @@ function getSkillCountValueError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
+function getTrajectoryToolCountValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') &&
+    isRecord(assertion.value) &&
+    hasMatcherName(assertion.value)
+  ) {
+    return getNonNegativeIntegerRangeError(assertion.value, 'trajectory tool count limits');
+  }
+
+  return undefined;
+}
+
 function getExpectedValueError(assertion: Assertion): string | undefined {
   return (
     getModerationValueError(assertion) ||
@@ -705,7 +756,8 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
     getRequiredStringValueError(assertion) ||
     getTrajectoryGoalValueError(assertion) ||
     getNamedMatcherValueError(assertion) ||
-    getSkillCountValueError(assertion)
+    getSkillCountValueError(assertion) ||
+    getTrajectoryToolCountValueError(assertion)
   );
 }
 
