@@ -306,12 +306,24 @@ tracing:
     retentionDays: 30
 ```
 
-`redactAttributes` is matched case-insensitively against attribute keys. For traces
-created by an evaluation, Promptfoo stores the evaluation's redaction and
-`commandToolNames` policy with that trace so overlapping evaluations do not change
-one another's results. Traces created only when spans arrive at the receiver use the
-active receiver's startup defaults. Similarly, `acceptFormats` configures the active
-HTTP receiver endpoint and is not changed by an overlapping evaluation.
+`redactAttributes` is matched case-insensitively as a **substring** of each attribute
+key, so short patterns over-match: `token` also matches `gen_ai.usage.total_tokens`, and
+`key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
+Redaction covers span **attributes** (recursively, including nested objects and arrays),
+and a span `name` or `statusMessage` that echoes the value of a redacted attribute. It does
+**not** scan arbitrary free text or trace `metadata` (such as test `vars`) for secrets, so
+avoid placing secrets in test variables when traces are retained.
+
+For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
+`commandToolNames` policy with that trace so overlapping evaluations do not change one
+another's results — each trace is redacted with its own policy, not the active receiver's.
+Traces created only when spans arrive at the receiver (no evaluation row) use the active
+receiver's startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver
+endpoint and is not changed by an overlapping evaluation.
+
+The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
+different container or host and must reach the receiver over the network, set
+`host: '0.0.0.0'` explicitly and restrict access to trusted networks.
 
 ### Supported Formats
 

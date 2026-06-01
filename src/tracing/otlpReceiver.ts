@@ -301,15 +301,30 @@ export class OTLPReceiver {
   }
 
   private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
-    const logBody = span.attributes?.['otel.log.body'];
+    if (redactAttributePatterns.length === 0) {
+      return span;
+    }
+    const attributes = span.attributes ?? {};
+    // Collect the values of attributes whose KEY will be redacted. A span `name` or
+    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
+    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
+    // credential into an error message) must be scrubbed too — otherwise the secret leaks
+    // through a span field the operator believes `redactAttributes` covers.
+    const redactedSourceValues = new Set<string>();
+    for (const [key, value] of Object.entries(attributes)) {
+      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
+        redactedSourceValues.add(value);
+      }
+    }
+    const scrubEcho = (value: string): string =>
+      redactedSourceValues.has(value) ? '[REDACTED]' : value;
+
     return {
       ...span,
-      name:
-        span.name === logBody &&
-        this.shouldRedactAttribute('otel.log.body', redactAttributePatterns)
-          ? '[REDACTED]'
-          : span.name,
-      attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
+      name: scrubEcho(span.name),
+      statusMessage:
+        span.statusMessage === undefined ? span.statusMessage : scrubEcho(span.statusMessage),
+      attributes: this.redactAttributes(attributes, redactAttributePatterns),
     };
   }
 
@@ -954,13 +969,26 @@ export class OTLPReceiver {
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 
     return new Promise((resolve, reject) => {
-      this.server = this.app.listen(port, host, () => {
+      let settled = false;
+      const server = this.app.listen(port, host, () => {
+        // Express invokes this callback even when the bind fails (e.g. EADDRINUSE), with
+        // `server.listening === false`. Only resolve once the socket is truly bound; otherwise
+        // let the 'error' handler reject so `failOnReceiverStartFailure` startup actually fails.
+        if (settled || !server.listening) {
+          return;
+        }
+        settled = true;
         logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
         logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
         resolve();
       });
+      this.server = server;
 
-      this.server.on('error', (error: Error) => {
+      server.on('error', (error: Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
         logger.error(`[OtlpReceiver] Failed to start: ${error}`);
         reject(error);
       });
