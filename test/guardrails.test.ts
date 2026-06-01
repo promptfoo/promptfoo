@@ -11,6 +11,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
+    getApiKey: vi.fn(),
   },
 }));
 
@@ -42,6 +43,7 @@ describe('guardrails', () => {
     // regardless of the local machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
   });
 
   describe('guard', () => {
@@ -361,22 +363,27 @@ describe('guardrails', () => {
 
   describe('on-prem / cloud-enabled host resolution', () => {
     const ONPREM_HOST = 'https://onprem.example.com';
+    const ONPREM_KEY = 'test-onprem-key';
 
     beforeEach(() => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getApiHost).mockReturnValue(ONPREM_HOST);
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue(ONPREM_KEY);
     });
 
     it.each([
       ['guard', () => guardrails.guard('test input'), '/v1/guard'],
       ['pii', () => guardrails.pii('test input'), '/v1/pii'],
       ['harm', () => guardrails.harm('test input'), '/v1/harm'],
-    ])('routes %s to the configured cloud host instead of public cloud', async (_name, call, path) => {
+    ])('routes %s to the configured cloud host with a bearer token', async (_name, call, path) => {
       await call();
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         `${ONPREM_HOST}${path}`,
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: `Bearer ${ONPREM_KEY}` }),
+        }),
         undefined,
         'json',
       );
@@ -384,7 +391,7 @@ describe('guardrails', () => {
       expect(calledUrl).not.toContain('api.promptfoo.app');
     });
 
-    it('routes adaptive requests to the configured cloud host', async () => {
+    it('routes adaptive requests to the configured cloud host with a bearer token', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: { model: 'm', adaptedPrompt: 'a', modifications: [] },
         cached: false,
@@ -396,7 +403,10 @@ describe('guardrails', () => {
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         `${ONPREM_HOST}/v1/adaptive`,
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: `Bearer ${ONPREM_KEY}` }),
+        }),
         undefined,
         'json',
       );
@@ -404,20 +414,31 @@ describe('guardrails', () => {
       expect(calledUrl).not.toContain('api.promptfoo.app');
     });
 
-    it('falls back to the public share host when cloud is not enabled', async () => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    it('strips a trailing slash on the configured host (no //v1)', async () => {
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/');
 
       await guardrails.guard('test input');
 
       const [calledUrl] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(calledUrl).toBe('https://api.promptfoo.app/v1/guard');
-      // getApiHost() must not be consulted on the non-cloud path.
-      expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
+      expect(calledUrl).toBe('https://onprem.example.com/v1/guard');
     });
 
-    it('lets an explicit PROMPTFOO_REMOTE_API_BASE_URL override win even when cloud is enabled', async () => {
+    it('falls back to the public share host (no auth) when cloud is not enabled', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+      await guardrails.guard('test input');
+
+      const [calledUrl, opts] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(calledUrl).toBe('https://api.promptfoo.app/v1/guard');
+      // getApiHost() must not be consulted on the non-cloud path, and no token is sent.
+      expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
+      expect((opts?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    });
+
+    it('lets an explicit PROMPTFOO_REMOTE_API_BASE_URL override win, without leaking the token', async () => {
       // Regression guard: logged-in users who redirect guardrails to a private
-      // endpoint must keep that override (codex P2 on the original PR).
+      // endpoint must keep that override (codex P2 on the original PR). The cloud
+      // bearer token must NOT be sent to the override host.
       vi.stubEnv('PROMPTFOO_REMOTE_API_BASE_URL', 'https://guardrails-override.example.com');
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getApiHost).mockReturnValue(ONPREM_HOST);
@@ -425,9 +446,10 @@ describe('guardrails', () => {
       try {
         await guardrails.guard('test input');
 
-        const [calledUrl] = vi.mocked(fetchWithCache).mock.calls[0];
+        const [calledUrl, opts] = vi.mocked(fetchWithCache).mock.calls[0];
         expect(calledUrl).toBe('https://guardrails-override.example.com/v1/guard');
         expect(calledUrl).not.toContain('onprem.example.com');
+        expect((opts?.headers as Record<string, string>)?.Authorization).toBeUndefined();
       } finally {
         vi.unstubAllEnvs();
       }

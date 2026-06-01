@@ -147,9 +147,16 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     return;
   }
 
-  const HOST = cloudConfig.isEnabled()
-    ? cloudConfig.getApiHost()
-    : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+  // Strip any trailing slash so we never produce `//api/v1/...`.
+  const HOST = (
+    cloudConfig.isEnabled()
+      ? cloudConfig.getApiHost()
+      : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')
+  ).replace(/\/+$/, '');
+
+  // The global fetch auth-injection only adds the bearer token for the public cloud
+  // origin, so send it explicitly to authenticate against on-prem cloud hosts.
+  const apiKey = cloudConfig.isEnabled() ? cloudConfig.getApiKey() : undefined;
 
   try {
     logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
@@ -161,6 +168,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
       body: JSON.stringify({
         requestExample,

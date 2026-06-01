@@ -18,6 +18,7 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
+    getApiKey: vi.fn(),
   },
 }));
 
@@ -69,6 +70,7 @@ describe('Providers Routes', () => {
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -480,9 +482,10 @@ describe('Providers Routes', () => {
       );
     });
 
-    it('should call the configured on-prem cloud host when cloud is enabled', async () => {
+    it('should call the configured on-prem cloud host with a bearer token when cloud is enabled', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-onprem-key');
 
       const generatedConfig = {
         url: 'https://api.example.com/v1/chat',
@@ -500,9 +503,31 @@ describe('Providers Routes', () => {
         .send({ requestExample: 'curl https://api.example.com/v1/chat' });
 
       expect(response.status).toBe(200);
-      const [calledUrl] = mockedFetchWithProxy.mock.calls[0];
+      const [calledUrl, calledOpts] = mockedFetchWithProxy.mock.calls[0];
+      // Trailing slash on the configured host is normalized (no //api/v1).
       expect(calledUrl).toBe('https://onprem.example.com/api/v1/http-provider-generator');
       expect(calledUrl).not.toContain('api.promptfoo.app');
+      expect((calledOpts?.headers as Record<string, string>)?.Authorization).toBe(
+        'Bearer test-onprem-key',
+      );
+    });
+
+    it('should not send an Authorization header when cloud is not enabled', async () => {
+      // default beforeEach: isEnabled=false
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ url: 'https://x', method: 'POST', headers: {} }),
+      } as any);
+
+      const response = await api
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 'curl https://api.example.com/v1/chat' });
+
+      expect(response.status).toBe(200);
+      const [calledUrl, calledOpts] = mockedFetchWithProxy.mock.calls[0];
+      expect(calledUrl).toBe('https://api.promptfoo.app/api/v1/http-provider-generator');
+      expect((calledOpts?.headers as Record<string, string>)?.Authorization).toBeUndefined();
     });
 
     it('should not call the hosted HTTP generator when remote generation is disabled', async () => {

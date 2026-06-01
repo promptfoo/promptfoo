@@ -4,16 +4,33 @@ import { getEnvString } from './envars';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 
-function getApiBaseUrl(): string {
+function resolveGuardrailsApi(): { baseUrl: string; headers: Record<string, string> } {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
   // An explicit PROMPTFOO_REMOTE_API_BASE_URL override always wins, so users who
   // point guardrails at a private endpoint keep that behavior even when logged in.
   // Otherwise prefer the configured cloud host (incl. on-prem), falling back to the
-  // public share host. The guardrails service uses a `/v1` prefix (not `/api/v1`
-  // like most cloud endpoints); this preserves the existing public-cloud routing.
-  const base =
-    getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') ||
-    (cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl());
-  return `${base}/v1`;
+  // public share host.
+  let base: string;
+  const override = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
+  if (override) {
+    base = override;
+  } else if (cloudConfig.isEnabled()) {
+    base = cloudConfig.getApiHost();
+    // The global fetch auth-injection only adds the bearer token for the public
+    // cloud origin, so send it explicitly to authenticate against on-prem hosts.
+    const apiKey = cloudConfig.getApiKey();
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+  } else {
+    base = getShareApiBaseUrl();
+  }
+
+  // The guardrails service uses a `/v1` prefix (not `/api/v1` like most cloud
+  // endpoints); this preserves the existing public-cloud routing. Strip any
+  // trailing slash on the base so we never produce `//v1/...`.
+  return { baseUrl: `${base.replace(/\/+$/, '')}/v1`, headers };
 }
 
 export interface GuardResult {
@@ -51,13 +68,12 @@ export interface AdaptiveResult {
 
 async function makeRequest(endpoint: string, input: string): Promise<GuardResult> {
   try {
+    const { baseUrl, headers } = resolveGuardrailsApi();
     const response = await fetchWithCache(
-      `${getApiBaseUrl()}${endpoint}`,
+      `${baseUrl}${endpoint}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ input }),
       },
       undefined,
@@ -77,13 +93,12 @@ async function makeRequest(endpoint: string, input: string): Promise<GuardResult
 
 async function makeAdaptiveRequest(request: AdaptiveRequest): Promise<AdaptiveResult> {
   try {
+    const { baseUrl, headers } = resolveGuardrailsApi();
     const response = await fetchWithCache(
-      `${getApiBaseUrl()}/adaptive`,
+      `${baseUrl}/adaptive`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           prompt: request.prompt,
           policies: request.policies || [],
