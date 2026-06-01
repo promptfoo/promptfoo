@@ -12,7 +12,11 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { asEvaluateResult, sanitizeResultForJsonlArtifact } from '../models/evalResult';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -50,10 +54,6 @@ export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: s
     );
   }
   return outputPaths;
-}
-
-function getJsonlResultKey(result: EvaluateResult): string {
-  return `${result.testIdx}:${result.promptIdx}`;
 }
 
 async function appendJsonlResults(outputPath: string, results: EvaluateResult[]) {
@@ -109,18 +109,18 @@ async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateRes
 async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
   const finalResults = new Map<string, EvaluateResult>();
   for (const result of await readStreamedJsonlResults(outputPath)) {
-    finalResults.set(getJsonlResultKey(result), result);
+    finalResults.set(getResultIndexKey(result), result);
   }
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
       const evaluateResult = asEvaluateResult(result);
       if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
-        finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+        finalResults.set(getResultIndexKey(evaluateResult), evaluateResult);
       }
     }
   }
   for (const result of evalRecord.getFinalJsonlResults()) {
-    finalResults.set(getJsonlResultKey(result), result);
+    finalResults.set(getResultIndexKey(result), result);
   }
   return Array.from(finalResults.values());
 }

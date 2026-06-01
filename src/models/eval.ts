@@ -53,7 +53,7 @@ import {
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult from './evalResult';
+import EvalResult, { getResultIndexKey } from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -729,7 +729,7 @@ export default class Eval {
   }
 
   recordFinalJsonlResult(result: EvaluateResult) {
-    this.finalJsonlResults.set(`${result.testIdx}:${result.promptIdx}`, result);
+    this.finalJsonlResults.set(getResultIndexKey(result), result);
   }
 
   getFinalJsonlResults() {
@@ -738,7 +738,7 @@ export default class Eval {
 
   recordResultPersistenceFailure(result: EvaluateResult) {
     this.resultPersistenceFailed = true;
-    const key = `${result.testIdx}:${result.promptIdx}`;
+    const key = getResultIndexKey(result);
     this.failedResultKeys.add(key);
     // Keep the row so comparison assertions (max-score / select-best) can still grade the
     // full output set — the DB is missing this row — and the failed row receives canonical
@@ -747,7 +747,7 @@ export default class Eval {
   }
 
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
-    return this.failedResultKeys.has(`${result.testIdx}:${result.promptIdx}`);
+    return this.failedResultKeys.has(getResultIndexKey(result));
   }
 
   // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,

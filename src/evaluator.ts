@@ -20,7 +20,11 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { asEvaluateResult, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -4105,8 +4109,8 @@ class Evaluator {
     if (failed.length === 0) {
       return base;
     }
-    const seen = new Set(base.map((r) => `${r.testIdx}:${r.promptIdx}`));
-    return [...base, ...failed.filter((r) => !seen.has(`${r.testIdx}:${r.promptIdx}`))].sort(
+    const seen = new Set(base.map(getResultIndexKey));
+    return [...base, ...failed.filter((r) => !seen.has(getResultIndexKey(r)))].sort(
       (a, b) => a.promptIdx - b.promptIdx,
     );
   }
@@ -4128,18 +4132,23 @@ class Evaluator {
     };
   }
 
-  private async applySelectBestGradingResult({
+  // Shared tail for the comparison graders: record the pass/score transition, capture the
+  // canonical row for JSONL finalization, and persist (unless this row already failed to
+  // persist, in which case re-saving would just re-throw). `wasSuccess`/`wasScore` must be
+  // captured by the caller before its merge mutates `result`.
+  private async finalizeComparisonGrading({
     gradingResult,
     metrics,
     result,
+    wasSuccess,
+    wasScore,
   }: {
     gradingResult: GradingResult;
     metrics: CompletedPrompt['metrics'] | undefined;
     result: EvalResult;
+    wasSuccess: boolean;
+    wasScore: number;
   }) {
-    const wasSuccess = result.success;
-    const wasScore = result.score;
-    mergeSelectBestGradingResult(result, gradingResult, this.stats.tokenUsage);
     this.updateComparisonStats(
       result,
       gradingResult.pass,
@@ -4155,6 +4164,21 @@ class Evaluator {
     }
   }
 
+  private async applySelectBestGradingResult({
+    gradingResult,
+    metrics,
+    result,
+  }: {
+    gradingResult: GradingResult;
+    metrics: CompletedPrompt['metrics'] | undefined;
+    result: EvalResult;
+  }) {
+    const wasSuccess = result.success;
+    const wasScore = result.score;
+    mergeSelectBestGradingResult(result, gradingResult, this.stats.tokenUsage);
+    await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
+  }
+
   private async applyMaxScoreGradingResult({
     gradingResult,
     metrics,
@@ -4167,19 +4191,7 @@ class Evaluator {
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeMaxScoreGradingResult(result, gradingResult);
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-    );
-    this.trackFinalJsonlResult(result);
-    if (this.evalRecord.persisted && !this.evalRecord.hasResultPersistenceFailure(result)) {
-      await result.save();
-    }
+    await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
   private async finalizeEvaluation({

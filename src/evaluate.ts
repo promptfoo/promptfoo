@@ -17,12 +17,7 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
-import {
-  filterOutputPathsAfterStreaming,
-  readFilters,
-  writeMultipleOutputs,
-  writeOutput,
-} from './util/index';
+import { filterOutputPathsAfterStreaming, readFilters, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -371,9 +366,9 @@ export async function evaluateWithSource(
         ? [testSuiteConfig.outputPath]
         : testSuiteConfig.outputPath,
     );
-    if (outputPaths.length === 1) {
-      await writeOutput(outputPaths[0], evalRecord, null);
-    } else if (outputPaths.length > 1) {
+    // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
+    // case too — matching the doEval call site in src/commands/eval.ts.
+    if (outputPaths.length) {
       await writeMultipleOutputs(outputPaths, evalRecord, null);
     }
   }

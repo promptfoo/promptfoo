@@ -333,6 +333,18 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
+// sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
+function getStripFlags() {
+  return {
+    shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
+    shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
+    shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
+    shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
+    shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
+  };
+}
+
 /**
  * Sanitize a result before it is serialized into a JSONL output artifact. This is the
  * JSONL-boundary equivalent of the database-persistence sanitization and must stay in sync
@@ -342,11 +354,13 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
  * on-disk copy is sanitized.
  */
 export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
-  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
-  const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
-  const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
-  const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
-  const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+  const {
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  } = getStripFlags();
 
   const artifactResult = result as T & Record<string, unknown>;
   const response = projectProviderResponse(
@@ -725,11 +739,13 @@ export default class EvalResult {
   }
 
   toEvaluateResult(): EvaluateResult {
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
-    const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
-    const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
-    const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
-    const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+    const {
+      shouldStripPromptText,
+      shouldStripResponseOutput,
+      shouldStripTestVars,
+      shouldStripGradingResult,
+      shouldStripMetadata,
+    } = getStripFlags();
 
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
@@ -781,4 +797,10 @@ export default class EvalResult {
 /** Normalize an `EvalResult` model instance or a plain `EvaluateResult` to `EvaluateResult`. */
 export function asEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
   return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+}
+
+/** Canonical `testIdx:promptIdx` key used to dedupe/look up a result across the streaming,
+ * recovery, and comparison paths. */
+export function getResultIndexKey(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>): string {
+  return `${result.testIdx}:${result.promptIdx}`;
 }

@@ -562,7 +562,7 @@ describe('evaluate function', () => {
       outputPath: 'test.json',
     };
     await evaluate(testSuite);
-    expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.json'], expect.any(Eval), null);
   });
 
   it('should finalize JSONL files streamed during evaluation', async () => {
@@ -572,10 +572,10 @@ describe('evaluate function', () => {
       outputPath: 'test.jsonl',
     };
     await evaluate(testSuite);
-    expect(writeOutput).toHaveBeenCalledWith('test.jsonl', expect.any(Eval), null);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.jsonl'], expect.any(Eval), null);
   });
 
-  it('should preserve streamed JSONL files when finalization filters them out', async () => {
+  it('should finalize the output paths returned by filterOutputPathsAfterStreaming', async () => {
     vi.mocked(filterOutputPathsAfterStreaming).mockReturnValueOnce(['test.json']);
     const testSuite = {
       prompts: ['test'],
@@ -589,8 +589,7 @@ describe('evaluate function', () => {
       'test.jsonl',
       'test.json',
     ]);
-    expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
-    expect(writeMultipleOutputs).not.toHaveBeenCalled();
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.json'], expect.any(Eval), null);
   });
 
   it('should skip writing output when outputPath is empty', async () => {
