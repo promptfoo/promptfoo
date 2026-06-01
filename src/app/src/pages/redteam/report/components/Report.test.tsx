@@ -621,7 +621,7 @@ describe('App component target selection', () => {
     expect(overviewTotal).toHaveTextContent('1');
   });
 
-  it('preserves zero probe counts in the report header', async () => {
+  it('falls back to result rows when the stored probe count is zero', async () => {
     const evalData = createComponentMockEvalData(1, [
       createComponentMockResult(0, 'plugin1', false),
     ]);
@@ -633,7 +633,7 @@ describe('App component target selection', () => {
     renderWithProviders(<App />);
 
     await screen.findByTestId('overview-total');
-    expect(screen.getByText('Depth:').parentElement).toHaveTextContent('0 probes');
+    expect(screen.getByText('Depth:').parentElement).toHaveTextContent('1 probes');
   });
 
   it('labels red-team token populations in the report header tooltip', async () => {

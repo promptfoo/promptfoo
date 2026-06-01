@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGradingRequest,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
+  createEmptyAssertions,
   createEmptyTokenUsage,
   normalizeTokenUsage,
 } from '../../src/util/tokenUsageUtils';
@@ -301,6 +303,26 @@ describe('tokenUsageUtils', () => {
       accumulateAssertionTokenUsage(assertions, { total: 7, numRequests: 0 });
 
       expect(assertions.numRequests).toBe(0);
+    });
+  });
+
+  describe('accumulateGradingRequest', () => {
+    it('counts the request without token usage when the grader reports none', () => {
+      const assertions = createEmptyAssertions();
+      accumulateGradingRequest(assertions, undefined);
+
+      expect(assertions.numRequests).toBe(1);
+      expect(assertions.total).toBe(0);
+    });
+
+    it('counts the request and folds in reported assertion token usage', () => {
+      const assertions = createEmptyAssertions();
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
+
+      expect(assertions.numRequests).toBe(1);
+      expect(assertions.total).toBe(9);
+      expect(assertions.prompt).toBe(5);
+      expect(assertions.completion).toBe(4);
     });
   });
 

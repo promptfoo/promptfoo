@@ -770,7 +770,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                         <Badge variant="secondary">
                           <strong>Depth:</strong>{' '}
                           {(
-                            selectedPrompt?.metrics?.tokenUsage?.numRequests ?? tableData.length
+                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
                           ).toLocaleString()}{' '}
                           probes
                         </Badge>

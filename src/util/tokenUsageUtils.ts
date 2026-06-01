@@ -160,6 +160,7 @@ export function accumulateTokenUsage(
 export function accumulateAssertionTokenUsage(
   target: NonNullable<TokenUsage['assertions']>,
   update: Partial<TokenUsage> | undefined,
+  options?: { countRequests?: boolean },
 ): void {
   if (!update) {
     return;
@@ -172,7 +173,9 @@ export function accumulateAssertionTokenUsage(
   target.cached = addNumbers(target.cached, update.cached);
   // A tokensUsed payload represents at least one grading request unless its
   // producer explicitly reports a count (including an intentional zero).
-  target.numRequests = addNumbers(target.numRequests, update.numRequests ?? 1);
+  if (options?.countRequests ?? true) {
+    target.numRequests = addNumbers(target.numRequests, update.numRequests ?? 1);
+  }
 
   // Handle completion details
   if (update.completionDetails) {
@@ -180,6 +183,22 @@ export function accumulateAssertionTokenUsage(
       target.completionDetails,
       update.completionDetails,
     );
+  }
+}
+
+/**
+ * Account for a single grading (assertion) request: every grading call counts as one
+ * assertion request, and its token usage is folded in when the grader reported any.
+ * Shared by the live grading path and the EvalResult -> EvaluateResult reconstruction so
+ * the two stay in sync. Mutates {@code assertions}.
+ */
+export function accumulateGradingRequest(
+  assertions: NonNullable<TokenUsage['assertions']>,
+  tokensUsed: Partial<TokenUsage> | undefined,
+): void {
+  assertions.numRequests = (assertions.numRequests ?? 0) + 1;
+  if (tokensUsed) {
+    accumulateAssertionTokenUsage(assertions, tokensUsed, { countRequests: false });
   }
 }
 

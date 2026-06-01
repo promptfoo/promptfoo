@@ -20,8 +20,6 @@ import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
-import { AwsBedrockConverseProvider } from './bedrock/converse';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -68,8 +66,11 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
+import { createN8nProvider } from './n8n';
+import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -82,6 +83,7 @@ import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
+import { createOrcaRouterProvider } from './orcarouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
@@ -337,133 +339,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('bedrock:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const modelName = splits.slice(2).join(':');
-
-      // Handle Converse API
-      if (modelType === 'converse') {
-        return new AwsBedrockConverseProvider(modelName, providerOptions);
-      }
-
-      // Handle nova-sonic model
-      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
-        const { NovaSonicProvider } = await import('./bedrock/nova-sonic');
-        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
-      }
-
-      // Handle Luma Ray video model
-      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
-      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
-      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
-        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
-        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
-        // For bedrock:video:luma.ray-v2:0, use modelName directly
-        const videoModelName = modelName.includes('luma.ray')
-          ? modelName
-          : splits.slice(1).join(':') || 'luma.ray-v2:0';
-        return new LumaRayVideoProvider(videoModelName, providerOptions);
-      }
-
-      // Handle Nova Reel video model
-      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
-      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
-      if (
-        modelType.includes('amazon.nova-reel') ||
-        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
-      ) {
-        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
-        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
-        return new NovaReelVideoProvider(videoModelName, providerOptions);
-      }
-
-      // Handle Bedrock Agents
-      if (modelType === 'agents') {
-        const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
-        return new AwsBedrockAgentsProvider(modelName, providerOptions);
-      }
-
-      if (modelType === 'completion') {
-        // Backwards compatibility: `completion` used to be required
-        return new AwsBedrockCompletionProvider(modelName, providerOptions);
-      }
-      if (modelType === 'embeddings' || modelType === 'embedding') {
-        return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
-      }
-      if (modelType === 'kb' || modelType === 'knowledge-base') {
-        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrock/knowledgeBase');
-        return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
-      }
-      // Reconstruct the full model name preserving the original format
-      const fullModelName = splits.slice(1).join(':');
-      return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('bedrock-agent:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const agentId = providerPath.substring('bedrock-agent:'.length);
-      const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
-      return new AwsBedrockAgentsProvider(agentId, providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('sagemaker:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const endpointName = splits.slice(2).join(':');
-
-      // Dynamically import SageMaker provider
-      const { SageMakerCompletionProvider, SageMakerEmbeddingProvider } = await import(
-        './sagemaker'
-      );
-
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);
-      }
-
-      // Handle the 'sagemaker:<endpoint>' format (no model type specified)
-      if (splits.length === 2) {
-        return new SageMakerCompletionProvider(modelType, providerOptions);
-      }
-
-      // Handle special case for JumpStart models
-      if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
-        return new SageMakerCompletionProvider(endpointName, {
-          ...providerOptions,
-          config: {
-            ...providerOptions.config,
-            modelType: 'jumpstart',
-          },
-        });
-      }
-
-      // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
-      return new SageMakerCompletionProvider(endpointName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          modelType,
-        },
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('cerebras:'),
     create: async (
       providerPath: string,
@@ -471,6 +346,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createCerebrasProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('novita:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNovitaProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -701,17 +589,15 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
-          apiKeyEnvar: 'FIREWORKS_API_KEY',
-        },
+      const { createFireworksProvider } = await import('./fireworks/chat');
+      return createFireworksProvider(providerPath, {
+        config: providerOptions,
+        // loadApiProvider merges any provider-level `env` block into
+        // providerOptions.env, so let those overrides win over the suite-level
+        // env from context.
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
@@ -842,6 +728,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('minimax:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMiniMaxProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
       providerPath: string,
@@ -865,6 +764,20 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nvidia:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createNvidiaProvider } = await import('./nvidia/chat');
+      return createNvidiaProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -1043,6 +956,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('orcarouter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createOrcaRouterProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -1294,6 +1220,16 @@ export const providerMap: ProviderFactory[] = [
       // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('n8n:') || providerPath === 'n8n',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return createN8nProvider(providerPath, providerOptions);
     },
   },
   {
@@ -1725,7 +1661,22 @@ function isRedteamProviderPath(providerPath: string): boolean {
   );
 }
 
+function isAwsProviderPath(providerPath: string): boolean {
+  return (
+    providerPath.startsWith('bedrock:') ||
+    providerPath.startsWith('bedrock-agent:') ||
+    providerPath.startsWith('sagemaker:')
+  );
+}
+
 const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: isAwsProviderPath,
+    factories: async () => {
+      const { awsProviderFactories } = await import('./families/aws');
+      return awsProviderFactories;
+    },
+  },
   {
     canHandle: isRedteamProviderPath,
     factories: async () => {
@@ -1774,5 +1725,15 @@ export async function getProviderFactories(
       }
     }),
   );
-  return [...providerMap, ...extraFactorySets.flat()];
+  // Family factories take precedence over the module-scoped providerMap so a
+  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:, redteam) is
+  // not first intercepted by a broader providerMap entry — notably the generic
+  // JS/TS-file factory (`isJavascriptFile`), which is a prefix-agnostic suffix
+  // match and would otherwise hijack any AWS path whose final segment ends in
+  // .js/.cjs/.mjs/.ts/.cts/.mts and try to load it as a custom module. Each
+  // family is gated by `canHandle`, and the family prefixes are disjoint from
+  // one another and from every concrete providerMap prefix, so prepending only
+  // changes precedence against that file-suffix catch-all — which is the bug we
+  // are fixing — and is otherwise order-neutral.
+  return [...extraFactorySets.flat(), ...providerMap];
 }

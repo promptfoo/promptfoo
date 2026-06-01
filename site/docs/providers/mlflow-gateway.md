@@ -1,6 +1,8 @@
 ---
+title: MLflow AI Gateway
 sidebar_label: MLflow Gateway
-description: Use MLflow AI Gateway as an LLM provider in promptfoo for unified multi-provider access with built-in governance.
+sidebar_position: 56
+description: Use MLflow AI Gateway with promptfoo to evaluate models through managed endpoints, server-side credentials, fallbacks, usage tracking, and budget policies.
 ---
 
 # MLflow AI Gateway
@@ -72,7 +74,7 @@ promptfoo eval
 
 You can pass additional configuration via the `config` key:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: mlflow-gateway:my-chat-endpoint
     config:

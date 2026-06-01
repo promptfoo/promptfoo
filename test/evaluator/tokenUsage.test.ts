@@ -185,6 +185,10 @@ describeEvaluator('evaluator token usage', () => {
 
     expect(result).toMatchObject({
       success: false,
+      response: {
+        error: expect.stringContaining('provider failed'),
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      },
       tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
     });
   });

@@ -45,6 +45,7 @@ describe('mathPrompt', () => {
       const mockResponse = {
         data: {
           result: mockResult,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
         },
         cached: false,
         status: 200,
@@ -56,7 +57,15 @@ describe('mathPrompt', () => {
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse as any);
       const result = await generateMathPrompt(mockTestCases as any, 'prompt', {});
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual([
+        {
+          vars: { prompt: 'encoded1' },
+          metadata: {
+            providerTokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+        },
+        { vars: { prompt: 'encoded2' } },
+      ]);
       expect(mockProgressBar.start).toHaveBeenCalledWith(1, 0);
       expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
       expect(mockProgressBar.stop).toHaveBeenCalledWith();

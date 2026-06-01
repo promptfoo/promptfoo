@@ -25,13 +25,13 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
-import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 import type { ApiProvider } from '../../types/providers';
@@ -349,11 +349,10 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     if (currentAbortController) {
       currentAbortController.abort();
     }
-    const existingJob = evalJobs.get(currentJobId);
-    if (existingJob) {
-      existingJob.status = 'error';
-      existingJob.logs.push('Job cancelled - new job started');
-    }
+    evalJobService.fail(currentJobId, ['Job cancelled - new job started'], {
+      append: true,
+      resetResult: false,
+    });
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
@@ -361,15 +360,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   currentJobId = id;
   currentAbortController = new AbortController();
 
-  // Initialize job status with empty logs array
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
+  evalJobService.create(id);
 
   // Set web UI mode
   cliState.webUI = true;
@@ -383,21 +374,15 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
     logCallback: (message: string) => {
       if (currentJobId === id) {
-        const job = evalJobs.get(id);
-        if (job) {
-          job.logs.push(message);
-        }
+        evalJobService.appendLog(id, message);
       }
     },
     abortSignal: currentAbortController.signal,
   })
     .then(async (evalResult) => {
       const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
-      const job = evalJobs.get(id);
-      if (job && currentJobId === id) {
-        job.status = 'complete';
-        job.result = summary;
-        job.evalId = evalResult?.id ?? null;
+      if (currentJobId === id) {
+        evalJobService.complete(id, summary, evalResult?.id ?? null);
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -407,13 +392,12 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     })
     .catch((error) => {
       logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
-      const job = evalJobs.get(id);
-      if (job && currentJobId === id) {
-        job.status = 'error';
-        job.logs.push(`Error: ${error.message}`);
-        if (error.stack) {
-          job.logs.push(`Stack trace: ${error.stack}`);
-        }
+      if (currentJobId === id) {
+        evalJobService.fail(
+          id,
+          [`Error: ${error.message}`, ...(error.stack ? [`Stack trace: ${error.stack}`] : [])],
+          { append: true, resetResult: false },
+        );
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -437,11 +421,10 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
     currentAbortController.abort();
   }
 
-  const job = evalJobs.get(jobId);
-  if (job) {
-    job.status = 'error';
-    job.logs.push('Job cancelled by user');
-  }
+  evalJobService.fail(jobId, ['Job cancelled by user'], {
+    append: true,
+    resetResult: false,
+  });
 
   // Clear state
   cliState.webUI = false;

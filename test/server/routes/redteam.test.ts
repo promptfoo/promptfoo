@@ -936,6 +936,143 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalled();
     });
 
+    it('should publish a completed redteam eval through the eval job endpoint', async () => {
+      const summary = { results: [] };
+      mockedDoRedteamRun.mockResolvedValueOnce({
+        id: 'redteam-eval-id',
+        toEvaluateSummary: vi.fn().mockResolvedValue(summary),
+      } as any);
+
+      const runResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' } });
+      expect(runResponse.status).toBe(200);
+
+      await vi.waitFor(async () => {
+        const completedResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+        expect(completedResponse.body).toMatchObject({
+          status: 'complete',
+          evalId: 'redteam-eval-id',
+          result: summary,
+        });
+      });
+    });
+
+    it('should publish logs and cancellation through the eval job endpoint', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const runResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' } });
+      expect(runResponse.status).toBe(200);
+
+      const runArgs = mockedDoRedteamRun.mock.calls[0][0];
+      runArgs.logCallback?.('working');
+
+      const inProgressResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+      expect(inProgressResponse.body).toMatchObject({
+        status: 'in-progress',
+        logs: ['working'],
+      });
+
+      const cancelResponse = await request(app).post('/api/redteam/cancel');
+      expect(cancelResponse.status).toBe(200);
+
+      const cancelledResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+      expect(cancelledResponse.body).toMatchObject({
+        status: 'error',
+        logs: ['working', 'Job cancelled by user'],
+      });
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const settledResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+        expect(settledResponse.body).toMatchObject({
+          status: 'error',
+          logs: ['working', 'Job cancelled by user'],
+        });
+      });
+    });
+
+    it('should keep a replaced job cancelled when its stale run settles', async () => {
+      let resolveFirstRun: ((value: any) => void) | undefined;
+      let resolveSecondRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveFirstRun = resolve;
+          }),
+        )
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveSecondRun = resolve;
+          }),
+        );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      const secondResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'second' } });
+      expect(firstResponse.status).toBe(200);
+      expect(secondResponse.status).toBe(200);
+
+      const cancelledResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
+      expect(cancelledResponse.body).toMatchObject({
+        status: 'error',
+        logs: ['Job cancelled - new job started'],
+      });
+
+      const toEvaluateSummary = vi.fn().mockResolvedValue({ results: [] });
+      resolveFirstRun!({
+        id: 'stale-redteam-eval-id',
+        toEvaluateSummary,
+      });
+      await vi.waitFor(async () => {
+        const settledResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
+        expect(settledResponse.body).toMatchObject({
+          status: 'error',
+          logs: ['Job cancelled - new job started'],
+        });
+      });
+      expect(toEvaluateSummary).toHaveBeenCalledOnce();
+
+      resolveSecondRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({
+          hasRunningJob: false,
+          jobId: null,
+        });
+      });
+    });
+
+    it('should preserve streamed logs when the background run rejects', async () => {
+      mockedDoRedteamRun.mockImplementationOnce(async ({ logCallback }) => {
+        logCallback?.('working');
+        throw new Error('run failed');
+      });
+
+      const runResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' } });
+      expect(runResponse.status).toBe(200);
+
+      await vi.waitFor(async () => {
+        const failedResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+        expect(failedResponse.body).toMatchObject({
+          status: 'error',
+          logs: expect.arrayContaining(['working', 'Error: run failed']),
+        });
+      });
+    });
+
     it('should not force runtime defaults when delay and maxConcurrency are omitted', async () => {
       const response = await request(app)
         .post('/api/redteam/run')

@@ -100,7 +100,25 @@ export async function generateMathPrompt(
         }
         throw new Error(errorMessage);
       }
-      allResults = allResults.concat(data.result as TestCase[]);
+      const batchResults = data.result as TestCase[];
+      if (data.tokenUsage && batchResults.length > 0) {
+        const [firstResult, ...remainingResults] = batchResults;
+        allResults = allResults.concat([
+          {
+            ...firstResult,
+            metadata: {
+              ...firstResult.metadata,
+              providerTokenUsage: mergeProviderTokenUsage(
+                firstResult.metadata?.providerTokenUsage,
+                data.tokenUsage,
+              ),
+            },
+          },
+          ...remainingResults,
+        ]);
+      } else {
+        allResults = allResults.concat(batchResults);
+      }
 
       processedBatches++;
       if (progressBar) {
