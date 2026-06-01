@@ -300,7 +300,7 @@ tracing:
     http:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
-      # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
+      # host: '127.0.0.1'  # Optional - defaults to loopback
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
       # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
   storage:
