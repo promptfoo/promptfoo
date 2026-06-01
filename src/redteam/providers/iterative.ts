@@ -256,6 +256,7 @@ export async function runRedteamConversation({
     const redteamResp = await redteamProvider.callApi(
       redteamBody,
       {
+        ...context,
         prompt: {
           raw: redteamBody,
           label: 'history',
@@ -638,6 +639,7 @@ export async function runRedteamConversation({
     const judgeResp = await gradingProvider.callApi(
       judgeBody,
       {
+        ...context,
         prompt: {
           raw: judgeBody,
           label: 'judge',

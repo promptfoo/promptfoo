@@ -1312,12 +1312,17 @@ Evaluate the response
       preferRemote: true,
     });
 
-    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
-    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+      },
+      { evaluationId: undefined },
+    );
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
   });
@@ -1346,15 +1351,61 @@ Evaluate the response
     await matchesLlmRubric(rubric, llmOutput, grading);
 
     const { doRemoteGrading } = remoteGrading;
-    expect(doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
-    });
+    expect(doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+      },
+      { evaluationId: undefined },
+    );
     expect(remoteGeneration.shouldGenerateRemote).toHaveBeenCalledWith({
       canUseCodexDefaultProvider: true,
     });
+  });
+
+  it('should forward evaluation, plugin, and strategy context to remote grading', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {};
+
+    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, undefined, {
+      prompt: { raw: 'raw prompt', label: 'redteam-grading' },
+      vars: {},
+      evaluationId: 'eval-abc',
+      test: {
+        metadata: {
+          pluginId: 'contracts',
+          strategyId: 'crescendo',
+        },
+      },
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: 'contracts',
+        strategyId: 'crescendo',
+      },
+      { evaluationId: 'eval-abc' },
+    );
   });
 
   it('should tag remote-grading transport failures with metadata.graderError', async () => {

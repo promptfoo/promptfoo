@@ -542,7 +542,20 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
+    const grade = (await matchesLlmRubric(
+      finalRubric,
+      llmOutput,
+      grading,
+      undefined,
+      undefined,
+      undefined,
+      {
+        prompt: { raw: prompt, label: 'redteam-grading' },
+        vars: {},
+        test,
+        evaluationId: test.metadata?.evaluationId,
+      },
+    )) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

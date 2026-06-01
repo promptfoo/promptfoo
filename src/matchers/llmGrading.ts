@@ -153,12 +153,17 @@ export async function matchesLlmRubric(
   ) {
     try {
       return {
-        ...(await doRemoteGrading({
-          task: 'llm-rubric',
-          rubric,
-          output: llmOutput,
-          vars: vars || {},
-        })),
+        ...(await doRemoteGrading(
+          {
+            task: 'llm-rubric',
+            rubric,
+            output: llmOutput,
+            vars: vars || {},
+            pluginId: providerCallContext?.test?.metadata?.pluginId,
+            strategyId: providerCallContext?.test?.metadata?.strategyId,
+          },
+          { evaluationId: providerCallContext?.evaluationId },
+        )),
         assertion,
       };
     } catch (error) {

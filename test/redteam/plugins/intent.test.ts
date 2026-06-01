@@ -382,10 +382,18 @@ describe('IntentGrader', () => {
       ),
       aiOutput,
       expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining("Attacker's jailbreak goal: malicious-intent"),
       aiOutput,
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
       expect.any(Object),
     );
     expect(result.grade).toEqual(mockResult);
@@ -405,10 +413,18 @@ describe('IntentGrader', () => {
       expect.stringContaining('No purpose provided'),
       aiOutput,
       expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining('No goal provided'),
       aiOutput,
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
       expect.any(Object),
     );
     expect(result.grade).toEqual(mockResult);

@@ -852,6 +852,8 @@ async function callProviderForRunEval({
         renderedPrompt,
         repeatIndex,
         test,
+        testIdx,
+        promptIdx,
         traceContext,
         vars,
       });
@@ -875,11 +877,20 @@ async function callActiveProvider({
   renderedPrompt,
   repeatIndex,
   test,
+  testIdx,
+  promptIdx,
   traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
+  | 'abortSignal'
+  | 'evalId'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testIdx'
+  | 'promptIdx'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
@@ -901,6 +912,8 @@ async function callActiveProvider({
     promptForRender,
     repeatIndex,
     test,
+    testIdx,
+    promptIdx,
     traceContext,
     vars,
   });
@@ -923,6 +936,8 @@ function buildCallApiContext({
   promptForRender,
   repeatIndex,
   test,
+  testIdx,
+  promptIdx,
   traceContext,
   vars,
 }: {
@@ -932,6 +947,8 @@ function buildCallApiContext({
   promptForRender: Prompt;
   repeatIndex: number;
   test: AtomicTestCase;
+  testIdx: number;
+  promptIdx: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -946,8 +963,15 @@ function buildCallApiContext({
     repeatIndex,
   };
 
+  const testCaseId =
+    test.metadata?.testCaseId ||
+    (test as AtomicTestCase & { id?: string }).id ||
+    `${testIdx}-${promptIdx}`;
   if (evalId) {
     callApiContext.evaluationId = evalId;
+  }
+  if (testCaseId) {
+    callApiContext.testCaseId = testCaseId;
   }
   if (traceContext) {
     callApiContext.traceparent = traceContext.traceparent;
@@ -1226,6 +1250,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          evaluationId: evalId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1246,6 +1271,7 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        evaluationId: evalId,
       }),
   );
   applyGradingResult(ret, checkResult);
@@ -4636,54 +4662,56 @@ class Evaluator {
       initializeOtel(otelConfig);
     }
 
-    try {
-      return await this._runEvaluation();
-    } finally {
-      // Flush and shutdown OTEL SDK
-      if (tracingEnabled) {
-        logger.debug('[Evaluator] Flushing OTEL spans...');
-        await flushOtel();
-        await shutdownOtel();
-      }
+    return cliState.withEvaluationId(this.evalRecord.id, async () => {
+      try {
+        return await this._runEvaluation();
+      } finally {
+        // Flush and shutdown OTEL SDK
+        if (tracingEnabled) {
+          logger.debug('[Evaluator] Flushing OTEL spans...');
+          await flushOtel();
+          await shutdownOtel();
+        }
 
-      if (isOtlpReceiverStarted()) {
-        // Add a delay to allow providers to finish exporting spans
-        logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(3000);
-      }
-      await stopOtlpReceiverIfNeeded();
+        if (isOtlpReceiverStarted()) {
+          // Add a delay to allow providers to finish exporting spans
+          logger.debug('[Evaluator] Waiting for span exports to complete...');
+          await sleep(3000);
+        }
+        await stopOtlpReceiverIfNeeded();
 
-      // Clean up Python worker pools to prevent resource leaks
-      await providerRegistry.shutdownAll();
+        // Clean up Python worker pools to prevent resource leaks
+        await providerRegistry.shutdownAll();
 
-      // Log rate limit metrics for debugging before cleanup
-      if (this.rateLimitRegistry) {
-        const metrics = this.rateLimitRegistry.getMetrics();
-        for (const [key, m] of Object.entries(metrics)) {
-          if (m.totalRequests > 0) {
-            logger.debug(`[Scheduler] Final metrics for ${key}`, {
-              totalRequests: m.totalRequests,
-              completedRequests: m.completedRequests,
-              failedRequests: m.failedRequests,
-              rateLimitHits: m.rateLimitHits,
-              retriedRequests: m.retriedRequests,
-              avgLatencyMs: Math.round(m.avgLatencyMs),
-              p50LatencyMs: Math.round(m.p50LatencyMs),
-              p99LatencyMs: Math.round(m.p99LatencyMs),
-            });
+        // Log rate limit metrics for debugging before cleanup
+        if (this.rateLimitRegistry) {
+          const metrics = this.rateLimitRegistry.getMetrics();
+          for (const [key, m] of Object.entries(metrics)) {
+            if (m.totalRequests > 0) {
+              logger.debug(`[Scheduler] Final metrics for ${key}`, {
+                totalRequests: m.totalRequests,
+                completedRequests: m.completedRequests,
+                failedRequests: m.failedRequests,
+                rateLimitHits: m.rateLimitHits,
+                retriedRequests: m.retriedRequests,
+                avgLatencyMs: Math.round(m.avgLatencyMs),
+                p50LatencyMs: Math.round(m.p50LatencyMs),
+                p99LatencyMs: Math.round(m.p99LatencyMs),
+              });
+            }
           }
         }
+
+        // Clean up rate limit registry resources
+        this.rateLimitRegistry?.dispose();
+
+        // Clear registry from redteam provider manager
+        redteamProviderManager.setRateLimitRegistry(undefined);
+
+        // Reset cliState.maxConcurrency to prevent stale state between evaluations
+        cliState.maxConcurrency = undefined;
       }
-
-      // Clean up rate limit registry resources
-      this.rateLimitRegistry?.dispose();
-
-      // Clear registry from redteam provider manager
-      redteamProviderManager.setRateLimitRegistry(undefined);
-
-      // Reset cliState.maxConcurrency to prevent stale state between evaluations
-      cliState.maxConcurrency = undefined;
-    }
+    });
   }
 }
 
