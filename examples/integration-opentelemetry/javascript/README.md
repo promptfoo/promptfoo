@@ -195,7 +195,7 @@ Configure OpenTelemetry using standard environment variables:
 
 ```bash
 # Custom endpoint (defaults to Promptfoo's receiver)
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318/v1/traces"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
 
 # Headers for authentication with external collectors
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"

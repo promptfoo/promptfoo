@@ -496,13 +496,13 @@ Use `trajectory:tool-args-match` when the tool call is only correct with specifi
 
 When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason. That keeps them out of failure reasons in `output.json`; it does not redact the original span attributes already stored in traces.
 
-Nested values under `args` are compared literally; they are not rendered as prompt templates. Provide concrete expected identifiers, or generate the config with those values before evaluation:
+Nested values under `args` render row variables recursively before matching. Use templates for row-specific identifiers, and keep redaction enabled when those identifiers are sensitive:
 
 ```yaml
 - type: trajectory:tool-args-match
   value:
     name: lookup_user
-    args: { tenant_id: tenant-acme }
+    args: { tenant_id: '{{ tenant_id }}' }
     mode: partial
     redactArgsInFailures: true # never echoes captured args into the failure reason
 ```
@@ -817,7 +817,7 @@ Pair this with a tool-call ceiling to detect runaway loops directly from the spa
 
 ### Compare against the last main run
 
-A common CI ask is "did this PR regress p95 latency vs main?" Today the cleanest route is two artefacts and a `jq`/`javascript` step. Run the eval on `main` nightly with the same config, store the artefact, then in PR runs compare. The snippet below regexes the duration out of the assertion `reason` field as a quick demo — for a durable check, prefer reading structured fields (`componentResults[i].score`, span events) instead of parsing prose:
+A common CI ask is "did this PR regress p95 latency vs main?" Today the cleanest route is two artefacts and a `jq`/`javascript` step. Run the eval on `main` nightly with the same config, store the artefact, then in PR runs compare. The snippet below regexes the measured max or percentile duration out of the assertion `reason` field as a quick demo — for a durable check, prefer reading structured fields (`componentResults[i].score`, span events) instead of parsing prose:
 
 ```bash
 # In PR job, fetch latest main artefact
@@ -830,10 +830,14 @@ node -e '
   const dur = (rows) => rows.flatMap((r) =>
     (r.gradingResult?.componentResults ?? [])
       .filter((c) => c.assertion?.type === "trace-span-duration")
-      .map((c) => Number((c.reason.match(/\((\d+)ms\)/) || [])[1]) || NaN));
+      .map((c) => Number((c.reason.match(/\((?:max: )?(\d+(?:\.\d+)?)ms(?:, method=[^)]+)?\)/) || [])[1])));
   const p = (xs, q) => xs.sort((a, b) => a - b)[Math.ceil((q/100)*xs.length) - 1];
   const baseP95 = p(dur(base).filter(Number.isFinite), 95);
   const curP95 = p(dur(cur).filter(Number.isFinite), 95);
+  if (!Number.isFinite(baseP95) || !Number.isFinite(curP95)) {
+    console.error("No parseable trace-span-duration results found");
+    process.exit(1);
+  }
   if (curP95 > baseP95 * 1.20) {
     console.error(`p95 regressed: ${baseP95}ms -> ${curP95}ms`);
     process.exit(1);
