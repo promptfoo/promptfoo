@@ -300,6 +300,19 @@ export class OTLPReceiver {
     return redacted;
   }
 
+  private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
+    const logBody = span.attributes?.['otel.log.body'];
+    return {
+      ...span,
+      name:
+        span.name === logBody &&
+        this.shouldRedactAttribute('otel.log.body', redactAttributePatterns)
+          ? '[REDACTED]'
+          : span.name,
+      attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
+    };
+  }
+
   private setupMiddleware(): void {
     // Reject disabled content types before any body parser runs.
     this.app.use('/v1/traces', (req, res, next) => {
@@ -541,10 +554,7 @@ export class OTLPReceiver {
       const redactAttributePatterns = await this.getRedactAttributePatterns(traceId);
       const sanitized =
         redactAttributePatterns.length > 0
-          ? spans.map((span) => ({
-              ...span,
-              attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
-            }))
+          ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
           : spans;
       await this.traceStore.addSpans(traceId, sanitized, {
         skipTraceCheck: false,

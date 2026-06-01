@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import {
   generateSpanId,
   generateTraceContextIfNeeded,
@@ -295,6 +296,36 @@ describe('evaluatorTracing', () => {
   });
 
   describe('startOtlpReceiverIfNeeded', () => {
+    it('should pass tracing configuration to the logger as sanitizable context', async () => {
+      const secret = 'Bearer secret-token';
+      const tracing = {
+        enabled: true,
+        forwarding: {
+          enabled: true,
+          endpoint: 'https://example.com/v1/traces',
+          headers: { authorization: secret },
+        },
+      };
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing,
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        '[EvaluatorTracing] Checking tracing configuration',
+        {
+          tracing,
+          testSuiteKeys: ['providers', 'prompts', 'tracing'],
+        },
+      );
+      expect(
+        vi.mocked(logger.debug).mock.calls.some(([message]) => String(message).includes(secret)),
+      ).toBe(false);
+    });
+
     it('should pass configured acceptFormats to the OTLP receiver', async () => {
       const testSuite = {
         providers: [],
@@ -682,6 +713,40 @@ describe('evaluatorTracing', () => {
       resolveStop();
       await Promise.all([stopping, restarting]);
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(2);
+    });
+
+    it('should preserve a receiver lease when an overlapping shutdown fails', async () => {
+      let rejectStop!: (error: Error) => void;
+      mockStopOTLPReceiver.mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectStop = reject;
+          }),
+      );
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite;
+
+      const lease = await startOtlpReceiverIfNeeded(testSuite);
+      const stopping = stopOtlpReceiverIfNeeded(lease);
+      const restarting = startOtlpReceiverIfNeeded(testSuite);
+
+      await vi.waitFor(() => expect(mockStopOTLPReceiver).toHaveBeenCalledTimes(1));
+      rejectStop(new Error('shutdown failed'));
+
+      await expect(stopping).resolves.toBeUndefined();
+      await expect(restarting).resolves.toBe(true);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(isOtlpReceiverStarted()).toBe(true);
+
+      await stopOtlpReceiverIfNeeded(true);
+      expect(mockStopOTLPReceiver).toHaveBeenCalledTimes(2);
+      expect(isOtlpReceiverStarted()).toBe(false);
     });
   });
 });
