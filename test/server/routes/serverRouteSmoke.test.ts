@@ -7,6 +7,7 @@ import {
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
+import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import type { Express } from 'express';
 
 const REQUEST_TIMEOUT_MS = 2000;
@@ -840,10 +841,14 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
+    // by one test cannot leak into another.
+    promptCacheService.invalidate();
     setupDefaultMocks();
   });
 
   afterEach(() => {
+    promptCacheService.invalidate();
     vi.resetAllMocks();
   });
 
