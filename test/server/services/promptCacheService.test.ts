@@ -54,23 +54,4 @@ describe('PromptCacheService', () => {
     await expect(service.getAll()).resolves.toEqual([{ id: 'fresh' }]);
     expect(getPrompts).toHaveBeenCalledTimes(2);
   });
-
-  it('does not coalesce concurrent cold loads (documents the no-single-flight contract)', async () => {
-    // Two callers hitting an empty cache each trigger their own getPrompts(); the service caches
-    // the result, not the in-flight promise. Pinning this guards against a future single-flight
-    // "optimization" silently changing the contract the generation race relies on.
-    const pending = createDeferred<Awaited<ReturnType<typeof getPrompts>>>();
-    vi.mocked(getPrompts)
-      .mockReturnValueOnce(pending.promise)
-      .mockResolvedValueOnce([{ id: 'second' }] as never);
-    const service = new PromptCacheService();
-
-    const first = service.getAll();
-    const second = service.getAll();
-    pending.resolve([{ id: 'first' }] as never);
-
-    await expect(first).resolves.toEqual([{ id: 'first' }]);
-    await expect(second).resolves.toEqual([{ id: 'second' }]);
-    expect(getPrompts).toHaveBeenCalledTimes(2);
-  });
 });

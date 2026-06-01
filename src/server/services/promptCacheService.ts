@@ -25,8 +25,7 @@ export class PromptCacheService {
     }
     // Return the value we just fetched, not `this.allPrompts`: a concurrent `invalidate()` may
     // have reset the field to null (and the generation check above kept our result out of the
-    // cache), so re-reading it could hand back null. This caller still gets a coherent snapshot;
-    // the stale-vs-invalidator race resolves on the next request, which re-reads the DB.
+    // cache), so re-reading it could hand back null.
     return prompts;
   }
 

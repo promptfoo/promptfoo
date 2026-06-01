@@ -126,6 +126,8 @@ describe('inline server API DTO validation', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
+    // by one test cannot leak into another.
     promptCacheService.invalidate();
   });
 
