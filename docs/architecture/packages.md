@@ -51,9 +51,12 @@ The older `src/types` and `src/validators` paths remain as compatibility shims o
 mixed transitional modules. They are useful public/internal surfaces today, but
 they are not yet clean enough to call a package boundary.
 
-Leaf layers may import only themselves plus external packages. The same
-architecture check enforces that rule so this first extracted surface cannot
-quietly grow back upward into Node, provider, or redteam code.
+Leaf layers may import only themselves plus the external packages on their
+`allowedExternal` allowlist in `architecture/layers.json` (`contracts` allows only
+`zod`). The same architecture check enforces both halves of the rule, so this first
+extracted surface can neither grow back upward into Node, provider, or redteam code,
+nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
+`node:` prefix is ignored when matching, so `"fs"` and `"node:fs"` are equivalent.
 
 ## Layer Dependency Ratchet
 
