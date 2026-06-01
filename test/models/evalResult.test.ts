@@ -60,6 +60,13 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         response: createProviderResponse({ output: 'test' }),
         config: { apiKey: 'test-key' },
+        metadata: {
+          owner: 'evals',
+          apiKey: 'sk-provider-metadata',
+          nested: {
+            token: 'provider-token',
+          },
+        },
       });
 
       const result = sanitizeProvider(apiProvider);
@@ -68,6 +75,13 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+        },
+        metadata: {
+          owner: 'evals',
+          apiKey: '[REDACTED]',
+          nested: {
+            token: '[REDACTED]',
+          },
         },
       });
     });
@@ -79,6 +93,9 @@ describe('EvalResult', () => {
         config: {
           apiKey: 'test-key',
         },
+        metadata: {
+          environment: 'staging',
+        },
       };
 
       const result = sanitizeProvider(providerOptions);
@@ -87,6 +104,32 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+        },
+        metadata: {
+          environment: 'staging',
+        },
+      });
+    });
+
+    it('should handle circular provider metadata', () => {
+      const metadata: Record<string, unknown> = {
+        owner: 'evals',
+      };
+      metadata.self = metadata;
+
+      const providerOptions: ProviderOptions = {
+        id: 'test-provider',
+        metadata,
+      };
+
+      const result = sanitizeProvider(providerOptions);
+
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: undefined,
+        metadata: {
+          owner: 'evals',
+          self: '[Circular]',
         },
       });
     });
@@ -98,7 +141,10 @@ describe('EvalResult', () => {
         config: {
           apiKey: 'test-key',
         },
-      } as ApiProvider;
+        metadata: {
+          team: 'platform',
+        },
+      } as unknown as ApiProvider;
 
       const result = sanitizeProvider(provider);
       expect(result).toEqual({
@@ -106,6 +152,9 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+        },
+        metadata: {
+          team: 'platform',
         },
       });
     });
@@ -1100,6 +1149,42 @@ describe('EvalResult', () => {
         expect(evaluateResult.testCase).not.toHaveProperty('metadata');
         expect(evaluateResult.testCase.vars).toBeUndefined();
         expect(JSON.stringify(evaluateResult)).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should strip provider metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: mockTestCase,
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+          },
+          gradingResult: null,
+          provider: {
+            ...mockProvider,
+            metadata: {
+              tenant: 'provider-secret',
+            },
+          },
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        });
+
+        expect(result.toEvaluateResult().provider).toEqual({
+          id: 'test-provider',
+          label: 'Test Provider',
+        });
       } finally {
         restoreEnv();
       }

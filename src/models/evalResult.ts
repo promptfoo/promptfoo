@@ -38,6 +38,13 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
+function sanitizeProviderMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeObject(metadata, {
+    context: 'provider metadata',
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as Record<string, unknown>;
+}
+
 function projectProviderResponse(
   response: ProviderResponse | undefined,
   options: { stripMetadata: boolean; stripOutput: boolean },
@@ -101,6 +108,9 @@ export function sanitizeProvider(
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
         }),
+        ...(provider.metadata !== undefined && {
+          metadata: sanitizeProviderMetadata(provider.metadata),
+        }),
       };
     }
     if (isProviderOptions(provider)) {
@@ -110,6 +120,9 @@ export function sanitizeProvider(
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
         }),
+        ...(provider.metadata !== undefined && {
+          metadata: sanitizeProviderMetadata(provider.metadata),
+        }),
       };
     }
     if (typeof provider === 'object' && provider) {
@@ -117,12 +130,16 @@ export function sanitizeProvider(
         id: string | (() => string);
         label?: string;
         config?: ProviderConfig;
+        metadata?: Record<string, unknown>;
       };
       return {
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
           config: sanitizeProviderConfig(providerObj.config),
+        }),
+        ...(providerObj.metadata !== undefined && {
+          metadata: sanitizeProviderMetadata(providerObj.metadata),
         }),
       };
     }
@@ -886,7 +903,11 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
-      provider: { id: this.provider.id, label: this.provider.label },
+      provider: {
+        id: this.provider.id,
+        label: this.provider.label,
+        ...(shouldStripMetadata ? {} : { metadata: this.provider.metadata }),
+      },
       response,
       score: this.score,
       success: this.success,

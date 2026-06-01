@@ -1013,6 +1013,7 @@ describe('loadApiProvider', () => {
     expect('delay' in providers[0]).toBe(false);
     expect('inputs' in providers[0]).toBe(false);
     expect('config' in providers[0]).toBe(false);
+    expect('metadata' in providers[0]).toBe(false);
   });
 
   it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {
@@ -1022,12 +1023,14 @@ describe('loadApiProvider', () => {
       delay?: number;
       inputs?: any;
       config?: any;
+      metadata?: Record<string, unknown>;
     } = async (prompt) => ({ output: `Output for ${prompt}` });
     providerFunction.label = 'My Function';
     providerFunction.transform = (output) => output.toUpperCase();
     providerFunction.delay = 500;
     providerFunction.inputs = [{ role: 'user', content: 'hi' }];
     providerFunction.config = { custom: 'value' };
+    providerFunction.metadata = { owner: 'evals', tier: 'gold' };
 
     const providers = await loadApiProviders([providerFunction] as any);
     expect(providers).toHaveLength(1);
@@ -1037,6 +1040,7 @@ describe('loadApiProvider', () => {
     expect(providers[0].delay).toBe(500);
     expect(providers[0].inputs).toBe(providerFunction.inputs);
     expect(providers[0].config).toEqual({ custom: 'value' });
+    expect(providers[0].metadata).toBe(providerFunction.metadata);
   });
 
   it('loadApiProviders and getProviderIds agree on the id of a labeled ProviderFunction in an array', async () => {
