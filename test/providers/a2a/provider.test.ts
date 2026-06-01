@@ -132,8 +132,8 @@ describe('A2AProvider', () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({
         message: {
-          role: 'agent',
-          parts: [{ kind: 'text', text: 'ok' }],
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'ok' }],
         },
       }),
     );
@@ -143,8 +143,8 @@ describe('A2AProvider', () => {
     expect(result.output).toBe('ok');
     const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
     expect(requestBody.message).toMatchObject({
-      role: 'user',
-      parts: [{ kind: 'text', text: 'hello' }],
+      role: 'ROLE_USER',
+      parts: [{ text: 'hello' }],
     });
   });
 
@@ -304,6 +304,11 @@ describe('A2AProvider', () => {
       }),
       expect.any(Number),
     );
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body as string);
+    expect(requestBody.message).toMatchObject({
+      role: 'user',
+      parts: [{ kind: 'text', text: 'hello' }],
+    });
   });
 
   it('does not inherit discovered tenant when config.url overrides Agent Card interface URL', async () => {

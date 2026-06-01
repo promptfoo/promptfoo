@@ -1104,8 +1104,8 @@ const CustomTargetConfiguration = ({
                             'X-Custom-Header': '{{value}}',
                           },
                           message: {
-                            role: 'user',
-                            parts: [{ kind: 'text', text: '{{prompt}}' }],
+                            role: 'ROLE_USER',
+                            parts: [{ text: '{{prompt}}' }],
                           },
                           transformResponse:
                             'return result.output || result.message || JSON.stringify(result.raw);',

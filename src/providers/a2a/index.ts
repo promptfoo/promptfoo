@@ -209,10 +209,21 @@ function canUseCardUrl(card: A2AAgentCard): boolean {
   return preferredTransport === HTTP_JSON_BINDING;
 }
 
-function getDefaultMessage(prompt: string): A2AMessage {
+function usesLegacyMessageShape(protocolVersion: string): boolean {
+  return protocolVersion.startsWith('0.3');
+}
+
+function getDefaultMessage(prompt: string, protocolVersion: string): A2AMessage {
+  if (usesLegacyMessageShape(protocolVersion)) {
+    return {
+      role: 'user',
+      parts: [{ kind: 'text', text: prompt }],
+    };
+  }
+
   return {
-    role: 'user',
-    parts: [{ kind: 'text', text: prompt }],
+    role: 'ROLE_USER',
+    parts: [{ text: prompt }],
   };
 }
 
@@ -431,7 +442,7 @@ export class A2AProvider implements ApiProvider {
       } as RequestVars;
       const endpoint = await this.resolveEndpoint(vars, context, options);
       const mode = this.resolveMode(endpoint);
-      const message = this.buildMessage(prompt, vars, context);
+      const message = this.buildMessage(prompt, endpoint.protocolVersion, vars, context);
       const body = {
         ...(endpoint.tenant ? { tenant: endpoint.tenant } : {}),
         message,
@@ -544,12 +555,13 @@ export class A2AProvider implements ApiProvider {
 
   private buildMessage(
     prompt: string,
+    protocolVersion: string,
     vars: RequestVars,
     context?: CallApiContextParams,
   ): A2AMessage {
     const configuredMessage = this.config.message
       ? renderTemplate(this.config.message, vars, context)
-      : getDefaultMessage(prompt);
+      : getDefaultMessage(prompt, protocolVersion);
     const message = A2AMessageSchema.parse(configuredMessage);
     return {
       ...message,
