@@ -7,7 +7,7 @@ import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { clearCountCache } from '../models/evalPerformance';
+import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import {
@@ -40,7 +40,7 @@ interface RetryCommandOptions {
  * Gets all ERROR results from an evaluation and returns their IDs
  */
 export async function getErrorResultIds(evalId: string): Promise<string[]> {
-  const db = getDb();
+  const db = await getDb();
 
   const errorResults = await db
     .select({ id: evalResultsTable.id })
@@ -65,7 +65,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
     return;
   }
 
-  const db = getDb();
+  const db = await getDb();
   const affectedEvals = await db
     .selectDistinct({ evalId: evalResultsTable.evalId })
     .from(evalResultsTable)
@@ -73,10 +73,10 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
     .all();
 
   // Use batch delete with inArray for better performance
-  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds));
+  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
 
   for (const { evalId } of affectedEvals) {
-    clearCountCache(evalId);
+    notifyEvaluationChanged(evalId);
   }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);

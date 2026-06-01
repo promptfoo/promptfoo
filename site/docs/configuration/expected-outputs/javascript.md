@@ -142,6 +142,9 @@ interface AssertionValueFunctionContext {
 
   // OpenTelemetry trace data (when tracing is enabled)
   trace?: TraceData;
+
+  // Shortcut to providerResponse?.metadata (provider-specific fields)
+  metadata?: Record<string, any>;
 }
 ```
 

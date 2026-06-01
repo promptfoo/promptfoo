@@ -287,6 +287,12 @@
         "FAL_KEY": {
           "type": "string"
         },
+        "FIREWORKS_API_BASE_URL": {
+          "type": "string"
+        },
+        "FIREWORKS_API_KEY": {
+          "type": "string"
+        },
         "GITHUB_TOKEN": {
           "type": "string"
         },
@@ -359,13 +365,34 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MINIMAX_API_KEY": {
+          "type": "string"
+        },
+        "MLFLOW_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "MLFLOW_GATEWAY_URL": {
+          "type": "string"
+        },
         "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
+        "N8N_API_KEY": {
           "type": "string"
         },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
         "NSCALE_API_KEY": {
+          "type": "string"
+        },
+        "NOVITA_API_KEY": {
+          "type": "string"
+        },
+        "NVIDIA_API_BASE_URL": {
+          "type": "string"
+        },
+        "NVIDIA_API_KEY": {
           "type": "string"
         },
         "OLLAMA_API_KEY": {
@@ -414,6 +441,9 @@
           "type": "string"
         },
         "OPENCLAW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "ORCAROUTER_API_KEY": {
           "type": "string"
         },
         "PALM_API_HOST": {
@@ -863,6 +893,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -933,6 +964,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -1712,6 +1744,12 @@
                     "FAL_KEY": {
                       "type": "string"
                     },
+                    "FIREWORKS_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_KEY": {
+                      "type": "string"
+                    },
                     "GITHUB_TOKEN": {
                       "type": "string"
                     },
@@ -1784,13 +1822,34 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MINIMAX_API_KEY": {
+                      "type": "string"
+                    },
+                    "MLFLOW_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "MLFLOW_GATEWAY_URL": {
+                      "type": "string"
+                    },
                     "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
+                    "N8N_API_KEY": {
                       "type": "string"
                     },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
                     "NSCALE_API_KEY": {
+                      "type": "string"
+                    },
+                    "NOVITA_API_KEY": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_KEY": {
                       "type": "string"
                     },
                     "OLLAMA_API_KEY": {
@@ -1839,6 +1898,9 @@
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "ORCAROUTER_API_KEY": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {
@@ -3283,6 +3345,11 @@
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "filterSampleSeed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
         "filterTargets": {
