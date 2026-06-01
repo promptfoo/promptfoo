@@ -288,6 +288,8 @@ describe('writeOutput', () => {
             'x-safe-debug': 'keep-legacy',
           },
           http: {
+            status: 200,
+            statusText: 'OK',
             headers: {
               'set-cookie': 'session=secret',
               'x-request-id': 'req_should_not_persist',
