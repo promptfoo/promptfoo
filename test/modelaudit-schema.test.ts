@@ -6,54 +6,96 @@ import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 describe('ModelAudit JSON Schema', () => {
-  let example: unknown;
-  let schema: Record<string, any>;
+  type JsonObject = Record<string, unknown>;
 
-  beforeAll(() => {
-    const version = 'v0.2.45';
-    const schemaPath = path.join(
+  const version = 'v0.2.45';
+  const latest = 'latest';
+
+  let versionedExample: JsonObject;
+  let latestExample: JsonObject;
+  let versionedSchema: JsonObject;
+  let latestSchema: JsonObject;
+
+  const readJsonObject = (filePath: string): JsonObject => {
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`Expected ${filePath} to contain a JSON object`);
+    }
+    return value as JsonObject;
+  };
+
+  const schemaPath = (label: string) =>
+    path.join(
       __dirname,
       '..',
       'site',
       'static',
       'schemas',
       'modelaudit',
-      version,
+      label,
       'modelaudit-scan-result.schema.json',
     );
-    const examplePath = path.join(
+
+  const examplePath = (label: string) =>
+    path.join(
       __dirname,
       '..',
       'site',
       'static',
       'examples',
       'modelaudit',
-      version,
+      label,
       'modelaudit-scan-result.example.json',
     );
 
-    schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
-    example = JSON.parse(fs.readFileSync(examplePath, 'utf-8'));
+  beforeAll(() => {
+    versionedSchema = readJsonObject(schemaPath(version));
+    latestSchema = readJsonObject(schemaPath(latest));
+    versionedExample = readJsonObject(examplePath(version));
+    latestExample = readJsonObject(examplePath(latest));
   });
 
-  it('declares its public Draft 2020-12 identifier', () => {
-    expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
-    expect(schema.$id).toBe(
-      'https://www.promptfoo.dev/schemas/modelaudit/v0.2.45/modelaudit-scan-result.schema.json',
-    );
+  const withoutSchemaId = (schema: JsonObject): JsonObject => {
+    const clone = { ...schema };
+    delete clone.$id;
+    return clone;
+  };
+
+  it('declares public Draft 2020-12 identifiers for latest and versioned schemas', () => {
+    for (const [label, schema] of [
+      [latest, latestSchema],
+      [version, versionedSchema],
+    ] as const) {
+      expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+      expect(schema.$id).toBe(
+        `https://www.promptfoo.dev/schemas/modelaudit/${label}/modelaudit-scan-result.schema.json`,
+      );
+    }
+  });
+
+  it('keeps the latest alias aligned with the versioned artifacts', () => {
+    expect(withoutSchemaId(latestSchema)).toEqual(withoutSchemaId(versionedSchema));
+    expect(latestExample).toEqual(versionedExample);
   });
 
   it('describes has_errors as an operational failure signal', () => {
-    expect(schema.properties.has_errors.description).toBe(
-      'Whether operational errors occurred during scanning',
-    );
+    for (const schema of [latestSchema, versionedSchema]) {
+      const properties = schema.properties as JsonObject;
+      const hasErrors = properties.has_errors as JsonObject;
+      expect(hasErrors.description).toBe('Whether operational errors occurred during scanning');
+    }
   });
 
-  it('validates the published example result', () => {
+  it('validates the published example results', () => {
     const ajv = new Ajv2020({ allErrors: true, strict: false });
     addFormats(ajv);
-    const validate = ajv.compile(schema);
 
-    expect(validate(example), JSON.stringify(validate.errors, null, 2)).toBe(true);
+    for (const [schema, example] of [
+      [latestSchema, latestExample],
+      [versionedSchema, versionedExample],
+    ] as const) {
+      const validate = ajv.compile(schema);
+      expect(validate(example), JSON.stringify(validate.errors, null, 2)).toBe(true);
+    }
   });
 });

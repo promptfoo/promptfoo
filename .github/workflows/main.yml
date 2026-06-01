@@ -305,12 +305,7 @@ jobs:
       - name: Install ModelAudit schema dependencies
         run: |
           python3 -m pip install --disable-pip-version-check --no-deps \
-            modelaudit==0.2.45 \
-            pydantic==2.13.4 \
-            pydantic-core==2.46.4 \
-            annotated-types==0.7.0 \
-            typing-extensions==4.15.0 \
-            typing-inspection==0.4.2
+            -r scripts/modelaudit_schema_requirements.txt
 
       - name: Generate JSON Schemas
         run: |
