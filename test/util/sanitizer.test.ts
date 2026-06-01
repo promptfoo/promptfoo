@@ -356,6 +356,65 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('restores same-index edited duplicates when a later array item is deleted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ suite: 'a', description: 'edited', file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                description: 'original',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'a',
+            description: 'edited',
+            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          },
+        ],
+      });
+    });
+
+    it('leaves shifted edited duplicates redacted after an earlier array item is deleted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ suite: 'b', description: 'edited', file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [{ suite: 'b', description: 'edited', file: redactedUri }],
+      });
+    });
+
     it('leaves ambiguous moved and edited duplicate Azure Blob SAS URIs redacted', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 

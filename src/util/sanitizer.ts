@@ -355,6 +355,41 @@ function findUniqueStoredArrayItemMatch(
   return matched ? { matched: true, index: matchedIndex, value: matchedValue } : { matched: false };
 }
 
+function hasSharedStableArrayItemIdentity(value: unknown, storedValue: unknown): boolean {
+  if (typeof value === 'string' || typeof storedValue === 'string') {
+    return (
+      typeof value === 'string' &&
+      typeof storedValue === 'string' &&
+      value === storedValue &&
+      value === redactAzureBlobSasToken(value)
+    );
+  }
+
+  if (Array.isArray(value) || Array.isArray(storedValue)) {
+    return (
+      Array.isArray(value) &&
+      Array.isArray(storedValue) &&
+      value.some((item, index) => hasSharedStableArrayItemIdentity(item, storedValue[index]))
+    );
+  }
+
+  if (
+    value &&
+    storedValue &&
+    typeof value === 'object' &&
+    typeof storedValue === 'object' &&
+    !isClassInstance(value) &&
+    !isClassInstance(storedValue)
+  ) {
+    const storedObject = storedValue as Record<string, unknown>;
+    return Object.entries(value).some(([key, item]) =>
+      hasSharedStableArrayItemIdentity(item, storedObject[key]),
+    );
+  }
+
+  return value != null && Object.is(value, storedValue);
+}
+
 function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
   if (typeof value === 'string') {
     if (typeof storedValue === 'string' && value === redactAzureBlobSasToken(storedValue)) {
@@ -366,7 +401,7 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
     const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
-    const canRestorePositionally = value.length === storedItems.length;
+    const hasSameLength = value.length === storedItems.length;
     const structuralMatches = value.map((item) =>
       findUniqueStoredArrayItemMatch(item, storedItems),
     );
@@ -379,12 +414,15 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
       // SAS tokens across unrelated edits unless another item claimed that
       // stored position. Finally, fall back to unambiguous URI identity.
       const structuralMatch = structuralMatches[index];
+      const storedItem = storedItems[index];
+      const canRestorePositionally =
+        storedItem !== undefined &&
+        !structurallyMatchedStoredIndexes.has(index) &&
+        (hasSameLength || hasSharedStableArrayItemIdentity(item, storedItem));
       const storedItemMatch =
-        structuralMatch.matched ||
-        !canRestorePositionally ||
-        structurallyMatchedStoredIndexes.has(index)
+        structuralMatch.matched || !canRestorePositionally
           ? structuralMatch
-          : { matched: true as const, index, value: storedItems[index] };
+          : { matched: true as const, index, value: storedItem };
       const structuralResult = storedItemMatch.matched
         ? restoreAzureBlobSasTokensWithResult(item, storedItemMatch.value)
         : { value: item, restored: false };
