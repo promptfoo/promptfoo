@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -19,7 +21,7 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { REDACTED, sanitizeObject } from '../util/sanitizer';
+import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingRequest,
@@ -226,11 +228,30 @@ function isSensitiveResponseHeader(headerName: string): boolean {
   return SENSITIVE_RESPONSE_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
-function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string, unknown> | null {
+// Request headers can carry credentials the response-header list doesn't enumerate
+// (api-key / x-api-key / x-auth-token / bearer …); fold in the shared secret-field matcher.
+function isSensitiveRequestHeader(headerName: string): boolean {
+  return isSensitiveResponseHeader(headerName) || isSecretField(headerName);
+}
+
+// Redact sensitive headers, but only when the value originates from `sourceHeaders` (the
+// transport headers). The provenance check matters for the legacy top-level `metadata.headers`
+// slot, which also holds arbitrary user metadata: a header is redacted only if it deep-equals
+// the value the transport actually sent. For the canonical `metadata.http.*` slots the source
+// is the slot itself, so the guard reduces to the plain name check.
+function redactSensitiveHeaders(
+  headers: Record<string, unknown>,
+  sourceHeaders: Record<string, unknown> = headers,
+  isSensitiveHeader: (headerName: string) => boolean = isSensitiveResponseHeader,
+): Record<string, unknown> | null {
   let mutated = false;
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (isSensitiveResponseHeader(key)) {
+    if (
+      Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
+      isDeepStrictEqual(sourceHeaders[key], value) &&
+      isSensitiveHeader(key)
+    ) {
       next[key] = REDACTED;
       mutated = true;
     } else {
@@ -240,39 +261,79 @@ function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string
   return mutated ? next : null;
 }
 
-// Redact `metadata.http.headers` and `metadata.http.requestHeaders` on a single
-// metadata object. Does NOT recurse into other keys (e.g. `output`, `audio`,
-// arbitrary model output) — providers populate transport metadata at the canonical
-// `metadata.http` slot only, and walking arbitrary subtrees risks rewriting
-// user-controlled content that legitimately uses an `http` key (see
+// Redact transport headers on a single metadata object. Providers populate
+// `metadata.http.headers` / `requestHeaders`, while some legacy integrations still use a
+// top-level `metadata.headers`. The legacy slot is only redacted when its transport source
+// is known (`redactLegacyHeaders` for a response's own metadata, or `legacyHeadersSource` for
+// result-level metadata that echoes the response) because top-level result metadata also holds
+// arbitrary user-authored test metadata. Does NOT recurse into other keys (e.g. `output`,
+// `audio`, arbitrary model output) — walking arbitrary subtrees risks rewriting user-controlled
+// content that legitimately uses an `http` key (see
 // https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
-function redactHttpHeadersOnMetadata<T>(metadata: T): T {
+function redactHttpHeadersOnMetadata<T>(
+  metadata: T,
+  options?: { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean },
+): T {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return metadata;
   }
 
   const m = metadata as Record<string, unknown>;
+  let nextMetadata: Record<string, unknown> | undefined;
+
+  const legacyHeaders = m.headers;
+  const legacyHeadersSource = options?.redactLegacyHeaders
+    ? legacyHeaders
+    : (options?.legacyHeadersSource as Record<string, unknown> | undefined)?.headers;
+  if (
+    legacyHeaders &&
+    typeof legacyHeaders === 'object' &&
+    !Array.isArray(legacyHeaders) &&
+    legacyHeadersSource &&
+    typeof legacyHeadersSource === 'object' &&
+    !Array.isArray(legacyHeadersSource)
+  ) {
+    const redacted = redactSensitiveHeaders(
+      legacyHeaders as Record<string, unknown>,
+      legacyHeadersSource as Record<string, unknown>,
+    );
+    if (redacted) {
+      nextMetadata = { ...m, headers: redacted };
+    }
+  }
+
   const http = m.http;
   if (!http || typeof http !== 'object' || Array.isArray(http)) {
-    return metadata;
+    return (nextMetadata ?? metadata) as T;
   }
 
   const httpRecord = http as Record<string, unknown>;
-  let mutated = false;
-  const nextHttp: Record<string, unknown> = { ...httpRecord };
+  let nextHttp: Record<string, unknown> | undefined;
 
   for (const slot of ['headers', 'requestHeaders'] as const) {
     const slotValue = httpRecord[slot];
     if (slotValue && typeof slotValue === 'object' && !Array.isArray(slotValue)) {
-      const redacted = redactSensitiveHeaders(slotValue as Record<string, unknown>);
+      const redacted =
+        slot === 'requestHeaders'
+          ? redactSensitiveHeaders(
+              slotValue as Record<string, unknown>,
+              slotValue as Record<string, unknown>,
+              isSensitiveRequestHeader,
+            )
+          : redactSensitiveHeaders(slotValue as Record<string, unknown>);
       if (redacted) {
+        nextHttp ??= { ...httpRecord };
         nextHttp[slot] = redacted;
-        mutated = true;
       }
     }
   }
 
-  return (mutated ? { ...m, http: nextHttp } : metadata) as T;
+  if (!nextHttp) {
+    return (nextMetadata ?? metadata) as T;
+  }
+  nextMetadata ??= { ...m };
+  nextMetadata.http = nextHttp;
+  return nextMetadata as T;
 }
 
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
@@ -318,15 +379,22 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata);
+  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+    redactLegacyHeaders: true,
+  });
   if (redactedMetadata === (response as ProviderResponse).metadata) {
     return response;
   }
   return { ...response, metadata: redactedMetadata } as T;
 }
 
-function sanitizeMetadataForDb<T>(metadata: T): T {
-  return redactHttpHeadersOnMetadata(metadata);
+// `responseMetadata` is the (pre-redaction) provider response metadata, used as the provenance
+// source so a legacy top-level `metadata.headers` is redacted only where it echoes the
+// transport — leaving user-authored test metadata headers intact.
+function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
+  return redactHttpHeadersOnMetadata(metadata, {
+    legacyHeadersSource: sanitizeForDb(responseMetadata),
+  });
 }
 
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {
@@ -354,7 +422,13 @@ function redactSensitiveResultFieldsForDb<
   return {
     response: sanitizeResponseForDb(fields.response),
     gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
-    metadata: sanitizeMetadataForDb(fields.metadata),
+    // Pass the response metadata as the legacy-header provenance source (see
+    // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
+    // cleartext here and can be matched against an echoed result-level metadata.headers.
+    metadata: sanitizeMetadataForDb(
+      fields.metadata,
+      (fields.response as ProviderResponse | null | undefined)?.metadata,
+    ),
   };
 }
 
