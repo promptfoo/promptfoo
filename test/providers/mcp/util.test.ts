@@ -377,13 +377,15 @@ describe('getOAuthTokenWithExpiry', () => {
 
   it('scopes cached tokens by the discovered token endpoint', async () => {
     mockFetch.mockImplementation(async (url: string) => {
-      if (url.includes('/.well-known/oauth-authorization-server')) {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname.endsWith('/.well-known/oauth-authorization-server')) {
         return {
           ok: true,
           json: async () => ({
-            token_endpoint: url.includes('agent-a.example.com')
-              ? 'https://auth-a.example.com/oauth/token'
-              : 'https://auth-b.example.com/oauth/token',
+            token_endpoint:
+              parsedUrl.hostname === 'agent-a.example.com'
+                ? 'https://auth-a.example.com/oauth/token'
+                : 'https://auth-b.example.com/oauth/token',
           }),
         };
       }
