@@ -54,8 +54,7 @@ def build_schema(result_model: Any, label: str) -> dict[str, Any]:
     return {
         "$schema": SCHEMA_DRAFT_URI,
         "$id": (
-            "https://www.promptfoo.dev/schemas/modelaudit/"
-            f"{label}/{SCHEMA_FILENAME}"
+            f"https://www.promptfoo.dev/schemas/modelaudit/{label}/{SCHEMA_FILENAME}"
         ),
         **schema,
     }
@@ -64,12 +63,26 @@ def build_schema(result_model: Any, label: str) -> dict[str, Any]:
 def artifact_paths(label: str) -> ModelAuditArtifacts:
     """Return checked-in artifact paths for a ModelAudit schema label."""
     schema_path = (
-        REPO_ROOT / "site" / "static" / "schemas" / "modelaudit" / label / SCHEMA_FILENAME
+        REPO_ROOT
+        / "site"
+        / "static"
+        / "schemas"
+        / "modelaudit"
+        / label
+        / SCHEMA_FILENAME
     )
     example_path = (
-        REPO_ROOT / "site" / "static" / "examples" / "modelaudit" / label / EXAMPLE_FILENAME
+        REPO_ROOT
+        / "site"
+        / "static"
+        / "examples"
+        / "modelaudit"
+        / label
+        / EXAMPLE_FILENAME
     )
-    return ModelAuditArtifacts(label=label, schema_path=schema_path, example_path=example_path)
+    return ModelAuditArtifacts(
+        label=label, schema_path=schema_path, example_path=example_path
+    )
 
 
 def expected_modelaudit_version() -> str:
@@ -80,7 +93,9 @@ def expected_modelaudit_version() -> str:
             continue
         if requirement.startswith("modelaudit=="):
             return requirement.removeprefix("modelaudit==").split()[0]
-    raise RuntimeError(f"Missing modelaudit pin in {REQUIREMENTS_PATH.relative_to(REPO_ROOT)}")
+    raise RuntimeError(
+        f"Missing modelaudit pin in {REQUIREMENTS_PATH.relative_to(REPO_ROOT)}"
+    )
 
 
 def install_hint() -> str:
