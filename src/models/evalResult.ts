@@ -405,6 +405,99 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
+// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
+// `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
+export const PROMPTFOO_METADATA_KEY = '__promptfoo';
+const TRACE_LINKAGE_KEY = 'traceLinkage';
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+export function persistTraceMetadata(
+  metadata: EvaluateResult['metadata'],
+  traceId: EvaluateResult['traceId'],
+  evaluationId: EvaluateResult['evaluationId'],
+): EvaluateResult['metadata'] {
+  if (!traceId && !evaluationId) {
+    return stripTraceLinkageFromMetadata(metadata);
+  }
+
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
+    logger.warn(
+      `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal trace linkage; the key is reserved for promptfoo internals.`,
+    );
+  }
+  if (promptfooMetadata && TRACE_LINKAGE_KEY in promptfooMetadata) {
+    logger.warn(
+      `[EvalResult] Overwriting metadata.${PROMPTFOO_METADATA_KEY}.${TRACE_LINKAGE_KEY} with internal trace linkage; the path is reserved for promptfoo internals.`,
+    );
+  }
+
+  // `traceId`/`evaluationId` are only persisted when truthy — JSON.stringify strips
+  // undefined values, and `surfaceTraceMetadata` requires `typeof === 'string'` on read.
+  return {
+    ...metadataRecord,
+    [PROMPTFOO_METADATA_KEY]: {
+      ...(promptfooMetadata ?? {}),
+      [TRACE_LINKAGE_KEY]: { traceId, evaluationId },
+    },
+  };
+}
+
+export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> | null | undefined>(
+  metadata: T,
+): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(TRACE_LINKAGE_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [TRACE_LINKAGE_KEY]: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+
+  return strippedMetadata as T;
+}
+
+function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
+  traceId?: string;
+  evaluationId?: string;
+  metadata: Record<string, unknown>;
+} {
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
+
+  const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
+  const evaluationId =
+    typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
+
+  // Strip the reserved namespace whenever a `traceLinkage` entry exists — even if the
+  // stored ids are malformed (non-string), the internal namespace must never surface to
+  // users. Gate on presence of the key, not on whether the ids read back as valid strings.
+  const hasTraceLinkage = promptfooMetadata != null && TRACE_LINKAGE_KEY in promptfooMetadata;
+  if (!hasTraceLinkage) {
+    return { traceId, evaluationId, metadata: metadataRecord };
+  }
+
+  return {
+    traceId,
+    evaluationId,
+    metadata: stripTraceLinkageFromMetadata(metadataRecord),
+  };
+}
+
 // Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
 // the database or a JSONL artifact. Single source of truth for which redactor pairs with which
 // field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
@@ -536,7 +629,13 @@ export default class EvalResult {
       metadata,
       failureReason,
       testCase,
+      traceId,
+      evaluationId,
     } = result;
+
+    // Persist trace linkage inside a private metadata namespace so it survives
+    // EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -576,7 +675,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(metadata),
+      metadata: sanitizeForDb(persistedMetadata),
       failureReason,
     };
     if (persist) {
@@ -616,15 +715,20 @@ export default class EvalResult {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`.
+        // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
+        // via `persistTraceMetadata`; strip the top-level fields so the DB write
+        // only carries known-schema columns.
+        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
         const sanitizedResult = {
-          ...result,
+          ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
           ...redactSensitiveResultFieldsForDb({
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
-            metadata: sanitizeForDb(result.metadata),
+            metadata: sanitizeForDb(
+              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+            ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
@@ -776,6 +880,8 @@ export default class EvalResult {
   cost: number;
   // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata: Record<string, any>;
+  traceId?: string;
+  evaluationId?: string;
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
@@ -819,7 +925,11 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    this.metadata = opts.metadata || {};
+    ({
+      metadata: this.metadata,
+      traceId: this.traceId,
+      evaluationId: this.evaluationId,
+    } = surfaceTraceMetadata(opts.metadata));
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -829,15 +939,24 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
+    // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
+    // testCase metadata in the constructor, and trace linkage travels inside the metadata
+    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
+    // explicitly keeps the write payload aligned with the schema.
+    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    const persistedValues = {
+      ...rest,
+      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+    };
     //check if this exists in the db
     if (this.persisted) {
       await db
         .update(evalResultsTable)
-        .set({ ...this, updatedAt: getCurrentTimestamp() })
+        .set({ ...persistedValues, updatedAt: getCurrentTimestamp() })
         .where(eq(evalResultsTable.id, this.id))
         .run();
     } else {
-      const result = await db.insert(evalResultsTable).values(this).returning();
+      const result = await db.insert(evalResultsTable).values(persistedValues).returning();
       this.id = result[0].id;
       this.persisted = true;
     }
@@ -886,6 +1005,8 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
+      ...(this.traceId ? { traceId: this.traceId } : {}),
+      ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,
