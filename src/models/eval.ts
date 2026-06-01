@@ -302,8 +302,13 @@ export default class Eval {
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
-  private failedResultKeys = new Set<string>();
   private failedResults = new Map<string, EvaluateResult>();
+  // Reconstructed EvalResults for rows that failed to persist, cached so comparison
+  // assertions reuse the SAME instance across passes (select-best then max-score).
+  // Persisted rows compose successive comparison grading via the DB round-trip
+  // (mutate -> save -> re-fetch); failed rows have no DB copy, so the shared in-memory
+  // instance is what lets later grading build on earlier grading instead of a stale row.
+  private failedEvalResults = new Map<string, EvalResult>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
@@ -739,24 +744,38 @@ export default class Eval {
   recordResultPersistenceFailure(result: EvaluateResult) {
     this.resultPersistenceFailed = true;
     const key = getResultIndexKey(result);
-    this.failedResultKeys.add(key);
     // Keep the row so comparison assertions (max-score / select-best) can still grade the
     // full output set — the DB is missing this row — and the failed row receives canonical
     // grading rather than being emitted in its stale, pre-comparison state.
     this.failedResults.set(key, result);
+    // Drop any cached reconstruction so the next comparison rehydrates from this raw row.
+    this.failedEvalResults.delete(key);
   }
 
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
-    return this.failedResultKeys.has(getResultIndexKey(result));
+    return this.failedResults.has(getResultIndexKey(result));
   }
 
   // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
   // so the comparison input (which otherwise reads only the database) sees the full set.
+  // The reconstruction is cached and reused: when a test has both select-best and max-score,
+  // select-best mutates the instance and max-score must build on that mutation rather than
+  // re-reading the stale pre-comparison row (which would erase the earlier grading from the
+  // finalized artifact). This mirrors how persisted rows compose grading via save() + re-fetch.
   async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
-    const rows = Array.from(this.failedResults.values()).filter((r) => r.testIdx === testIdx);
-    return Promise.all(
-      rows.map((row) => EvalResult.createFromEvaluateResult(this.id, row, { persist: false })),
-    );
+    const reconstructed: EvalResult[] = [];
+    for (const [key, row] of this.failedResults) {
+      if (row.testIdx !== testIdx) {
+        continue;
+      }
+      let evalResult = this.failedEvalResults.get(key);
+      if (!evalResult) {
+        evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+        this.failedEvalResults.set(key, evalResult);
+      }
+      reconstructed.push(evalResult);
+    }
+    return reconstructed;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {

@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as comparison from '../src/matchers/comparison';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { evaluate } from '../src/node/evaluate';
@@ -195,6 +196,66 @@ describe('programmatic JSONL output', () => {
     expect(results[0]).toEqual(expect.objectContaining({ success: true }));
     expect(results[1]).toEqual(expect.objectContaining({ success: false }));
     expect(results[2]).toEqual(expect.objectContaining({ success: false }));
+  });
+
+  it('composes select-best then max-score grading for a row that failed to persist', async () => {
+    // Regression: when a test has BOTH select-best and max-score, the failed-to-persist row
+    // used to be rehydrated from its stale pre-comparison state for each pass. select-best
+    // would demote it, then max-score (which can make it the winner) rehydrated the stale row
+    // and overwrote the finalized artifact — erasing the select-best failure and reporting
+    // success: true. The reconstructed row must be reused across passes so grading composes.
+    const selectBestSpy = vi.spyOn(comparison, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: true, score: 1, reason: 'Selected as best' },
+      // The row that failed to persist (promptIdx 2) loses the select-best comparison.
+      { pass: false, score: 0, reason: 'Not selected as best' },
+    ]);
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    // Only the failed row's output contains "hello", so real max-score makes it the unique
+    // winner — without composition it would be re-promoted to success.
+    const provider: ApiProvider = {
+      id: () => 'compose-comparison-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((prompt) =>
+        Promise.resolve({
+          output: prompt.includes('Prompt C') ? 'hello world' : 'goodbye',
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      ),
+    };
+    const originalAddResult = Eval.prototype.addResult;
+    vi.spyOn(Eval.prototype, 'addResult').mockImplementation(async function (this: Eval, result) {
+      if (result.promptIdx === 2) {
+        throw new Error('simulated save failure');
+      }
+      return originalAddResult.call(this, result);
+    });
+
+    await evaluate({
+      outputPath,
+      prompts: ['Prompt A', 'Prompt B', 'Prompt C'],
+      providers: [provider],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'select-best', value: 'choose the best one' },
+            { type: 'max-score' },
+          ],
+        },
+      ],
+    });
+
+    const results = readJsonl(outputPath).sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(results).toHaveLength(3);
+    // The later max-score pass must not erase the select-best failure for the failed row.
+    expect(results[2].success).toBe(false);
+    const selectBestComponent = results[2].gradingResult?.componentResults?.find(
+      (component: any) => component.assertion?.type === 'select-best',
+    );
+    expect(selectBestComponent?.pass).toBe(false);
+
+    selectBestSpy.mockRestore();
   });
 
   it('preserves provider and model-graded assertion token usage when finalizing persisted rows', async () => {

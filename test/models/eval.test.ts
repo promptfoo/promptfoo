@@ -177,6 +177,57 @@ describe('evaluator', () => {
     });
   });
 
+  describe('getFailedResultsByTestIdx', () => {
+    const makeFailedRow = (promptIdx: number) => ({
+      promptIdx,
+      testIdx: 0,
+      testCase: { vars: {} },
+      prompt: { raw: 'p', label: 'p' },
+      provider: { id: 'test-provider' },
+      response: { output: 'out' },
+      gradingResult: { pass: true, score: 1, reason: 'init', componentResults: [] },
+      namedScores: {},
+      metadata: {},
+      success: true,
+      score: 1,
+      latencyMs: 1,
+      cost: 0,
+      failureReason: ResultFailureReason.NONE,
+    });
+
+    it('reuses the reconstructed instance so comparison grading composes across passes', async () => {
+      const eval_ = new Eval({});
+      eval_.recordResultPersistenceFailure(makeFailedRow(1) as any);
+
+      const [first] = await eval_.getFailedResultsByTestIdx(0);
+      // Simulate an earlier comparison pass (e.g. select-best) demoting the failed row.
+      first.success = false;
+      first.score = 0;
+
+      const [second] = await eval_.getFailedResultsByTestIdx(0);
+      // A later pass (e.g. max-score) must see the SAME, already-mutated instance so its
+      // grading composes on top rather than rehydrating the stale pre-comparison row.
+      expect(second).toBe(first);
+      expect(second.success).toBe(false);
+      expect(second.score).toBe(0);
+    });
+
+    it('rebuilds from the raw row when the persistence failure is re-recorded', async () => {
+      const eval_ = new Eval({});
+      eval_.recordResultPersistenceFailure(makeFailedRow(0) as any);
+
+      const [first] = await eval_.getFailedResultsByTestIdx(0);
+      first.success = false;
+
+      // Re-recording the failure replaces the raw row and must drop the cached reconstruction.
+      eval_.recordResultPersistenceFailure(makeFailedRow(0) as any);
+      const [second] = await eval_.getFailedResultsByTestIdx(0);
+
+      expect(second).not.toBe(first);
+      expect(second.success).toBe(true);
+    });
+  });
+
   describe('setResults', () => {
     it('should persist result rows when replacing results on a persisted eval', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
