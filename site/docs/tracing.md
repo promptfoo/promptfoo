@@ -453,6 +453,23 @@ Click the **Export Traces** button to download all traces for the current evalua
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 
+### Trace Linkage on Result Rows
+
+When tracing is enabled, every `EvaluateResult` row carries `traceId` and `evaluationId` at the top level so external tooling can correlate result rows to traces without re-deriving the linkage:
+
+```json
+{
+  "promptIdx": 0,
+  "testIdx": 0,
+  "success": true,
+  "traceId": "b01f108667a48e148ee80deb42c7f16d",
+  "evaluationId": "eval-Lie-2026-05-08T13:43:46",
+  "metadata": { "...": "..." }
+}
+```
+
+Use the `traceId` to look up an individual trace via `GET /api/traces/:traceId`, or pass the `evaluationId` to `GET /api/traces/evaluation/:evaluationId` to fetch every trace for the eval. Both fields are absent when tracing is not enabled for the row, so their presence is an unambiguous "this row was traced" signal.
+
 ## Best Practices
 
 ### 1. Semantic Naming
