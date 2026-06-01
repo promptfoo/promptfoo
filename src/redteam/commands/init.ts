@@ -522,7 +522,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('collect privacy rights geographies');
     const privacyRightsPlugin = await configurePrivacyRightsRequestWorkflowIntegrityPlugin();
     recordOnboardingStep('choose privacy rights geographies', {
-      value: privacyRightsPlugin.config?.geographies,
+      value: privacyRightsPlugin.config?.geographies ?? [],
     });
     plugins.push(privacyRightsPlugin);
   }

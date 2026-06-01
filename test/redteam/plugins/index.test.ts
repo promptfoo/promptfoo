@@ -164,6 +164,11 @@ describe('Plugins', () => {
       expect(() => privacyPolicyConsistencyPlugin?.validate?.({})).toThrow(
         'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
       );
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'Resolved privacy policy contents.',
+        }),
+      ).not.toThrow();
     });
 
     it('should validate privacy rights workflow geography config', async () => {

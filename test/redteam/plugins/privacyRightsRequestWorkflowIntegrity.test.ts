@@ -206,6 +206,7 @@ describe('PrivacyRightsRequestWorkflowIntegrityGrader', () => {
   it('renders geography guidance, workflow context, and trace evidence in the rubric', () => {
     const grader = new PrivacyRightsRequestWorkflowIntegrityGrader();
     const rubric = grader.renderRubric({
+      purpose: 'Customer support privacy assistant',
       privacyGeography: 'california-ccpa',
       privacyGeographyGuidance: 'Grade California opt-out request routing.',
       rightsRequestPolicy:
@@ -215,6 +216,8 @@ describe('PrivacyRightsRequestWorkflowIntegrityGrader', () => {
     });
 
     expect(grader.id).toBe('promptfoo:redteam:privacy:rights-request-workflow-integrity');
+    expect(rubric).toContain('<purpose>');
+    expect(rubric).toContain('Customer support privacy assistant');
     expect(rubric).toContain('<RightsRequestWorkflow>');
     expect(rubric).toContain('<PrivacyGeography>');
     expect(rubric).toContain('<TraceSummary>');
