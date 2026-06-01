@@ -11,7 +11,6 @@ import {
 import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
-import { NumberInput } from '@app/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -19,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
-import { Switch } from '@app/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
@@ -83,15 +81,10 @@ type A2AProviderConfig = Record<string, unknown> & {
   mode?: 'auto' | 'send' | 'stream';
   tenant?: string;
   protocolVersion?: string;
-  polling?: {
-    enabled?: boolean;
-    intervalMs?: number;
-    timeoutMs?: number;
-  };
   auth?: A2AAuthConfig;
 };
 
-const A2A_STRUCTURED_CONFIG_KEYS = new Set(['url', 'agentCardUrl', 'polling', 'auth']);
+const A2A_STRUCTURED_CONFIG_KEYS = new Set(['url', 'agentCardUrl', 'auth']);
 
 const asA2AConfig = (config?: ProviderOptions['config']): A2AProviderConfig =>
   (config ?? {}) as A2AProviderConfig;
@@ -674,19 +667,6 @@ const CustomTargetConfiguration = ({
     updateCustomTarget(field, value);
   };
 
-  const updateA2APollingField = (
-    field: keyof NonNullable<A2AProviderConfig['polling']>,
-    value: unknown,
-  ) => {
-    updateCustomTarget('polling', {
-      enabled: true,
-      intervalMs: 1000,
-      timeoutMs: 300000,
-      ...(a2aConfig.polling ?? {}),
-      [field]: value,
-    });
-  };
-
   const updateA2AAuth = (auth: A2AAuthConfig | undefined) => {
     updateCustomTarget('auth', auth);
   };
@@ -1013,39 +993,6 @@ const CustomTargetConfiguration = ({
             </div>
 
             {renderA2AAuthFields()}
-
-            <div className="mt-6 space-y-4 rounded-lg border border-border p-4">
-              <div>
-                <h4 className="font-medium">Task Polling</h4>
-                <p className="text-sm text-muted-foreground">
-                  Poll /tasks/:id when message:send returns a non-terminal task.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="a2a-polling-enabled"
-                  checked={a2aConfig.polling?.enabled ?? true}
-                  onCheckedChange={(checked) => updateA2APollingField('enabled', checked)}
-                />
-                <Label htmlFor="a2a-polling-enabled">Enable polling</Label>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <NumberInput
-                  fullWidth
-                  label="Interval (ms)"
-                  min={0}
-                  value={a2aConfig.polling?.intervalMs ?? 1000}
-                  onChange={(value) => updateA2APollingField('intervalMs', value)}
-                />
-                <NumberInput
-                  fullWidth
-                  label="Timeout (ms)"
-                  min={0}
-                  value={a2aConfig.polling?.timeoutMs ?? 300000}
-                  onChange={(value) => updateA2APollingField('timeoutMs', value)}
-                />
-              </div>
-            </div>
           </>
         )}
 
@@ -1146,6 +1093,11 @@ const CustomTargetConfiguration = ({
                           mode: 'auto',
                           tenant: 'optional-tenant',
                           protocolVersion: '1.0',
+                          polling: {
+                            enabled: true,
+                            intervalMs: 1000,
+                            timeoutMs: 300000,
+                          },
                           headers: {
                             'X-Custom-Header': '{{value}}',
                           },
@@ -1180,7 +1132,7 @@ const CustomTargetConfiguration = ({
           ) : providerType === 'a2a' ? (
             <HelperText>
               Optional JSON merged with the fields above. Use it for headers, custom message
-              templates, mode, tenant, protocol version, timeouts, and transformResponse.
+              templates, mode, tenant, protocol version, polling, timeouts, and transformResponse.
             </HelperText>
           ) : (
             <p className="text-sm text-muted-foreground">{config.configDescription}</p>

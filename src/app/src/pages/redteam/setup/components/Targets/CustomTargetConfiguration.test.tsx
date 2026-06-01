@@ -78,18 +78,12 @@ const renderA2AConfiguration = (
 
 describe('CustomTargetConfiguration', () => {
   describe('A2A provider configuration', () => {
-    it('should render friendly A2A connection, auth, polling, and advanced fields', async () => {
+    it('should render friendly A2A connection, auth, and advanced fields', async () => {
       const user = userEvent.setup();
       const { updateSpy } = renderA2AConfiguration({
         id: 'a2a',
         config: {
           url: '',
-          mode: 'auto',
-          polling: {
-            enabled: true,
-            intervalMs: 1000,
-            timeoutMs: 300000,
-          },
         },
       });
 
@@ -103,8 +97,8 @@ describe('CustomTargetConfiguration', () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(screen.queryByLabelText(/Request Mode/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Enable polling/i)).not.toBeInTheDocument();
       expect(screen.getByLabelText(/Authentication Type/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Enable polling/i)).toBeChecked();
       expect(screen.getByText(/Advanced Configuration \(JSON\)/i)).toBeInTheDocument();
 
       await user.type(endpointUrlInput, 'https://agent.example.com/a2a');
@@ -131,13 +125,7 @@ describe('CustomTargetConfiguration', () => {
           id: 'a2a',
           config: {
             url: 'https://agent.example.com/a2a',
-            mode: 'auto',
             auth: { type: 'bearer', token: '{{A2A_API_KEY}}' },
-            polling: {
-              enabled: true,
-              intervalMs: 1000,
-              timeoutMs: 300000,
-            },
           },
         },
         '{}',
@@ -147,6 +135,11 @@ describe('CustomTargetConfiguration', () => {
         mode: 'stream',
         tenant: 'acme',
         protocolVersion: '1.0',
+        polling: {
+          enabled: false,
+          intervalMs: 2000,
+          timeoutMs: 120000,
+        },
         headers: {
           'X-Trace-Id': '{{traceId}}',
         },
@@ -162,11 +155,6 @@ describe('CustomTargetConfiguration', () => {
           ...advancedConfig,
           url: 'https://agent.example.com/a2a',
           auth: { type: 'bearer', token: '{{A2A_API_KEY}}' },
-          polling: {
-            enabled: true,
-            intervalMs: 1000,
-            timeoutMs: 300000,
-          },
         });
       });
     });

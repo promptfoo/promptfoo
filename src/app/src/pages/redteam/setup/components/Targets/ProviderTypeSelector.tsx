@@ -541,13 +541,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
           config: {
             url: '',
-            mode: 'auto',
-            headers: {},
-            polling: {
-              enabled: true,
-              intervalMs: 1000,
-              timeoutMs: 300000,
-            },
           },
         },
         'a2a',
