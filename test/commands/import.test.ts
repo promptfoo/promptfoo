@@ -1146,6 +1146,41 @@ describe('importCommand', () => {
       });
     });
 
+    it('keeps the trace id and rewrites evaluationId on a default import (no --new-id)', async () => {
+      // The most common import path: trace ids are preserved (no collision) and the result's
+      // evaluationId is corrected to the imported eval id even if the export carried a stale one.
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-default-import',
+          evaluationId: 'eval-from-original-machine',
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-default-import', name: 'span', startTime: 10 }],
+        },
+      ];
+      sampleData.results.results[0].traceId = 'trace-default-import';
+      sampleData.results.results[0].evaluationId = 'eval-from-original-machine';
+
+      const filePath = path.join(__dirname, `temp-trace-default-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const traceStore = new TraceStore();
+      const traces = await traceStore.getTracesByEvaluation(sampleData.evalId);
+      expect(traces).toHaveLength(1);
+      expect(traces[0].traceId).toBe('trace-default-import');
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'trace-default-import',
+        evaluationId: sampleData.evalId,
+      });
+    });
+
     it('should remap imported trace IDs that already belong to another eval', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));

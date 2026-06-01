@@ -411,8 +411,11 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   const evaluationId =
     typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
 
-  // No trace linkage to surface — return metadata untouched.
-  if (!traceId && !evaluationId) {
+  // Strip the reserved namespace whenever a `traceLinkage` entry exists — even if the
+  // stored ids are malformed (non-string), the internal namespace must never surface to
+  // users. Gate on presence of the key, not on whether the ids read back as valid strings.
+  const hasTraceLinkage = promptfooMetadata != null && TRACE_LINKAGE_KEY in promptfooMetadata;
+  if (!hasTraceLinkage) {
     return { traceId, evaluationId, metadata: metadataRecord };
   }
 

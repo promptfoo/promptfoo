@@ -1000,6 +1000,50 @@ describe('EvalResult', () => {
       expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
     });
 
+    it('persists trace linkage on the save() INSERT branch', async () => {
+      // persist:false yields an in-memory result, so the first save() takes the INSERT branch
+      // (the UPDATE branch is covered above). This pins trace-linkage persistence on insert.
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-save-insert-trace',
+        {
+          ...mockEvaluateResult,
+          traceId: 'insert-trace-id',
+          evaluationId: 'insert-evaluation-id',
+          metadata: { source: 'insert' },
+        },
+        { persist: false },
+      );
+      expect(result.persisted).toBe(false);
+
+      await result.save();
+      expect(result.persisted).toBe(true);
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'insert-trace-id',
+        evaluationId: 'insert-evaluation-id',
+        metadata: { source: 'insert' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
+    it('strips the reserved namespace even when stored trace ids are malformed (non-string)', async () => {
+      // Guards against a corrupted/hand-written row: malformed ids don't surface, but the
+      // internal `__promptfoo` namespace must never leak back into user-visible metadata.
+      const result = await EvalResult.createFromEvaluateResult('test-eval-malformed-linkage', {
+        ...mockEvaluateResult,
+        traceId: 123 as unknown as string,
+        evaluationId: null as unknown as string,
+        metadata: { source: 'malformed' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult().traceId).toBeUndefined();
+      expect(retrieved?.toEvaluateResult().evaluationId).toBeUndefined();
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+      expect(retrieved?.metadata).toEqual({ source: 'malformed' });
+    });
+
     it('persists trace linkage mutated after construction', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-mutate-trace', {
         ...mockEvaluateResult,

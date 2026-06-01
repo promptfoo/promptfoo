@@ -1304,24 +1304,26 @@ async function transformRunEvalResponse({
   };
 }
 
-function getTraceId(
+export function getTraceId(
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
 ) {
   if (!traceContext?.traceparent) {
     return undefined;
   }
-  // W3C traceparent: `version-traceId-spanId-flags` (4 dash-separated parts).
+  // W3C traceparent: `version-traceId-spanId-flags`. Version 00 has exactly 4 dash-separated
+  // parts; future versions MAY append fields after flags, so accept 4+ and read the trace-id
+  // from position 1. Anything with fewer than 4 parts is malformed — drop the linkage.
   const parts = traceContext.traceparent.split('-');
-  if (parts.length !== 4) {
+  if (parts.length < 4) {
     logger.warn(
-      `[Evaluator] Malformed traceparent (expected 4 parts, got ${parts.length}); dropping trace linkage on this row.`,
+      `[Evaluator] Malformed traceparent (expected >=4 parts, got ${parts.length}); dropping trace linkage on this row.`,
     );
     return undefined;
   }
   return parts[1];
 }
 
-function getTraceLinkage(
+export function getTraceLinkage(
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
   evalId?: string,
 ) {
