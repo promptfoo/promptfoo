@@ -331,21 +331,16 @@ function restoreAzureBlobSasTokensFromMap<T>(
     : { value, restored };
 }
 
-type StoredArrayItemMatch = { matched: true; value: unknown } | { matched: false };
+type StoredArrayItemMatch = { matched: true; index: number; value: unknown } | { matched: false };
 
-function findStoredArrayItemForRestore(
+function findUniqueStoredArrayItemMatch(
   value: unknown,
-  positionalStoredValue: unknown,
   storedItems: readonly unknown[],
-  canRestorePositionally: boolean,
 ): StoredArrayItemMatch {
-  if (canRestorePositionally && deepEqual(value, redactAzureBlobSasTokens(positionalStoredValue))) {
-    return { matched: true, value: positionalStoredValue };
-  }
-
   let matchedValue: unknown;
+  let matchedIndex = -1;
   let matched = false;
-  for (const storedItem of storedItems) {
+  for (const [index, storedItem] of storedItems.entries()) {
     if (!deepEqual(value, redactAzureBlobSasTokens(storedItem))) {
       continue;
     }
@@ -353,10 +348,11 @@ function findStoredArrayItemForRestore(
       return { matched: false };
     }
     matched = true;
+    matchedIndex = index;
     matchedValue = storedItem;
   }
 
-  return matched ? { matched: true, value: matchedValue } : { matched: false };
+  return matched ? { matched: true, index: matchedIndex, value: matchedValue } : { matched: false };
 }
 
 function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
@@ -371,17 +367,22 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
     const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
     const canRestorePositionally = value.length === storedItems.length;
+    const structuralMatches = value.map((item) =>
+      findUniqueStoredArrayItemMatch(item, storedItems),
+    );
+    const hasMovedArrayItem = structuralMatches.some(
+      (match, index) => match.matched && match.index !== index,
+    );
     let restored = false;
     const restoredItems = value.map((item, index) => {
-      // Preserve structurally unchanged positions first so duplicate redacted
-      // URIs remain distinguishable. For moved items, use a unique redacted
-      // structural match before falling back to URI identity.
-      const storedItemMatch = findStoredArrayItemForRestore(
-        item,
-        storedItems[index],
-        storedItems,
-        canRestorePositionally,
-      );
+      // Prefer unique structural identity for moved items. When the array shows
+      // no evidence of a reorder, preserve same-index SAS tokens across edits
+      // to unrelated fields. Finally, fall back to unambiguous URI identity.
+      const structuralMatch = structuralMatches[index];
+      const storedItemMatch =
+        structuralMatch.matched || !canRestorePositionally || hasMovedArrayItem
+          ? structuralMatch
+          : { matched: true as const, index, value: storedItems[index] };
       const structuralResult = storedItemMatch.matched
         ? restoreAzureBlobSasTokensWithResult(item, storedItemMatch.value)
         : { value: item, restored: false };
