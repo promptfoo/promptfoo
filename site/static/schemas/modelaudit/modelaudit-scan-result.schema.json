@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://www.promptfoo.dev/schemas/modelaudit/latest/modelaudit-scan-result.schema.json",
+  "$id": "https://www.promptfoo.dev/schemas/modelaudit/modelaudit-scan-result.schema.json",
   "$defs": {
     "AssetModel": {
       "description": "Model for scanned assets",

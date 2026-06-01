@@ -15,7 +15,6 @@ import json
 import os
 import sys
 import tempfile
-from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
@@ -23,25 +22,19 @@ from typing import Any
 
 SCHEMA_FILENAME = "modelaudit-scan-result.schema.json"
 EXAMPLE_FILENAME = "modelaudit-scan-result.example.json"
-LATEST_ALIAS = "latest"
 SCHEMA_DRAFT_URI = "https://json-schema.org/draft/2020-12/schema"
 HAS_ERRORS_DESCRIPTION = "Whether operational errors occurred during scanning"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = REPO_ROOT / "scripts" / "modelaudit_schema_requirements.txt"
 MIN_PYTHON_VERSION = (3, 10)
 MAX_PYTHON_VERSION = (3, 14)
+SCHEMA_PATH = REPO_ROOT / "site" / "static" / "schemas" / "modelaudit" / SCHEMA_FILENAME
+EXAMPLE_PATH = (
+    REPO_ROOT / "site" / "static" / "examples" / "modelaudit" / EXAMPLE_FILENAME
+)
 
 
-@dataclass(frozen=True)
-class ModelAuditArtifacts:
-    """Artifact paths for one published ModelAudit schema label."""
-
-    label: str
-    schema_path: Path
-    example_path: Path
-
-
-def build_schema(result_model: Any, label: str) -> dict[str, Any]:
+def build_schema(result_model: Any) -> dict[str, Any]:
     """Build the public schema with stable metadata and corrected field semantics."""
     schema = result_model.model_json_schema()
     has_errors = schema.get("properties", {}).get("has_errors")
@@ -53,36 +46,9 @@ def build_schema(result_model: Any, label: str) -> dict[str, Any]:
     schema.pop("$id", None)
     return {
         "$schema": SCHEMA_DRAFT_URI,
-        "$id": (
-            f"https://www.promptfoo.dev/schemas/modelaudit/{label}/{SCHEMA_FILENAME}"
-        ),
+        "$id": f"https://www.promptfoo.dev/schemas/modelaudit/{SCHEMA_FILENAME}",
         **schema,
     }
-
-
-def artifact_paths(label: str) -> ModelAuditArtifacts:
-    """Return checked-in artifact paths for a ModelAudit schema label."""
-    schema_path = (
-        REPO_ROOT
-        / "site"
-        / "static"
-        / "schemas"
-        / "modelaudit"
-        / label
-        / SCHEMA_FILENAME
-    )
-    example_path = (
-        REPO_ROOT
-        / "site"
-        / "static"
-        / "examples"
-        / "modelaudit"
-        / label
-        / EXAMPLE_FILENAME
-    )
-    return ModelAuditArtifacts(
-        label=label, schema_path=schema_path, example_path=example_path
-    )
 
 
 def expected_modelaudit_version() -> str:
@@ -169,19 +135,16 @@ def main() -> None:
 
     validate_python_version()
     modelaudit_version = expected_modelaudit_version()
-    version_label = f"v{modelaudit_version}"
     result_model = load_result_model(modelaudit_version)
-    example_path = args.example or artifact_paths(version_label).example_path
+    example_path = args.example or EXAMPLE_PATH
 
     example = json.loads(example_path.read_text(encoding="utf-8"))
     result_model.model_validate(example)
 
-    for artifacts in (artifact_paths(version_label), artifact_paths(LATEST_ALIAS)):
-        schema = build_schema(result_model, artifacts.label)
-        write_text_atomic(artifacts.schema_path, render_json(schema))
-        write_text_atomic(artifacts.example_path, render_json(example))
-        print(f"Wrote {artifacts.schema_path.relative_to(REPO_ROOT)}")
-        print(f"Wrote {artifacts.example_path.relative_to(REPO_ROOT)}")
+    write_text_atomic(SCHEMA_PATH, render_json(build_schema(result_model)))
+    write_text_atomic(EXAMPLE_PATH, render_json(example))
+    print(f"Wrote {SCHEMA_PATH.relative_to(REPO_ROOT)}")
+    print(f"Wrote {EXAMPLE_PATH.relative_to(REPO_ROOT)}")
 
 
 if __name__ == "__main__":

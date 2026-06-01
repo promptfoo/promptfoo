@@ -1,4 +1,4 @@
-# Keep this file in sync with the latest ModelAudit JSON output contract.
+# Keep this file in sync with the current ModelAudit JSON output contract.
 # Install with --no-deps so CI uses only the transitive pins listed here.
 modelaudit==0.2.45
 pydantic==2.13.4
