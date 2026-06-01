@@ -2,11 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import {
-  getProviderCallExecutionContext,
-  withProviderCallExecutionContext,
-} from '../scheduler/providerCallExecutionContext';
-import { renderVarsInObject } from '../util/render';
-import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
   formatTrajectoryStep,
@@ -509,6 +504,11 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const matchedStep = stepsWithArgs.find((step) => matchesToolArgs(step.args, expectedArgs, mode));
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
+  // When enabled, redact argument values in every reason string this handler builds (pass
+  // and fail alike) so args never leak into reports/logs. NOTE for the rebase onto main:
+  // main's handleTrajectoryToolArgsMatch also appends "Ignored argument(s): <keys>" and
+  // "Ignored default argument(s): <keys>" suffixes (from the ignore/defaults features) — those
+  // key lists must also be routed through redaction here so redaction stays complete.
   const formatArgs = (value: unknown) =>
     redactArgsInFailures ? REDACTED_ARGS_LABEL : formatTrajectoryArgs(value);
   const expectedArgsLabel = formatArgs(expectedArgs);
@@ -650,6 +650,12 @@ export const handleTrajectoryGoalSuccess = async (
   params: AssertionParams,
 ): Promise<GradingResult> => {
   const trace = getTraceOrThrow(params);
+  // Imported lazily so the trajectory assertion module doesn't pull the scheduler/render
+  // (and transitively the DB) into its import graph for the non-goal-success handlers.
+  const { renderVarsInObject } = await import('../util/render');
+  const { getProviderCallExecutionContext, withProviderCallExecutionContext } = await import(
+    '../scheduler/providerCallExecutionContext'
+  );
   const assertionValue = params.renderedValue ?? params.assertion.value;
   const { goal, timeoutMs } = resolveGoalSuccessValue(
     typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
