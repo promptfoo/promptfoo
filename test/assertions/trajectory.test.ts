@@ -1178,7 +1178,24 @@ describe('trajectory assertions', () => {
       expect(result.reason).toContain('fetch_document');
     });
 
-    it('renders object-form tool templates before exact matching', () => {
+    it('renders templates in object-form tool sets', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertionValueContext: {
+          ...baseSetParams.assertionValueContext,
+          vars: { expectedTool: 'search_corpus' },
+        },
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: { tools: ['{{ expectedTool }}', 'rerank', 'fetch_document'], mode: 'exact' },
+        },
+      };
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('search_corpus');
+    });
+
+    it('renders templates when the provided object-form rendered value is still unresolved', () => {
       const params: AssertionParams = {
         ...baseSetParams,
         assertionValueContext: {
