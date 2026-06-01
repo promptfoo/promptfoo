@@ -530,6 +530,8 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -538,7 +540,7 @@ export async function doEval(
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
       cmdObj.filterPattern !== undefined ||
-      cmdObj.filterSample !== undefined;
+      filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
@@ -557,7 +559,8 @@ export async function doEval(
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
-        sample: cmdObj.filterSample,
+        sample: filterSample,
+        sampleSeed: filterSampleSeed,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
@@ -1224,6 +1227,7 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
+    .option('--filter-sample-seed <number>', 'Numeric seed used to make --filter-sample repeatable')
     .option(
       '--filter-failing <path or id>',
       'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',

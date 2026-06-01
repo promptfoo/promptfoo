@@ -26,6 +26,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -712,6 +713,7 @@ export default class EvalResult {
       this.id = result[0].id;
       this.persisted = true;
     }
+    invalidateEvaluationCache(this.evalId);
   }
 
   toEvaluateResult(): EvaluateResult {
