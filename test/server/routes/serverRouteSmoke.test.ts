@@ -97,7 +97,7 @@ vi.mock('../../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: mocks.isBlobStorageEnabled,
 }));
 
-vi.mock('../../../src/commands/modelScan', () => ({
+vi.mock('../../../src/util/modelAuditInstall', () => ({
   checkModelAuditInstalled: mocks.checkModelAuditInstalled,
 }));
 
