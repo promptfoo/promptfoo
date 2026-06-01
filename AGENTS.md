@@ -20,15 +20,19 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/assertions/`   | Assertion handlers              | `src/assertions/AGENTS.md`   |
 | `src/codeScan/`     | Code scan scanner               | `src/codeScan/AGENTS.md`     |
 | `src/commands/`     | CLI commands                    | `src/commands/AGENTS.md`     |
+| `src/contracts/`    | Public package contracts        | `src/contracts/AGENTS.md`    |
 | `src/database/`     | SQLite/libSQL persistence       | `src/database/AGENTS.md`     |
 | `src/matchers/`     | Assertion matcher helpers       | `src/matchers/AGENTS.md`     |
+| `src/models/`       | Eval/result persistence models  | `src/models/AGENTS.md`       |
 | `src/prompts/`      | Prompt loading & processors     | `src/prompts/AGENTS.md`      |
 | `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
 | `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
 | `src/scheduler/`    | Concurrency & rate limits       | `src/scheduler/AGENTS.md`    |
 | `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
+| `src/tracing/`      | OpenTelemetry trace storage     | `src/tracing/AGENTS.md`      |
 | `src/types/`        | Config/API types & Zod schemas  | `src/types/AGENTS.md`        |
 | `src/util/`         | Shared utilities                | `src/util/AGENTS.md`         |
+| `src/validators/`   | Config validation schemas       | `src/validators/AGENTS.md`   |
 | `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
 | `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
 | `examples/`         | Example configs                 | `examples/AGENTS.md`         |
