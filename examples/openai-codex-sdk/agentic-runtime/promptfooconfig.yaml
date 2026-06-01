@@ -19,7 +19,7 @@ targets:
   - id: openai:codex-sdk
     label: codex-cli-readonly
     config:
-      model: '{{ env.PROMPTFOO_CODEX_MODEL | default("gpt-5.2-codex") }}'
+      model: '{{ env.PROMPTFOO_CODEX_MODEL | default("gpt-5.5") }}'
       model_reasoning_effort: low
       working_dir: '{{ env.PROMPTFOO_CODEX_WORKING_DIR | default(".") }}'
       sandbox_mode: read-only
@@ -33,7 +33,7 @@ targets:
         CODEX_HOME: '{{ env.PROMPTFOO_CODEX_HOME | default(env.HOME + "/.codex") }}'
 
 evaluateOptions:
-  maxConcurrency: 20
+  maxConcurrency: 1
 
 defaultTest:
   metadata:

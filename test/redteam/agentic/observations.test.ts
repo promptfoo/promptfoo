@@ -138,6 +138,47 @@ describe('agentic run observations', () => {
     expect(findingsFromObservations(observations)).toEqual([]);
   });
 
+  it('normalizes singular and plural guardrail decision attributes as control evidence', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-guardrail-decisions',
+          testCaseId: 'case-guardrail-decisions',
+          traceId: 'trace-guardrail-decisions',
+          spans: [
+            {
+              attributes: { 'guardrails.decision': 'blocked' },
+              name: 'tool update_seat',
+              spanId: 'span-plural',
+              startTime: 1,
+            },
+            {
+              attributes: { 'guardrail.decision': 'allowed' },
+              name: 'tool read_customer',
+              spanId: 'span-singular',
+              startTime: 2,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'blocked',
+          spanId: 'span-plural',
+        }),
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'allowed',
+          spanId: 'span-singular',
+        }),
+      ]),
+    );
+  });
+
   it('continues scanning embedded trace evidence blobs until it finds findings', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {
@@ -165,6 +206,52 @@ describe('agentic run observations', () => {
     expect(findingsFromObservations(observations)).toEqual([
       expect.objectContaining({
         evidence: 'loaded hidden tool',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
+  it('continues scanning nested trace evidence arrays extracted from strings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-nested-evidence',
+          testCaseId: 'case-nested-evidence',
+          traceId: 'trace-nested-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: `sidecar ${JSON.stringify({
+                  agenticEvidence: [
+                    {
+                      findings: [],
+                      pluginId: 'agentic:mcp-schema-injection',
+                    },
+                    {
+                      findings: [
+                        {
+                          evidence: 'loaded hidden tool from nested sidecar',
+                          kind: 'tool-discovery-confusion',
+                          pluginId: 'agentic:tool-discovery-confusion',
+                        },
+                      ],
+                    },
+                  ],
+                })}`,
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-nested',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool from nested sidecar',
         kind: 'tool-discovery-confusion',
         pluginId: 'agentic:tool-discovery-confusion',
       }),

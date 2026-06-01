@@ -57,7 +57,7 @@ promptfoo.agentic.plugin_id=agentic:approval-continuity
 promptfoo.agentic.evidence_json={"pluginId":"agentic:approval-continuity","mode":"hardened","findings":[]}
 ```
 
-As a fallback, the target provider can return JSON in the final output or provider metadata:
+As a fallback for a trusted non-traced harness, the target provider can return JSON in provider metadata:
 
 ```json
 {
@@ -75,6 +75,8 @@ As a fallback, the target provider can return JSON in the final output or provid
   }
 }
 ```
+
+Do not put verifier evidence in final model text. Promptfoo ignores model-controlled final output so a target cannot forge a clean result.
 
 If `findings` contains a matching `pluginId`, Promptfoo fails the row. If plugin-scoped evidence is present with no matching finding, the row passes. If plugin-scoped evidence is missing, the row fails with `verifierStatus: missing-evidence`; treat that as a harness configuration problem, not an application security pass.
 

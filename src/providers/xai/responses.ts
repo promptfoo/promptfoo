@@ -318,8 +318,10 @@ export class XAIResponsesProvider implements ApiProvider {
         calculateXAICost(
           modelName,
           config || {},
-          usage?.input_tokens || usage?.prompt_tokens,
-          usage?.output_tokens || usage?.completion_tokens,
+          usage?.input_tokens ?? usage?.prompt_tokens,
+          usage?.output_tokens ?? usage?.completion_tokens,
+          usage?.output_tokens_details?.reasoning_tokens ??
+            usage?.completion_tokens_details?.reasoning_tokens,
         ) ??
         0,
     });

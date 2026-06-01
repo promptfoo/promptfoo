@@ -250,9 +250,10 @@ function parseAgentEvidenceCandidates(
     }
 
     for (const object of extractJsonObjects(untaggedValue)) {
-      const evidence = parseAgentEvidenceCandidates(object)[0];
-      if (evidence?.findings) {
-        candidates.push(evidence);
+      for (const evidence of parseAgentEvidenceCandidates(object)) {
+        if (evidence?.findings) {
+          candidates.push(evidence);
+        }
       }
     }
 
@@ -345,16 +346,22 @@ function controlObservationFromSpan(
   const name = span.name?.toLowerCase() || '';
   const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
   const location = `trace span ${spanIndex + 1}`;
+  const guardrailDecision = getAttribute(attributes, ['guardrails.decision', 'guardrail.decision']);
 
   if (
     name.includes('guardrail') ||
     spanType === 'guardrail' ||
-    Boolean(attributes['guardrail.name'])
+    Boolean(attributes['guardrail.name']) ||
+    guardrailDecision !== undefined
   ) {
     return {
       kind: 'guardrail',
       location,
-      outcome: stringifyValue(attributes['guardrail.outcome'] ?? attributes['codex.status']),
+      outcome: stringifyValue(
+        guardrailDecision ??
+          getAttribute(attributes, ['guardrail.outcome']) ??
+          attributes['codex.status'],
+      ),
       source,
       spanId: span.spanId,
       spanName: span.name,

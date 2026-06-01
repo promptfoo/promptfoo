@@ -113,6 +113,11 @@ describe('XAIResponsesProvider', () => {
             max_num_results: 3,
           },
           {
+            type: 'collections_search',
+            collection_ids: ['collection_456'],
+            max_num_results: 2,
+          },
+          {
             type: 'mcp',
             server_url: 'https://mcp.example.com',
             server_label: 'example',
@@ -137,6 +142,11 @@ describe('XAIResponsesProvider', () => {
         type: 'file_search',
         vector_store_ids: ['collection_123'],
         max_num_results: 3,
+      },
+      {
+        type: 'collections_search',
+        collection_ids: ['collection_456'],
+        max_num_results: 2,
       },
       {
         type: 'mcp',
@@ -206,6 +216,80 @@ describe('XAIResponsesProvider', () => {
     expect(result.cost).toBe(1.25);
   });
 
+  it('falls back to calculated xAI pricing when cost ticks are absent', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_124',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 18,
+          output_tokens_details: {
+            reasoning_tokens: 3,
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // xAI prices the 5 completion and 3 reasoning tokens separately at the
+    // output rate: 10 input @ $1.25/M + 8 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.0000325, 10);
+    expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
+  });
+
+  it('keeps fallback xAI pricing when input tokens are zero', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_zero_input',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 0,
+          output_tokens: 5,
+          total_tokens: 8,
+          output_tokens_details: {
+            reasoning_tokens: 3,
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 0 input @ $1.25/M + 8 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.00002, 10);
+  });
+
   it('parses streamed Responses API events', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
@@ -258,6 +342,8 @@ describe('XAIResponsesProvider', () => {
           '',
           'data: {"type":"response.output_text.delta","delta":"lo"}',
           '',
+          'data: {"type":"response.completed","response":{"id":"resp_stream","model":"grok-4.3","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"final from completed"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}',
+          '',
           'data: [DONE]',
           '',
         ].join('\n'),
@@ -270,7 +356,7 @@ describe('XAIResponsesProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    expect(result.output).toBe('hello');
+    expect(result.output).toBe('final from completed');
   });
 
   it('accumulates nested output_text deltas from streamed Responses API events', async () => {
@@ -385,6 +471,7 @@ describe('XAIResponsesProvider', () => {
 
     expect(result.output).toBe('final answer');
     expect(result.output).not.toContain('Reasoning:');
+    expect(result.output).not.toContain('internal reasoning');
     expect(result.raw?.output).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

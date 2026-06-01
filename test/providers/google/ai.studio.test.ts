@@ -283,6 +283,147 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('should accumulate incremental chunks in array responses', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'Hello ' }] } }],
+          },
+          {
+            candidates: [{ content: { parts: [{ text: 'world' }] } }],
+          },
+          {
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('Hello world');
+      expect(response.tokenUsage).toEqual({
+        prompt: 3,
+        completion: 2,
+        total: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should ignore terminal STOP chunks without parts after streamed output', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'streamed response' }] } }],
+          },
+          {
+            candidates: [{ finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 4, candidatesTokenCount: 2, totalTokenCount: 6 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('streamed response');
+      expect(response.tokenUsage).toEqual({
+        prompt: 4,
+        completion: 2,
+        total: 6,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve prompt safety ratings from separate streaming chunks', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            promptFeedback: {
+              safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'HIGH' }],
+            },
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'safe response' }] },
+                safetyRatings: [
+                  { category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' },
+                ],
+              },
+            ],
+          },
+          {
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('safe response');
+      expect(response.guardrails).toEqual({
+        flaggedInput: true,
+        flaggedOutput: false,
+        flagged: true,
+      });
+    });
+
+    it('should reject array responses that never provide output', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 0, totalTokenCount: 3 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toContain('No output found in response');
+    });
+
     it('should handle responses blocked with promptFeedback', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
@@ -670,6 +811,39 @@ describe('AIStudioChatProvider', () => {
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('v1alpha/models/gemini-2.0-flash-thinking-exp:generateContent'),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should use v1beta API for Gemini 3 models', async () => {
+      // Regression: all Gemini 3.x models use v1beta, including dash-named
+      // gemini-3-* preview IDs that were previously forced onto v1alpha.
+      provider = new AIStudioChatProvider('gemini-3-flash-preview', {
+        config: { apiKey: 'test-key' },
+      });
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'gemini 3 response' }] } }],
+        },
+        cached: false,
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+
+      await provider.callGemini('test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('v1beta/models/gemini-3-flash-preview:generateContent'),
         expect.any(Object),
         expect.any(Number),
         'json',

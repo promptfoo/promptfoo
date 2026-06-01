@@ -103,6 +103,20 @@ If you run this config from the repo root, set `CODEX_SKILL_COMPARE_V1_DIR` and 
 
 If your network requires proxy or custom certificate environment variables such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, or `NODE_EXTRA_CA_CERTS`, pass them through `config.cli_env` or set `inherit_process_env: true` in the provider config. Promptfoo intentionally does not forward the full process environment to Codex by default.
 
+### Agentic Runtime Red Teaming
+
+This example runs the verifier-backed `agentic:*` red-team plugins against a read-only Codex CLI target with streamed OTEL traces. It keeps evaluation concurrency at one so a local run does not start several Codex processes at once.
+
+**Location**: `./agentic-runtime/`
+
+**Usage**:
+
+```bash
+(cd agentic-runtime && promptfoo eval --no-cache)
+```
+
+Set `PROMPTFOO_CODEX_HOME`, `PROMPTFOO_CODEX_MODEL`, or `PROMPTFOO_CODEX_WORKING_DIR` to override the Codex login directory, model, or working directory.
+
 ### Thread Persistence
 
 This example demonstrates `persist_threads: true` with one prompt template and multiple tests. It checks that Codex can remember a marker from the first test when answering the second test.
