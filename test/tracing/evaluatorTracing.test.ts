@@ -44,7 +44,7 @@ describe('evaluatorTracing', () => {
     mockStartOTLPReceiver.mockResolvedValue(undefined);
     resetTracingState();
     // Reset environment variables
-    mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: undefined });
+    mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: undefined });
   });
 
   describe('generateTraceId', () => {
@@ -125,7 +125,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should generate trace context when tracing is enabled via environment', async () => {
-      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+      mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: 'true' });
       const test: TestCase = {
         vars: { foo: 'bar' },
       };
@@ -172,8 +172,8 @@ describe('evaluatorTracing', () => {
       expect(isTracingEnabled(test)).toBe(true);
     });
 
-    it('should return true when environment variable is set', () => {
-      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+    it('should return true when PROMPTFOO_OTEL_ENABLED is set', () => {
+      mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: 'true' });
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(true);
     });

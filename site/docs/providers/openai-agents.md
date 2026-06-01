@@ -435,7 +435,7 @@ providers:
 Or enable globally:
 
 ```bash
-export PROMPTFOO_TRACING_ENABLED=true
+export PROMPTFOO_OTEL_ENABLED=true
 npx promptfoo eval
 ```
 
@@ -529,12 +529,12 @@ This provider targets non-streaming text and sandbox `run()` workflows. Use `ope
 
 ## Environment Variables
 
-| Variable                    | Description                |
-| --------------------------- | -------------------------- |
-| `OPENAI_API_KEY`            | OpenAI API key (required)  |
-| `PROMPTFOO_TRACING_ENABLED` | Enable tracing globally    |
-| `OPENAI_BASE_URL`           | Custom OpenAI API base URL |
-| `OPENAI_ORGANIZATION`       | OpenAI organization ID     |
+| Variable                 | Description                |
+| ------------------------ | -------------------------- |
+| `OPENAI_API_KEY`         | OpenAI API key (required)  |
+| `PROMPTFOO_OTEL_ENABLED` | Enable tracing globally    |
+| `OPENAI_BASE_URL`        | Custom OpenAI API base URL |
+| `OPENAI_ORGANIZATION`    | OpenAI organization ID     |
 
 ## Limitations
 

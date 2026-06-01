@@ -1,6 +1,7 @@
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
+import { SpanStatusCode } from '@opentelemetry/api';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -50,6 +51,7 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import { GenAIAttributes, PromptfooAttributes } from './tracing/genaiTracer';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import { isCliEventSource } from './types/eventSource';
@@ -866,26 +868,33 @@ async function callProviderForRunEval({
   const traceContext = test.providerOutput
     ? null
     : await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx, testSuite);
-  const response = test.providerOutput
-    ? {
-        output: test.providerOutput,
-        tokenUsage: createEmptyTokenUsage(),
-        cost: 0,
-        cached: false,
-      }
-    : await callActiveProvider({
-        abortSignal,
-        evalId,
-        filters,
-        promptForRender,
-        provider,
-        rateLimitRegistry,
-        renderedPrompt,
-        repeatIndex,
-        test,
-        traceContext,
-        vars,
-      });
+  let response: ProviderResponse;
+  try {
+    response = test.providerOutput
+      ? {
+          output: test.providerOutput,
+          tokenUsage: createEmptyTokenUsage(),
+          cost: 0,
+          cached: false,
+        }
+      : await callActiveProvider({
+          abortSignal,
+          evalId,
+          filters,
+          promptForRender,
+          provider,
+          rateLimitRegistry,
+          renderedPrompt,
+          repeatIndex,
+          test,
+          traceContext,
+          vars,
+        });
+  } catch (error) {
+    recordEvaluationTraceError(traceContext, error);
+    traceContext?.rootSpan?.end();
+    throw error;
+  }
 
   sanitizeResponseMetadata(response);
 
@@ -924,6 +933,12 @@ async function callActiveProvider({
     test,
   );
   logger.debug(`Provider type: ${activeProvider.id()}`);
+  if (traceContext?.rootSpan) {
+    traceContext.rootSpan.setAttribute(PromptfooAttributes.PROVIDER_ID, activeProvider.id());
+    if (promptForRender.label) {
+      traceContext.rootSpan.setAttribute(PromptfooAttributes.PROMPT_LABEL, promptForRender.label);
+    }
+  }
 
   const callApiContext = buildCallApiContext({
     evalId,
@@ -1149,15 +1164,15 @@ async function applyRunEvalResponseOutcome({
     ret.error = response.error;
     ret.failureReason = ResultFailureReason.ERROR;
     ret.success = false;
-    return;
+    return false;
   }
 
   if (response.output === null || response.output === undefined) {
     applyEmptyResponseOutcome(ret, isRedteam);
-    return;
+    return false;
   }
 
-  await gradeRunEvalResponse({
+  return gradeRunEvalResponse({
     abortSignal,
     deferGrading,
     evalId,
@@ -1233,6 +1248,7 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
+  const traceparent = traceContext?.traceparent;
   if (traceId && hasTraceAwareAssertions(test.assert)) {
     await flushOtel();
   }
@@ -1257,12 +1273,21 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
-        }).then((checkResult) => applyGradingResult(ret, checkResult)),
-    ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
-    });
+          traceparent,
+        }).then((checkResult) => {
+          applyGradingResult(ret, checkResult);
+          recordEvaluationTraceOutcome(traceContext, ret);
+        }),
+    )
+      .catch((error) => {
+        applyGradingError(ret, error, abortSignal);
+        recordEvaluationTraceError(traceContext, error);
+      })
+      .finally(() => {
+        traceContext?.rootSpan?.end();
+      });
     deferredGradingPromises.set(ret, gradingPromise);
-    return;
+    return true;
   }
 
   const checkResult = await withProviderCallExecutionContext(
@@ -1277,10 +1302,12 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        traceparent,
       }),
   );
   applyGradingResult(ret, checkResult);
   ret.response = processedResponse;
+  return false;
 }
 
 async function transformRunEvalResponse({
@@ -1337,11 +1364,80 @@ async function transformRunEvalResponse({
 }
 
 function getTraceId(traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>) {
-  if (!traceContext?.traceparent) {
+  if (traceContext?.traceId) {
+    return traceContext.traceId;
+  }
+  const traceparent = traceContext?.traceparent;
+  if (!traceparent) {
     return undefined;
   }
-  const parts = traceContext.traceparent.split('-');
-  return parts.length >= 3 ? parts[1] : undefined;
+  const match = /^[\da-f]{2}-([\da-f]{32})-[\da-f]{16}-[\da-f]{2}$/i.exec(traceparent);
+  return match ? match[1].toLowerCase() : undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function recordEvaluationTraceOutcome(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>,
+  ret: EvaluateResult,
+) {
+  const rootSpan = traceContext?.rootSpan;
+  if (!rootSpan) {
+    return;
+  }
+
+  const scoreValue = typeof ret.score === 'number' ? ret.score : undefined;
+  const scoreLabel = ret.success ? 'pass' : 'fail';
+  const explanation =
+    typeof ret.error === 'string' && ret.error
+      ? ret.error
+      : ret.failureReason === ResultFailureReason.ASSERT
+        ? 'Assertion failed'
+        : ret.failureReason === ResultFailureReason.ERROR
+          ? 'Provider error'
+          : undefined;
+
+  rootSpan.addEvent('gen_ai.evaluation.result', {
+    [GenAIAttributes.EVALUATION_NAME]: 'promptfoo.overall',
+    ...(scoreValue !== undefined && { [GenAIAttributes.EVALUATION_SCORE_VALUE]: scoreValue }),
+    [GenAIAttributes.EVALUATION_SCORE_LABEL]: scoreLabel,
+    ...(explanation && { [GenAIAttributes.EVALUATION_EXPLANATION]: explanation }),
+  });
+
+  for (const [name, value] of Object.entries(ret.namedScores ?? {})) {
+    if (typeof value !== 'number') {
+      continue;
+    }
+    rootSpan.addEvent('gen_ai.evaluation.result', {
+      [GenAIAttributes.EVALUATION_NAME]: name,
+      [GenAIAttributes.EVALUATION_SCORE_VALUE]: value,
+    });
+  }
+
+  rootSpan.setStatus(
+    ret.success
+      ? { code: SpanStatusCode.OK }
+      : { code: SpanStatusCode.ERROR, message: explanation || 'Evaluation failed' },
+  );
+}
+
+function recordEvaluationTraceError(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>,
+  error: unknown,
+) {
+  const rootSpan = traceContext?.rootSpan;
+  if (!rootSpan) {
+    return;
+  }
+  const message = getErrorMessage(error);
+  rootSpan.addEvent('gen_ai.evaluation.result', {
+    [GenAIAttributes.EVALUATION_NAME]: 'promptfoo.overall',
+    [GenAIAttributes.EVALUATION_SCORE_LABEL]: 'fail',
+    [GenAIAttributes.EVALUATION_EXPLANATION]: message,
+  });
+  rootSpan.setStatus({ code: SpanStatusCode.ERROR, message });
 }
 
 /**
@@ -1417,6 +1513,8 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> = null;
+  let rootSpanEndDeferred = false;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1449,7 +1547,8 @@ async function runEvalInternal({
       testSuite,
       vars: state.vars,
     });
-    const { response, traceContext } = providerCall;
+    const { response } = providerCall;
+    traceContext = providerCall.traceContext;
     latencyMs = providerCall.latencyMs;
 
     updateConversationHistory({
@@ -1491,7 +1590,7 @@ async function runEvalInternal({
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
     trackProviderUsage(provider, response);
-    await applyRunEvalResponseOutcome({
+    rootSpanEndDeferred = await applyRunEvalResponseOutcome({
       abortSignal,
       deferGrading,
       evalId,
@@ -1521,6 +1620,10 @@ async function runEvalInternal({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
+    if (!rootSpanEndDeferred) {
+      recordEvaluationTraceOutcome(traceContext, ret);
+    }
+
     return [ret];
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
@@ -1536,6 +1639,7 @@ async function runEvalInternal({
     if (!isAbortError) {
       logger.error('Provider call failed during eval', logContext);
     }
+    recordEvaluationTraceError(traceContext, err);
 
     return [
       {
@@ -1555,6 +1659,10 @@ async function runEvalInternal({
         metadata,
       },
     ];
+  } finally {
+    if (!rootSpanEndDeferred) {
+      traceContext?.rootSpan?.end();
+    }
   }
 }
 
@@ -2622,7 +2730,7 @@ function createRunEvalTest(
 }
 
 function isTracingEnabledForTest(testSuite: TestSuite, testCase: AtomicTestCase) {
-  const tracingEnvEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+  const tracingEnvEnabled = getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
   const tracingEnabled =
     tracingEnvEnabled ||
     testCase.metadata?.tracingEnabled === true ||
@@ -4702,7 +4810,7 @@ class Evaluator {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
-      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+      getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
       this.testSuite.tracing?.enabled === true ||
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||

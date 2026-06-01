@@ -188,7 +188,7 @@ describe('OpenTelemetry Tracing Integration', () => {
   });
 
   it('should respect environment variable for enabling tracing', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: 'true' });
     try {
       const config: Partial<EvaluateTestSuite> = {
         providers: ['mock-traced-provider'],
