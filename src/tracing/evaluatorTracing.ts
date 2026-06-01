@@ -94,10 +94,43 @@ function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
   );
 }
 
+function getOtlpReceiverTracePolicy(
+  testSuite: TestSuite,
+  evaluationId?: string,
+): {
+  evaluationId: string;
+  commandToolNames?: string[];
+  redactAttributes?: string[];
+} | null {
+  if (!evaluationId) {
+    return null;
+  }
+
+  return {
+    evaluationId,
+    commandToolNames: testSuite.tracing?.commandToolNames,
+    redactAttributes: testSuite.tracing?.otlp?.http?.redactAttributes,
+  };
+}
+
+async function registerOtlpReceiverTracePolicyIfAvailable(
+  tracePolicy: ReturnType<typeof getOtlpReceiverTracePolicy>,
+): Promise<void> {
+  if (!tracePolicy) {
+    return;
+  }
+
+  const { registerOTLPReceiverTracePolicy } = await import('./otlpReceiver');
+  registerOTLPReceiverTracePolicy(tracePolicy);
+}
+
 /**
  * Start the OTLP receiver if tracing is enabled and it hasn't been started yet
  */
-export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<boolean> {
+export async function startOtlpReceiverIfNeeded(
+  testSuite: TestSuite,
+  evaluationId?: string,
+): Promise<boolean> {
   logger.debug('[EvaluatorTracing] Checking tracing configuration', {
     tracing: testSuite.tracing,
     testSuiteKeys: Object.keys(testSuite),
@@ -113,6 +146,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<b
   if (tracingEnabled && httpTracing?.enabled) {
     const acceptFormats = normalizeOtlpAcceptFormats(httpTracing.acceptFormats);
     const redactAttributes = httpTracing.redactAttributes;
+    const tracePolicy = getOtlpReceiverTracePolicy(testSuite, evaluationId);
 
     if (otlpReceiverStopPromise !== null) {
       await otlpReceiverStopPromise;
@@ -130,6 +164,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<b
       }
     }
     if (otlpReceiverStarted) {
+      await registerOtlpReceiverTracePolicyIfAvailable(tracePolicy);
       return true;
     }
 
@@ -147,7 +182,11 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<b
             ? ` (redact: ${redactAttributes.join(',')})`
             : ''),
       );
-      await startOTLPReceiver(port, host, acceptFormats, { commandToolNames, redactAttributes });
+      await startOTLPReceiver(port, host, acceptFormats, {
+        commandToolNames,
+        redactAttributes,
+        ...(tracePolicy ? { tracePolicy } : {}),
+      });
       otlpReceiverStarted = true;
       otlpReceiverUsers += 1;
       logger.info(
