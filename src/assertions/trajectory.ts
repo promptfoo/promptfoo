@@ -60,10 +60,17 @@ function formatStepList(stepLabels: string[]): string {
 }
 
 function getRenderedTrajectoryValue(params: AssertionParams): unknown {
-  return renderVarsInObject(
-    params.renderedValue ?? params.assertion.value,
-    params.assertionValueContext.vars,
-  );
+  const value = params.renderedValue ?? params.assertion.value;
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? renderVarsInObject(item, params.assertionValueContext.vars)
+        : item,
+    );
+  }
+  return value && typeof value === 'object'
+    ? renderVarsInObject(value, params.assertionValueContext.vars)
+    : value;
 }
 
 function requireNamedTrajectoryMatcher(

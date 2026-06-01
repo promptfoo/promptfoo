@@ -1,3 +1,4 @@
+import { renderVarsInObject } from '../util/render';
 import { assertFiniteNonNegativeNumber, matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -216,7 +217,10 @@ function validateTokenBudgetBound(boundName: 'min' | 'max', value: unknown): num
 }
 
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
-  const value = (params.renderedValue ?? params.assertion.value) as TokensUsedValue | undefined;
+  const value = renderVarsInObject(
+    params.renderedValue ?? params.assertion.value,
+    params.assertionValueContext.vars,
+  ) as TokensUsedValue | undefined;
   if (!value || typeof value !== 'object') {
     throw new Error('tokens-used assertion must have an object value');
   }
