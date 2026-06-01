@@ -1,37 +1,36 @@
 # Types and Schemas
 
-Public configuration types, environment schemas, provider types, and server/API Zod schemas.
+Public configuration types, provider types, and server/API Zod schemas. `src/types/env.ts` only re-exports `src/contracts/env.ts`; the published `promptfoo/contracts` subpath is the real public boundary, so edit env/contract schemas in `src/contracts/` and let `src/types/` re-export them.
 
 ## Public Surface
 
-- Treat changes in `src/types/index.ts`, `src/types/providers.ts`, `src/types/env.ts`, and `src/types/api/` as public contract changes.
-- Preserve backwards compatibility unless the user explicitly asks for a breaking change. Prefer optional fields, nullable transforms, and permissive response schemas where existing saved evals or older clients may send older shapes.
-- Do not use `any` to hide schema drift. If a schema needs to preserve unknown provider output, prefer `z.unknown()` or a clearly bounded passthrough shape.
+- Treat changes in `src/contracts/`, `src/types/index.ts`, `src/types/providers.ts`, and `src/types/api/` as public-contract changes.
+- Preserve backwards compatibility unless the user explicitly asks for a break. Prefer optional fields, nullable transforms, and permissive response schemas — older saved evals and clients still send older shapes.
+- Don't use `any` to hide schema drift. To preserve unknown provider output, use `z.unknown()` or a bounded passthrough, not `any`.
 
 ## Schema Generation
 
-When changing config, env, provider, or API schemas, check whether generated artifacts and docs need updates:
+Config/env/provider/API schema changes can require regenerating artifacts and docs:
 
 ```bash
-npm run jsonSchema:generate
+npm run jsonSchema:generate   # regenerates site/static/config-schema.json
 npm run tsc
 ```
 
-Also inspect affected docs under `site/docs/configuration/`, `site/docs/providers/`, and `site/static/config-schema.json` when relevant.
+Check affected docs under `site/docs/configuration/` and `site/docs/providers/`.
 
-## API Schemas
+## API Schemas (`src/types/api/`)
 
-Schemas under `src/types/api/` are shared with `src/server/` and the web UI:
+Shared with `src/server/` and the web UI:
 
-- Request schemas should validate before route logic uses the body.
-- Response schemas should allow provider/model-specific variable output where needed.
-- Keep route and API-schema changes together so server handlers, frontend callers, and tests stay aligned.
+- Validate request schemas before route logic touches the body.
+- Allow provider/model-specific variable output in response schemas where needed.
+- Keep route and schema changes together so handlers, frontend callers, and tests stay aligned.
 
-## Environment Variables
+## Provider Env Vars
 
-When adding provider env vars:
+When adding a provider env var:
 
-- Update `ProviderEnvOverridesSchema` in `src/types/env.ts`.
-- Update CLI/env documentation where applicable.
-- Regenerate JSON schema.
-- Add provider tests for explicit config vs env fallback precedence.
+- Add it to `ProviderEnvOverridesSchema` in `src/contracts/env.ts` (re-exported via `src/types/env.ts`).
+- Regenerate the JSON schema and update CLI/env docs.
+- Add tests covering explicit config vs env-fallback precedence.

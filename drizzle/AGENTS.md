@@ -64,5 +64,5 @@ Workaround: Create new table, copy data, drop old table, rename new table.
 ## Tech Stack
 
 - **Drizzle ORM** - Type-safe schema and migrations
-- **Better SQLite3** - Fast synchronous driver
-- **SQLite** - Embedded database
+- **@libsql/client** - SQLite/libSQL driver. The DB handle is async: `getDb()` returns a Promise (`src/database/index.ts`), so always `await getDb()`. (The old synchronous better-sqlite3 driver is gone — don't write synchronous DB access.)
+- **SQLite / libSQL** - Embedded database
