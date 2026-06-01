@@ -105,7 +105,9 @@ export class CloudConfig {
   }
 
   setApiHost(apiHost: string): void {
-    this.config.apiHost = apiHost;
+    // Persist without a trailing slash so the stored host stays clean regardless of
+    // caller (defense in depth alongside the strip in resolveApiHost()).
+    this.config.apiHost = apiHost.replace(/\/+$/, '');
     this.saveConfig();
   }
 

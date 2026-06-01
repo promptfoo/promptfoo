@@ -66,6 +66,15 @@ describe('CloudConfig', () => {
       });
     });
 
+    it('should strip a trailing slash when persisting apiHost', () => {
+      cloudConfigInstance.setApiHost('https://onprem.example.com/');
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        cloud: expect.objectContaining({
+          apiHost: 'https://onprem.example.com',
+        }),
+      });
+    });
+
     it('should set and get apiKey', () => {
       cloudConfigInstance.setApiKey('new-key');
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({

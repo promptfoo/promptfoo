@@ -832,6 +832,20 @@ describe('accounts', () => {
       expect(calledUrl).toContain('https://env-cloud.example.com/api/users/status');
       expect(getApiHostSpy).not.toHaveBeenCalled();
     });
+
+    it('strips a trailing slash from PROMPTFOO_CLOUD_API_URL on the non-cloud path', async () => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+      vi.mocked(getEnvString).mockImplementation((key: string, fallback?: any) =>
+        key === 'PROMPTFOO_CLOUD_API_URL' ? 'https://env-cloud.example.com/' : fallback,
+      );
+
+      await checkEmailStatus();
+
+      const calledUrl = vi.mocked(fetchWithTimeout).mock.calls[0][0] as string;
+      // No `//api/users/status` from the trailing slash.
+      expect(calledUrl).toContain('https://env-cloud.example.com/api/users/status');
+      expect(calledUrl).not.toContain('.com//api');
+    });
   });
 
   describe('isLoggedIntoCloud', () => {
