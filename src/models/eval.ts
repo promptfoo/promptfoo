@@ -2,7 +2,6 @@ import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
-import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalResultsTable,
@@ -42,15 +41,23 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
-import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  invalidateEvaluationCache,
+  notifyEvaluationChanged,
+  notifyEvaluationsDeleted,
+} from './evalMutation';
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult, { persistTraceMetadata, stripTraceLinkageFromMetadata } from './evalResult';
+import EvalResult, {
+  getResultIndexKey,
+  persistTraceMetadata,
+  stripTraceLinkageFromMetadata,
+} from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -313,6 +320,15 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  resultPersistenceFailed: boolean = false;
+  private failedResults = new Map<string, EvaluateResult>();
+  // Reconstructed EvalResults for rows that failed to persist, cached so comparison
+  // assertions reuse the SAME instance across passes (select-best then max-score).
+  // Persisted rows compose successive comparison grading via the DB round-trip
+  // (mutate -> save -> re-fetch); failed rows have no DB copy, so the shared in-memory
+  // instance is what lets later grading build on earlier grading instead of a stale row.
+  private failedEvalResults = new Map<string, EvalResult>();
+  private finalJsonlResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -580,7 +596,7 @@ export default class Eval {
       }
     });
 
-    clearStandaloneEvalCache();
+    invalidateEvaluationCache(evalId);
 
     return new Eval(config, {
       id: evalId,
@@ -683,7 +699,7 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    clearStandaloneEvalCache();
+    notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
 
@@ -739,11 +755,63 @@ export default class Eval {
     }
     if (this.persisted) {
       // Notify watchers that new results are available, passing the eval ID
-      updateSignalFile(this.id);
+      notifyEvaluationChanged(this.id);
     }
   }
 
+  recordFinalJsonlResult(result: EvaluateResult) {
+    this.finalJsonlResults.set(getResultIndexKey(result), result);
+  }
+
+  getFinalJsonlResults() {
+    return Array.from(this.finalJsonlResults.values());
+  }
+
+  recordResultPersistenceFailure(result: EvaluateResult) {
+    this.resultPersistenceFailed = true;
+    const key = getResultIndexKey(result);
+    // Keep the row so comparison assertions (max-score / select-best) can still grade the
+    // full output set — the DB is missing this row — and the failed row receives canonical
+    // grading rather than being emitted in its stale, pre-comparison state.
+    this.failedResults.set(key, result);
+    // Drop any cached reconstruction so the next comparison rehydrates from this raw row.
+    this.failedEvalResults.delete(key);
+  }
+
+  hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    return this.failedResults.has(getResultIndexKey(result));
+  }
+
+  // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
+  // so the comparison input (which otherwise reads only the database) sees the full set.
+  // The reconstruction is cached and reused: when a test has both select-best and max-score,
+  // select-best mutates the instance and max-score must build on that mutation rather than
+  // re-reading the stale pre-comparison row (which would erase the earlier grading from the
+  // finalized artifact). This mirrors how persisted rows compose grading via save() + re-fetch.
+  async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
+    const reconstructed: EvalResult[] = [];
+    for (const [key, row] of this.failedResults) {
+      if (row.testIdx !== testIdx) {
+        continue;
+      }
+      let evalResult = this.failedEvalResults.get(key);
+      if (!evalResult) {
+        evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+        this.failedEvalResults.set(key, evalResult);
+      }
+      reconstructed.push(evalResult);
+    }
+    return reconstructed;
+  }
+
   async *fetchResultsBatched(batchSize: number = 100) {
+    if (!this.persisted) {
+      for (let offset = 0; offset < this.results.length; offset += batchSize) {
+        yield this.results.slice(offset, offset + batchSize);
+      }
+      return;
+    }
+
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
       yield batch;
     }
@@ -1282,8 +1350,7 @@ export default class Eval {
       await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
-      updateSignalFile(this.id);
-      clearStandaloneEvalCache();
+      notifyEvaluationChanged(this.id);
     }
   }
 
@@ -1301,7 +1368,7 @@ export default class Eval {
           })),
         )
         .run();
-      clearStandaloneEvalCache();
+      notifyEvaluationChanged(this.id);
     }
     this._resultsLoaded = true;
   }
@@ -1445,7 +1512,7 @@ export default class Eval {
     return results;
   }
 
-  async delete() {
+  async delete({ notify = true }: { notify?: boolean } = {}) {
     const db = await getDb();
     await db.transaction(async (tx) => {
       await deleteTraceRecordsForEvals(tx, [this.id]);
@@ -1455,6 +1522,9 @@ export default class Eval {
       await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+    if (notify) {
+      notifyEvaluationsDeleted([this.id]);
+    }
   }
 
   /**
@@ -1619,7 +1689,7 @@ export default class Eval {
       }
     });
 
-    clearStandaloneEvalCache();
+    notifyEvaluationChanged(newEvalId);
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,
