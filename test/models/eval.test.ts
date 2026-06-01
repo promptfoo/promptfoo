@@ -471,7 +471,7 @@ describe('evaluator', () => {
           [{ raw: 'Test prompt', label: 'Test prompt' }],
         );
 
-        const summaries = await getEvalSummaries();
+        const summaries = await getEvalSummaries(undefined, undefined, true);
         const summary = summaries.find((s) => s.evalId === evaluation.id);
 
         expect(summary).toBeDefined();
@@ -1534,12 +1534,10 @@ describe('evaluator', () => {
           '{"__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
       );
 
-      await expect(EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo')).resolves.toEqual(
-        [],
-      );
-      await expect(
-        EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo.traceLinkage'),
-      ).resolves.toEqual([]);
+      expect(await EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo')).toEqual([]);
+      expect(
+        await EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo.traceLinkage'),
+      ).toEqual([]);
     });
   });
 
