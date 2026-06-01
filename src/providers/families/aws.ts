@@ -35,9 +35,12 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 
-      // Handle Nova Reel video model
-      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
-      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      // Handle Nova Reel video model. Canonical forms: `bedrock:video:amazon.nova-reel-v1:1`
+      // (explicit model) or `bedrock:video` (defaults the model). The model segment is used
+      // verbatim as the Bedrock modelId, so the `video:` prefix is required to carry the full
+      // id — `bedrock:amazon.nova-reel-v1:1` would collapse the model name to its version tail.
+      // Match when modelType names a nova-reel model, or modelType is 'video' with a
+      // nova-reel or empty model segment.
       if (
         modelType.includes('amazon.nova-reel') ||
         (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))

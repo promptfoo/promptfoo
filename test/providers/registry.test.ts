@@ -508,6 +508,7 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
 
       const provider = await factory!.create('bedrock-agent:agent-id', { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe('AwsBedrockAgentsProvider');
       expect(provider.id()).toBe('bedrock-agent:agent-id');
     });
 
@@ -521,6 +522,7 @@ describe('Provider Registry', () => {
         { config: {} },
         mockContext,
       );
+      expect(provider.constructor.name).toBe('AwsBedrockAgentsProvider');
       expect(provider.id()).toBe('bedrock-agent:agent-id');
     });
 
@@ -574,6 +576,7 @@ describe('Provider Registry', () => {
       const provider = await factory!.create('bedrock:luma.ray-v2:0', { config: {} }, mockContext);
       expect(provider).toBeDefined();
       // Verify the model name includes the full version (luma.ray-v2:0, not just '0')
+      expect(provider.constructor.name).toBe('LumaRayVideoProvider');
       expect(provider.id()).toContain('luma.ray-v2:0');
     });
 
@@ -590,6 +593,7 @@ describe('Provider Registry', () => {
       );
       expect(provider).toBeDefined();
       // Verify it's a Luma Ray provider, not Nova Reel
+      expect(provider.constructor.name).toBe('LumaRayVideoProvider');
       expect(provider.id()).toContain('luma.ray-v2:0');
       expect(provider.id()).not.toContain('nova-reel');
     });
@@ -605,8 +609,19 @@ describe('Provider Registry', () => {
         { config: {} },
         mockContext,
       );
-      expect(provider).toBeDefined();
+      expect(provider.constructor.name).toBe('NovaReelVideoProvider');
       expect(provider.id()).toContain('nova-reel');
+    });
+
+    it('defaults the Nova Reel model for a bare bedrock:video path', async () => {
+      const factories = await getProviderFactories('bedrock:video');
+      const factory = factories.find((f) => f.test('bedrock:video'));
+      expect(factory).toBeDefined();
+
+      // Empty model segment falls back to the default Nova Reel model id.
+      const provider = await factory!.create('bedrock:video', { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe('NovaReelVideoProvider');
+      expect(provider.id()).toContain('amazon.nova-reel-v1:1');
     });
 
     // Regression guard for the AWS-before-script routing precedence (PR #9537).
