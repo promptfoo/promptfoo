@@ -1054,11 +1054,11 @@ describe('evalCommand', () => {
     expect(chokidarMocks.watch).toHaveBeenCalledWith(
       expect.arrayContaining([
         '/suite/promptfooconfig.yaml',
-        '/suite/prompts/main.txt',
-        '/suite/prompts/object.txt',
-        '/suite/providers/provider.yaml',
-        '/suite/vars/scenario.yaml',
-        '/suite/vars/body.txt',
+        path.resolve('/suite', 'prompts/main.txt'),
+        path.resolve('/suite', 'prompts/object.txt'),
+        path.resolve('/suite', 'providers/provider.yaml'),
+        path.resolve('/suite', 'vars/scenario.yaml'),
+        path.resolve('/suite', 'vars/body.txt'),
       ]),
       { ignored: /^\./, persistent: true },
     );
