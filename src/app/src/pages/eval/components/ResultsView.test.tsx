@@ -429,7 +429,7 @@ describe('ResultsView Share Button', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith(
       expect.objectContaining({ description: 'Test Evaluation' }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+    expect(mockNavigate).toHaveBeenCalledWith('/setup?sourceEvalId=test-eval-id', {
       state: { sourceEvalId: 'test-eval-id' },
     });
   });

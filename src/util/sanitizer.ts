@@ -3,6 +3,8 @@
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
 
+import { isDeepStrictEqual } from 'node:util';
+
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
@@ -268,7 +270,24 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    return value.map((item, index) => restoreAzureBlobSasTokens(item, storedItems[index])) as T;
+    const availableStoredItems = new Set(storedItems.keys());
+
+    return value.map((item) => {
+      const candidates = [...availableStoredItems]
+        .map((index) => ({
+          index,
+          restored: restoreAzureBlobSasTokens(item, storedItems[index]),
+        }))
+        .filter(({ restored }) => !isDeepStrictEqual(restored, item));
+
+      if (candidates.length !== 1) {
+        return restoreAzureBlobSasTokens(item, undefined);
+      }
+
+      const [{ index, restored }] = candidates;
+      availableStoredItems.delete(index);
+      return restored;
+    }) as T;
   }
 
   if (!value || typeof value !== 'object' || isClassInstance(value)) {

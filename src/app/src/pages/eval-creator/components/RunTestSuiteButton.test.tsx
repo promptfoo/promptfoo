@@ -18,10 +18,15 @@ const renderWithProvider = (ui: React.ReactElement) => {
 
 const mockShowToast = vi.fn();
 let sourceEvalId: string | undefined;
+let sourceEvalIdParam: string | undefined;
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
+  useSearchParams: () => [
+    new URLSearchParams(sourceEvalIdParam ? { sourceEvalId: sourceEvalIdParam } : undefined),
+    vi.fn(),
+  ],
 }));
 
 vi.mock('@app/utils/api', () => ({
@@ -42,6 +47,7 @@ describe('RunTestSuiteButton', () => {
     resetCallApiMock();
     mockShowToast.mockReset();
     sourceEvalId = undefined;
+    sourceEvalIdParam = undefined;
     timers = useTestTimers();
   });
 
@@ -159,6 +165,30 @@ describe('RunTestSuiteButton', () => {
     expect(JSON.parse(requestInit.body as string)).toMatchObject({
       sourceEvalId: 'source-eval-id',
       tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+    });
+  });
+
+  it('should prefer the persisted source eval id from the URL when rerunning', async () => {
+    sourceEvalId = 'stale-router-state';
+    sourceEvalIdParam = 'persisted-source-eval-id';
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['echo'],
+      tests: [{ vars: { input: 'test' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({
+      sourceEvalId: 'persisted-source-eval-id',
     });
   });
 

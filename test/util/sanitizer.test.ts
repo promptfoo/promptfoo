@@ -107,6 +107,60 @@ describe('sanitizeObject', () => {
         tests: 'az://account/container/edited.yaml?sp=r&sig=%5BREDACTED%5D',
       });
     });
+
+    it('should restore reordered Azure Blob SAS URIs by matching stored values', () => {
+      const stored = {
+        tests: [
+          {
+            description: 'first',
+            vars: { input: 'az://account/container/first.yaml?sp=r&sig=first-secret' },
+          },
+          {
+            description: 'second',
+            vars: { input: 'az://account/container/second.yaml?sp=r&sig=second-secret' },
+          },
+        ],
+      };
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              {
+                description: 'edited second',
+                vars: {
+                  input: 'az://account/container/second.yaml?sp=r&sig=%5BREDACTED%5D',
+                },
+              },
+            ],
+          },
+          stored,
+        ),
+      ).toEqual({
+        tests: [
+          {
+            description: 'edited second',
+            vars: { input: 'az://account/container/second.yaml?sp=r&sig=second-secret' },
+          },
+        ],
+      });
+    });
+
+    it('should leave ambiguous reordered Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [redactedUri] },
+          {
+            tests: [
+              'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            ],
+          },
+        ),
+      ).toEqual({ tests: [redactedUri] });
+    });
   });
 
   describe('function handling', () => {

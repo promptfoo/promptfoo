@@ -783,7 +783,12 @@ export default function ResultsView({
             return;
           }
           updateConfig(config);
-          navigate(ROUTES.SETUP, { state: { sourceEvalId: evalId } });
+          navigate(
+            validEvalId
+              ? `${ROUTES.SETUP}?${new URLSearchParams({ sourceEvalId: validEvalId })}`
+              : ROUTES.SETUP,
+            { state: validEvalId ? { sourceEvalId: validEvalId } : undefined },
+          );
         }}
       >
         <Play className="size-4 mr-2" />
