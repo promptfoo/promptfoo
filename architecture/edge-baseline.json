@@ -50,7 +50,7 @@
   "redteam -> view-server": 3,
   "view-server -> cli": 1,
   "view-server -> core": 1,
-  "view-server -> legacy-contracts": 22,
+  "view-server -> legacy-contracts": 23,
   "view-server -> legacy-runtime": 35,
   "view-server -> node": 37,
   "view-server -> providers": 3,
