@@ -938,10 +938,11 @@ assert:
 
   - type: trace-span-duration
     metric: advisory.retrieval-latency
+    weight: 0
     value: { pattern: retrieve_document_*, max: 350 }
 ```
 
-A failing `advisory.*` becomes a soft signal in dashboards rather than a CI blocker.
+The `weight: 0` setting makes a failing `advisory.*` assertion a soft signal in dashboards rather than a CI blocker.
 
 **Rebaseline on intentional changes.** When you switch the retriever from top-3 to top-5, update the assertion in the same PR that switches it. Reviewers should see both changes together — never silently relax bounds in a separate "flake fix" commit.
 
