@@ -21,6 +21,7 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
+import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -626,6 +627,7 @@ export default class EvalResult {
       this.id = result[0].id;
       this.persisted = true;
     }
+    invalidateEvaluationCache(this.evalId);
   }
 
   toEvaluateResult(): EvaluateResult {
