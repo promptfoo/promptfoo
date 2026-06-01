@@ -2,8 +2,7 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
-import { isDeepStrictEqual } from 'node:util';
-
+import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
@@ -340,17 +339,14 @@ function findStoredArrayItemForRestore(
   storedItems: readonly unknown[],
   canRestorePositionally: boolean,
 ): StoredArrayItemMatch {
-  if (
-    canRestorePositionally &&
-    isDeepStrictEqual(value, redactAzureBlobSasTokens(positionalStoredValue))
-  ) {
+  if (canRestorePositionally && deepEqual(value, redactAzureBlobSasTokens(positionalStoredValue))) {
     return { matched: true, value: positionalStoredValue };
   }
 
   let matchedValue: unknown;
   let matched = false;
   for (const storedItem of storedItems) {
-    if (!isDeepStrictEqual(value, redactAzureBlobSasTokens(storedItem))) {
+    if (!deepEqual(value, redactAzureBlobSasTokens(storedItem))) {
       continue;
     }
     if (matched) {
