@@ -1,4 +1,5 @@
 import readline from 'readline';
+import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -535,6 +536,33 @@ function logGroupedGradingStatus({
       `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
     );
   }
+}
+
+// When an afterEach hook replaces response.metadata, a legacy top-level metadata.headers that
+// was copied from the OLD transport headers becomes stale — and would persist as stale (and
+// possibly sensitive) headers. Only re-sync when the original top-level headers provably came
+// from the original transport (deep-equal) and the hook left that top-level copy unchanged;
+// otherwise the hook owns metadata.headers and we leave it alone.
+function synchronizeLegacyTransportHeaders(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  hookMetadata: Record<string, unknown> | undefined,
+  hookResponseMetadata: Record<string, unknown> | undefined,
+) {
+  const originalHeaders = originalMetadata?.headers;
+  if (
+    originalHeaders === undefined ||
+    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
+    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
+  ) {
+    return hookMetadata;
+  }
+
+  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
+  if (hookResponseMetadata?.headers === undefined) {
+    return metadataWithoutHeaders;
+  }
+  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
@@ -3303,6 +3331,8 @@ class Evaluator {
       // so in-place mutations don't corrupt the row on hook failure.
       if (context.testSuite.extensions?.length) {
         try {
+          const originalMetadata = row.metadata;
+          const originalResponseMetadata = row.response?.metadata;
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,
             result: {
@@ -3317,7 +3347,14 @@ class Evaluator {
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          row.metadata = afterEachOut.result.metadata;
+          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
+          // from the old transport would otherwise persist as stale credentials. Re-sync it.
+          row.metadata = synchronizeLegacyTransportHeaders(
+            originalMetadata,
+            originalResponseMetadata,
+            afterEachOut.result.metadata,
+            afterEachOut.result.response?.metadata,
+          );
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;
           }
