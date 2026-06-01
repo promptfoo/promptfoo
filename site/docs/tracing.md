@@ -310,8 +310,9 @@ tracing:
 created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change
 one another's results. Traces created only when spans arrive at the receiver use the
-active receiver's startup defaults. Similarly, `acceptFormats` configures the active
-HTTP receiver endpoint and is not changed by an overlapping evaluation.
+registered evaluation policy from `evaluation.id`, then fall back to the active
+receiver's startup defaults. Similarly, `acceptFormats` configures the active HTTP
+receiver endpoint and is not changed by an overlapping evaluation.
 
 ### Supported Formats
 

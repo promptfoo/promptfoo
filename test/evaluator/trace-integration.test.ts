@@ -139,6 +139,10 @@ describe('evaluator trace integration', () => {
 
     // Verify trace context was generated
     expect(evaluatorTracing.generateTraceContextIfNeeded).toHaveBeenCalled();
+    expect(evaluatorTracing.startOtlpReceiverIfNeeded).toHaveBeenCalledWith(
+      testSuite,
+      'test-eval-id',
+    );
 
     // Verify trace was fetched for assertion
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {

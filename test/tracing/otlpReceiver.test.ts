@@ -870,6 +870,127 @@ describe('OTLPReceiver', () => {
         metadata: { commandToolNames: ['bash', 'shell'] },
       });
     });
+
+    it('uses registered evaluation policy for receiver-created traces on a shared receiver', async () => {
+      const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({
+        evaluationId: 'registered-eval',
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'f'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'registered-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'registered-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'ffffffffffffffffffffffffffffffff',
+        evaluationId: 'registered-eval',
+        testCaseId: 'registered-test',
+        metadata: {
+          commandToolNames: ['bash'],
+          otlpHttpRedactAttributes: ['authorization'],
+        },
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'ffffffffffffffffffffffffffffffff',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('uses an empty registered evaluation policy instead of older startup defaults', async () => {
+      const sharedReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({ evaluationId: 'no-redaction-eval' });
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '1'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'no-redaction-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'no-redaction-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: '11111111111111111111111111111111',
+        evaluationId: 'no-redaction-eval',
+        testCaseId: 'no-redaction-test',
+        metadata: undefined,
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '11111111111111111111111111111111',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer hidden',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
   });
 
   describe('Singleton startup recovery', () => {

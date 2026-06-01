@@ -4750,7 +4750,7 @@ class Evaluator {
 
     let evaluationError: unknown;
     try {
-      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite);
+      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.evalRecord.id);
 
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');

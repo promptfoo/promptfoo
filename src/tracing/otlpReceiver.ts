@@ -156,12 +156,23 @@ function resolveLogSpanName(attributes: Record<string, any>, bodyValue: unknown)
 
 type OTLPFormat = 'json' | 'protobuf';
 
+export interface OTLPReceiverTracePolicy {
+  evaluationId: string;
+  testCaseId?: string;
+  /** Tool names whose tool-call spans should be normalized as command steps. */
+  commandToolNames?: string[];
+  /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
+  redactAttributes?: string[];
+}
+
 interface OTLPReceiverOptions {
   acceptFormats?: OTLPFormat[];
   /** Tool names whose tool-call spans should be normalized as command steps. */
   commandToolNames?: string[];
   /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
   redactAttributes?: string[];
+  /** Per-evaluation policy for receiver-created traces emitted while this receiver is shared. */
+  tracePolicy?: OTLPReceiverTracePolicy;
 }
 
 interface TraceInfo {
@@ -172,6 +183,11 @@ interface TraceInfo {
 interface GroupedTraces {
   spansByTrace: Map<string, SpanData[]>;
   traceInfoById: Map<string, TraceInfo>;
+}
+
+interface RegisteredTracePolicy {
+  commandToolNames?: string[];
+  redactAttributePatterns: string[];
 }
 
 const SPAN_KIND_MAP: Record<number, string> = {
@@ -215,6 +231,30 @@ function normalizeCommandToolNames(commandToolNames?: string[]): string[] | unde
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function traceInfoKey(evaluationId: string, testCaseId: string): string {
+  return `${evaluationId}\0${testCaseId}`;
+}
+
+function normalizeTracePolicy(policy: OTLPReceiverTracePolicy): RegisteredTracePolicy {
+  return {
+    commandToolNames: normalizeCommandToolNames(policy.commandToolNames),
+    redactAttributePatterns: normalizeRedactAttributePatterns(policy.redactAttributes),
+  };
+}
+
+function metadataFromTracePolicy(
+  policy: RegisteredTracePolicy,
+): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = {};
+  if (policy.commandToolNames) {
+    metadata.commandToolNames = policy.commandToolNames;
+  }
+  if (policy.redactAttributePatterns.length > 0) {
+    metadata.otlpHttpRedactAttributes = policy.redactAttributePatterns;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
 function getRequestFormat(contentType: string | string[] | undefined): OTLPFormat | null {
   const rawContentType = Array.isArray(contentType) ? contentType[0] : contentType;
   const mimeType = rawContentType?.split(';', 1)[0]?.trim().toLowerCase();
@@ -238,6 +278,8 @@ export class OTLPReceiver {
   private server?: any; // http.Server type
   private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
+  private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
+  private tracePoliciesByTestCase = new Map<string, RegisteredTracePolicy>();
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -245,6 +287,7 @@ export class OTLPReceiver {
     this.traceStore = getTraceStore();
     this.setCommandToolNames(options.commandToolNames);
     this.setRedactAttributes(options.redactAttributes);
+    this.registerTracePolicy(options.tracePolicy);
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
@@ -256,6 +299,23 @@ export class OTLPReceiver {
 
   setCommandToolNames(commandToolNames?: string[]): void {
     this.commandToolNames = normalizeCommandToolNames(commandToolNames);
+  }
+
+  registerTracePolicy(policy?: OTLPReceiverTracePolicy): void {
+    if (!policy?.evaluationId) {
+      return;
+    }
+
+    const normalizedPolicy = normalizeTracePolicy(policy);
+    if (policy.testCaseId) {
+      this.tracePoliciesByTestCase.set(
+        traceInfoKey(policy.evaluationId, policy.testCaseId),
+        normalizedPolicy,
+      );
+      return;
+    }
+
+    this.tracePoliciesByEvaluationId.set(policy.evaluationId, normalizedPolicy);
   }
 
   private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
@@ -512,7 +572,7 @@ export class OTLPReceiver {
 
   private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<void> {
     await this.createTraceRecords(traceInfoById);
-    await this.storeSpans(spansByTrace);
+    await this.storeSpans(spansByTrace, traceInfoById);
   }
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
@@ -528,7 +588,7 @@ export class OTLPReceiver {
           traceId,
           evaluationId: info.evaluationId,
           testCaseId: info.testCaseId,
-          metadata: this.getTraceMetadata(),
+          metadata: this.getTraceMetadata(info),
         });
       } catch (error) {
         // Trace might already exist, which is fine
@@ -537,21 +597,46 @@ export class OTLPReceiver {
     }
   }
 
-  private getTraceMetadata(): Record<string, unknown> | undefined {
-    const metadata: Record<string, unknown> = {};
-    if (this.commandToolNames) {
-      metadata.commandToolNames = this.commandToolNames;
+  private getRegisteredTracePolicy(info?: TraceInfo): RegisteredTracePolicy | undefined {
+    if (!info?.evaluationId) {
+      return undefined;
     }
-    if (this.redactAttributePatterns.length > 0) {
-      metadata.otlpHttpRedactAttributes = this.redactAttributePatterns;
+
+    if (info.testCaseId) {
+      const testCasePolicy = this.tracePoliciesByTestCase.get(
+        traceInfoKey(info.evaluationId, info.testCaseId),
+      );
+      if (testCasePolicy) {
+        return testCasePolicy;
+      }
     }
-    return Object.keys(metadata).length > 0 ? metadata : undefined;
+
+    return this.tracePoliciesByEvaluationId.get(info.evaluationId);
   }
 
-  private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
+  private getFallbackTracePolicy(): RegisteredTracePolicy {
+    return {
+      commandToolNames: this.commandToolNames,
+      redactAttributePatterns: this.redactAttributePatterns,
+    };
+  }
+
+  private getTraceMetadata(info?: TraceInfo): Record<string, unknown> | undefined {
+    return metadataFromTracePolicy(
+      this.getRegisteredTracePolicy(info) ?? this.getFallbackTracePolicy(),
+    );
+  }
+
+  private async storeSpans(
+    spansByTrace: Map<string, SpanData[]>,
+    traceInfoById: Map<string, TraceInfo>,
+  ): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      const redactAttributePatterns = await this.getRedactAttributePatterns(traceId);
+      const redactAttributePatterns = await this.getRedactAttributePatterns(
+        traceId,
+        traceInfoById.get(traceId),
+      );
       const sanitized =
         redactAttributePatterns.length > 0
           ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
@@ -563,10 +648,13 @@ export class OTLPReceiver {
     }
   }
 
-  private async getRedactAttributePatterns(traceId: string): Promise<string[]> {
+  private async getRedactAttributePatterns(traceId: string, info?: TraceInfo): Promise<string[]> {
     const metadata = await this.traceStore.getTraceMetadata(traceId);
     if (metadata === undefined) {
-      return this.redactAttributePatterns;
+      return (
+        this.getRegisteredTracePolicy(info)?.redactAttributePatterns ??
+        this.getFallbackTracePolicy().redactAttributePatterns
+      );
     }
 
     return Array.isArray(metadata.otlpHttpRedactAttributes)
@@ -1009,6 +1097,7 @@ function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
     otlpReceiver.setAcceptFormats(options?.acceptFormats);
     otlpReceiver.setCommandToolNames(options?.commandToolNames);
     otlpReceiver.setRedactAttributes(options?.redactAttributes);
+    otlpReceiver.registerTracePolicy(options?.tracePolicy);
     return otlpReceiver;
   }
 
@@ -1020,7 +1109,11 @@ export async function startOTLPReceiver(
   port?: number,
   host?: string,
   acceptFormats?: OTLPFormat[],
-  extra?: { commandToolNames?: string[]; redactAttributes?: string[] },
+  extra?: {
+    commandToolNames?: string[];
+    redactAttributes?: string[];
+    tracePolicy?: OTLPReceiverTracePolicy;
+  },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });
@@ -1033,6 +1126,10 @@ export async function startOTLPReceiver(
     }
     throw error;
   }
+}
+
+export function registerOTLPReceiverTracePolicy(policy?: OTLPReceiverTracePolicy): void {
+  otlpReceiver?.registerTracePolicy(policy);
 }
 
 export async function stopOTLPReceiver(): Promise<void> {
