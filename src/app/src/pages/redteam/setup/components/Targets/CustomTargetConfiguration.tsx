@@ -64,6 +64,42 @@ const highlightJSON = (code: string): string => {
 
 const getProviderConfig = (providerType?: string): ProviderConfig => {
   switch (providerType) {
+    case 'a2a':
+      return {
+        title: 'A2A Provider',
+        icon: <Server className="size-5 text-primary" />,
+        targetIdLabel: 'Provider ID',
+        targetIdPlaceholder: 'a2a or a2a:https://agent.example.com/a2a/v1',
+        helpText: (
+          <>
+            Agent2Agent (A2A) HTTP+JSON endpoint configuration. Promptfoo sends test prompts as A2A
+            messages and reads final messages, task artifacts, or streaming events.
+          </>
+        ),
+        docUrl: 'https://www.promptfoo.dev/docs/providers/a2a/',
+        examples: {
+          title: 'A2A Provider Examples',
+          items: [
+            { code: 'a2a:https://agent.example.com/a2a/v1', description: 'Endpoint shorthand' },
+            { code: 'a2a', description: 'Use config.url or config.agentCardUrl' },
+          ],
+        },
+        configExample: {
+          url: 'https://agent.example.com/a2a/v1',
+          agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+          mode: 'auto',
+          headers: {
+            Authorization: 'Bearer {{A2A_API_KEY}}',
+          },
+          polling: {
+            enabled: true,
+            intervalMs: 1000,
+            timeoutMs: 300000,
+          },
+        },
+        configDescription: 'A2A endpoint, Agent Card discovery, headers, and task polling',
+      };
+
     case 'python':
       return {
         title: 'Python Provider',

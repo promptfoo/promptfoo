@@ -249,11 +249,20 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
+      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      }
+      if (providerType === 'a2a') {
+        const hasUrl = typeof provider.config?.url === 'string' && validateUrl(provider.config.url);
+        const hasAgentCardUrl =
+          typeof provider.config?.agentCardUrl === 'string' &&
+          validateUrl(provider.config.agentCardUrl);
+        if (!hasUrl && !hasAgentCardUrl) {
+          errors.push('A valid A2A endpoint URL or Agent Card URL is required');
+        }
       }
     }
 
@@ -407,7 +416,7 @@ function ProviderConfigEditor({
       )}
 
       {/* Custom providers */}
-      {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
+      {['a2a', 'javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}

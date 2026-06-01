@@ -17,7 +17,7 @@ interface TargetConfigurationProps {
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
-  return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
+  return !['a2a', 'http', 'websocket', 'browser'].includes(target.id);
 };
 
 export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
