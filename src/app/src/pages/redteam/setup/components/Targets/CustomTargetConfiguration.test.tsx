@@ -102,7 +102,7 @@ describe('CustomTargetConfiguration', () => {
         agentCardUrlInput.compareDocumentPosition(endpointUrlInput) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(screen.getByLabelText(/Request Mode/i)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/Request Mode/i)).not.toBeInTheDocument();
       expect(screen.getByLabelText(/Authentication Type/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Enable polling/i)).toBeChecked();
       expect(screen.getByText(/Advanced Configuration \(JSON\)/i)).toBeInTheDocument();
@@ -144,6 +144,9 @@ describe('CustomTargetConfiguration', () => {
       );
 
       const advancedConfig = {
+        mode: 'stream',
+        tenant: 'acme',
+        protocolVersion: '1.0',
         headers: {
           'X-Trace-Id': '{{traceId}}',
         },
@@ -158,7 +161,6 @@ describe('CustomTargetConfiguration', () => {
         expect(updateSpy).toHaveBeenLastCalledWith('config', {
           ...advancedConfig,
           url: 'https://agent.example.com/a2a',
-          mode: 'auto',
           auth: { type: 'bearer', token: '{{A2A_API_KEY}}' },
           polling: {
             enabled: true,

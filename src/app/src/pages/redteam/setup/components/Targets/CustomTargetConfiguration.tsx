@@ -91,15 +91,7 @@ type A2AProviderConfig = Record<string, unknown> & {
   auth?: A2AAuthConfig;
 };
 
-const A2A_STRUCTURED_CONFIG_KEYS = new Set([
-  'url',
-  'agentCardUrl',
-  'mode',
-  'tenant',
-  'protocolVersion',
-  'polling',
-  'auth',
-]);
+const A2A_STRUCTURED_CONFIG_KEYS = new Set(['url', 'agentCardUrl', 'polling', 'auth']);
 
 const asA2AConfig = (config?: ProviderOptions['config']): A2AProviderConfig =>
   (config ?? {}) as A2AProviderConfig;
@@ -1018,45 +1010,6 @@ const CustomTargetConfiguration = ({
                   </p>
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="a2a-mode">Request Mode</Label>
-                  <Select
-                    value={a2aConfig.mode ?? 'auto'}
-                    onValueChange={(value) => updateA2AField('mode', value)}
-                  >
-                    <SelectTrigger id="a2a-mode">
-                      <SelectValue placeholder="Select mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="send">Send</SelectItem>
-                      <SelectItem value="stream">Stream</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-sm text-muted-foreground">
-                    Auto streams only when requested or discovered.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="a2a-tenant">Tenant</Label>
-                  <Input
-                    id="a2a-tenant"
-                    value={a2aConfig.tenant ?? ''}
-                    onChange={(e) => updateA2AField('tenant', e.target.value || undefined)}
-                    placeholder="Optional tenant"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="a2a-protocol-version">Protocol Version</Label>
-                  <Input
-                    id="a2a-protocol-version"
-                    value={a2aConfig.protocolVersion ?? ''}
-                    onChange={(e) => updateA2AField('protocolVersion', e.target.value || undefined)}
-                    placeholder="1.0"
-                  />
-                </div>
-              </div>
             </div>
 
             {renderA2AAuthFields()}
@@ -1190,6 +1143,9 @@ const CustomTargetConfiguration = ({
                   providerType === 'a2a'
                     ? JSON.stringify(
                         {
+                          mode: 'auto',
+                          tenant: 'optional-tenant',
+                          protocolVersion: '1.0',
                           headers: {
                             'X-Custom-Header': '{{value}}',
                           },
@@ -1224,7 +1180,7 @@ const CustomTargetConfiguration = ({
           ) : providerType === 'a2a' ? (
             <HelperText>
               Optional JSON merged with the fields above. Use it for headers, custom message
-              templates, provider configuration, timeouts, and transformResponse.
+              templates, mode, tenant, protocol version, timeouts, and transformResponse.
             </HelperText>
           ) : (
             <p className="text-sm text-muted-foreground">{config.configDescription}</p>
