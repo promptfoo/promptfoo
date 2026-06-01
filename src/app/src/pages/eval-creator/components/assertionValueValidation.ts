@@ -56,6 +56,7 @@ const BASE_ASSERTION_TYPES = [
   'similar:euclidean',
   'skill-used',
   'starts-with',
+  'tokens-used',
   'tool-call-f1',
   'trace-error-spans',
   'trace-span-count',
@@ -64,6 +65,7 @@ const BASE_ASSERTION_TYPES = [
   'trajectory:step-count',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:tool-used',
   'webhook',
   'word-count',
@@ -163,11 +165,15 @@ export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'trace-span-duration',
   'not-trace-span-count',
   'not-trace-span-duration',
+  'tokens-used',
+  'not-tokens-used',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:step-count',
   'not-trajectory:tool-args-match',
   'not-trajectory:tool-sequence',
+  'not-trajectory:tool-set',
   'not-trajectory:step-count',
 ]);
 
@@ -451,6 +457,59 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
   return undefined;
 }
 
+function getTokensUsedValueError(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return 'Enter JSON with a minimum or maximum token budget.';
+  }
+
+  const { max, min, pattern, source } = value;
+  if (min === undefined && max === undefined) {
+    return 'Enter JSON with a minimum or maximum token budget.';
+  }
+  if (
+    (min !== undefined && (typeof min !== 'number' || !Number.isFinite(min) || min < 0)) ||
+    (max !== undefined && (typeof max !== 'number' || !Number.isFinite(max) || max < 0))
+  ) {
+    return 'Enter token budgets as numbers, 0 or greater.';
+  }
+  if (typeof min === 'number' && typeof max === 'number' && min > max) {
+    return 'Minimum token usage cannot exceed maximum token usage.';
+  }
+  if (source !== undefined && source !== 'trace' && source !== 'response' && source !== 'auto') {
+    return 'Set token usage source to "trace", "response", or "auto".';
+  }
+  if (pattern !== undefined && typeof pattern !== 'string') {
+    return 'Enter the optional token usage span pattern as text.';
+  }
+
+  return undefined;
+}
+
+function getTrajectoryToolSetValueError(value: unknown): string | undefined {
+  const tools = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.tools)
+      ? value.tools
+      : undefined;
+
+  if (!tools || tools.length === 0) {
+    return 'Enter a non-empty JSON tool set.';
+  }
+  if (!tools.every(isUsableTrajectorySequenceStep)) {
+    return 'Each trajectory tool set entry needs a name or pattern.';
+  }
+  if (
+    isRecord(value) &&
+    value.mode !== undefined &&
+    value.mode !== 'subset' &&
+    value.mode !== 'exact'
+  ) {
+    return 'Set trajectory tool set mode to "subset" or "exact".';
+  }
+
+  return undefined;
+}
+
 function getStructuredValueError(assertion: Assertion): string | undefined {
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
@@ -465,6 +524,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   }
   if (assertion.type === 'trace-span-duration' || assertion.type === 'not-trace-span-duration') {
     return getTraceSpanDurationValueError(assertion.value);
+  }
+  if (assertion.type === 'tokens-used' || assertion.type === 'not-tokens-used') {
+    return getTokensUsedValueError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-args-match' ||
@@ -483,6 +545,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:tool-sequence'
   ) {
     return getTrajectoryToolSequenceValueError(assertion.value);
+  }
+  if (assertion.type === 'trajectory:tool-set' || assertion.type === 'not-trajectory:tool-set') {
+    return getTrajectoryToolSetValueError(assertion.value);
   }
 
   return undefined;

@@ -251,6 +251,41 @@ describe('structured value assertions', () => {
     ).toBeUndefined();
   });
 
+  it('validates tokens-used budgets', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'tokens-used', value: {} as any }))).toMatch(
+      /minimum or maximum token budget/,
+    );
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'tokens-used', value: { min: 10, max: 5 } as any }),
+      ),
+    ).toMatch(/Minimum token usage/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'tokens-used', value: { max: 100, source: 'response' } as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('validates trajectory:tool-set matcher lists and modes', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trajectory:tool-set', value: [] as any })),
+    ).toMatch(/non-empty JSON tool set/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-set', value: { tools: ['find'], mode: 'ordered' } as any }),
+      ),
+    ).toMatch(/subset.*exact/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-set',
+          value: { tools: ['find', { pattern: 'fetch.*' }], mode: 'exact' } as any,
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
   it('validates trace span assertion value shapes', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'trace-span-count', value: { max: 2 } as any })),
