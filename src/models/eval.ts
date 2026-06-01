@@ -303,6 +303,7 @@ export default class Eval {
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
   private failedResultKeys = new Set<string>();
+  private failedResults = new Map<string, EvaluateResult>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
@@ -735,13 +736,27 @@ export default class Eval {
     return Array.from(this.finalJsonlResults.values());
   }
 
-  recordResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+  recordResultPersistenceFailure(result: EvaluateResult) {
     this.resultPersistenceFailed = true;
-    this.failedResultKeys.add(`${result.testIdx}:${result.promptIdx}`);
+    const key = `${result.testIdx}:${result.promptIdx}`;
+    this.failedResultKeys.add(key);
+    // Keep the row so comparison assertions (max-score / select-best) can still grade the
+    // full output set — the DB is missing this row — and the failed row receives canonical
+    // grading rather than being emitted in its stale, pre-comparison state.
+    this.failedResults.set(key, result);
   }
 
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
     return this.failedResultKeys.has(`${result.testIdx}:${result.promptIdx}`);
+  }
+
+  // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
+  // so the comparison input (which otherwise reads only the database) sees the full set.
+  async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
+    const rows = Array.from(this.failedResults.values()).filter((r) => r.testIdx === testIdx);
+    return Promise.all(
+      rows.map((row) => EvalResult.createFromEvaluateResult(this.id, row, { persist: false })),
+    );
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {

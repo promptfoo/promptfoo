@@ -189,8 +189,12 @@ describe('programmatic JSONL output', () => {
 
     const results = readJsonl(outputPath).sort((a, b) => a.promptIdx - b.promptIdx);
     expect(results).toHaveLength(3);
-    expect(results.filter((result) => result.promptIdx < 2 && !result.success)).toHaveLength(1);
-    expect(results[2]).toEqual(expect.objectContaining({ success: true }));
+    // max-score over three equal outputs keeps only the lowest index as the winner. The row
+    // that failed to persist (promptIdx 2) is graded over the full output set and demoted to
+    // a loser, not emitted in its stale, pre-comparison success state.
+    expect(results[0]).toEqual(expect.objectContaining({ success: true }));
+    expect(results[1]).toEqual(expect.objectContaining({ success: false }));
+    expect(results[2]).toEqual(expect.objectContaining({ success: false }));
   });
 
   it('preserves provider and model-graded assertion token usage when finalizing persisted rows', async () => {

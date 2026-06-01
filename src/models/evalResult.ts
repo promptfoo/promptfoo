@@ -22,7 +22,7 @@ import { safeJsonStringify } from '../util/json';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateGradingRequest,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
@@ -333,6 +333,14 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+/**
+ * Sanitize a result before it is serialized into a JSONL output artifact. This is the
+ * JSONL-boundary equivalent of the database-persistence sanitization and must stay in sync
+ * with it: it redacts credential-bearing HTTP headers from the response / grading / metadata
+ * and applies the `PROMPTFOO_STRIP_*` projections (prompt text, response output, test vars,
+ * grading result, metadata). In-memory rows keep their real values for hooks; only the
+ * on-disk copy is sanitized.
+ */
 export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
   const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
@@ -734,15 +742,15 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
     });
+    // Mirror the live accounting in the evaluator: a response counts as one provider
+    // request even when it reports no token usage, and a grading result counts as one
+    // assertion request (with its tokens folded in when present).
     const tokenUsage = createEmptyTokenUsage();
-    if (this.response?.tokenUsage) {
+    if (this.response) {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
     if (this.gradingResult) {
-      tokenUsage.assertions.numRequests = (tokenUsage.assertions.numRequests ?? 0) + 1;
-    }
-    if (this.gradingResult?.tokensUsed) {
-      accumulateAssertionTokenUsage(tokenUsage.assertions, this.gradingResult.tokensUsed);
+      accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed);
     }
 
     return {
@@ -768,4 +776,9 @@ export default class EvalResult {
       failureReason: this.failureReason,
     };
   }
+}
+
+/** Normalize an `EvalResult` model instance or a plain `EvaluateResult` to `EvaluateResult`. */
+export function asEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
+  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 }

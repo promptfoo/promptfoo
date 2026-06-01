@@ -24,7 +24,7 @@ describe('JsonlFileWriter', () => {
     vi.resetAllMocks();
   });
 
-  it('resolves after the final flush completes', async () => {
+  it('resolves after the final flush completes and swallows a late close error', async () => {
     const stream = createMockWriteStream();
     stream.end.mockImplementation((callback?: () => void) => {
       callback?.();
@@ -32,7 +32,21 @@ describe('JsonlFileWriter', () => {
     });
 
     await expect(new JsonlFileWriter('/tmp/results.jsonl').close()).resolves.toBeUndefined();
-    expect(stream.listenerCount('error')).toBe(0);
+    // The rejecting listener is replaced (not left attached), and a late fd-close error
+    // emitted after 'finish' is swallowed rather than thrown as an unhandled 'error' event.
+    expect(stream.listenerCount('error')).toBe(1);
+    expect(() => stream.emit('error', new Error('late close error'))).not.toThrow();
+  });
+
+  it('truncates by default and appends only when requested', async () => {
+    createMockWriteStream();
+    new JsonlFileWriter('/tmp/results.jsonl');
+    expect(mocks.createWriteStream).toHaveBeenCalledWith('/tmp/results.jsonl', { flags: 'w' });
+
+    mocks.createWriteStream.mockClear();
+    createMockWriteStream();
+    new JsonlFileWriter('/tmp/results.jsonl', { append: true });
+    expect(mocks.createWriteStream).toHaveBeenCalledWith('/tmp/results.jsonl', { flags: 'a' });
   });
 
   it('rejects final flush errors with the output path', async () => {

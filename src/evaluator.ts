@@ -20,7 +20,7 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { sanitizeResultForJsonlArtifact } from './models/evalResult';
+import { asEvaluateResult, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -93,6 +93,7 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGradingRequest,
   accumulateResponseTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
@@ -547,11 +548,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage.assertions) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
-  row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
-
-  if (checkResult.tokensUsed) {
-    accumulateAssertionTokenUsage(row.tokenUsage.assertions, checkResult.tokensUsed);
-  }
+  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed);
   row.gradingResult = checkResult;
 }
 
@@ -3155,9 +3152,7 @@ class Evaluator {
   // that never stream) to override stale entries in the recovery merge.
   private trackFinalJsonlResult(row: EvalResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.evalRecord.resultPersistenceFailed) {
-      this.evalRecord.recordFinalJsonlResult(
-        'toEvaluateResult' in row ? row.toEvaluateResult() : row,
-      );
+      this.evalRecord.recordFinalJsonlResult(asEvaluateResult(row));
     }
   }
 
@@ -4096,10 +4091,24 @@ class Evaluator {
     }
   }
 
-  private async getResultsToCompare(testIdx: number) {
-    return this.evalRecord.persisted
-      ? this.evalRecord.fetchResultsByTestIdx(testIdx)
+  private async getResultsToCompare(testIdx: number): Promise<EvalResult[]> {
+    const base = this.evalRecord.persisted
+      ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
       : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+    if (!this.evalRecord.resultPersistenceFailed) {
+      return base;
+    }
+    // A row that failed to persist is absent from the database (and from `results`), so it
+    // would otherwise be excluded from the comparison — skewing the winner for its siblings
+    // and leaving the failed row with stale, pre-comparison grading. Merge it back in.
+    const failed = await this.evalRecord.getFailedResultsByTestIdx(testIdx);
+    if (failed.length === 0) {
+      return base;
+    }
+    const seen = new Set(base.map((r) => `${r.testIdx}:${r.promptIdx}`));
+    return [...base, ...failed.filter((r) => !seen.has(`${r.testIdx}:${r.promptIdx}`))].sort(
+      (a, b) => a.promptIdx - b.promptIdx,
+    );
   }
 
   private getComparisonCallApiContext(
@@ -4141,7 +4150,7 @@ class Evaluator {
       metrics,
     );
     this.trackFinalJsonlResult(result);
-    if (this.evalRecord.persisted) {
+    if (this.evalRecord.persisted && !this.evalRecord.hasResultPersistenceFailure(result)) {
       await result.save();
     }
   }
@@ -4168,7 +4177,7 @@ class Evaluator {
       metrics,
     );
     this.trackFinalJsonlResult(result);
-    if (this.evalRecord.persisted) {
+    if (this.evalRecord.persisted && !this.evalRecord.hasResultPersistenceFailure(result)) {
       await result.save();
     }
   }
@@ -4282,10 +4291,7 @@ class Evaluator {
     }
 
     const allResults = await this.evalRecord.getResults();
-    const resultsForExtension: EvaluateResult[] = allResults.map(
-      (result): EvaluateResult =>
-        'toEvaluateResult' in result ? result.toEvaluateResult() : result,
-    );
+    const resultsForExtension: EvaluateResult[] = allResults.map(asEvaluateResult);
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
@@ -4666,6 +4672,10 @@ class Evaluator {
       evaluationError = error;
       throw error;
     } finally {
+      // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
+      // teardown below, so the streamed file is fully flushed before the post-run rewrite
+      // reads it back and the file handle is released promptly. allSettled so one writer's
+      // close failure neither blocks cleanup nor masks another writer's error.
       const writerCloseResults = await Promise.allSettled(
         this.fileWriters.map((writer) => writer.close()),
       );
@@ -4725,6 +4735,8 @@ class Evaluator {
       } finally {
         if (writerCloseErrors.length > 0) {
           logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
+          // Only surface a writer-close failure when nothing else failed, so the original
+          // evaluation/cleanup error is never masked by a secondary I/O error.
           if (evaluationError === undefined && cleanupError === undefined) {
             throw writerCloseErrors.length === 1
               ? writerCloseErrors[0]

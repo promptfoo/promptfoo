@@ -12,7 +12,7 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { sanitizeResultForJsonlArtifact } from '../models/evalResult';
+import { asEvaluateResult, sanitizeResultForJsonlArtifact } from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -28,7 +28,6 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
@@ -51,10 +50,6 @@ export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: s
     );
   }
   return outputPaths;
-}
-
-function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 }
 
 function getJsonlResultKey(result: EvaluateResult): string {
@@ -104,6 +99,13 @@ async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateRes
   return results;
 }
 
+// Rebuild the JSONL rows after a mid-run persistence failure by merging three sources,
+// keyed by `testIdx:promptIdx` with later sources winning:
+//   1. the rows already streamed to disk (the base, including any that failed to persist),
+//   2. the canonical database rows (skipping keys that failed to persist — the DB copy is
+//      missing or stale for those), then
+//   3. the in-memory final rows captured after the failure (timeout / deferred-grading
+//      updates that never streamed), which are authoritative.
 async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
   const finalResults = new Map<string, EvaluateResult>();
   for (const result of await readStreamedJsonlResults(outputPath)) {
@@ -111,7 +113,7 @@ async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, ev
   }
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
-      const evaluateResult = toEvaluateResult(result);
+      const evaluateResult = asEvaluateResult(result);
       if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
         finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
       }
@@ -536,7 +538,7 @@ export async function writeOutput(
     // Truncate file first for consistent behavior with other formats
     await fsPromises.writeFile(outputPath, '');
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      await appendJsonlResults(outputPath, batchResults.map(toEvaluateResult));
+      await appendJsonlResults(outputPath, batchResults.map(asEvaluateResult));
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();

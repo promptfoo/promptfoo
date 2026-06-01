@@ -31,7 +31,11 @@ export class JsonlFileWriter {
       };
       this.writeStream.once('error', onError);
       this.writeStream.end(() => {
+        // The stream finished flushing. Swap the rejecting listener for a no-op so a late
+        // fd-close error (emitted after 'finish') is swallowed rather than thrown as an
+        // unhandled 'error' event that would crash the process — the bytes are on disk.
         this.writeStream.off('error', onError);
+        this.writeStream.on('error', () => {});
         resolve();
       });
     });

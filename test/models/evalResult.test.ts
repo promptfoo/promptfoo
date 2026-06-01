@@ -925,6 +925,25 @@ describe('EvalResult', () => {
       });
     });
 
+    it('counts a provider request for a response that reports no token usage', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: { output: 'hello' },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.numRequests).toBe(1);
+    });
+
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
 
