@@ -201,6 +201,8 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
           url: 'https://agent.example.com/a2a/v1',
           agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
           mode: 'auto',
+          tenant: 'optional-tenant',
+          protocolVersion: '1.0',
           auth: {
             type: 'bearer',
             token: '{{A2A_API_KEY}}',
