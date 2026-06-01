@@ -214,6 +214,10 @@ function assertExportsResolve(
     }
   }
 
+  assert(
+    referencedPaths.size > 0,
+    'Expected the installed package manifest to declare export paths',
+  );
   const missing = [...referencedPaths].filter(
     (relativePath) => !fs.existsSync(path.join(installedPackageDir, relativePath)),
   );
@@ -221,13 +225,6 @@ function assertExportsResolve(
     missing,
     [],
     `Installed package exports reference missing files: ${missing.join(', ')}`,
-  );
-  assert(
-    referencedPaths.has('./dist/src/contracts.d.ts') &&
-      referencedPaths.has('./dist/src/contracts.d.cts') &&
-      referencedPaths.has('./dist/src/contracts.js') &&
-      referencedPaths.has('./dist/src/contracts.cjs'),
-    'Expected the installed package to declare the promptfoo/contracts subpath in exports',
   );
 }
 

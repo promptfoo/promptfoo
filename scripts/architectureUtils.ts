@@ -312,29 +312,11 @@ export function resolveInternalModule(
   return undefined;
 }
 
-export function getPackageName(specifier: string): string | undefined {
-  if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('#')) {
-    return undefined;
-  }
-
-  const withoutNodePrefix = specifier.replace(/^node:/, '');
-  const segments = withoutNodePrefix.split('/');
-  const packageName = withoutNodePrefix.startsWith('@')
-    ? segments.slice(0, 2).join('/')
-    : segments[0];
-
-  if (!packageName || BUILTIN_MODULES.has(packageName)) {
-    return undefined;
-  }
-
-  return packageName;
-}
-
 /**
- * The bare module name a specifier resolves to for leaf-layer external-import checks. Unlike
- * {@link getPackageName} this also names Node builtins (with the `node:` prefix stripped), so a
- * leaf layer cannot silently pull in `node:fs`. Returns undefined for relative/absolute/`#` subpath
- * specifiers, which are not external dependencies.
+ * The bare module name a specifier resolves to: its package root (`@scope/pkg`) or builtin name,
+ * with any `node:` prefix stripped. Returns undefined for relative/absolute/`#` subpath specifiers,
+ * which are not external dependencies. Unlike {@link getPackageName} this also names Node builtins,
+ * so a leaf-layer external check cannot let `node:fs` slip through.
  */
 export function getExternalModuleName(specifier: string): string | undefined {
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('#')) {
@@ -348,6 +330,12 @@ export function getExternalModuleName(specifier: string): string | undefined {
     : segments[0];
 
   return moduleName || undefined;
+}
+
+/** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
+export function getPackageName(specifier: string): string | undefined {
+  const moduleName = getExternalModuleName(specifier);
+  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
