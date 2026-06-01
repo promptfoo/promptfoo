@@ -41,9 +41,16 @@ describeIfBuildExists('Library Exports', () => {
     });
 
     it('should have lightweight contracts builds', () => {
-      expect(fs.existsSync(path.join(distDir, 'contracts.js'))).toBe(true);
-      expect(fs.existsSync(path.join(distDir, 'contracts.cjs'))).toBe(true);
-      expect(fs.existsSync(path.join(distDir, 'contracts.d.ts'))).toBe(true);
+      for (const artifact of [
+        'contracts.js',
+        'contracts.cjs',
+        'contracts.d.ts',
+        'contracts.d.cts',
+      ]) {
+        const buildPath = path.join(distDir, artifact);
+        expect(fs.existsSync(buildPath)).toBe(true);
+        expect(fs.statSync(buildPath).size).toBeLessThan(100000);
+      }
     });
 
     it('should have ESM CLI build (main.js)', () => {
