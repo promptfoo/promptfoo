@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../src/cache';
+import { cloudConfig } from '../src/globalConfig/cloud';
 import guardrails, { type AdaptiveRequest } from '../src/guardrails';
 
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
+}));
+
+vi.mock('../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: vi.fn(),
+    getApiHost: vi.fn(),
+  },
 }));
 
 describe('guardrails', () => {
@@ -30,6 +38,10 @@ describe('guardrails', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    // Default to the non-cloud path so existing assertions stay deterministic
+    // regardless of the local machine's cloud-login state.
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
   });
 
   describe('guard', () => {
@@ -344,6 +356,81 @@ describe('guardrails', () => {
         'json',
       );
       expect(result).toEqual(mockResponse.data);
+    });
+  });
+
+  describe('on-prem / cloud-enabled host resolution', () => {
+    const ONPREM_HOST = 'https://onprem.example.com';
+
+    beforeEach(() => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue(ONPREM_HOST);
+    });
+
+    it.each([
+      ['guard', () => guardrails.guard('test input'), '/v1/guard'],
+      ['pii', () => guardrails.pii('test input'), '/v1/pii'],
+      ['harm', () => guardrails.harm('test input'), '/v1/harm'],
+    ])('routes %s to the configured cloud host instead of public cloud', async (_name, call, path) => {
+      await call();
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `${ONPREM_HOST}${path}`,
+        expect.objectContaining({ method: 'POST' }),
+        undefined,
+        'json',
+      );
+      const [calledUrl] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(calledUrl).not.toContain('api.promptfoo.app');
+    });
+
+    it('routes adaptive requests to the configured cloud host', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { model: 'm', adaptedPrompt: 'a', modifications: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await guardrails.adaptive({ prompt: 'test input', policies: ['No harmful content'] });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `${ONPREM_HOST}/v1/adaptive`,
+        expect.objectContaining({ method: 'POST' }),
+        undefined,
+        'json',
+      );
+      const [calledUrl] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(calledUrl).not.toContain('api.promptfoo.app');
+    });
+
+    it('falls back to the public share host when cloud is not enabled', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+      await guardrails.guard('test input');
+
+      const [calledUrl] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(calledUrl).toBe('https://api.promptfoo.app/v1/guard');
+      // getApiHost() must not be consulted on the non-cloud path.
+      expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
+    });
+
+    it('lets an explicit PROMPTFOO_REMOTE_API_BASE_URL override win even when cloud is enabled', async () => {
+      // Regression guard: logged-in users who redirect guardrails to a private
+      // endpoint must keep that override (codex P2 on the original PR).
+      vi.stubEnv('PROMPTFOO_REMOTE_API_BASE_URL', 'https://guardrails-override.example.com');
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue(ONPREM_HOST);
+
+      try {
+        await guardrails.guard('test input');
+
+        const [calledUrl] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(calledUrl).toBe('https://guardrails-override.example.com/v1/guard');
+        expect(calledUrl).not.toContain('onprem.example.com');
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 });

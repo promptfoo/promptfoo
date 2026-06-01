@@ -16,6 +16,7 @@ import {
   promptForEmailUnverified,
   setUserEmail,
 } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
   readGlobalConfig,
   writeGlobalConfig,
@@ -785,6 +786,51 @@ describe('accounts', () => {
 
         expect(telemetry.saveConsent).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('checkEmailStatus host resolution (on-prem)', () => {
+    const ONPREM_HOST = 'https://onprem.example.com';
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      vi.mocked(fetchWithTimeout).mockResolvedValue(
+        new Response(JSON.stringify({ status: 'ok' }), { status: 200, statusText: 'OK' }),
+      );
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('sends the email-status request to the configured cloud host when cloud is enabled', async () => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue(ONPREM_HOST);
+
+      await checkEmailStatus();
+
+      expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+      const calledUrl = vi.mocked(fetchWithTimeout).mock.calls[0][0] as string;
+      expect(calledUrl).toContain(`${ONPREM_HOST}/api/users/status`);
+      expect(calledUrl).not.toContain('api.promptfoo.app');
+    });
+
+    it('does not consult getApiHost and uses PROMPTFOO_CLOUD_API_URL when cloud is not enabled', async () => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+      const getApiHostSpy = vi.spyOn(cloudConfig, 'getApiHost');
+      vi.mocked(getEnvString).mockImplementation((key: string, fallback?: any) =>
+        key === 'PROMPTFOO_CLOUD_API_URL' ? 'https://env-cloud.example.com' : fallback,
+      );
+
+      await checkEmailStatus();
+
+      const calledUrl = vi.mocked(fetchWithTimeout).mock.calls[0][0] as string;
+      expect(calledUrl).toContain('https://env-cloud.example.com/api/users/status');
+      expect(getApiHostSpy).not.toHaveBeenCalled();
     });
   });
 

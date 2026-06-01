@@ -1,10 +1,18 @@
 import { fetchWithCache } from './cache';
 import { getShareApiBaseUrl } from './constants';
+import { getEnvString } from './envars';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 
 function getApiBaseUrl(): string {
-  const base = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
+  // An explicit PROMPTFOO_REMOTE_API_BASE_URL override always wins, so users who
+  // point guardrails at a private endpoint keep that behavior even when logged in.
+  // Otherwise prefer the configured cloud host (incl. on-prem), falling back to the
+  // public share host. The guardrails service uses a `/v1` prefix (not `/api/v1`
+  // like most cloud endpoints); this preserves the existing public-cloud routing.
+  const base =
+    getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') ||
+    (cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl());
   return `${base}/v1`;
 }
 
