@@ -31,7 +31,7 @@ import type { ProviderOptions } from '../../src/types/providers';
 vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -109,9 +109,7 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
 }));
 
 vi.mock('../../src/util/azureBlob', async () => ({
-  ...(await vi.importActual<typeof import('../../src/util/azureBlob')>(
-    '../../src/util/azureBlob',
-  )),
+  ...(await vi.importActual<typeof import('../../src/util/azureBlob')>('../../src/util/azureBlob')),
   readAzureBlobText: vi.fn(),
 }));
 
@@ -410,9 +408,7 @@ describe('readStandaloneTestsFile', () => {
 
   it('should read CSV test sets from Azure Blob Storage URIs', async () => {
     const blobUri = 'az://account/container/tests.csv';
-    vi.mocked(readAzureBlobText).mockResolvedValue(
-      'review_id,__expected\nreview-004,ready',
-    );
+    vi.mocked(readAzureBlobText).mockResolvedValue('review_id,__expected\nreview-004,ready');
 
     const result = await readStandaloneTestsFile(blobUri);
 

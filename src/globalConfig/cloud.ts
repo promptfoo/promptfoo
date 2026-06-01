@@ -182,7 +182,7 @@ export class CloudConfig {
 
   async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
     try {
-      const { fetchWithProxy } = await import('../util/fetch');
+      const { fetchWithProxy } = await import('../util/fetch/index');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
