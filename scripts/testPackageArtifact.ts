@@ -178,6 +178,56 @@ function assertInstalledWebApp(installedPackageDir: string): void {
   );
 }
 
+/**
+ * Asserts every file path declared in the installed package's `exports` and `typesVersions`
+ * resolves to a real file. The consumer `tsc` checks can't catch a wrong declared `types` path on
+ * their own — TypeScript falls through to the `default` condition and auto-discovers the sibling
+ * `.d.ts` — so validate the declared paths directly here.
+ */
+function assertExportsResolve(
+  installedPackageDir: string,
+  manifest: {
+    exports?: unknown;
+    typesVersions?: Record<string, Record<string, string[]>>;
+  },
+): void {
+  const referencedPaths = new Set<string>();
+  const collect = (value: unknown): void => {
+    if (typeof value === 'string') {
+      if (value.startsWith('.')) {
+        referencedPaths.add(value);
+      }
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const nested of Object.values(value)) {
+        collect(nested);
+      }
+    }
+  };
+  collect(manifest.exports);
+  for (const subpaths of Object.values(manifest.typesVersions ?? {})) {
+    for (const candidatePaths of Object.values(subpaths)) {
+      for (const candidatePath of candidatePaths) {
+        referencedPaths.add(candidatePath);
+      }
+    }
+  }
+
+  assert(
+    referencedPaths.size > 0,
+    'Expected the installed package manifest to declare export paths',
+  );
+  const missing = [...referencedPaths].filter(
+    (relativePath) => !fs.existsSync(path.join(installedPackageDir, relativePath)),
+  );
+  assert.deepEqual(
+    missing,
+    [],
+    `Installed package exports reference missing files: ${missing.join(', ')}`,
+  );
+}
+
 function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
   const binPath = path.join(
     consumerDir,
@@ -358,8 +408,13 @@ function main(): void {
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
     const installedPackageJson = JSON.parse(
       fs.readFileSync(path.join(installedPackageDir, 'package.json'), 'utf8'),
-    ) as { version: string };
+    ) as {
+      version: string;
+      exports?: unknown;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    };
     assert.equal(installedPackageJson.version, packResult.version);
+    assertExportsResolve(installedPackageDir, installedPackageJson);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
