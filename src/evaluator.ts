@@ -1339,16 +1339,25 @@ export function getTraceId(
     return undefined;
   }
   // W3C traceparent: `version-traceId-spanId-flags`. Version 00 has exactly 4 dash-separated
-  // parts; future versions MAY append fields after flags, so accept 4+ and read the trace-id
-  // from position 1. Anything with fewer than 4 parts is malformed — drop the linkage.
+  // parts; future versions MAY append fields after flags. Validate the required fields before
+  // surfacing linkage so malformed or sentinel IDs never become persisted row metadata.
   const parts = traceContext.traceparent.split('-');
-  if (parts.length < 4) {
-    logger.warn(
-      `[Evaluator] Malformed traceparent (expected >=4 parts, got ${parts.length}); dropping trace linkage on this row.`,
-    );
+  const [version, traceId, parentId, flags] = parts;
+  const validPartCount = version === '00' ? parts.length === 4 : parts.length >= 4;
+  const validTraceId = /^[0-9a-f]{32}$/.test(traceId) && !/^0+$/.test(traceId);
+  const validParentId = /^[0-9a-f]{16}$/.test(parentId) && !/^0+$/.test(parentId);
+  if (
+    !/^[0-9a-f]{2}$/.test(version) ||
+    version === 'ff' ||
+    !validPartCount ||
+    !validTraceId ||
+    !validParentId ||
+    !/^[0-9a-f]{2}$/.test(flags)
+  ) {
+    logger.warn(`[Evaluator] Malformed traceparent; dropping trace linkage on this row.`);
     return undefined;
   }
-  return parts[1];
+  return traceId;
 }
 
 export function getTraceLinkage(

@@ -7,7 +7,6 @@ const SPAN_ID = 'b'.repeat(16);
 // Well-formed W3C v00 traceparent (4 parts) and a forward-compatible 5+ part variant.
 const TP_V00 = `00-${TRACE_ID}-${SPAN_ID}-01`;
 const TP_FUTURE = `01-${TRACE_ID}-${SPAN_ID}-01-extra-field`;
-const TP_EMPTY_ID = `00--${SPAN_ID}-01`;
 
 describe('getTraceId', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -39,17 +38,20 @@ describe('getTraceId', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('drops linkage and warns for malformed traceparents with fewer than 4 parts', () => {
-    expect(getTraceId({ traceparent: `00-${TRACE_ID}-01` })).toBeUndefined();
-    expect(getTraceId({ traceparent: 'garbage' })).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledTimes(2);
+  it.each([
+    ['too few fields', `00-${TRACE_ID}-01`],
+    ['unparseable value', 'garbage'],
+    ['extra fields on version 00', `${TP_V00}-extra-field`],
+    ['forbidden ff version', `ff-${TRACE_ID}-${SPAN_ID}-01`],
+    ['empty trace id', `00--${SPAN_ID}-01`],
+    ['all-zero trace id', `00-${'0'.repeat(32)}-${SPAN_ID}-01`],
+    ['uppercase trace id', `00-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01`],
+    ['all-zero parent id', `00-${TRACE_ID}-${'0'.repeat(16)}-01`],
+    ['invalid flags', `00-${TRACE_ID}-${SPAN_ID}-0g`],
+  ])('drops linkage and warns for %s', (_description, traceparent) => {
+    expect(getTraceId({ traceparent })).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0][0]).toContain('Malformed traceparent');
-  });
-
-  it('returns an empty id verbatim when the traceparent has 4 parts but an empty id', () => {
-    // Downstream getTraceLinkage treats the falsy value as "no trace id" so it never surfaces.
-    expect(getTraceId({ traceparent: TP_EMPTY_ID })).toBe('');
-    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 
