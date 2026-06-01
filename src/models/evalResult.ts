@@ -333,6 +333,31 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+// Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
+// the database or a JSONL artifact. Single source of truth for which redactor pairs with which
+// field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
+// and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
+// field can't be redacted on one path while leaking from another.
+function redactSensitiveResultFieldsForDb<
+  R extends ProviderResponse | null | undefined,
+  G,
+  M,
+>(fields: {
+  response: R;
+  gradingResult: G;
+  metadata: M;
+}): {
+  response: R;
+  gradingResult: G;
+  metadata: M;
+} {
+  return {
+    response: sanitizeResponseForDb(fields.response),
+    gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
+    metadata: sanitizeMetadataForDb(fields.metadata),
+  };
+}
+
 // Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
 // sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
 function getStripFlags() {
@@ -363,15 +388,15 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   } = getStripFlags();
 
   const artifactResult = result as T & Record<string, unknown>;
-  const response = projectProviderResponse(
-    sanitizeResponseForDb(
-      sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    ) ?? undefined,
-    {
-      stripMetadata: shouldStripMetadata,
-      stripOutput: shouldStripResponseOutput,
-    },
-  );
+  const redacted = redactSensitiveResultFieldsForDb({
+    response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
+    gradingResult: sanitizeForDb(artifactResult.gradingResult),
+    metadata: sanitizeForDb(artifactResult.metadata),
+  });
+  const response = projectProviderResponse(redacted.response ?? undefined, {
+    stripMetadata: shouldStripMetadata,
+    stripOutput: shouldStripResponseOutput,
+  });
 
   return {
     ...result,
@@ -407,13 +432,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult
-      ? null
-      : sanitizeGradingResultForDb(sanitizeForDb(artifactResult.gradingResult)),
+    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: shouldStripMetadata
-      ? {}
-      : sanitizeMetadataForDb(sanitizeForDb(artifactResult.metadata)),
+    metadata: shouldStripMetadata ? {} : redacted.metadata,
   } as T;
 }
 
@@ -483,9 +504,14 @@ export default class EvalResult {
     if (persist) {
       const db = await getDb();
 
-      args.response = sanitizeResponseForDb(args.response);
-      args.gradingResult = sanitizeGradingResultForDb(args.gradingResult);
-      args.metadata = sanitizeMetadataForDb(args.metadata);
+      const redacted = redactSensitiveResultFieldsForDb({
+        response: args.response,
+        gradingResult: args.gradingResult,
+        metadata: args.metadata,
+      });
+      args.response = redacted.response;
+      args.gradingResult = redacted.gradingResult;
+      args.metadata = redacted.metadata;
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
@@ -517,10 +543,12 @@ export default class EvalResult {
           ...result,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
-          response: sanitizeResponseForDb(sanitizeForDb(result.response)),
-          gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
+          ...redactSensitiveResultFieldsForDb({
+            response: sanitizeForDb(result.response),
+            gradingResult: sanitizeForDb(result.gradingResult),
+            metadata: sanitizeForDb(result.metadata),
+          }),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = await tx

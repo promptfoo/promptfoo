@@ -40,9 +40,9 @@ import {
 } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import {
-  filterOutputPathsAfterStreaming,
   printBorder,
   setupEnv,
+  warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
 import invariant from '../util/invariant';
@@ -994,10 +994,10 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
-    const outputPaths = filterOutputPathsAfterStreaming(evalRecord, paths);
-    if (outputPaths.length) {
-      await writeMultipleOutputs(outputPaths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${outputPaths.join(', ')}`));
+    warnOnDegradedJsonlRecovery(evalRecord, paths);
+    if (paths.length) {
+      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 
     telemetry.record('command_used', {

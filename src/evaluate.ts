@@ -17,7 +17,7 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
-import { filterOutputPathsAfterStreaming, readFilters, writeMultipleOutputs } from './util/index';
+import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -360,12 +360,11 @@ export async function evaluateWithSource(
 
   await maybeShareEval(testSuiteConfig, ret);
   if (testSuiteConfig.outputPath) {
-    const outputPaths = filterOutputPathsAfterStreaming(
-      evalRecord,
+    const outputPaths =
       typeof testSuiteConfig.outputPath === 'string'
         ? [testSuiteConfig.outputPath]
-        : testSuiteConfig.outputPath,
-    );
+        : testSuiteConfig.outputPath;
+    warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
     // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
     // case too — matching the doEval call site in src/commands/eval.ts.
     if (outputPaths.length) {
