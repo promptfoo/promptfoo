@@ -528,6 +528,8 @@ describe('EvalResult', () => {
                   },
                   requestHeaders: {
                     authorization: 'Bearer sk-should-not-persist',
+                    'api-key': 'azure-api-key-should-not-persist',
+                    'X-API-Key': 'custom-api-key-should-not-persist',
                     'x-safe-debug': 'keep-me',
                   },
                 },
@@ -547,6 +549,8 @@ describe('EvalResult', () => {
         });
         expect(result.response?.metadata?.http?.requestHeaders).toEqual({
           authorization: '[REDACTED]',
+          'api-key': '[REDACTED]',
+          'X-API-Key': '[REDACTED]',
           'x-safe-debug': 'keep-me',
         });
         expect(result.metadata?.http?.headers).toEqual({
@@ -565,6 +569,12 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
         expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
         expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'azure-api-key-should-not-persist',
+        );
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'custom-api-key-should-not-persist',
+        );
         expect(JSON.stringify(retrieved?.metadata)).not.toContain(
           'metadata_proj_should_not_persist',
         );
@@ -573,6 +583,57 @@ describe('EvalResult', () => {
           'grading_proj_should_not_persist',
         );
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
+      });
+
+      it('preserves arbitrary legacy headers in grading metadata', async () => {
+        const evalId = 'test-eval-preserve-grading-metadata-headers';
+        const gradingMetadataHeaders = {
+          'set-cookie': ['user-authored-grading-cookie'],
+          'x-request-id': {
+            value: 'user-authored-grading-request-id',
+          },
+        };
+        const componentMetadataHeaders = {
+          'x-request-id': 'user-authored-component-request-id',
+        };
+
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              metadata: {
+                headers: gradingMetadataHeaders,
+              },
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: {
+                    headers: componentMetadataHeaders,
+                  },
+                },
+              ],
+            },
+          },
+          { persist: true },
+        );
+
+        // Grading metadata has no transport provenance, so its arbitrary `headers` must be kept.
+        expect(result.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
+        expect(result.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
+          componentMetadataHeaders,
+        );
+
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved?.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
+        expect(retrieved?.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
+          componentMetadataHeaders,
+        );
       });
 
       it('preserves user-controlled `http` keys nested inside response.output, response.metadata, and gradingResult', async () => {
