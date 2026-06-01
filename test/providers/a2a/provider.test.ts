@@ -6,6 +6,7 @@ vi.mock('../../../src/util/fetch/index', async () => {
   );
   return {
     ...actual,
+    fetchWithProxy: vi.fn(),
     fetchWithTimeout: vi.fn(),
   };
 });
@@ -21,7 +22,7 @@ vi.mock('../../../src/util/time', async () => {
 
 import { loadApiProvider } from '../../../src/providers';
 import { A2AProvider } from '../../../src/providers/a2a';
-import { fetchWithTimeout } from '../../../src/util/fetch/index';
+import { fetchWithProxy, fetchWithTimeout } from '../../../src/util/fetch/index';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -146,6 +147,170 @@ describe('A2AProvider', () => {
       expect.objectContaining({
         body: expect.stringContaining('"tenant":"tenant-a"'),
         headers: expect.objectContaining({ 'A2A-Version': '1.0' }),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('applies bearer auth to agent card and operation requests', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          supportedInterfaces: [
+            {
+              protocolBinding: 'HTTP+JSON',
+              url: 'https://agent.example.com/a2a/http',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'authenticated response' }],
+          },
+        }),
+      );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+        auth: { type: 'bearer', token: '{{A2A_TOKEN}}' },
+      },
+    }).callApi('hello', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      vars: { A2A_TOKEN: 'secret-token' },
+    });
+
+    expect(result.output).toBe('authenticated response');
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      'https://agent.example.com/.well-known/agent-card.json',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer secret-token' }),
+        method: 'GET',
+      }),
+      expect.any(Number),
+    );
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      'https://agent.example.com/a2a/http/message:send',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer secret-token' }),
+        method: 'POST',
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('supports basic auth headers', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'basic auth response' }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      auth: { type: 'basic', username: 'user', password: 'pass' },
+    }).callApi('hi');
+
+    expect(result.output).toBe('basic auth response');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://agent.example.com/a2a/v1/message:send',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from('user:pass').toString('base64')}`,
+        }),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('supports api key auth in query parameters', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'query auth response' }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      auth: {
+        keyName: 'api_key',
+        placement: 'query',
+        type: 'api_key',
+        value: '{{A2A_API_KEY}}',
+      },
+    }).callApi('hi', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      vars: { A2A_API_KEY: 'query-secret' },
+    });
+
+    expect(result.output).toBe('query auth response');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://agent.example.com/a2a/v1/message:send?api_key=query-secret',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+    );
+  });
+
+  it('fetches OAuth client credentials tokens for operation requests', async () => {
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+      jsonResponse({
+        access_token: 'oauth-token',
+        expires_in: 3600,
+      }),
+    );
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'oauth response' }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      auth: {
+        clientId: '{{clientId}}',
+        clientSecret: '{{clientSecret}}',
+        grantType: 'client_credentials',
+        scopes: ['a2a.send'],
+        tokenUrl: 'https://auth.example.com/oauth/token',
+        type: 'oauth',
+      },
+    }).callApi('hi', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      vars: { clientId: 'client-1', clientSecret: 'client-secret' },
+    });
+
+    expect(result.output).toBe('oauth response');
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://auth.example.com/oauth/token',
+      expect.objectContaining({
+        body: expect.stringContaining('client_id=client-1'),
+        headers: expect.objectContaining({
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }),
+        method: 'POST',
+      }),
+    );
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://auth.example.com/oauth/token',
+      expect.objectContaining({
+        body: expect.stringContaining('scope=a2a.send'),
+      }),
+    );
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://agent.example.com/a2a/v1/message:send',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer oauth-token' }),
       }),
       expect.any(Number),
     );

@@ -36,8 +36,9 @@ The simplest configuration points promptfoo at the base URL for the A2A HTTP+JSO
 providers:
   - id: a2a:https://agent.example.com/a2a/v1
     config:
-      headers:
-        Authorization: Bearer {{A2A_API_KEY}}
+      auth:
+        type: bearer
+        token: '{{A2A_API_KEY}}'
 ```
 
 The `a2a:<url>` shorthand sets `config.url`. Promptfoo appends the operation paths, such as
@@ -53,8 +54,9 @@ providers:
   - id: a2a
     config:
       agentCardUrl: https://agent.example.com/.well-known/agent-card.json
-      headers:
-        Authorization: Bearer {{A2A_API_KEY}}
+      auth:
+        type: bearer
+        token: '{{A2A_API_KEY}}'
       mode: auto
 ```
 
@@ -72,6 +74,7 @@ context, similar to how the MCP provider uses discovered tools.
 | -------------------- | ---------------------------- | -------- | --------------------------------------------------------------------------- |
 | `url`                | string                       | -        | Base URL for the A2A HTTP+JSON interface                                    |
 | `agentCardUrl`       | string                       | -        | URL of the Agent Card used for endpoint and capability discovery            |
+| `auth`               | object                       | -        | Bearer, basic, API key, or OAuth authentication configuration               |
 | `headers`            | `Record<string, string>`     | `{}`     | Headers sent to the Agent Card endpoint and A2A operation requests          |
 | `mode`               | `auto` \| `send` \| `stream` | `auto`   | Whether to call `message:send`, `message:stream`, or choose automatically   |
 | `tenant`             | string                       | -        | Tenant override. Defaults to the selected Agent Card interface tenant       |
@@ -83,6 +86,83 @@ context, similar to how the MCP provider uses discovered tools.
 | `configuration`      | object                       | -        | A2A message configuration sent with each request                            |
 | `transformResponse`  | string \| Function           | -        | JavaScript transform for reshaping the final provider response              |
 | `timeoutMs`          | number                       | -        | Per-request HTTP timeout. Defaults to promptfoo's provider request timeout. |
+
+## Authentication
+
+Use `auth` for common authentication schemes. Promptfoo applies it to both Agent Card discovery
+requests and A2A operation requests. Values support Nunjucks variables, so you can use environment
+variables or team secrets.
+
+### Bearer Token
+
+```yaml
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    config:
+      auth:
+        type: bearer
+        token: '{{A2A_API_KEY}}'
+```
+
+### Basic Auth
+
+```yaml
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    config:
+      auth:
+        type: basic
+        username: '{{A2A_USERNAME}}'
+        password: '{{A2A_PASSWORD}}'
+```
+
+### API Key
+
+API keys default to the `X-API-Key` header. Set `placement: query` when the server expects a query
+parameter instead.
+
+```yaml
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    config:
+      auth:
+        type: api_key
+        keyName: X-API-Key
+        value: '{{A2A_API_KEY}}'
+```
+
+```yaml
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    config:
+      auth:
+        type: api_key
+        placement: query
+        keyName: api_key
+        value: '{{A2A_API_KEY}}'
+```
+
+### OAuth 2.0
+
+OAuth supports the client credentials and password grants. If `tokenUrl` is omitted, promptfoo tries
+OAuth authorization-server metadata discovery from the A2A server URL.
+
+```yaml
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    config:
+      auth:
+        type: oauth
+        grantType: client_credentials
+        tokenUrl: https://auth.example.com/oauth/token
+        clientId: '{{A2A_CLIENT_ID}}'
+        clientSecret: '{{A2A_CLIENT_SECRET}}'
+        scopes:
+          - a2a.send
+```
+
+You can still use `headers` for custom headers that are not authentication-specific. If both
+`headers.Authorization` and `auth` produce an `Authorization` header, the `auth` header wins.
 
 ## Request Modes
 
@@ -151,7 +231,7 @@ providers:
         returnImmediately: false
 ```
 
-Promptfoo renders Nunjucks variables in `message`, `headers`, `agentCardUrl`, `url`, and
+Promptfoo renders Nunjucks variables in `message`, `auth`, `headers`, `agentCardUrl`, `url`, and
 `configuration`. It also adds a stable `messageId` and uses `sessionId` as the A2A `contextId` when
 available.
 
@@ -313,8 +393,9 @@ providers:
   - id: a2a
     config:
       agentCardUrl: https://travel-agent.example.com/.well-known/agent-card.json
-      headers:
-        Authorization: Bearer {{A2A_API_KEY}}
+      auth:
+        type: bearer
+        token: '{{A2A_API_KEY}}'
 
 redteam:
   purpose: |

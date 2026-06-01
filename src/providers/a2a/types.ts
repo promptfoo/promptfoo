@@ -1,6 +1,61 @@
 import { z } from 'zod';
 
 const RecordSchema = z.record(z.string(), z.unknown());
+const OAuthScopesSchema = z.union([
+  z.array(z.string()),
+  z.string().transform((value) =>
+    value
+      .split(/[,\s]+/)
+      .map((scope) => scope.trim())
+      .filter(Boolean),
+  ),
+]);
+
+export const A2AAuthSchema = z.union([
+  z
+    .object({
+      type: z.union([z.literal(''), z.literal('none'), z.literal('no_auth')]),
+    })
+    .transform(() => undefined),
+  z.object({
+    token: z.string(),
+    type: z.literal('bearer'),
+  }),
+  z.object({
+    password: z.string(),
+    type: z.literal('basic'),
+    username: z.string(),
+  }),
+  z
+    .object({
+      api_key: z.string().optional(),
+      keyName: z.string().optional(),
+      placement: z.enum(['header', 'query']).optional(),
+      type: z.literal('api_key'),
+      value: z.string().optional(),
+    })
+    .refine((auth) => auth.value || auth.api_key, {
+      message: 'A2A api_key auth requires value or api_key',
+    }),
+  z.object({
+    clientId: z.string(),
+    clientSecret: z.string(),
+    grantType: z.literal('client_credentials').prefault('client_credentials'),
+    scopes: OAuthScopesSchema.optional(),
+    tokenUrl: z.string().optional(),
+    type: z.literal('oauth'),
+  }),
+  z.object({
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    grantType: z.literal('password'),
+    password: z.string(),
+    scopes: OAuthScopesSchema.optional(),
+    tokenUrl: z.string().optional(),
+    type: z.literal('oauth'),
+    username: z.string(),
+  }),
+]);
 
 export const A2APartSchema = z.looseObject({
   text: z.union([z.string(), z.looseObject({ text: z.string().optional() })]).optional(),
@@ -96,6 +151,7 @@ export const A2AAgentCardSchema = z.looseObject({
 export const A2AProviderConfigSchema = z
   .object({
     agentCardUrl: z.string().optional(),
+    auth: A2AAuthSchema.optional(),
     configuration: RecordSchema.optional(),
     headers: z.record(z.string(), z.string()).optional(),
     message: RecordSchema.optional(),
@@ -119,6 +175,7 @@ export type A2AAgentCard = z.infer<typeof A2AAgentCardSchema>;
 export type A2AAgentInterface = z.infer<typeof A2AAgentInterfaceSchema>;
 export type A2AAgentSkill = z.infer<typeof A2AAgentSkillSchema>;
 export type A2AArtifact = z.infer<typeof A2AArtifactSchema>;
+export type A2AAuth = z.infer<typeof A2AAuthSchema>;
 export type A2AMessage = z.infer<typeof A2AMessageSchema>;
 export type A2APart = z.infer<typeof A2APartSchema>;
 export type A2AProviderConfig = z.infer<typeof A2AProviderConfigSchema>;

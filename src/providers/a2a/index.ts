@@ -5,6 +5,12 @@ import { fetchWithTimeout } from '../../util/fetch/index';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import {
+  applyQueryParams,
+  getAuthHeaders,
+  getAuthQueryParams,
+  getOAuthTokenWithExpiry,
+} from '../mcp/util';
 import { getRequestTimeoutMs } from '../shared';
 import { loadTransformModule } from '../transformUtils';
 import { createTransformResponse } from './transforms';
@@ -23,6 +29,11 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/index';
+import type {
+  MCPOAuthClientCredentialsAuth,
+  MCPOAuthPasswordAuth,
+  MCPServerConfig,
+} from '../mcp/types';
 import type { A2ATransformResponseContext } from './transforms';
 import type {
   A2AAgentCard,
@@ -51,6 +62,11 @@ interface A2AEndpoint {
   url: string;
 }
 
+interface A2ARequestAuth {
+  headers: Record<string, string>;
+  queryParams: Record<string, string>;
+}
+
 interface RequestVars extends Record<string, unknown> {
   prompt: string;
 }
@@ -61,6 +77,10 @@ function normalizeBaseUrl(url: string): string {
 
 function appendPath(url: string, path: string): string {
   return `${normalizeBaseUrl(url)}${path}`;
+}
+
+function appendQueryParams(url: string, queryParams: Record<string, string>): string {
+  return applyQueryParams(url, queryParams);
 }
 
 function getTaskState(task?: A2ATask): string | undefined {
@@ -386,10 +406,14 @@ export class A2AProvider implements ApiProvider {
       return undefined;
     }
     const agentCardUrl = renderString(this.config.agentCardUrl, vars, context);
+    const auth = await this.requestAuth(vars, context, agentCardUrl);
     const response = await fetchWithTimeout(
-      agentCardUrl,
+      appendQueryParams(agentCardUrl, auth.queryParams),
       {
-        headers: this.renderHeaders(vars, context),
+        headers: {
+          ...this.renderHeaders(vars, context),
+          ...auth.headers,
+        },
         method: 'GET',
         signal: options?.abortSignal,
       },
@@ -423,10 +447,36 @@ export class A2AProvider implements ApiProvider {
     );
   }
 
+  private async requestAuth(
+    vars: RequestVars,
+    context: CallApiContextParams | undefined,
+    serverUrl: string,
+  ): Promise<A2ARequestAuth> {
+    if (!this.config.auth) {
+      return { headers: {}, queryParams: {} };
+    }
+    const renderedAuth = renderTemplate(this.config.auth, vars, context);
+    const server = { auth: renderedAuth } as MCPServerConfig;
+    const oauthToken =
+      server.auth?.type === 'oauth'
+        ? (
+            await getOAuthTokenWithExpiry(
+              server.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+              serverUrl,
+            )
+          ).accessToken
+        : undefined;
+    return {
+      headers: getAuthHeaders(server, oauthToken),
+      queryParams: getAuthQueryParams(server),
+    };
+  }
+
   private requestHeaders(
     endpoint: A2AEndpoint,
     vars: RequestVars,
     context?: CallApiContextParams,
+    auth: A2ARequestAuth = { headers: {}, queryParams: {} },
     extra?: Record<string, string>,
   ): Record<string, string> {
     return {
@@ -434,8 +484,17 @@ export class A2AProvider implements ApiProvider {
       'A2A-Version': endpoint.protocolVersion,
       'Content-Type': 'application/a2a+json',
       ...this.renderHeaders(vars, context),
+      ...auth.headers,
       ...extra,
     };
+  }
+
+  private requestUrl(
+    endpoint: A2AEndpoint,
+    path: string,
+    auth: A2ARequestAuth = { headers: {}, queryParams: {} },
+  ): string {
+    return appendQueryParams(appendPath(endpoint.url, path), auth.queryParams);
   }
 
   private getTimeoutMs(): number {
@@ -449,11 +508,12 @@ export class A2AProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<A2AFinalResponse> {
+    const auth = await this.requestAuth(vars, context, endpoint.url);
     const response = await fetchWithTimeout(
-      appendPath(endpoint.url, '/message:send'),
+      this.requestUrl(endpoint, '/message:send', auth),
       {
         body: JSON.stringify(body),
-        headers: this.requestHeaders(endpoint, vars, context),
+        headers: this.requestHeaders(endpoint, vars, context, auth),
         method: 'POST',
         signal: options?.abortSignal,
       },
@@ -486,10 +546,11 @@ export class A2AProvider implements ApiProvider {
     const startedAt = Date.now();
     let lastTask: A2ATask | undefined;
     while (Date.now() - startedAt <= this.config.polling.timeoutMs) {
+      const auth = await this.requestAuth(vars, context, endpoint.url);
       const response = await fetchWithTimeout(
-        appendPath(endpoint.url, `/tasks/${encodeURIComponent(taskId)}`),
+        this.requestUrl(endpoint, `/tasks/${encodeURIComponent(taskId)}`, auth),
         {
-          headers: this.requestHeaders(endpoint, vars, context, {
+          headers: this.requestHeaders(endpoint, vars, context, auth, {
             Accept: 'application/a2a+json, application/json',
           }),
           method: 'GET',
@@ -518,11 +579,14 @@ export class A2AProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<A2AFinalResponse> {
+    const auth = await this.requestAuth(vars, context, endpoint.url);
     const response = await fetchWithTimeout(
-      appendPath(endpoint.url, '/message:stream'),
+      this.requestUrl(endpoint, '/message:stream', auth),
       {
         body: JSON.stringify(body),
-        headers: this.requestHeaders(endpoint, vars, context, { Accept: 'text/event-stream' }),
+        headers: this.requestHeaders(endpoint, vars, context, auth, {
+          Accept: 'text/event-stream',
+        }),
         method: 'POST',
         signal: options?.abortSignal,
       },
