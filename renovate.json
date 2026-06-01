@@ -244,6 +244,19 @@
       "groupName": "ModelAudit schema generator"
     },
     {
+      "description": "ModelAudit schema generator: only modelaudit (the top-level package) drives updates. Its transitive pins (pydantic, pydantic-core, and typing helpers) are a matched set that must move together — pydantic enforces an exact pydantic-core pair at import time, and pydantic-core releases ahead of pydantic stable — so an independent bump of any one creates an incompatible pair. They are refreshed by regenerating the schema when modelaudit bumps.",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["scripts/modelaudit_schema_requirements.txt"],
+      "matchPackageNames": [
+        "pydantic",
+        "pydantic-core",
+        "annotated-types",
+        "typing-extensions",
+        "typing-inspection"
+      ],
+      "enabled": false
+    },
+    {
       "description": "LLM provider packages: frequent updates with a ten-day stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
