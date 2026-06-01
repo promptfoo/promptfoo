@@ -75,7 +75,8 @@ function validateLayerDefinition(
       layer.allowedImportPaths.some(
         (allowedImportPath) =>
           typeof allowedImportPath !== 'string' ||
-          !fs.existsSync(path.join(repoRoot, allowedImportPath)),
+          !fs.existsSync(path.join(repoRoot, allowedImportPath)) ||
+          !fs.statSync(path.join(repoRoot, allowedImportPath)).isFile(),
       ))
   ) {
     throw new Error(
