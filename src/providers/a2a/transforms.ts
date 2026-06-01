@@ -17,22 +17,22 @@ export interface A2ATransformResponseContext {
 export function createTransformResponse(
   parser: string | Function | undefined,
 ): (
-  result: A2AFinalResponse,
+  json: A2AFinalResponse,
   text: string,
   context: A2ATransformResponseContext,
 ) => Promise<ProviderResponse> {
   if (!parser) {
-    return async (_result, text) => ({ output: text });
+    return async (_json, text) => ({ output: text });
   }
 
   if (typeof parser === 'function') {
-    return async (result, text, context) => {
+    return async (json, text, context) => {
       try {
-        return normalizeResponseTransformResult(await parser(result, text, context));
+        return normalizeResponseTransformResult(await parser(json, text, context));
       } catch (error) {
         logger.error(
-          `[A2A Provider] Error in response transform function: ${String(error)}. Result: ${safeJsonStringify(
-            result,
+          `[A2A Provider] Error in response transform function: ${String(error)}. JSON: ${safeJsonStringify(
+            json,
           )}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
         );
         throw error;
@@ -47,28 +47,29 @@ export function createTransformResponse(
   }
 
   if (typeof parser === 'string') {
-    return async (result, text, context) => {
+    return async (json, text, context) => {
       try {
         const trimmedParser = parser.trim();
         const isFunctionExpression = /^(async\s+)?(\(.*?\)\s*=>|function\s*\(.*?\))/.test(
           trimmedParser,
         );
         const transformFn = new Function(
-          'result',
+          'json',
           'text',
           'context',
           'process',
+          'result',
           isFunctionExpression
-            ? `return (${trimmedParser})(result, text, context);`
+            ? `return (${trimmedParser})(json, text, context);`
             : `return (${trimmedParser});`,
         );
         return normalizeResponseTransformResult(
-          await transformFn(result, text, context, getProcessShim()),
+          await transformFn(json, text, context, getProcessShim(), json),
         );
       } catch (error) {
         logger.error(
-          `[A2A Provider] Error in response transform: ${String(error)}. Result: ${safeJsonStringify(
-            result,
+          `[A2A Provider] Error in response transform: ${String(error)}. JSON: ${safeJsonStringify(
+            json,
           )}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
         );
         throw new Error(`Failed to transform A2A response: ${String(error)}`);

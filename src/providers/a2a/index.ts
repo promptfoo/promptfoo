@@ -254,7 +254,7 @@ export class A2AProvider implements ApiProvider {
   private readonly providerId: string;
   private readonly transformResponse: Promise<
     (
-      result: A2AFinalResponse,
+      json: A2AFinalResponse,
       text: string,
       context: A2ATransformResponseContext,
     ) => Promise<ProviderResponse>

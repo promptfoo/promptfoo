@@ -390,4 +390,40 @@ describe('A2AProvider', () => {
 
     expect(result.output).toBe('send:original');
   });
+
+  it('supports HTTP-style json variable in string transformResponse', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        task: {
+          id: 'task-1',
+          status: { state: 'TASK_STATE_COMPLETED' },
+          artifacts: [{ parts: [{ text: 'artifact text' }] }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      transformResponse: '({ output: `${json.task.id}:${text}` })',
+    }).callApi('hi');
+
+    expect(result.output).toBe('task-1:artifact text');
+  });
+
+  it('keeps result as an alias in string transformResponse', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        task: {
+          id: 'task-1',
+          status: { state: 'TASK_STATE_COMPLETED' },
+          artifacts: [{ parts: [{ text: 'artifact text' }] }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      transformResponse: '({ output: result.task.id })',
+    }).callApi('hi');
+
+    expect(result.output).toBe('task-1');
+  });
 });

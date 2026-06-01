@@ -90,7 +90,7 @@ providers:
   - id: a2a:https://agent.example.com/a2a/v1
     config:
       transformResponse: |
-        (result, text, context) => ({
+        (json, text, context) => ({
           output: text,
           metadata: { taskId: context.task?.id, mode: context.mode },
         })
@@ -98,8 +98,10 @@ providers:
 
 The transform receives:
 
-- `result`: `{ message, task, events, raw }`
+- `json`: `{ message, task, events, raw }`
 - `text`: promptfoo's default extracted output
 - `context`: `{ message, task, events, raw, mode }`
+
+`result` is also available as an alias for `json` in inline JavaScript expressions.
 
 Return a string or a provider response object such as `{ output, metadata }`.
