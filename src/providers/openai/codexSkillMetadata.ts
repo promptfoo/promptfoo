@@ -103,11 +103,7 @@ export function buildCodexSkillMetadata(
     return undefined;
   }
 
-  const attemptedSkillCalls = extractCodexSkillCallsFromItems(
-    items,
-    skillRootPrefixes,
-    itemAdapter,
-  );
+  const attemptedSkillCalls = extractCodexSkillCallsFromItems(items, skillRootPrefixes, itemAdapter);
   const skillCalls = extractCodexSkillCallsFromItems(items, skillRootPrefixes, itemAdapter, {
     requireSuccessfulCommand: true,
   });

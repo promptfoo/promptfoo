@@ -1123,7 +1123,9 @@ export default class Eval {
         sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
         sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        sql`json_extract(metadata, '$') LIKE ${searchPattern}`,
+        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
+        // (trace linkage) so a query can't match on internal data the UI never shows.
+        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
       ];

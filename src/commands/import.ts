@@ -340,10 +340,13 @@ function remapImportedResultTraceLinkage(
   return results.map((result) => {
     const importedTraceId = result.traceId && importedTraceIds.get(result.traceId);
     if (importedTraceId) {
+      // Strip any linkage already embedded in metadata (e.g. from a hand-crafted or legacy
+      // file); the correct remapped linkage is re-applied by persistTraceMetadata on write.
       return {
         ...result,
         traceId: importedTraceId,
         evaluationId: evalId,
+        metadata: stripTraceLinkageFromMetadata(result.metadata),
       };
     }
 
