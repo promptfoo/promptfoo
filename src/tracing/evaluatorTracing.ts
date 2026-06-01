@@ -9,6 +9,7 @@ import type { InternalEvaluateOptions } from '../types/internal';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
+let otlpReceiverStartPromise: Promise<void> | null = null;
 const DEFAULT_OTLP_ACCEPT_FORMATS = ['json', 'protobuf'] as const;
 
 function normalizeOtlpAcceptFormats(
@@ -28,6 +29,7 @@ function normalizeOtlpAcceptFormats(
  */
 export function resetTracingState(): void {
   otlpReceiverStarted = false;
+  otlpReceiverStartPromise = null;
   logger.debug('[EvaluatorTracing] Tracing state reset');
 }
 
@@ -98,16 +100,32 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     const redactAttributes = httpTracing.redactAttributes;
 
     if (otlpReceiverStarted) {
-      const { updateOTLPReceiverOptions } = await import('./otlpReceiver');
-      updateOTLPReceiverOptions(acceptFormats, { commandToolNames, redactAttributes });
-      logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
+      logger.debug(
+        '[EvaluatorTracing] OTLP receiver already started; preserving active receiver defaults',
+      );
       return;
+    }
+
+    while (otlpReceiverStartPromise !== null) {
+      const pendingStart = otlpReceiverStartPromise;
+      try {
+        await pendingStart;
+      } catch {
+        // The initiating evaluation applies its failure policy. A waiter may retry below.
+      }
+
+      if (otlpReceiverStarted) {
+        logger.debug(
+          '[EvaluatorTracing] OTLP receiver already started; preserving active receiver defaults',
+        );
+        return;
+      }
     }
 
     telemetry.record('feature_used', {
       feature: 'tracing',
     });
-    try {
+    const startPromise = (async () => {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
       const port = httpTracing.port || 4318;
@@ -123,6 +141,11 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
       );
+    })();
+    otlpReceiverStartPromise = startPromise;
+
+    try {
+      await startPromise;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
@@ -135,6 +158,10 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
         );
       }
       logger.error(`[EvaluatorTracing] Failed to start OTLP receiver: ${message}`);
+    } finally {
+      if (otlpReceiverStartPromise === startPromise) {
+        otlpReceiverStartPromise = null;
+      }
     }
   } else {
     if (otlpReceiverStarted) {

@@ -2200,7 +2200,10 @@ export class HttpProvider implements ApiProvider {
     while (this.tokenRefreshLocks.has(cacheKey)) {
       const refreshedToken = await this.waitForInFlightTokenRefresh(cacheKey);
       if (refreshedToken) {
-        return refreshedToken;
+        const validCachedToken = this.getValidCachedToken(cacheKey);
+        if (validCachedToken) {
+          return validCachedToken;
+        }
       }
     }
 

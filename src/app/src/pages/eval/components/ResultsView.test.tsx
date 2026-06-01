@@ -434,6 +434,29 @@ describe('ResultsView Share Button', () => {
     });
   });
 
+  it('falls back to the loaded eval id when editing and rerunning a redacted config', async () => {
+    const tableStore = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...tableStore,
+      evalId: '',
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="fallback-eval-id"
+      />,
+    );
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+      state: { sourceEvalId: 'fallback-eval-id' },
+    });
+  });
+
   it('hides eval actions while config is loading', () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',

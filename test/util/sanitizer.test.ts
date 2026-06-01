@@ -108,39 +108,87 @@ describe('sanitizeObject', () => {
       });
     });
 
-    it('should restore reordered Azure Blob SAS URIs by matching stored values', () => {
+    it('restores array SAS tokens by value when entries are reordered or inserted', () => {
+      const stored = {
+        tests: [
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+          'az://account/container/b.yaml?sp=r&sig=secret-b',
+        ],
+      };
+
+      // The user reordered the entries and inserted a new (non-Azure) one before
+      // re-running, so positions no longer line up with the stored array.
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            'inline test case',
+            'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+            'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          'inline test case',
+          'az://account/container/b.yaml?sp=r&sig=secret-b',
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+        ],
+      });
+    });
+
+    it('restores nested array SAS tokens by value when object entries are reordered', () => {
       const stored = {
         tests: [
           {
-            description: 'first',
-            vars: { input: 'az://account/container/first.yaml?sp=r&sig=first-secret' },
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
           },
           {
-            description: 'second',
-            vars: { input: 'az://account/container/second.yaml?sp=r&sig=second-secret' },
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
           },
         ],
       };
 
-      expect(
-        restoreAzureBlobSasTokens(
-          {
-            tests: [
-              {
-                description: 'edited second',
-                vars: {
-                  input: 'az://account/container/second.yaml?sp=r&sig=%5BREDACTED%5D',
-                },
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            {
+              vars: {
+                suite: 'b',
+                file: 'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
               },
-            ],
-          },
-          stored,
-        ),
-      ).toEqual({
+            },
+            {
+              vars: {
+                suite: 'a',
+                file: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
         tests: [
           {
-            description: 'edited second',
-            vars: { input: 'az://account/container/second.yaml?sp=r&sig=second-secret' },
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+          {
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
           },
         ],
       });
@@ -160,6 +208,83 @@ describe('sanitizeObject', () => {
           },
         ),
       ).toEqual({ tests: [redactedUri] });
+    });
+
+    it('restores nested array SAS tokens when unrelated object fields are edited', () => {
+      const stored = {
+        tests: [
+          {
+            description: 'old description',
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+          {
+            description: 'second test',
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+        ],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            {
+              description: 'edited description',
+              vars: {
+                suite: 'b',
+                file: 'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+            {
+              description: 'old description',
+              vars: {
+                suite: 'a',
+                file: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          {
+            description: 'edited description',
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+          {
+            description: 'old description',
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+        ],
+      });
+    });
+
+    it('does not restore an entry the user edited to point at a different blob', () => {
+      const stored = {
+        tests: ['az://account/container/a.yaml?sp=r&sig=secret-a'],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        { tests: ['az://account/container/changed.yaml?sp=r&sig=%5BREDACTED%5D'] },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: ['az://account/container/changed.yaml?sp=r&sig=%5BREDACTED%5D'],
+      });
     });
   });
 

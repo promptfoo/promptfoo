@@ -660,7 +660,7 @@ describe('TraceStore', () => {
 
       await traceStore.deleteOldTraces(retentionDays);
 
-      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.transaction).toHaveBeenCalledWith(expect.any(Function));
       expect(mockDb.delete).toHaveBeenCalledTimes(2);
       expect(mockDeleteChain.where).toHaveBeenCalledTimes(2);
       expect(mockDeleteChain.run).toHaveBeenCalledTimes(2);

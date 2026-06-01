@@ -541,7 +541,7 @@ describe('evaluatorTracing', () => {
       expect(deleteOldTraces).toHaveBeenCalledWith(7);
     });
 
-    it('should refresh receiver options when tracing is already running', async () => {
+    it('should not mutate receiver defaults when another traced evaluation is already running', async () => {
       await startOtlpReceiverIfNeeded({
         providers: [],
         prompts: [],
@@ -570,10 +570,63 @@ describe('evaluatorTracing', () => {
       } as unknown as TestSuite);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
-      expect(mockUpdateOTLPReceiverOptions).toHaveBeenCalledWith(['json'], {
+      expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
+    });
+
+    it('should preserve the first receiver defaults during overlapping startup', async () => {
+      let resolveStart!: () => void;
+      mockStartOTLPReceiver.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveStart = resolve;
+          }),
+      );
+
+      const firstStart = startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+      const secondStart = startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['shell'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['protobuf'],
+              redactAttributes: ['cookie'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+
+      await vi.waitFor(() => expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1));
+      resolveStart();
+      await Promise.all([firstStart, secondStart]);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json'], {
         commandToolNames: ['bash'],
         redactAttributes: ['authorization'],
       });
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
     });
   });
 });

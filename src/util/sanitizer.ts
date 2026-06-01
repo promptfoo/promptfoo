@@ -2,9 +2,6 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
-
-import { isDeepStrictEqual } from 'node:util';
-
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
@@ -256,53 +253,131 @@ export function redactAzureBlobSasTokens<T>(value: T): T {
   return Object.fromEntries(redactedEntries) as T;
 }
 
-/**
- * Preserve stored SAS credentials when a sanitized config is written back unchanged.
- * If the caller edits the resource or supplies a replacement token, retain its value.
- */
-export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T {
+type RestoreResult<T> = {
+  value: T;
+  restored: boolean;
+};
+
+function collectStoredAzureBlobSasTokens(
+  value: unknown,
+  tokensByRedactedUri = new Map<string, string | null>(),
+): Map<string, string | null> {
+  if (typeof value === 'string') {
+    const redacted = redactAzureBlobSasToken(value);
+    if (redacted !== value) {
+      const storedValue = tokensByRedactedUri.get(redacted);
+      if (storedValue === undefined) {
+        tokensByRedactedUri.set(redacted, value);
+      } else if (storedValue !== value) {
+        // Two stored secrets collapse to the same redacted URI. Leave future
+        // submissions redacted rather than guessing which credential to reuse.
+        tokensByRedactedUri.set(redacted, null);
+      }
+    }
+    return tokensByRedactedUri;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+    }
+    return tokensByRedactedUri;
+  }
+
+  if (!value || typeof value !== 'object' || isClassInstance(value)) {
+    return tokensByRedactedUri;
+  }
+
+  for (const item of Object.values(value)) {
+    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+  }
+  return tokensByRedactedUri;
+}
+
+function restoreAzureBlobSasTokensFromMap<T>(
+  value: T,
+  tokensByRedactedUri: ReadonlyMap<string, string | null>,
+): RestoreResult<T> {
+  if (typeof value === 'string') {
+    const storedValue = tokensByRedactedUri.get(value);
+    return storedValue == null
+      ? { value, restored: false }
+      : { value: storedValue as T, restored: true };
+  }
+
+  if (Array.isArray(value)) {
+    let restored = false;
+    const restoredItems = value.map((item) => {
+      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri);
+      restored ||= result.restored;
+      return result.value;
+    });
+    return restored ? { value: restoredItems as T, restored } : { value, restored };
+  }
+
+  if (!value || typeof value !== 'object' || isClassInstance(value)) {
+    return { value, restored: false };
+  }
+
+  let restored = false;
+  const restoredEntries = Object.entries(value).map(([key, item]) => {
+    const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri);
+    restored ||= result.restored;
+    return [key, result.value];
+  });
+  return restored
+    ? { value: Object.fromEntries(restoredEntries) as T, restored }
+    : { value, restored };
+}
+
+function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
   if (typeof value === 'string') {
     if (typeof storedValue === 'string' && value === redactAzureBlobSasToken(storedValue)) {
-      return storedValue as T;
+      return { value: storedValue as T, restored: storedValue !== value };
     }
-    return value;
+    return { value, restored: false };
   }
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    const availableStoredItems = new Set(storedItems.keys());
-
-    return value.map((item) => {
-      const candidates = [...availableStoredItems]
-        .map((index) => ({
-          index,
-          restored: restoreAzureBlobSasTokens(item, storedItems[index]),
-        }))
-        .filter(({ restored }) => !isDeepStrictEqual(restored, item));
-
-      if (candidates.length !== 1) {
-        return restoreAzureBlobSasTokens(item, undefined);
-      }
-
-      const [{ index, restored }] = candidates;
-      availableStoredItems.delete(index);
-      return restored;
-    }) as T;
+    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
+    let restored = false;
+    const restoredItems = value.map((item) => {
+      // Array positions are not stable across edits. Restore by URI identity so
+      // reorders and deletions keep the matching secret while ambiguous URIs
+      // remain redacted.
+      const result = restoreAzureBlobSasTokensFromMap(item, storedTokensByRedactedUri);
+      restored ||= result.restored;
+      return result.value;
+    });
+    return restored ? { value: restoredItems as T, restored } : { value, restored };
   }
 
   if (!value || typeof value !== 'object' || isClassInstance(value)) {
-    return value;
+    return { value, restored: false };
   }
 
   const storedObject =
     storedValue && typeof storedValue === 'object' && !Array.isArray(storedValue)
       ? (storedValue as Record<string, unknown>)
       : {};
-  const restoredEntries = Object.entries(value).map(([key, item]) => [
-    key,
-    restoreAzureBlobSasTokens(item, storedObject[key]),
-  ]);
-  return Object.fromEntries(restoredEntries) as T;
+  let restored = false;
+  const restoredEntries = Object.entries(value).map(([key, item]) => {
+    const result = restoreAzureBlobSasTokensWithResult(item, storedObject[key]);
+    restored ||= result.restored;
+    return [key, result.value];
+  });
+  return restored
+    ? { value: Object.fromEntries(restoredEntries) as T, restored }
+    : { value, restored };
+}
+
+/**
+ * Preserve stored SAS credentials when a sanitized config is written back unchanged.
+ * If the caller edits the resource or supplies a replacement token, retain its value.
+ */
+export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T {
+  return restoreAzureBlobSasTokensWithResult(value, storedValue).value;
 }
 
 /**
