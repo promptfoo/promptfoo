@@ -238,6 +238,12 @@
       "schedule": ["before 6am on Monday"]
     },
     {
+      "description": "Keep ModelAudit schema generator pins current",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["scripts/modelaudit_schema_requirements.txt"],
+      "groupName": "ModelAudit schema generator"
+    },
+    {
       "description": "LLM provider packages: frequent updates with a ten-day stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
