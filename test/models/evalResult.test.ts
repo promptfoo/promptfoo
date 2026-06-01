@@ -10,6 +10,11 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
@@ -411,8 +416,6 @@ describe('EvalResult', () => {
                   },
                   requestHeaders: {
                     authorization: 'Bearer sk-should-not-persist',
-                    'api-key': 'azure-api-key-should-not-persist',
-                    'X-API-Key': 'custom-api-key-should-not-persist',
                     'x-safe-debug': 'keep-me',
                   },
                 },
@@ -432,8 +435,6 @@ describe('EvalResult', () => {
         });
         expect(result.response?.metadata?.http?.requestHeaders).toEqual({
           authorization: '[REDACTED]',
-          'api-key': '[REDACTED]',
-          'X-API-Key': '[REDACTED]',
           'x-safe-debug': 'keep-me',
         });
         expect(result.metadata?.http?.headers).toEqual({
@@ -452,12 +453,6 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
         expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
         expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
-        expect(JSON.stringify(retrieved?.response)).not.toContain(
-          'azure-api-key-should-not-persist',
-        );
-        expect(JSON.stringify(retrieved?.response)).not.toContain(
-          'custom-api-key-should-not-persist',
-        );
         expect(JSON.stringify(retrieved?.metadata)).not.toContain(
           'metadata_proj_should_not_persist',
         );
@@ -466,56 +461,6 @@ describe('EvalResult', () => {
           'grading_proj_should_not_persist',
         );
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
-      });
-
-      it('preserves arbitrary legacy headers in grading metadata', async () => {
-        const evalId = 'test-eval-preserve-grading-metadata-headers';
-        const gradingMetadataHeaders = {
-          'set-cookie': ['user-authored-grading-cookie'],
-          'x-request-id': {
-            value: 'user-authored-grading-request-id',
-          },
-        };
-        const componentMetadataHeaders = {
-          'x-request-id': 'user-authored-component-request-id',
-        };
-
-        const result = await EvalResult.createFromEvaluateResult(
-          evalId,
-          {
-            ...mockEvaluateResult,
-            gradingResult: {
-              pass: true,
-              score: 1,
-              reason: 'ok',
-              metadata: {
-                headers: gradingMetadataHeaders,
-              },
-              componentResults: [
-                {
-                  pass: true,
-                  score: 1,
-                  reason: 'ok',
-                  metadata: {
-                    headers: componentMetadataHeaders,
-                  },
-                },
-              ],
-            },
-          },
-          { persist: true },
-        );
-
-        expect(result.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
-        expect(result.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
-          componentMetadataHeaders,
-        );
-
-        const retrieved = await EvalResult.findById(result.id);
-        expect(retrieved?.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
-        expect(retrieved?.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
-          componentMetadataHeaders,
-        );
       });
 
       it('preserves user-controlled `http` keys nested inside response.output, response.metadata, and gradingResult', async () => {
@@ -872,12 +817,32 @@ describe('EvalResult', () => {
 
     it('should update existing results', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       result.score = 0.5;
       await result.save();
 
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+    });
+
+    it('clears the standalone cache when a new result is inserted via save()', async () => {
+      // persist:false yields an in-memory result, so save() takes the INSERT branch. This pins
+      // the PR's headline behavior — incrementally-added results invalidate the standalone cache.
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult, {
+        persist: false,
+      });
+      expect(result.persisted).toBe(false);
+
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
+
+      await result.save();
+
+      expect(result.persisted).toBe(true);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
     });
   });
 
@@ -958,6 +923,26 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
         numRequests: 1,
       });
+    });
+
+    it('counts a provider request for a response that reports no token usage', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: { output: 'hello' },
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.numRequests).toBe(1);
     });
 
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -12,7 +13,11 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { sanitizeResultForJsonlArtifact } from '../models/evalResult';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -28,32 +33,26 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
 }
 
-export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: string[]): string[] {
+// Every output path is always finalized post-run now (JSONL included), so nothing is
+// filtered. This only emits a heads-up when a row failed to persist, so operators know the
+// JSONL artifact was reconciled from the streamed rows and the eval record (the degraded
+// recovery path in `writeOutput`) rather than rebuilt cleanly from the database.
+export function warnOnDegradedJsonlRecovery(evalRecord: Eval, outputPaths: string[]): void {
   if (!evalRecord.resultPersistenceFailed) {
-    return outputPaths;
+    return;
   }
 
   if (outputPaths.some((outputPath) => getOutputFileFormat(outputPath) === 'jsonl')) {
     logger.warn(
-      '[Output] Finalizing JSONL from streamed rows and canonical updates because one or more rows failed to persist',
+      '[Output] Reconciling JSONL from streamed rows and the eval record because one or more rows failed to persist',
     );
   }
-  return outputPaths;
-}
-
-function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
-}
-
-function getJsonlResultKey(result: EvaluateResult): string {
-  return `${result.testIdx}:${result.promptIdx}`;
 }
 
 async function appendJsonlResults(outputPath: string, results: EvaluateResult[]) {
@@ -67,35 +66,97 @@ async function appendJsonlResults(outputPath: string, results: EvaluateResult[])
   await fsPromises.appendFile(outputPath, text);
 }
 
-async function readStreamedJsonlResults(outputPath: string) {
+// Rewrite a JSONL artifact atomically: build the full file in a sibling temp file, then
+// rename it over the destination. A crash/interruption mid-rewrite leaves the temp file
+// (cleaned up below) rather than a truncated or empty destination — the streamed file at
+// `outputPath` stays intact until the rename succeeds. `produce` is handed an `append`
+// callback that writes sanitized rows to the temp file.
+//
+// `rename` replaces the destination's inode, so we copy the existing file's permission bits
+// onto the temp file first — otherwise a reused path the operator had restricted (e.g. 0600)
+// would silently widen to the umask default. The inode swap itself is inherent to atomic
+// writes: a hardlink to / inode-watcher on the old path will track the replaced file, not the
+// new one.
+async function rewriteJsonlAtomically(
+  outputPath: string,
+  produce: (append: (results: EvaluateResult[]) => Promise<void>) => Promise<void>,
+): Promise<void> {
+  const tmpPath = `${outputPath}.${randomUUID()}.tmp`;
+  const existingMode = await fsPromises
+    .stat(outputPath)
+    .then((stats) => stats.mode & 0o777)
+    .catch(() => undefined);
   try {
-    return (await fsPromises.readFile(outputPath, 'utf8'))
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as EvaluateResult);
+    // Create (or truncate) the temp file so an eval that produced no rows still yields an
+    // empty artifact, matching the truncate-then-write behavior of the other formats.
+    await fsPromises.writeFile(tmpPath, '');
+    await produce((results) => appendJsonlResults(tmpPath, results));
+    if (existingMode !== undefined) {
+      await fsPromises.chmod(tmpPath, existingMode);
+    }
+    await fsPromises.rename(tmpPath, outputPath);
+  } catch (error) {
+    await fsPromises.rm(tmpPath, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateResult[]> {
+  let contents: string;
+  try {
+    contents = await fsPromises.readFile(outputPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];
     }
     throw error;
   }
+
+  // Parse each line defensively. This recovery path exists precisely for runs that were
+  // interrupted (crash / kill / partial flush), so the streamed file may end in a
+  // truncated row. Skipping a malformed line — rather than aborting the whole
+  // finalization — keeps the recoverable rows; the eval record and `getFinalJsonlResults()`
+  // backfill the rest in `collectJsonlResultsAfterPersistenceFailure`.
+  const results: EvaluateResult[] = [];
+  const lines = contents.split(/\r?\n/).filter(Boolean);
+  for (const [index, line] of lines.entries()) {
+    try {
+      results.push(JSON.parse(line) as EvaluateResult);
+    } catch (error) {
+      logger.warn(
+        `[Output] Skipping malformed streamed JSONL row at ${outputPath}:${index + 1} during recovery: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return results;
 }
 
+// Rebuild the JSONL rows after a mid-run persistence failure by merging three sources,
+// keyed by `testIdx:promptIdx` with later sources winning:
+//   1. the rows already streamed to disk (the base, including any that failed to persist),
+//   2. the canonical database rows (skipping keys that failed to persist — the DB copy is
+//      missing or stale for those), then
+//   3. the in-memory final rows captured after the failure (timeout / deferred-grading
+//      updates that never streamed), which are authoritative.
 async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
   const finalResults = new Map<string, EvaluateResult>();
+  const put = (result: EvaluateResult) => finalResults.set(getResultIndexKey(result), result);
+
   for (const result of await readStreamedJsonlResults(outputPath)) {
-    finalResults.set(getJsonlResultKey(result), result);
+    put(result);
   }
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
-      const evaluateResult = toEvaluateResult(result);
+      const evaluateResult = asEvaluateResult(result);
       if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
-        finalResults.set(getJsonlResultKey(evaluateResult), evaluateResult);
+        put(evaluateResult);
       }
     }
   }
   for (const result of evalRecord.getFinalJsonlResults()) {
-    finalResults.set(getJsonlResultKey(result), result);
+    put(result);
   }
   return Array.from(finalResults.values());
 }
@@ -504,17 +565,18 @@ export async function writeOutput(
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     if (evalRecord.resultPersistenceFailed) {
+      // Read the streamed rows (from `outputPath`) before any truncation, then rebuild
+      // the reconciled set into a temp file and atomically swap it over the destination.
       const finalResults = await collectJsonlResultsAfterPersistenceFailure(outputPath, evalRecord);
-      await fsPromises.writeFile(outputPath, '');
-      await appendJsonlResults(outputPath, finalResults);
+      await rewriteJsonlAtomically(outputPath, (append) => append(finalResults));
       return;
     }
 
-    // Truncate file first for consistent behavior with other formats
-    await fsPromises.writeFile(outputPath, '');
-    for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      await appendJsonlResults(outputPath, batchResults.map(toEvaluateResult));
-    }
+    await rewriteJsonlAtomically(outputPath, async (append) => {
+      for await (const batchResults of evalRecord.fetchResultsBatched()) {
+        await append(batchResults.map(asEvaluateResult));
+      }
+    });
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);

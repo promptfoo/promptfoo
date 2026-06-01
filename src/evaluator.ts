@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
 import readline from 'readline';
 
 import async from 'async';
@@ -17,12 +16,15 @@ import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
-import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { sanitizeResultForJsonlArtifact } from './models/evalResult';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -95,6 +97,7 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGradingRequest,
   accumulateResponseTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
@@ -549,11 +552,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage.assertions) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
-  row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
-
-  if (checkResult.tokensUsed) {
-    accumulateAssertionTokenUsage(row.tokenUsage.assertions, checkResult.tokensUsed);
-  }
+  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed);
   row.gradingResult = checkResult;
 }
 
@@ -968,28 +967,6 @@ function sanitizeResponseMetadata(response: ProviderResponse) {
   }
   const sanitizedMetadata = safeJsonStringify(response.metadata);
   response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
-}
-
-function synchronizeLegacyTransportHeaders(
-  originalMetadata: Record<string, unknown> | undefined,
-  originalResponseMetadata: Record<string, unknown> | undefined,
-  hookMetadata: Record<string, unknown> | undefined,
-  hookResponseMetadata: Record<string, unknown> | undefined,
-) {
-  const originalHeaders = originalMetadata?.headers;
-  if (
-    originalHeaders === undefined ||
-    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
-    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
-  ) {
-    return hookMetadata;
-  }
-
-  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
-  if (hookResponseMetadata?.headers === undefined) {
-    return metadataWithoutHeaders;
-  }
-  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
 function updateConversationHistory({
@@ -3172,11 +3149,14 @@ class Evaluator {
     }
   }
 
+  // Buffer the authoritative copy of a row only once a DB persistence failure has been
+  // observed. Before any failure, rows are recoverable from the streamed JSONL file and
+  // the database during finalization; after a failure we can no longer trust the DB, so
+  // we keep the in-memory copy of every subsequent row (timeout / deferred-grading rows
+  // that never stream) to override stale entries in the recovery merge.
   private trackFinalJsonlResult(row: EvalResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.evalRecord.resultPersistenceFailed) {
-      this.evalRecord.recordFinalJsonlResult(
-        'toEvaluateResult' in row ? row.toEvaluateResult() : row,
-      );
+      this.evalRecord.recordFinalJsonlResult(asEvaluateResult(row));
     }
   }
 
@@ -3323,8 +3303,6 @@ class Evaluator {
       // so in-place mutations don't corrupt the row on hook failure.
       if (context.testSuite.extensions?.length) {
         try {
-          const originalMetadata = row.metadata;
-          const originalResponseMetadata = row.response?.metadata;
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,
             result: {
@@ -3339,12 +3317,7 @@ class Evaluator {
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          row.metadata = synchronizeLegacyTransportHeaders(
-            originalMetadata,
-            originalResponseMetadata,
-            afterEachOut.result.metadata,
-            afterEachOut.result.response?.metadata,
-          );
+          row.metadata = afterEachOut.result.metadata;
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;
           }
@@ -3825,7 +3798,6 @@ class Evaluator {
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -3852,7 +3824,6 @@ class Evaluator {
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
     await this.evalRecord.addPrompts(prompts);
-    updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
 
@@ -4124,10 +4095,24 @@ class Evaluator {
     }
   }
 
-  private async getResultsToCompare(testIdx: number) {
-    return this.evalRecord.persisted
-      ? this.evalRecord.fetchResultsByTestIdx(testIdx)
+  private async getResultsToCompare(testIdx: number): Promise<EvalResult[]> {
+    const base = this.evalRecord.persisted
+      ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
       : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+    if (!this.evalRecord.resultPersistenceFailed) {
+      return base;
+    }
+    // A row that failed to persist is absent from the database (and from `results`), so it
+    // would otherwise be excluded from the comparison — skewing the winner for its siblings
+    // and leaving the failed row with stale, pre-comparison grading. Merge it back in.
+    const failed = await this.evalRecord.getFailedResultsByTestIdx(testIdx);
+    if (failed.length === 0) {
+      return base;
+    }
+    const seen = new Set(base.map(getResultIndexKey));
+    return [...base, ...failed.filter((r) => !seen.has(getResultIndexKey(r)))].sort(
+      (a, b) => a.promptIdx - b.promptIdx,
+    );
   }
 
   private getComparisonCallApiContext(
@@ -4147,6 +4132,38 @@ class Evaluator {
     };
   }
 
+  // Shared tail for the comparison graders: record the pass/score transition, capture the
+  // canonical row for JSONL finalization, and persist (unless this row already failed to
+  // persist, in which case re-saving would just re-throw). `wasSuccess`/`wasScore` must be
+  // captured by the caller before its merge mutates `result`.
+  private async finalizeComparisonGrading({
+    gradingResult,
+    metrics,
+    result,
+    wasSuccess,
+    wasScore,
+  }: {
+    gradingResult: GradingResult;
+    metrics: CompletedPrompt['metrics'] | undefined;
+    result: EvalResult;
+    wasSuccess: boolean;
+    wasScore: number;
+  }) {
+    this.updateComparisonStats(
+      result,
+      gradingResult.pass,
+      gradingResult.reason || '',
+      gradingResult.tokensUsed,
+      wasSuccess,
+      wasScore,
+      metrics,
+    );
+    this.trackFinalJsonlResult(result);
+    if (this.evalRecord.persisted && !this.evalRecord.hasResultPersistenceFailure(result)) {
+      await result.save();
+    }
+  }
+
   private async applySelectBestGradingResult({
     gradingResult,
     metrics,
@@ -4159,19 +4176,7 @@ class Evaluator {
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeSelectBestGradingResult(result, gradingResult, this.stats.tokenUsage);
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-    );
-    this.trackFinalJsonlResult(result);
-    if (this.evalRecord.persisted) {
-      await result.save();
-    }
+    await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
   private async applyMaxScoreGradingResult({
@@ -4186,19 +4191,7 @@ class Evaluator {
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeMaxScoreGradingResult(result, gradingResult);
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-    );
-    this.trackFinalJsonlResult(result);
-    if (this.evalRecord.persisted) {
-      await result.save();
-    }
+    await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
   private async finalizeEvaluation({
@@ -4272,7 +4265,6 @@ class Evaluator {
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
     }
-    updateSignalFile(this.evalRecord.id);
   }
 
   private async addMaxDurationTimeoutResults({
@@ -4311,10 +4303,7 @@ class Evaluator {
     }
 
     const allResults = await this.evalRecord.getResults();
-    const resultsForExtension: EvaluateResult[] = allResults.map(
-      (result): EvaluateResult =>
-        'toEvaluateResult' in result ? result.toEvaluateResult() : result,
-    );
+    const resultsForExtension: EvaluateResult[] = allResults.map(asEvaluateResult);
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
@@ -4695,6 +4684,10 @@ class Evaluator {
       evaluationError = error;
       throw error;
     } finally {
+      // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
+      // teardown below, so the streamed file is fully flushed before the post-run rewrite
+      // reads it back and the file handle is released promptly. allSettled so one writer's
+      // close failure neither blocks cleanup nor masks another writer's error.
       const writerCloseResults = await Promise.allSettled(
         this.fileWriters.map((writer) => writer.close()),
       );
@@ -4754,6 +4747,8 @@ class Evaluator {
       } finally {
         if (writerCloseErrors.length > 0) {
           logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
+          // Only surface a writer-close failure when nothing else failed, so the original
+          // evaluation/cleanup error is never masked by a secondary I/O error.
           if (evaluationError === undefined && cleanupError === undefined) {
             throw writerCloseErrors.length === 1
               ? writerCloseErrors[0]

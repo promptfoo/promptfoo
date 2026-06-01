@@ -58,6 +58,10 @@ export function shouldCopyDrizzlePath(src: string): boolean {
 const REQUIRED_BUILD_OUTPUTS = [
   'dist/src/entrypoint.js', // CLI entry (Node version check wrapper)
   'dist/src/main.js', // CLI main module
+  'dist/src/contracts.js', // ESM contracts subpath
+  'dist/src/contracts.cjs', // CJS contracts subpath
+  'dist/src/contracts.d.ts', // ESM contracts declarations
+  'dist/src/contracts.d.cts', // CJS contracts declarations
   'dist/src/index.js', // ESM library entry
   'dist/src/index.cjs', // CJS library entry
   'dist/src/server/index.js', // Server entry

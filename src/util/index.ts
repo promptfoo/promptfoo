@@ -23,7 +23,7 @@ export {
 // Output operations
 export {
   createOutputMetadata,
-  filterOutputPathsAfterStreaming,
+  warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from './output';

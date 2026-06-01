@@ -40,9 +40,9 @@ import {
 } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import {
-  filterOutputPathsAfterStreaming,
   printBorder,
   setupEnv,
+  warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
 import invariant from '../util/invariant';
@@ -530,6 +530,8 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -538,7 +540,7 @@ export async function doEval(
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
       cmdObj.filterPattern !== undefined ||
-      cmdObj.filterSample !== undefined;
+      filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
@@ -557,7 +559,8 @@ export async function doEval(
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
-        sample: cmdObj.filterSample,
+        sample: filterSample,
+        sampleSeed: filterSampleSeed,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
@@ -888,8 +891,9 @@ export async function doEval(
 
     const { outputPath } = config;
 
-    // JSONL is streamed during evaluation, then rewritten from the completed eval so
-    // deferred grading, timeout rows, and persisted redactions are reflected on disk.
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0,
     );
@@ -990,10 +994,10 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
-    const outputPaths = filterOutputPathsAfterStreaming(evalRecord, paths);
-    if (outputPaths.length) {
-      await writeMultipleOutputs(outputPaths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${outputPaths.join(', ')}`));
+    warnOnDegradedJsonlRecovery(evalRecord, paths);
+    if (paths.length) {
+      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 
     telemetry.record('command_used', {
@@ -1224,6 +1228,7 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
+    .option('--filter-sample-seed <number>', 'Numeric seed used to make --filter-sample repeatable')
     .option(
       '--filter-failing <path or id>',
       'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',

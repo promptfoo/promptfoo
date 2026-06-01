@@ -8,12 +8,21 @@ import {
   recalculatePromptMetrics,
 } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
 import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
 
 /** Generate a unique eval ID to avoid UNIQUE constraint collisions when tests run in the same second */
 function uniqueEvalId(): string {
@@ -180,6 +189,7 @@ describe('retry command', () => {
 
       expect(remaining).toHaveLength(1);
       expect(remaining[0].id).toBe(`${evalRecord.id}-del-2`);
+      expect(updateSignalFile).toHaveBeenCalledWith(evalRecord.id);
     });
 
     it('should invalidate the cached total row count after deleting results', async () => {
