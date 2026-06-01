@@ -1081,6 +1081,37 @@ describe('OTLPReceiver', () => {
       expect((spans as any[])[0].name).toBe('agent.message');
     });
 
+    it('redacts a log body copied into the fallback span name', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        redactAttributes: ['otel.log.body'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          body: { stringValue: 'secret agent message' },
+        },
+      ]);
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0]).toEqual(
+        expect.objectContaining({
+          name: '[REDACTED]',
+          attributes: expect.objectContaining({
+            'otel.log.body': '[REDACTED]',
+          }),
+        }),
+      );
+    });
+
     it('rejects non-JSON content types on /v1/logs', async () => {
       await request(receiver.getApp())
         .post('/v1/logs')
