@@ -55,8 +55,15 @@ describe('GoogleAuthManager', () => {
     mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
   });
 
+  // Captured once during collection so afterEach can guarantee no test leaks a patched
+  // process.emitWarning into the next one (the suppression helper swaps it process-globally).
+  const realEmitWarning = process.emitWarning;
+
   afterEach(() => {
     vi.clearAllMocks();
+    if (process.emitWarning !== realEmitWarning) {
+      process.emitWarning = realEmitWarning;
+    }
   });
 
   describe('getApiKey', () => {
@@ -551,6 +558,32 @@ describe('GoogleAuthManager', () => {
         .mockImplementation(async () => {
           process.emitWarning(
             'received unexpected error = All promises were rejected code = UNKNOWN',
+            'MetadataLookupWarning',
+          );
+          throw new Error('no default credentials');
+        });
+
+      try {
+        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+        expect(emitWarningSpy).not.toHaveBeenCalled();
+      } finally {
+        getOAuthClientSpy.mockRestore();
+        emitWarningSpy.mockRestore();
+      }
+    });
+
+    it('should suppress metadata lookup warnings for any unreachable-host error code', async () => {
+      // gcp-metadata interpolates the underlying error + code into the message, so the suffix
+      // varies by failure mode (the codeless `All promises were rejected`/`UNKNOWN` aggregate,
+      // plus non-allowlisted codes like ETIMEDOUT or EAI_AGAIN). All are the same optional probe
+      // failing to reach metadata, so the stable prefix must suppress every variant — and tolerate
+      // a dependency reword of the interpolated suffix.
+      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockImplementation(async () => {
+          process.emitWarning(
+            'received unexpected error = connect ETIMEDOUT 169.254.169.254:80 code = ETIMEDOUT',
             'MetadataLookupWarning',
           );
           throw new Error('no default credentials');
