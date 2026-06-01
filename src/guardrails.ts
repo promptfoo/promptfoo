@@ -1,8 +1,12 @@
 import { fetchWithCache } from './cache';
 import { getShareApiBaseUrl } from './constants';
+import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 
-const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
+function getApiBaseUrl(): string {
+  const base = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
+  return `${base}/v1`;
+}
 
 export interface GuardResult {
   model: string;
@@ -40,7 +44,7 @@ export interface AdaptiveResult {
 async function makeRequest(endpoint: string, input: string): Promise<GuardResult> {
   try {
     const response = await fetchWithCache(
-      `${API_BASE_URL}${endpoint}`,
+      `${getApiBaseUrl()}${endpoint}`,
       {
         method: 'POST',
         headers: {
@@ -66,7 +70,7 @@ async function makeRequest(endpoint: string, input: string): Promise<GuardResult
 async function makeAdaptiveRequest(request: AdaptiveRequest): Promise<AdaptiveResult> {
   try {
     const response = await fetchWithCache(
-      `${API_BASE_URL}/adaptive`,
+      `${getApiBaseUrl()}/adaptive`,
       {
         method: 'POST',
         headers: {

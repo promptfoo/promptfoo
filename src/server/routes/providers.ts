@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
@@ -146,7 +147,9 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     return;
   }
 
-  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+  const HOST = cloudConfig.isEnabled()
+    ? cloudConfig.getApiHost()
+    : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {
     logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
