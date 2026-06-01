@@ -95,9 +95,7 @@
     }
   ],
   "has_errors": false,
-  "scanner_names": [
-    "pickle"
-  ],
+  "scanner_names": ["pickle"],
   "file_metadata": {
     "tests/assets/samples/pickles/malicious_system_call.pkl": {
       "file_size": 82,
@@ -147,9 +145,7 @@
         }
       ],
       "callable_invocations_truncated": false,
-      "protocols": [
-        4
-      ],
+      "protocols": [4],
       "first_pickle_end_pos": 82,
       "pickle_report_status": "complete",
       "pickle_verdict": "malicious",
