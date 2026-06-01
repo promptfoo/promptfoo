@@ -19,9 +19,9 @@ function createResultWriter() {
   };
 }
 
-function createRuntime(resultWriter = createResultWriter()): EvaluatorRuntime {
+function createRuntime(resultWriters = [createResultWriter()]): EvaluatorRuntime {
   return {
-    createResultWriters: vi.fn().mockReturnValue([resultWriter]),
+    createResultWriters: vi.fn().mockReturnValue(resultWriters),
     persistResult: vi.fn((evalRecord, result) => evalRecord.addResult(result)),
     updateResumeSignal: vi.fn(),
   };
@@ -34,7 +34,7 @@ function createEvalRecord(): Eval {
 describeEvaluator('evaluator runtime ports', () => {
   it('delegates result side effects and closes writers during cleanup', async () => {
     const resultWriter = createResultWriter();
-    const runtime = createRuntime(resultWriter);
+    const runtime = createRuntime([resultWriter]);
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
@@ -56,7 +56,7 @@ describeEvaluator('evaluator runtime ports', () => {
 
   it('continues streaming output when result persistence fails', async () => {
     const resultWriter = createResultWriter();
-    const runtime = createRuntime(resultWriter);
+    const runtime = createRuntime([resultWriter]);
     vi.mocked(runtime.persistResult).mockRejectedValue(new Error('database unavailable'));
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -73,7 +73,7 @@ describeEvaluator('evaluator runtime ports', () => {
   it('rejects output failures after closing writers', async () => {
     const resultWriter = createResultWriter();
     resultWriter.write.mockRejectedValue(new Error('output unavailable'));
-    const runtime = createRuntime(resultWriter);
+    const runtime = createRuntime([resultWriter]);
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
@@ -87,10 +87,27 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(resultWriter.close).toHaveBeenCalledOnce();
   });
 
+  it('continues closing writers when one close fails', async () => {
+    const failingWriter = createResultWriter();
+    failingWriter.close.mockRejectedValue(new Error('close unavailable'));
+    const healthyWriter = createResultWriter();
+    const runtime = createRuntime([failingWriter, healthyWriter]);
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    await expect(evaluate(testSuite, createEvalRecord(), {}, runtime)).resolves.toBeDefined();
+
+    expect(failingWriter.close).toHaveBeenCalledOnce();
+    expect(healthyWriter.close).toHaveBeenCalledOnce();
+  });
+
   it('persists per-call timeout rows without streaming them', async () => {
     vi.useFakeTimers();
     const resultWriter = createResultWriter();
-    const runtime = createRuntime(resultWriter);
+    const runtime = createRuntime([resultWriter]);
     const slowProvider: ApiProvider = {
       id: () => 'slow-provider',
       callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {

@@ -136,6 +136,17 @@ describe('resolveInternalModule', () => {
       ).toBe('src/index.ts');
     });
 
+    it('prefers the longest configured source alias', () => {
+      write('src/app/foo.ts');
+      write('src/app/src/foo.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo/app/foo', {
+          '@promptfoo': 'src',
+          '@promptfoo/app': 'src/app/src',
+        }),
+      ).toBe('src/app/src/foo.ts');
+    });
+
     it('prefers a file over a directory when both could match', () => {
       write('src/index.ts', '// file');
       write('src/index/index.ts', '// directory');
@@ -182,6 +193,76 @@ describe('readLayerConfig', () => {
 
   afterEach(() => {
     fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function writeConfig(config: unknown): void {
+    fs.writeFileSync(path.join(repoRoot, 'architecture/layers.json'), JSON.stringify(config));
+  }
+
+  function coreLayer(overrides: Partial<LayerConfig['layers'][number]> = {}) {
+    return {
+      name: 'core',
+      roots: ['src/core'],
+      allowedDependencies: [],
+      ...overrides,
+    };
+  }
+
+  it('rejects configs that omit the layers array', () => {
+    writeConfig({ publicFacade: 'src/index.ts' });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('must define a layers array.');
+  });
+
+  it('rejects configs that omit an existing public facade', () => {
+    writeConfig({ layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('must define an existing publicFacade path.');
+  });
+
+  it('rejects duplicate layer names', () => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer(), coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('contains duplicate layer "core".');
+  });
+
+  it('rejects layers without names', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [{ roots: ['src/core'], allowedDependencies: [] }],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('contains a layer without a name.');
+  });
+
+  it('rejects layers that omit roots', () => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer({ roots: [] })] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" must declare roots.',
+    );
+  });
+
+  it('rejects directory entries in allowed import paths', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ allowedImportPaths: ['src/core'] })],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" contains an invalid allowedImportPaths entry.',
+    );
+  });
+
+  it('rejects missing layer roots', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ roots: ['src/missing'] })],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" root "src/missing" does not exist.',
+    );
   });
 
   it('rejects layers that omit allowed dependencies', () => {
@@ -268,6 +349,12 @@ describe('production layer config', () => {
   it('classifies evaluator runtime ports as transitional runtime modules', () => {
     expect(getLayerForFile('src/evaluator/runtime.ts', readLayerConfig(process.cwd()))).toBe(
       'legacy-runtime',
+    );
+  });
+
+  it('classifies the evaluator runtime adapter as a node module', () => {
+    expect(getLayerForFile('src/node/evaluatorRuntime.ts', readLayerConfig(process.cwd()))).toBe(
+      'node',
     );
   });
 });
@@ -451,6 +538,17 @@ describe('findViolations', () => {
     write('src/app/a.ts', "import { x } from '@promptfoo/shared/allowed';");
 
     expect(findViolations(repoRoot, configWithLayerRules())).toEqual([]);
+  });
+
+  it('allows configured layer dependencies without path allowlists', () => {
+    write('src/index.ts');
+    write('src/shared/allowed.ts', 'export const x = 1;');
+    write('src/core/a.ts', "import { x } from '../shared/allowed';");
+
+    const config = configWithLayerRules();
+    config.layers[2].allowedDependencies = ['shared'];
+
+    expect(findViolations(repoRoot, config)).toEqual([]);
   });
 
   it('flags new imports outside a restricted layer path allowlist', () => {
