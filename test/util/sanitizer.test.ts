@@ -231,6 +231,76 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('restores reordered duplicate Azure Blob SAS URIs using stable object identity', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'b', file: redactedUri },
+              { suite: 'a', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'b',
+            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+          },
+          {
+            suite: 'a',
+            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          },
+        ],
+      });
+    });
+
+    it('leaves ambiguous same-length edited duplicate Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'edited-a', file: redactedUri },
+              { suite: 'edited-b', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          { suite: 'edited-a', file: redactedUri },
+          { suite: 'edited-b', file: redactedUri },
+        ],
+      });
+    });
+
     it('combines positional and identity restoration within the same array item', () => {
       const stored = {
         tests: [
