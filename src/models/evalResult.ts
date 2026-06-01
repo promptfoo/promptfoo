@@ -352,7 +352,7 @@ export function persistTraceMetadata(
   evaluationId: EvaluateResult['evaluationId'],
 ): EvaluateResult['metadata'] {
   if (!traceId && !evaluationId) {
-    return metadata;
+    return stripTraceLinkageFromMetadata(metadata);
   }
 
   const metadataRecord = metadata ?? {};

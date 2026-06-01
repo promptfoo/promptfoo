@@ -238,6 +238,25 @@ describe('EvalResult', () => {
       });
     });
 
+    it('strips user-supplied reserved trace linkage from untraced rows', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
+        ...mockEvaluateResult,
+        metadata: {
+          __promptfoo: {
+            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+            retained: 'user-metadata',
+          },
+        },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        metadata: { __promptfoo: { retained: 'user-metadata' } },
+      });
+      expect(retrieved?.traceId).toBeUndefined();
+      expect(retrieved?.evaluationId).toBeUndefined();
+    });
+
     it('round-trips evaluationId without traceId (malformed traceparent path)', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-only-id', {
         ...mockEvaluateResult,
