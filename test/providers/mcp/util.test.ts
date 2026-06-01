@@ -5,15 +5,23 @@ import {
   getAuthHeaders,
   getAuthQueryParams,
   getMcpErrorMessage,
+  getOAuthTokenWithExpiry,
   isMcpErrorResult,
   isMcpToolNameFilter,
 } from '../../../src/providers/mcp/util';
 
-import type { MCPServerConfig } from '../../../src/providers/mcp/types';
+import type {
+  MCPOAuthClientCredentialsAuth,
+  MCPServerConfig,
+} from '../../../src/providers/mcp/types';
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
 vi.mock('../../../src/util/fetch', () => ({
+  fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
+}));
+
+vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
 
@@ -355,5 +363,64 @@ describe('discoverTokenEndpoint', () => {
     await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
       /Failed to discover OAuth token endpoint/,
     );
+  });
+});
+
+describe('getOAuthTokenWithExpiry', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('scopes cached tokens by the discovered token endpoint', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('/.well-known/oauth-authorization-server')) {
+        return {
+          ok: true,
+          json: async () => ({
+            token_endpoint: url.includes('agent-a.example.com')
+              ? 'https://auth-a.example.com/oauth/token'
+              : 'https://auth-b.example.com/oauth/token',
+          }),
+        };
+      }
+
+      if (url === 'https://auth-a.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-a', expires_in: 3600 }),
+        };
+      }
+
+      if (url === 'https://auth-b.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-b', expires_in: 3600 }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'shared-client',
+      clientSecret: 'secret',
+    };
+
+    const firstToken = await getOAuthTokenWithExpiry(auth, 'https://agent-a.example.com/a2a');
+    const secondToken = await getOAuthTokenWithExpiry(auth, 'https://agent-b.example.com/a2a');
+
+    expect(firstToken.accessToken).toBe('token-a');
+    expect(secondToken.accessToken).toBe('token-b');
+    expect(
+      mockFetch.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/oauth/token')),
+    ).toEqual(['https://auth-a.example.com/oauth/token', 'https://auth-b.example.com/oauth/token']);
   });
 });
