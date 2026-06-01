@@ -781,8 +781,8 @@ evalRouter.post(
         }
       }
 
-      await eval_.save();
       await result.save();
+      await eval_.save();
 
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {

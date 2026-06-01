@@ -8,6 +8,7 @@ import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
@@ -246,7 +247,7 @@ async function replaceExistingEval(
   }
 
   logger.info(`Replacing existing eval ${importId}`);
-  await existingEval.delete();
+  await existingEval.delete({ notify: false });
   return importId;
 }
 
@@ -448,6 +449,7 @@ export function importCommand(program: Command) {
         evalId = importV3
           ? await createImportedV3Eval(evalData, traces, blobAssets, context)
           : await createImportedV2Eval(evalData, context);
+        notifyEvaluationChanged(evalId);
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
 
@@ -463,6 +465,7 @@ export function importCommand(program: Command) {
           `Failed to import eval: ${error instanceof Error ? error.message : String(error)}`,
         );
         if (removedExistingEvalId) {
+          notifyEvaluationsDeleted([removedExistingEvalId]);
           logger.error(
             `The existing eval ${removedExistingEvalId} was deleted for a --force replacement that did not complete. Re-import it from a backup.`,
           );

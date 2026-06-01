@@ -8,7 +8,7 @@ model the internal boundaries that would support a future multi-package split.
 | Layer              | Current roots                                                    | Intended role                                   |
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
-| `contracts`        | `src/contracts`                                                  | Leaf-safe shared contracts and schemas          |
+| `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -38,8 +38,8 @@ npm run architecture:check
 
 ## First Leaf Layer
 
-`src/contracts` is the first intentionally leaf-safe surface. It currently owns
-the dependency-free-or-`zod` subset that can plausibly become a future
+`src/contracts` and its `src/contracts.ts` public entrypoint are the first intentionally
+leaf-safe surface. They currently own the dependency-free-or-`zod` subset that can plausibly become a future
 `@promptfoo/schema` package:
 
 - shared token/input contracts
@@ -51,9 +51,12 @@ The older `src/types` and `src/validators` paths remain as compatibility shims o
 mixed transitional modules. They are useful public/internal surfaces today, but
 they are not yet clean enough to call a package boundary.
 
-Leaf layers may import only themselves plus external packages. The same
-architecture check enforces that rule so this first extracted surface cannot
-quietly grow back upward into Node, provider, or redteam code.
+Leaf layers may import only themselves plus the external packages on their
+`allowedExternal` allowlist in `architecture/layers.json` (`contracts` allows only
+`zod`). The same architecture check enforces both halves of the rule, so this first
+extracted surface can neither grow back upward into Node, provider, or redteam code,
+nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
+`node:` prefix is ignored when matching, so `"fs"` and `"node:fs"` are equivalent.
 
 ## Layer Dependency Ratchet
 

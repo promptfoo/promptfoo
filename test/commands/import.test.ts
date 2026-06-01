@@ -9,6 +9,7 @@ import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
@@ -33,6 +34,15 @@ vi.mock('../../src/telemetry', () => ({
     record: vi.fn(),
   },
 }));
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
+  };
+});
 
 describe('importCommand', () => {
   let program: Command;
@@ -202,6 +212,7 @@ describe('importCommand', () => {
       // Also verify that eval results were imported
       const results = await EvalResult.findManyByEvalId(importedEval!.id);
       expect(results.length).toBe(4); // Based on sample file having 4 results
+      expect(updateSignalFile).toHaveBeenCalledWith(importedEval!.id);
     });
 
     it('should preserve createdAt timestamp from metadata', async () => {
@@ -1180,6 +1191,7 @@ describe('importCommand', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringMatching(/has been successfully imported/),
       );
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
 
       // Should still have only 1 eval in database (replaced, not duplicated)
       const allEvals = await Eval.getMany(10);
@@ -1312,6 +1324,7 @@ describe('importCommand', () => {
         expect(logger.error).toHaveBeenCalledWith(
           expect.stringContaining('was deleted for a --force replacement'),
         );
+        expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([sampleData.evalId]);
         expect(process.exitCode).toBe(1);
         // The original results are gone — the disclosure tells the user why.
         expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(0);
