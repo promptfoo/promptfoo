@@ -787,6 +787,66 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('does not render an already-rendered scalar value a second time', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          vars: { nestedTool: 'search_orders' },
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'literal-template-tool',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: { 'tool.name': '{{ nestedTool }}' },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: '{{ expectedTool }}',
+        },
+        renderedValue: '{{ nestedTool }}',
+      };
+
+      expect(handleTrajectoryToolUsed(params).pass).toBe(true);
+    });
+
+    it('does not render already-rendered scalar array entries a second time', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          vars: { nestedTool: 'search_orders' },
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'literal-template-tool',
+                name: 'tool.call',
+                startTime: 1000,
+                endTime: 1100,
+                attributes: { 'tool.name': '{{ nestedTool }}' },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: ['{{ expectedTool }}'],
+        },
+        renderedValue: ['{{ nestedTool }}'],
+      };
+
+      expect(handleTrajectoryToolUsed(params).pass).toBe(true);
+    });
+
     it('rejects invalid matcher values', () => {
       const params: AssertionParams = {
         ...defaultParams,

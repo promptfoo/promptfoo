@@ -495,6 +495,27 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 350');
   });
 
+  it('renders nested pattern templates before filtering trace spans', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: {
+        type: 'tokens-used',
+        value: { pattern: '{{ llmSpan }}', max: 100, source: 'auto' },
+      },
+      renderedValue: { pattern: '{{ llmSpan }}', max: 100, source: 'auto' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        vars: { llmSpan: 'llm.*' },
+        trace: traceWithTokens,
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 350');
+    expect(result.reason).toContain('source=trace');
+  });
+
   it('keeps source:auto on trace when a filtered trace contributes zero tokens', () => {
     const params: AssertionParams = {
       ...baseParams,
