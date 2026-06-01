@@ -1167,6 +1167,44 @@ describe('writeOutput', () => {
     ]);
   });
 
+  it('skips a malformed (truncated) streamed JSONL row during recovery instead of aborting', async () => {
+    const outputPath = 'output.jsonl';
+    const goodResult: EvaluateResult = {
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 10,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { output: 'recovered streamed row' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+    // A complete row followed by a truncated final row, as a killed/crashed run can leave.
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(goodResult)}\n{"testIdx":1,"promptIdx":0,"resp`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {});
+
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({ testIdx: 0, response: { output: 'recovered streamed row' } }),
+    ]);
+  });
+
   it('writeOutput with json and txt output', async () => {
     const outputPath = ['output.json', 'output.txt'];
     const eval_ = new Eval({});

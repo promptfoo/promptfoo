@@ -35,6 +35,11 @@ export interface OutputOptions {
   includeMedia?: boolean;
 }
 
+// NOTE: despite the name, this intentionally returns every path unchanged — JSONL is
+// always finalized post-run now, so nothing is filtered out. It only emits a heads-up
+// when a row failed to persist, so operators know the JSONL artifact was reconciled
+// from the streamed rows and the eval record (the degraded recovery path in
+// `writeOutput`) rather than rebuilt cleanly from the database.
 export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: string[]): string[] {
   if (!evalRecord.resultPersistenceFailed) {
     return outputPaths;
@@ -42,7 +47,7 @@ export function filterOutputPathsAfterStreaming(evalRecord: Eval, outputPaths: s
 
   if (outputPaths.some((outputPath) => getOutputFileFormat(outputPath) === 'jsonl')) {
     logger.warn(
-      '[Output] Finalizing JSONL from streamed rows and canonical updates because one or more rows failed to persist',
+      '[Output] Reconciling JSONL from streamed rows and the eval record because one or more rows failed to persist',
     );
   }
   return outputPaths;
@@ -67,18 +72,36 @@ async function appendJsonlResults(outputPath: string, results: EvaluateResult[])
   await fsPromises.appendFile(outputPath, text);
 }
 
-async function readStreamedJsonlResults(outputPath: string) {
+async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateResult[]> {
+  let contents: string;
   try {
-    return (await fsPromises.readFile(outputPath, 'utf8'))
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as EvaluateResult);
+    contents = await fsPromises.readFile(outputPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];
     }
     throw error;
   }
+
+  // Parse each line defensively. This recovery path exists precisely for runs that were
+  // interrupted (crash / kill / partial flush), so the streamed file may end in a
+  // truncated row. Skipping a malformed line — rather than aborting the whole
+  // finalization — keeps the recoverable rows; the eval record and `getFinalJsonlResults()`
+  // backfill the rest in `collectJsonlResultsAfterPersistenceFailure`.
+  const results: EvaluateResult[] = [];
+  const lines = contents.split(/\r?\n/).filter(Boolean);
+  for (const [index, line] of lines.entries()) {
+    try {
+      results.push(JSON.parse(line) as EvaluateResult);
+    } catch (error) {
+      logger.warn(
+        `[Output] Skipping malformed streamed JSONL row at ${outputPath}:${index + 1} during recovery: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return results;
 }
 
 async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {

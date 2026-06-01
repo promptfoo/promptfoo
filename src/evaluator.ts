@@ -3148,6 +3148,11 @@ class Evaluator {
     }
   }
 
+  // Buffer the authoritative copy of a row only once a DB persistence failure has been
+  // observed. Before any failure, rows are recoverable from the streamed JSONL file and
+  // the database during finalization; after a failure we can no longer trust the DB, so
+  // we keep the in-memory copy of every subsequent row (timeout / deferred-grading rows
+  // that never stream) to override stale entries in the recovery merge.
   private trackFinalJsonlResult(row: EvalResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.evalRecord.resultPersistenceFailed) {
       this.evalRecord.recordFinalJsonlResult(

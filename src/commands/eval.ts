@@ -891,8 +891,9 @@ export async function doEval(
 
     const { outputPath } = config;
 
-    // JSONL is streamed during evaluation, then rewritten from the completed eval so
-    // deferred grading, timeout rows, and persisted redactions are reflected on disk.
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0,
     );

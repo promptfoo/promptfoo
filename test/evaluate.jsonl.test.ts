@@ -393,4 +393,35 @@ describe('programmatic JSONL output', () => {
       restoreEnv();
     }
   });
+
+  it('applies prompt-text and grading-result strip projections to finalized JSONL', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+    });
+    const outputPath = createOutputPath();
+    outputPaths.push(outputPath);
+    const provider: ApiProvider = {
+      id: () => 'strip-prompt-grading-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    try {
+      await evaluate({
+        outputPath,
+        prompts: ['Prompt {{topic}}'],
+        providers: [provider],
+        tests: [{ vars: { topic: 'alpha' }, assert: [{ type: 'contains', value: 'hello' }] }],
+      });
+
+      const [result] = readJsonl(outputPath);
+      expect(result.prompt.raw).toBe('[prompt stripped]');
+      expect(result.gradingResult).toBeNull();
+    } finally {
+      restoreEnv();
+    }
+  });
 });
