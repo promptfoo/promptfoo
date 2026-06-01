@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,6 +44,8 @@ vi.mock('../../src/database/signal', async () => {
     updateSignalFileForDeletedEvals: vi.fn(),
   };
 });
+
+const SHARED_CACHE_MEMORY_URL = 'file::memory:?cache=shared';
 
 describe('importCommand', () => {
   let program: Command;
@@ -1231,9 +1234,21 @@ describe('importCommand', () => {
       vi.clearAllMocks();
       process.exitCode = undefined;
 
-      const program2 = new Command();
-      importCommand(program2);
-      await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+      const lockHolder = createClient({ url: SHARED_CACHE_MEMORY_URL });
+      const writeTx = await lockHolder.transaction('write');
+      try {
+        await writeTx.execute({
+          sql: 'UPDATE evals SET description = description WHERE id = ?',
+          args: [sampleData.evalId],
+        });
+
+        const program2 = new Command();
+        importCommand(program2);
+        await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+      } finally {
+        await writeTx.rollback().catch(() => undefined);
+        lockHolder.close();
+      }
 
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Embedded blob hash mismatch'),
