@@ -1,17 +1,23 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
   type ProviderResponse,
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
@@ -69,6 +75,102 @@ describeEvaluator('evaluator execution control', () => {
 
     expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes JSONL writers after evaluation', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const closeSpy = vi.spyOn(JsonlFileWriter.prototype, 'close');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      fs.writeFileSync(outputPath, 'stale row\n');
+      const evalRecord = new Eval({ outputPath });
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(closeSpy).toHaveBeenCalledOnce();
+      const output = fs.readFileSync(outputPath, 'utf8');
+      expect(output).not.toContain('stale row');
+      expect(output.trim()).not.toBe('');
+    } finally {
+      closeSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('continues cleanup after a JSONL writer fails to close', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const originalClose = JsonlFileWriter.prototype.close;
+    const closeSpy = vi
+      .spyOn(JsonlFileWriter.prototype, 'close')
+      .mockImplementationOnce(async function (this: JsonlFileWriter) {
+        await originalClose.call(this);
+        throw new Error('simulated close failure');
+      });
+    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalRecord = new Eval({ outputPath });
+      await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow('simulated close failure');
+      expect(shutdownSpy).toHaveBeenCalledOnce();
+    } finally {
+      closeSpy.mockRestore();
+      shutdownSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('appends JSONL rows when resuming an evaluation', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      fs.writeFileSync(outputPath, 'existing row\n');
+      cliState.resume = true;
+
+      const evalRecord = new Eval({ outputPath });
+      await evaluate(testSuite, evalRecord, {});
+
+      const output = fs.readFileSync(outputPath, 'utf8');
+      expect(output).toContain('existing row');
+      expect(output.trim().split('\n')).toHaveLength(2);
+    } finally {
+      cliState.resume = false;
+      fs.rmSync(outputPath, { force: true });
+    }
   });
 
   it('keeps raw SVG text available to llm-rubric judges while indexing media metadata', async () => {
@@ -524,6 +626,8 @@ describeEvaluator('evaluator execution control', () => {
           }),
         }),
       );
+      expect(evalRecord.resultPersistenceFailed).toBe(true);
+      expect(evalRecord.hasResultPersistenceFailure({ promptIdx: 0, testIdx: 0 })).toBe(true);
     } finally {
       mockAddResult.mockRestore();
       errorSpy.mockRestore();

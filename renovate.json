@@ -238,7 +238,13 @@
       "schedule": ["before 6am on Monday"]
     },
     {
-      "description": "LLM provider packages: frequent updates with a one-week stabilization window",
+      "description": "Keep ModelAudit schema generator pins current",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["scripts/modelaudit_schema_requirements.txt"],
+      "groupName": "ModelAudit schema generator"
+    },
+    {
+      "description": "LLM provider packages: frequent updates with a ten-day stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
@@ -256,49 +262,49 @@
       ],
       "schedule": ["every weekday"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
-      "description": "All npm packages: wait 7 days to match the Socket minimum release age floor",
+      "description": "All npm packages: wait 10 days, a buffer above the 7-day Socket minimum release age floor",
       "matchDatasources": ["npm"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
 
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "AWS SDK packages: weekly updates to reduce noise",
       "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Biome: weekly updates",
       "matchPackageNames": ["@biomejs/biome"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "framer-motion: monthly updates (animation library, low urgency)",
       "matchPackageNames": ["framer-motion"],
       "schedule": ["before 6am on the first day of the month"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "satori: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["satori"],
       "schedule": ["before 6am on the first day of the month"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
@@ -306,42 +312,42 @@
       "groupName": "Vercel AI SDK",
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "Storybook: monthly updates to reduce noise from frequent patch releases",
       "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "PostHog packages: monthly updates to reduce noise from frequent patch releases",
       "matchPackagePatterns": ["^posthog-"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "undici: monthly updates to reduce noise",
       "matchPackageNames": ["undici"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "postcss: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["postcss"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     },
     {
       "description": "fast-xml-parser: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["fast-xml-parser"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "10 days"
     }
   ]
 }

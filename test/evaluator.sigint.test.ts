@@ -92,8 +92,8 @@ describe('evaluate SIGINT/abort handling', () => {
     expect(result).toBeDefined();
     expect(result.id).toBe('test-eval-abort-123');
 
-    // When user aborts (not timeout), should update signal file for resume
-    expect(updateSignalFile).toHaveBeenCalledWith('test-eval-abort-123');
+    // Non-persisted evals are not visible to database watchers.
+    expect(updateSignalFile).not.toHaveBeenCalled();
 
     // Should persist vars and prompts before early return
     expect(mockSetVars).toHaveBeenCalled();
@@ -104,9 +104,10 @@ describe('evaluate SIGINT/abort handling', () => {
     // This test verifies that per-call timeouts (timeoutMs option) write
     // timeout error rows and continue the normal evaluation flow.
     //
-    // Key difference from user SIGINT: evaluation continues normally and
-    // updateSignalFile is called at the end of the normal flow (not during early return).
-    // Both paths call updateSignalFile, just at different points.
+    // Key difference from user SIGINT: evaluation continues normally rather than returning
+    // early. The evaluator no longer writes the signal file directly — persisted evals emit a
+    // refresh via Eval.addPrompts()/save(); a non-persisted eval (this test) writes no signal,
+    // which is asserted below.
     let longTimer: NodeJS.Timeout | null = null;
 
     const slowProvider = createMockProvider({
@@ -272,7 +273,7 @@ describe('evaluate SIGINT/abort handling', () => {
     // Should have added at least one result before abort
     expect(resultsAdded.length).toBeGreaterThanOrEqual(1);
 
-    // Signal file should be updated for resume capability
-    expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
+    // Non-persisted evals are not visible to database watchers.
+    expect(updateSignalFile).not.toHaveBeenCalled();
   });
 });

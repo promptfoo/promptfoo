@@ -29,6 +29,7 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -94,6 +95,10 @@ vi.mock('chokidar', () => ({
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
+}));
+vi.mock('../../src/util/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/index')>()),
+  writeMultipleOutputs: vi.fn(),
 }));
 vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/util/provider', async (importOriginal) => ({
@@ -206,6 +211,55 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+  });
+
+  it('should finalize streamed JSONL output after a successful CLI evaluation', async () => {
+    const cmdObj = { table: false, write: false, share: false };
+    const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['results.jsonl', 'results.json'],
+      expect.any(Eval),
+      null,
+    );
+  });
+
+  it('should finalize streamed JSONL output through recovery when CLI result persistence fails', async () => {
+    const cmdObj = { table: false, write: false, share: false };
+    const config = { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      evalRecord.resultPersistenceFailed = true;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['results.jsonl', 'results.json'],
+      expect.any(Eval),
+      null,
+    );
   });
 
   it('should merge runtime tags over config tags', async () => {

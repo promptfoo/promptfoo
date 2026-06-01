@@ -7,7 +7,7 @@ import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { clearCountCache } from '../models/evalPerformance';
+import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import {
@@ -76,7 +76,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
 
   for (const { evalId } of affectedEvals) {
-    clearCountCache(evalId);
+    notifyEvaluationChanged(evalId);
   }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);

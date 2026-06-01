@@ -8,6 +8,7 @@ import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
@@ -246,7 +247,7 @@ async function replaceExistingEval(
   }
 
   logger.info(`Replacing existing eval ${importId}`);
-  await existingEval.delete();
+  await existingEval.delete({ notify: false });
   return importId;
 }
 
@@ -334,6 +335,30 @@ interface ImportedEvalContext {
   importAuthor: string | undefined;
 }
 
+function prepareImportArtifacts(
+  evalData: any,
+  importV3: boolean,
+): {
+  traces: TraceData[];
+  blobAssets: PreparedBlobAsset[];
+} {
+  const traces = importV3 ? prepareTraces(evalData.traces) : [];
+  const blobAssets =
+    importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
+      ? prepareBlobAssets(
+          evalData.blobAssets,
+          // Bound the scan: imported files are untrusted, and deeply
+          // nested JSON would otherwise overflow the stack here.
+          collectBlobHashes(
+            { results: evalData.results, traces },
+            { maxDepth: 64, maxStringLength: 100_000 },
+          ),
+        )
+      : [];
+
+  return { traces, blobAssets };
+}
+
 async function createImportedV3Eval(
   evalData: any,
   traces: TraceData[],
@@ -399,6 +424,37 @@ export function importCommand(program: Command) {
         const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
 
+        let formatChecked = false;
+        let importV3 = false;
+        let importLegacy = false;
+        let artifactsPrepared = false;
+        let traces: TraceData[] = [];
+        let blobAssets: PreparedBlobAsset[] = [];
+        const validateImportFormat = () => {
+          if (!formatChecked) {
+            importV3 = isImportableV3Results(evalData.results);
+            importLegacy = isImportableLegacyResults(evalData.results);
+            if (!importV3 && !importLegacy) {
+              throw new Error('Unsupported eval export results format');
+            }
+            formatChecked = true;
+          }
+        };
+        const prepareArtifacts = () => {
+          if (!artifactsPrepared) {
+            validateImportFormat();
+            ({ traces, blobAssets } = prepareImportArtifacts(evalData, importV3));
+            artifactsPrepared = true;
+          }
+        };
+
+        // Validate replacement artifacts before consulting the database. A
+        // transient lock on the eval row should not mask a corrupt import file,
+        // and this preflight has no filesystem or database side effects.
+        if (cmdObj.force) {
+          prepareArtifacts();
+        }
+
         if (importId && !cmdObj.newId) {
           const existing = await Eval.findById(importId);
           if (existing) {
@@ -414,25 +470,7 @@ export function importCommand(program: Command) {
           }
         }
 
-        const importV3 = isImportableV3Results(evalData.results);
-        const importLegacy = isImportableLegacyResults(evalData.results);
-        if (!importV3 && !importLegacy) {
-          throw new Error('Unsupported eval export results format');
-        }
-
-        const traces = importV3 ? prepareTraces(evalData.traces) : [];
-        const blobAssets =
-          importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
-            ? prepareBlobAssets(
-                evalData.blobAssets,
-                // Bound the scan: imported files are untrusted, and deeply
-                // nested JSON would otherwise overflow the stack here.
-                collectBlobHashes(
-                  { results: evalData.results, traces },
-                  { maxDepth: 64, maxStringLength: 100_000 },
-                ),
-              )
-            : [];
+        prepareArtifacts();
 
         // Restore embedded media before the destructive replace so a corrupt
         // artifact cannot delete the existing eval. blobAssets is empty for v2.
@@ -448,6 +486,7 @@ export function importCommand(program: Command) {
         evalId = importV3
           ? await createImportedV3Eval(evalData, traces, blobAssets, context)
           : await createImportedV2Eval(evalData, context);
+        notifyEvaluationChanged(evalId);
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
 
@@ -463,6 +502,7 @@ export function importCommand(program: Command) {
           `Failed to import eval: ${error instanceof Error ? error.message : String(error)}`,
         );
         if (removedExistingEvalId) {
+          notifyEvaluationsDeleted([removedExistingEvalId]);
           logger.error(
             `The existing eval ${removedExistingEvalId} was deleted for a --force replacement that did not complete. Re-import it from a backup.`,
           );
