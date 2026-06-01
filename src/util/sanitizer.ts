@@ -370,17 +370,19 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
     const structuralMatches = value.map((item) =>
       findUniqueStoredArrayItemMatch(item, storedItems),
     );
-    const hasMovedArrayItem = structuralMatches.some(
-      (match, index) => match.matched && match.index !== index,
+    const structurallyMatchedStoredIndexes = new Set(
+      structuralMatches.flatMap((match) => (match.matched ? [match.index] : [])),
     );
     let restored = false;
     const restoredItems = value.map((item, index) => {
-      // Prefer unique structural identity for moved items. When the array shows
-      // no evidence of a reorder, preserve same-index SAS tokens across edits
-      // to unrelated fields. Finally, fall back to unambiguous URI identity.
+      // Prefer unique structural identity for moved items. Preserve same-index
+      // SAS tokens across unrelated edits unless another item claimed that
+      // stored position. Finally, fall back to unambiguous URI identity.
       const structuralMatch = structuralMatches[index];
       const storedItemMatch =
-        structuralMatch.matched || !canRestorePositionally || hasMovedArrayItem
+        structuralMatch.matched ||
+        !canRestorePositionally ||
+        structurallyMatchedStoredIndexes.has(index)
           ? structuralMatch
           : { matched: true as const, index, value: storedItems[index] };
       const structuralResult = storedItemMatch.matched
