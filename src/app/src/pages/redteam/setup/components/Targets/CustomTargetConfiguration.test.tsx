@@ -93,14 +93,21 @@ describe('CustomTargetConfiguration', () => {
         },
       });
 
-      expect(screen.getByLabelText(/A2A Endpoint URL/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Agent Card URL/i)).toBeInTheDocument();
+      const agentCardUrlInput = screen.getByLabelText(/Agent Card URL/i);
+      const endpointUrlInput = screen.getByLabelText(/A2A Endpoint URL/i);
+
+      expect(agentCardUrlInput).toBeInTheDocument();
+      expect(endpointUrlInput).toBeInTheDocument();
+      expect(
+        agentCardUrlInput.compareDocumentPosition(endpointUrlInput) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(screen.getByLabelText(/Request Mode/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Authentication Type/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Enable polling/i)).toBeChecked();
       expect(screen.getByText(/Advanced Configuration \(JSON\)/i)).toBeInTheDocument();
 
-      await user.type(screen.getByLabelText(/A2A Endpoint URL/i), 'https://agent.example.com/a2a');
+      await user.type(endpointUrlInput, 'https://agent.example.com/a2a');
       expect(updateSpy).toHaveBeenCalledWith('url', 'https://agent.example.com/a2a');
 
       await user.click(screen.getByLabelText(/Authentication Type/i));

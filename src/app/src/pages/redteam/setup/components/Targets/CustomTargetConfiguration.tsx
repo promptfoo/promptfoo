@@ -987,22 +987,11 @@ const CustomTargetConfiguration = ({
               <div>
                 <h4 className="font-medium">Connection</h4>
                 <p className="text-sm text-muted-foreground">
-                  Point promptfoo at an A2A HTTP+JSON endpoint, or discover one from an Agent Card.
+                  Start with an Agent Card when available. Use an endpoint URL only to override
+                  discovery or connect directly.
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="a2a-url">A2A Endpoint URL</Label>
-                  <Input
-                    id="a2a-url"
-                    value={a2aConfig.url ?? ''}
-                    onChange={(e) => updateA2AField('url', e.target.value)}
-                    placeholder="https://agent.example.com/a2a/v1"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Used for /message:send, /message:stream, and task polling.
-                  </p>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="a2a-agent-card-url">Agent Card URL</Label>
                   <Input
@@ -1012,7 +1001,20 @@ const CustomTargetConfiguration = ({
                     placeholder="https://agent.example.com/.well-known/agent-card.json"
                   />
                   <p className="text-sm text-muted-foreground">
-                    Optional. Used to discover supported transport, tenant, and protocol version.
+                    Recommended. Used to discover the HTTP+JSON endpoint, tenant, and protocol
+                    version.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="a2a-url">A2A Endpoint URL</Label>
+                  <Input
+                    id="a2a-url"
+                    value={a2aConfig.url ?? ''}
+                    onChange={(e) => updateA2AField('url', e.target.value)}
+                    placeholder="https://agent.example.com/a2a/v1"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Optional override. Used for /message:send, /message:stream, and task polling.
                   </p>
                 </div>
               </div>
