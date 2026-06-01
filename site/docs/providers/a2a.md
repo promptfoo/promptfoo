@@ -210,6 +210,96 @@ If you do not provide `transformResponse`, promptfoo extracts output in this ord
 Text parts are joined with newlines. Structured data remains available through `raw`,
 `metadata.a2a`, and `transformResponse`.
 
+### Direct message response
+
+If the agent returns a direct message:
+
+```json
+{
+  "message": {
+    "role": "ROLE_AGENT",
+    "parts": [{ "text": "I can help book that flight." }]
+  }
+}
+```
+
+Promptfoo output is:
+
+```text
+I can help book that flight.
+```
+
+### Completed task artifact
+
+If `message:send` returns a task and polling later returns a completed task with artifacts:
+
+```json
+{
+  "id": "task-123",
+  "status": {
+    "state": "TASK_STATE_COMPLETED",
+    "message": {
+      "role": "ROLE_AGENT",
+      "parts": [{ "text": "Completed" }]
+    }
+  },
+  "artifacts": [
+    {
+      "artifactId": "final-answer",
+      "parts": [{ "text": "The best itinerary is SFO to JFK at 9:00 AM." }]
+    }
+  ]
+}
+```
+
+Promptfoo output is the artifact text, not the lifecycle status message:
+
+```text
+The best itinerary is SFO to JFK at 9:00 AM.
+```
+
+### Status message fallback
+
+If there is no direct message and no artifact, promptfoo falls back to task status text:
+
+```json
+{
+  "id": "task-123",
+  "status": {
+    "state": "TASK_STATE_COMPLETED",
+    "message": {
+      "role": "ROLE_AGENT",
+      "parts": [{ "text": "Completed with no artifact." }]
+    }
+  }
+}
+```
+
+Promptfoo output is:
+
+```text
+Completed with no artifact.
+```
+
+### Structured output
+
+For agents that return useful non-text fields, use `transformResponse` to shape the output:
+
+```yaml
+providers:
+  - id: a2a:https://agent.example.com/a2a/v1
+    config:
+      transformResponse: |
+        {
+          output: text,
+          metadata: {
+            taskId: json.task?.id,
+            state: json.task?.status?.state,
+            eventCount: json.events?.length ?? 0
+          }
+        }
+```
+
 ## Red Team Testing with A2A
 
 A2A targets work with normal promptfoo red team configuration. When `agentCardUrl` is configured,
