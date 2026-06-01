@@ -153,6 +153,74 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(true);
     });
 
+    it('should return true from validate() for an A2A provider with a shorthand URL', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a:https://agent.example.com/a2a/v1',
+        config: {
+          url: '',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('should return false from validate() for an A2A provider without endpoint details', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a',
+        config: {
+          url: '',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'A valid A2A endpoint URL or Agent Card URL is required',
+      );
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
+    });
+
     it("should return true from validate() for a valid agent framework provider (e.g., providerType is 'langchain', provider.id is 'file://path/to/agent.py')", () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();

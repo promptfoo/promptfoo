@@ -117,6 +117,7 @@ export const A2AAgentInterfaceSchema = z.looseObject({
   protocolBinding: z.string().optional(),
   protocolVersion: z.string().optional(),
   tenant: z.string().optional(),
+  transport: z.string().optional(),
   url: z.string().optional(),
 });
 
@@ -143,6 +144,8 @@ export const A2AAgentCardSchema = z.looseObject({
   description: z.string().optional(),
   documentationUrl: z.string().optional(),
   name: z.string().optional(),
+  additionalInterfaces: z.array(A2AAgentInterfaceSchema).optional(),
+  preferredTransport: z.string().optional(),
   skills: z.array(A2AAgentSkillSchema).optional(),
   supportedInterfaces: z.array(A2AAgentInterfaceSchema).optional(),
   url: z.string().optional(),

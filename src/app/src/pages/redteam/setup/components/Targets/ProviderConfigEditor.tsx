@@ -74,6 +74,14 @@ function ProviderConfigEditor({
     }
   }, []);
 
+  const getA2AShorthandUrl = useCallback((id?: string): string | undefined => {
+    if (!id?.startsWith('a2a:')) {
+      return undefined;
+    }
+    const url = id.slice('a2a:'.length);
+    return url.trim().length > 0 ? url : undefined;
+  }, []);
+
   const updateCustomTarget = (field: string, value: unknown) => {
     // Shallow-clone the config along with the target so subsequent
     // assignments and `delete` don't mutate the original provider object
@@ -257,10 +265,11 @@ function ProviderConfigEditor({
       }
       if (providerType === 'a2a') {
         const hasUrl = typeof provider.config?.url === 'string' && validateUrl(provider.config.url);
+        const hasShorthandUrl = validateUrl(getA2AShorthandUrl(provider.id) ?? '');
         const hasAgentCardUrl =
           typeof provider.config?.agentCardUrl === 'string' &&
           validateUrl(provider.config.agentCardUrl);
-        if (!hasUrl && !hasAgentCardUrl) {
+        if (!hasUrl && !hasShorthandUrl && !hasAgentCardUrl) {
           errors.push('A valid A2A endpoint URL or Agent Card URL is required');
         }
       }
@@ -279,7 +288,16 @@ function ProviderConfigEditor({
       onValidate(!hasErrors);
     }
     return !hasErrors;
-  }, [providerType, provider, bodyError, extensionErrors, setError, onValidate, validateUrl]);
+  }, [
+    providerType,
+    provider,
+    bodyError,
+    extensionErrors,
+    setError,
+    onValidate,
+    validateUrl,
+    getA2AShorthandUrl,
+  ]);
 
   useEffect(() => {
     if (validateAll) {

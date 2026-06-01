@@ -70,6 +70,26 @@ describe('A2AProvider', () => {
     expect(loaded.config.url).toBe('https://agent.example.com/a2a/v1');
   });
 
+  it('uses the shorthand url when config.url is blank', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'blank url response' }],
+        },
+      }),
+    );
+
+    const result = await provider({ url: '' }).callApi('hi');
+
+    expect(result.output).toBe('blank url response');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://agent.example.com/a2a/v1/message:send',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+    );
+  });
+
   it('sends a non-streaming message and extracts the direct message text', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({
@@ -152,6 +172,66 @@ describe('A2AProvider', () => {
       }),
       expect.any(Number),
     );
+  });
+
+  it('discovers HTTP+JSON from legacy additionalInterfaces agent cards', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          preferredTransport: 'JSONRPC',
+          url: 'https://agent.example.com/jsonrpc',
+          additionalInterfaces: [
+            {
+              transport: 'HTTP+JSON',
+              protocolVersion: '1.0',
+              tenant: 'tenant-a',
+              url: 'https://agent.example.com/a2a/http',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'legacy card response' }],
+          },
+        }),
+      );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+      },
+    }).callApi('hello');
+
+    expect(result.output).toBe('legacy card response');
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      'https://agent.example.com/a2a/http/message:send',
+      expect.objectContaining({
+        body: expect.stringContaining('"tenant":"tenant-a"'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('fails fast when an agent card only advertises JSON-RPC', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        preferredTransport: 'JSONRPC',
+        url: 'https://agent.example.com/jsonrpc',
+      }),
+    );
+
+    const result = await new A2AProvider('a2a', {
+      config: {
+        agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+      },
+    }).callApi('hello');
+
+    expect(result.error).toContain('does not advertise a supported HTTP+JSON interface');
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
   });
 
   it('applies bearer auth to agent card and operation requests', async () => {
@@ -419,6 +499,62 @@ describe('A2AProvider', () => {
     );
   });
 
+  it('includes tenant query parameter when polling tasks', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          task: {
+            id: 'task-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'task-1',
+          status: { state: 'TASK_STATE_COMPLETED' },
+          artifacts: [{ parts: [{ text: 'tenant done' }] }],
+        }),
+      );
+
+    const result = await provider({
+      polling: { intervalMs: 0, timeoutMs: 1000 },
+      tenant: 'tenant-a',
+    }).callApi('hi');
+
+    expect(result.output).toBe('tenant done');
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      'https://agent.example.com/a2a/v1/tasks/task-1?tenant=tenant-a',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+    );
+  });
+
+  it('recognizes standard completed task state spelling', async () => {
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          task: {
+            id: 'task-1',
+            status: { state: 'working' },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'task-1',
+          status: { state: 'completed' },
+          artifacts: [{ parts: [{ text: 'standard done' }] }],
+        }),
+      );
+
+    const result = await provider({ polling: { intervalMs: 0, timeoutMs: 1000 } }).callApi('hi');
+
+    expect(result.output).toBe('standard done');
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['TASK_STATE_FAILED', 'failed'],
     ['TASK_STATE_CANCELED', 'canceled'],
@@ -442,6 +578,67 @@ describe('A2AProvider', () => {
 
     expect(result.error).toContain(expected);
     expect(result.error).toContain('state detail');
+  });
+
+  it.each([
+    ['failed', 'failed'],
+    ['canceled', 'canceled'],
+    ['rejected', 'rejected'],
+    ['input-required', 'requires additional input'],
+    ['auth-required', 'requires additional authentication'],
+  ])('returns an error for standard %s tasks', async (state, expected) => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        task: {
+          id: 'task-1',
+          status: {
+            state,
+            message: { parts: [{ text: 'state detail' }] },
+          },
+        },
+      }),
+    );
+
+    const result = await provider().callApi('hi');
+
+    expect(result.error).toContain(expected);
+    expect(result.error).toContain('state detail');
+  });
+
+  it('filters user messages from history fallback output', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        task: {
+          id: 'task-1',
+          status: { state: 'completed' },
+          history: [
+            { role: 'ROLE_USER', parts: [{ text: 'user prompt' }] },
+            { role: 'ROLE_AGENT', parts: [{ text: 'agent answer' }] },
+          ],
+        },
+      }),
+    );
+
+    const result = await provider().callApi('hi');
+
+    expect(result.output).toBe('agent answer');
+  });
+
+  it('falls back to raw JSON when history only contains user messages', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        task: {
+          id: 'task-1',
+          status: { state: 'completed' },
+          history: [{ role: 'ROLE_USER', parts: [{ text: 'user prompt' }] }],
+        },
+      }),
+    );
+
+    const result = await provider().callApi('hi');
+
+    expect(result.output).toContain('"history"');
+    expect(result.output).toContain('"user prompt"');
   });
 
   it('consumes a message-only SSE stream', async () => {

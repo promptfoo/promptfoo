@@ -54,6 +54,7 @@ const TERMINAL_TASK_STATES = new Set([
   'TASK_STATE_REJECTED',
 ]);
 const ATTENTION_TASK_STATES = new Set(['TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_AUTH_REQUIRED']);
+const AGENT_ROLES = new Set(['agent', 'assistant', 'model', 'role_agent']);
 
 interface A2AEndpoint {
   protocolVersion: string;
@@ -83,17 +84,32 @@ function appendQueryParams(url: string, queryParams: Record<string, string>): st
   return applyQueryParams(url, queryParams);
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
 function getTaskState(task?: A2ATask): string | undefined {
   return typeof task?.status?.state === 'string' ? task.status.state : undefined;
 }
 
+function normalizeTaskState(state: string | undefined): string | undefined {
+  if (!state) {
+    return undefined;
+  }
+  const normalized = state.trim().toUpperCase().replace(/-/g, '_');
+  if (!normalized) {
+    return undefined;
+  }
+  return normalized.startsWith('TASK_STATE_') ? normalized : `TASK_STATE_${normalized}`;
+}
+
 function isTerminalTask(task?: A2ATask): boolean {
-  const state = getTaskState(task);
+  const state = normalizeTaskState(getTaskState(task));
   return state ? TERMINAL_TASK_STATES.has(state) : false;
 }
 
 function needsCallerAction(task?: A2ATask): boolean {
-  const state = getTaskState(task);
+  const state = normalizeTaskState(getTaskState(task));
   return state ? ATTENTION_TASK_STATES.has(state) : false;
 }
 
@@ -119,6 +135,10 @@ function textFromPart(part: unknown): string[] {
 
 function textFromMessage(message?: A2AMessage): string[] {
   return message?.parts?.flatMap(textFromPart) ?? [];
+}
+
+function isAgentMessage(message?: A2AMessage): boolean {
+  return message?.role ? AGENT_ROLES.has(message.role.toLowerCase()) : false;
 }
 
 function renderString(value: string, vars: RequestVars, context?: CallApiContextParams): string {
@@ -164,10 +184,25 @@ function getSessionId(context?: CallApiContextParams): string | undefined {
   return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
 }
 
+function getInterfaceBinding(entry: A2AAgentInterface): string | undefined {
+  return (entry.protocolBinding ?? entry.transport)?.toUpperCase();
+}
+
 function selectedInterfaceFromCard(card: A2AAgentCard): A2AAgentInterface | undefined {
-  return card.supportedInterfaces?.find(
-    (entry) => entry.protocolBinding?.toUpperCase() === HTTP_JSON_BINDING,
+  return [...(card.supportedInterfaces ?? []), ...(card.additionalInterfaces ?? [])].find(
+    (entry) => getInterfaceBinding(entry) === HTTP_JSON_BINDING,
   );
+}
+
+function hasDeclaredInterfaces(card: A2AAgentCard): boolean {
+  return (
+    (card.supportedInterfaces?.length ?? 0) > 0 || (card.additionalInterfaces?.length ?? 0) > 0
+  );
+}
+
+function canUseCardUrl(card: A2AAgentCard): boolean {
+  const preferredTransport = card.preferredTransport?.toUpperCase();
+  return !preferredTransport || preferredTransport === HTTP_JSON_BINDING;
 }
 
 function getDefaultMessage(prompt: string): A2AMessage {
@@ -281,11 +316,13 @@ export class A2AProvider implements ApiProvider {
   >;
 
   constructor(providerPath: string, options: ProviderOptions = {}) {
-    const shorthandUrl = providerPath.startsWith('a2a:') ? providerPath.slice('a2a:'.length) : '';
+    const shorthandUrl = nonEmptyString(
+      providerPath.startsWith('a2a:') ? providerPath.slice('a2a:'.length) : undefined,
+    );
     this.providerId = options.id ?? providerPath;
     this.config = A2AProviderConfigSchema.parse({
       ...(options.config ?? {}),
-      url: options.config?.url ?? (shorthandUrl || undefined),
+      url: nonEmptyString(options.config?.url) ?? shorthandUrl,
     });
     this.transformResponse = loadTransformModule(this.config.transformResponse).then(
       createTransformResponse,
@@ -372,10 +409,15 @@ export class A2AProvider implements ApiProvider {
     const card = await this.fetchAgentCard(vars, context, options);
 
     const cardInterface = card ? selectedInterfaceFromCard(card) : undefined;
-    const url = this.config.url
-      ? renderString(this.config.url, vars, context)
-      : (cardInterface?.url ?? card?.url);
+    const configuredUrl = this.config.url
+      ? nonEmptyString(renderString(this.config.url, vars, context))
+      : undefined;
+    const url =
+      configuredUrl ?? cardInterface?.url ?? (card && canUseCardUrl(card) ? card.url : undefined);
     if (!url) {
+      if (card && (hasDeclaredInterfaces(card) || card.url)) {
+        throw new Error('A2A Agent Card does not advertise a supported HTTP+JSON interface.');
+      }
       throw new Error('Missing A2A endpoint URL. Set config.url or config.agentCardUrl.');
     }
     return {
@@ -493,8 +535,12 @@ export class A2AProvider implements ApiProvider {
     endpoint: A2AEndpoint,
     path: string,
     auth: A2ARequestAuth = { headers: {}, queryParams: {} },
+    queryParams: Record<string, string> = {},
   ): string {
-    return appendQueryParams(appendPath(endpoint.url, path), auth.queryParams);
+    return appendQueryParams(appendPath(endpoint.url, path), {
+      ...auth.queryParams,
+      ...queryParams,
+    });
   }
 
   private getTimeoutMs(): number {
@@ -548,7 +594,12 @@ export class A2AProvider implements ApiProvider {
     while (Date.now() - startedAt <= this.config.polling.timeoutMs) {
       const auth = await this.requestAuth(vars, context, endpoint.url);
       const response = await fetchWithTimeout(
-        this.requestUrl(endpoint, `/tasks/${encodeURIComponent(taskId)}`, auth),
+        this.requestUrl(
+          endpoint,
+          `/tasks/${encodeURIComponent(taskId)}`,
+          auth,
+          endpoint.tenant ? { tenant: endpoint.tenant } : {},
+        ),
         {
           headers: this.requestHeaders(endpoint, vars, context, auth, {
             Accept: 'application/a2a+json, application/json',
@@ -667,7 +718,7 @@ export class A2AProvider implements ApiProvider {
   }
 
   private throwForTaskState(task?: A2ATask): void {
-    const state = getTaskState(task);
+    const state = normalizeTaskState(getTaskState(task));
     if (!state || state === 'TASK_STATE_COMPLETED') {
       return;
     }
@@ -704,7 +755,10 @@ export class A2AProvider implements ApiProvider {
     if (statusText.length > 0) {
       return statusText.join('\n');
     }
-    const historyText = final.task?.history?.flatMap(textFromMessage) ?? [];
+    const historyText =
+      final.task?.history?.flatMap((message) =>
+        isAgentMessage(message) ? textFromMessage(message) : [],
+      ) ?? [];
     if (historyText.length > 0) {
       return historyText.join('\n');
     }
