@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, getEnvString, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -51,6 +51,7 @@ import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
+import { getFailingGroups, groupResultsByTest } from './eval/repeatPassRate';
 import { generateEvalSummary } from './eval/summary';
 import { collectKeyValueOption, normalizeTagOption } from './options';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
@@ -130,6 +131,57 @@ function handleRecoverableWatchError(error: unknown): boolean {
     return true;
   }
   return false;
+}
+
+async function applyCliRepeatPassRateThreshold({
+  evalRecord,
+  failedTestExitCode,
+  isCliInvocation,
+  repeat,
+}: {
+  evalRecord: Eval;
+  failedTestExitCode: number | undefined;
+  isCliInvocation: boolean;
+  repeat: number;
+}): Promise<void> {
+  const configuredThreshold = getEnvString('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
+  if (
+    !isCliInvocation ||
+    repeat <= 1 ||
+    configuredThreshold === undefined ||
+    configuredThreshold.trim() === ''
+  ) {
+    return;
+  }
+
+  const threshold = Number(configuredThreshold);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
+    logger.error(
+      chalk.red('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD must be a number from 0 to 100.'),
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const results = evalRecord.persisted ? await evalRecord.getResults() : evalRecord.results;
+  const failing = getFailingGroups(
+    groupResultsByTest(results, repeat, evalRecord.repeatPassRateGroupByTestIdx),
+    threshold,
+  );
+  if (failing.length === 0) {
+    return;
+  }
+
+  logger.info(chalk.white('Per-test repeat pass rate check failed:'));
+  for (const group of failing) {
+    const groupPassRate = (group.pass / group.total) * 100;
+    logger.info(
+      chalk.white(
+        `  ${chalk.cyan(group.description)}: ${chalk.red.bold(groupPassRate.toFixed(2))}${chalk.red('%')} (${group.pass}/${group.total}) is below threshold of ${chalk.red.bold(String(threshold))}${chalk.red('%')}`,
+      ),
+    );
+  }
+  process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
 }
 
 function resolveSuggestionOptions(
@@ -1093,8 +1145,14 @@ export async function doEval(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
       }
+
+      await applyCliRepeatPassRateThreshold({
+        evalRecord,
+        failedTestExitCode,
+        isCliInvocation,
+        repeat,
+      });
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);

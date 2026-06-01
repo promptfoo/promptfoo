@@ -2317,9 +2317,10 @@ function appendRunEvalOptionsForTestCase({
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
+  const repeatPassRateGroupStartIdx = nextTestIdx;
 
   for (let repeatIndex = 0; repeatIndex < (options.repeat || 1); repeatIndex++) {
-    for (const vars of varCombinations) {
+    for (const [varIndex, vars] of varCombinations.entries()) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
@@ -2333,6 +2334,7 @@ function appendRunEvalOptionsForTestCase({
         rateLimitRegistry,
         registers,
         repeatIndex,
+        repeatPassRateGroupIdx: repeatPassRateGroupStartIdx + varIndex,
         runEvalOptions,
         testCase,
         testIdx: nextTestIdx,
@@ -2359,6 +2361,7 @@ function appendRunEvalOptionsForVars({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatPassRateGroupIdx,
   runEvalOptions,
   testCase,
   testIdx,
@@ -2377,6 +2380,7 @@ function appendRunEvalOptionsForVars({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatPassRateGroupIdx: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2401,6 +2405,7 @@ function appendRunEvalOptionsForVars({
       rateLimitRegistry,
       registers,
       repeatIndex,
+      repeatPassRateGroupIdx,
       runEvalOptions,
       testCase,
       testIdx,
@@ -2424,6 +2429,7 @@ function appendRunEvalOptionsForProvider({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatPassRateGroupIdx,
   runEvalOptions,
   testCase,
   testIdx,
@@ -2443,6 +2449,7 @@ function appendRunEvalOptionsForProvider({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatPassRateGroupIdx: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2478,6 +2485,7 @@ function appendRunEvalOptionsForProvider({
         rateLimitRegistry,
         registers,
         repeatIndex,
+        repeatPassRateGroupIdx,
         testCase,
         testIdx,
         testSuite,
@@ -2513,6 +2521,7 @@ function createRunEvalOption({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatPassRateGroupIdx,
   testCase,
   testIdx,
   testSuite,
@@ -2531,6 +2540,7 @@ function createRunEvalOption({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatPassRateGroupIdx: number;
   testCase: AtomicTestCase;
   testIdx: number;
   testSuite: TestSuite;
@@ -2550,6 +2560,7 @@ function createRunEvalOption({
     testIdx,
     promptIdx,
     repeatIndex,
+    repeatPassRateGroupIdx,
     evaluateOptions: options,
     conversations,
     registers,
@@ -4444,6 +4455,15 @@ class Evaluator {
       testSuite,
       tests,
     });
+    this.evalRecord.repeatPassRateGroupByTestIdx =
+      (options.repeat ?? 1) > 1
+        ? new Map(
+            runEvalOptions.map(({ repeatPassRateGroupIdx, testIdx }) => [
+              testIdx,
+              repeatPassRateGroupIdx ?? testIdx,
+            ]),
+          )
+        : undefined;
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.evalRecord);

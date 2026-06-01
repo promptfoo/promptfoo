@@ -23,6 +23,7 @@ import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
+import { ResultFailureReason } from '../../src/types/index';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -31,6 +32,7 @@ import {
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
@@ -206,6 +208,274 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+  });
+
+  it('checks repeat pass-rate thresholds against --no-write results', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '100',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const cleanup = vi.fn();
+
+    try {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: defaultConfig,
+        testSuite: {
+          prompts: [],
+          providers: [{ id: () => 'echo', callApi: vi.fn(), cleanup }] as ApiProvider[],
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'repeated failure' },
+          promptId: 'prompt-1',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        };
+
+        await (evalRecord as Eval).addResult(result);
+        await (evalRecord as Eval).addResult({ ...result, testIdx: 1 });
+        return evalRecord as Eval;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(100);
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('cleans up providers when the aggregate pass-rate threshold fails', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '100',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: undefined,
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const cleanup = vi.fn();
+
+    try {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: defaultConfig,
+        testSuite: {
+          prompts: [],
+          providers: [{ id: () => 'echo', callApi: vi.fn(), cleanup }] as ApiProvider[],
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const record = evalRecord as Eval;
+        await record.addResult({
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'aggregate failure' },
+          promptId: 'prompt-1',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        });
+        record.prompts = [
+          {
+            metrics: {
+              testPassCount: 0,
+              testFailCount: 1,
+              testErrorCount: 0,
+            },
+          } as (typeof record.prompts)[number],
+        ];
+        return record;
+      });
+
+      await doEval({ table: false, write: false }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(100);
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    '-1',
+    '101',
+    'not-a-number',
+    '80oops',
+  ])('rejects invalid repeat pass-rate threshold %s without skipping cleanup', async (threshold) => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: threshold,
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const cleanup = vi.fn();
+
+    try {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: defaultConfig,
+        testSuite: {
+          prompts: [],
+          providers: [{ id: () => 'echo', callApi: vi.fn(), cleanup }] as ApiProvider[],
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'passing repetitions' },
+          promptId: 'prompt-1',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
+          vars: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+        };
+
+        await (evalRecord as Eval).addResult(result);
+        await (evalRecord as Eval).addResult({ ...result, testIdx: 1 });
+        return evalRecord as Eval;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(1);
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('keeps secret variable repetitions distinct after result sanitization', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '50',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const record = evalRecord as Eval;
+        record.repeatPassRateGroupByTestIdx = new Map([
+          [0, 0],
+          [1, 1],
+          [2, 0],
+          [3, 1],
+        ]);
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'secret vars', vars: { token: 'sk-failing-secret' } },
+          promptId: '',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        };
+
+        await record.addResult(result);
+        await record.addResult({
+          ...result,
+          testIdx: 1,
+          testCase: { description: 'secret vars', vars: { token: 'sk-passing-secret' } },
+          success: true,
+          score: 1,
+        });
+        await record.addResult({ ...result, testIdx: 2 });
+        await record.addResult({
+          ...result,
+          testIdx: 3,
+          testCase: { description: 'secret vars', vars: { token: 'sk-passing-secret' } },
+          success: true,
+          score: 1,
+        });
+        return record;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(100);
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('does not apply repeat pass-rate thresholds to reusable callers', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '100',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'repeated failure' },
+          promptId: 'prompt-1',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        };
+
+        await (evalRecord as Eval).addResult(result);
+        await (evalRecord as Eval).addResult({ ...result, testIdx: 1 });
+        return evalRecord as Eval;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'mcp',
+      });
+
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
   });
 
   it('should merge runtime tags over config tags', async () => {
