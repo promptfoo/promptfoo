@@ -210,6 +210,20 @@ describe('sanitizeObject', () => {
       ).toEqual({ tests: [redactedUri] });
     });
 
+    it('restores unchanged duplicate Azure Blob SAS URIs positionally', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+      const stored = {
+        tests: [
+          'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          'az://account/container/tests.yaml?sp=r&sig=second-secret',
+        ],
+      };
+
+      expect(restoreAzureBlobSasTokens({ tests: [redactedUri, redactedUri] }, stored)).toEqual(
+        stored,
+      );
+    });
+
     it('restores nested array SAS tokens when unrelated object fields are edited', () => {
       const stored = {
         tests: [

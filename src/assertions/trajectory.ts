@@ -263,7 +263,12 @@ function resolveToolSetValue(value: unknown): TrajectoryToolSetValue {
 export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const value = resolveToolSetValue(params.renderedValue ?? params.assertion.value);
+  const assertionValue = params.renderedValue ?? params.assertion.value;
+  const value = resolveToolSetValue(
+    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
+      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
+      : assertionValue,
+  );
 
   if (value.tools.length === 0) {
     throw new Error('trajectory:tool-set assertion requires at least one expected tool');
