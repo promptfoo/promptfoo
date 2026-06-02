@@ -23,11 +23,12 @@ providers:
       max_output_tokens: 2048
   # GPT-5.4 is available in us-east-2 (Ohio) and us-west-2 (Oregon).
   - id: bedrock:openai.gpt-5.4
-    label: GPT-5.4 (minimal reasoning)
+    label: GPT-5.4 (low reasoning)
     config:
       region: us-east-2
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
-      reasoning_effort: minimal
+      # Valid: none | low | medium | high | xhigh (minimal is NOT supported)
+      reasoning_effort: low
       max_output_tokens: 1024
 
 tests:

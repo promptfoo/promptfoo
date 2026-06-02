@@ -392,13 +392,13 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
   presence_penalty?: number;
   stop?: string[];
   /**
-   * Reasoning depth for OpenAI reasoning models on Bedrock, passed through as the
-   * native `reasoning_effort` request field. Valid values depend on the model:
-   * gpt-oss accepts `low`/`medium`/`high`, while the frontier GPT-5.x models also
-   * support `minimal` and `none`. The value is forwarded as-is so the Bedrock API
-   * validates it per-model.
+   * Reasoning depth for the open-weight gpt-oss models (served via InvokeModel), passed
+   * through as the native `reasoning_effort` request field. gpt-oss accepts `low`, `medium`,
+   * and `high` (the Harmony runtime rejects `none`); `minimal` is not supported. The value is
+   * forwarded as-is so the Bedrock API validates it. Frontier gpt-5.x models do not use this
+   * handler — they go through the OpenAI Responses provider (see openaiResponses.ts).
    */
-  reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+  reasoning_effort?: 'low' | 'medium' | 'high';
   /**
    * Controls how the `<reasoning>...</reasoning>` block that OpenAI reasoning models
    * (gpt-oss, gpt-5.x) prepend to the response content via `InvokeModel` is surfaced.

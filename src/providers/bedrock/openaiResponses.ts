@@ -60,13 +60,28 @@ function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string 
 
 /**
  * OpenAI Responses provider for Bedrock frontier models. Behaves exactly like the OpenAI
- * Platform provider (shared request/response/usage handling) but strips the `openai.`
- * prefix from the model id when resolving billing rates, so cost is computed from the
- * OpenAI billing tables (Bedrock mirrors OpenAI first-party rates).
+ * Platform provider (shared request/response/usage handling).
+ *
+ * Bedrock model ids carry an `openai.` prefix (e.g. `openai.gpt-5.5`), which the base
+ * provider's GPT-5 detection (`gpt-5*` / `/gpt-5`) and billing lookups don't recognize.
+ * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
+ * `temperature` default wrongly applied. We strip the prefix for those capability/billing
+ * checks while still sending the real `openai.gpt-5.5` id as the request `model` — Bedrock
+ * mirrors OpenAI first-party rates, so the OpenAI billing tables apply.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
-  protected getBillingModelName(config: OpenAiCompletionOptions): string {
-    return super.getBillingModelName(config).replace(/^openai\./, '');
+  /** Model id without the Bedrock `openai.` prefix, for OpenAI capability/billing lookups. */
+  private bareModelName(): string {
+    return this.modelName.replace(/^openai\./, '');
+  }
+
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.bareModelName();
+  }
+
+  protected isGPT5Model(): boolean {
+    const model = this.bareModelName();
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 }
 

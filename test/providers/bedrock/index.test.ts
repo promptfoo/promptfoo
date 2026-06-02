@@ -2134,15 +2134,15 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should forward frontier-only reasoning_effort values verbatim', async () => {
+    it('should forward the configured reasoning_effort verbatim', async () => {
       const config = {
-        reasoning_effort: 'minimal' as const,
+        reasoning_effort: 'low' as const,
       };
       const prompt = 'Test prompt';
 
       const params = await modelHandler.params(config, prompt);
 
-      expect(params.reasoning_effort).toBe('minimal');
+      expect(params.reasoning_effort).toBe('low');
     });
 
     it('should not include reasoning_effort when it is not specified', async () => {

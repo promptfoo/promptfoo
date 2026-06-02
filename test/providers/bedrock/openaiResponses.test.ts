@@ -92,5 +92,31 @@ describe('bedrock openaiResponses helper', () => {
       // billing key so cost is computed (Bedrock mirrors OpenAI first-party rates).
       expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
     });
+
+    it('detects the prefixed frontier id as a GPT-5 / reasoning model', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {});
+      // Without prefix-stripping these would be false (the id starts with "openai.").
+      expect((provider as any).isGPT5Model()).toBe(true);
+      expect((provider as any).isReasoningModel()).toBe(true);
+      expect((provider as any).supportsTemperature()).toBe(false);
+    });
+
+    it('sends GPT-5 controls in the request body and preserves the openai. model id', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { reasoning_effort: 'high', verbosity: 'low' } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('hello');
+
+      // Real Bedrock model id is sent to the mantle endpoint...
+      expect(body.model).toBe('openai.gpt-5.5');
+      // ...while GPT-5 capability detection applies: reasoning effort + verbosity are sent,
+      // and no temperature default leaks in (reasoning models don't support it).
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.text?.verbosity).toBe('low');
+      expect(body.temperature).toBeUndefined();
+    });
   });
 });

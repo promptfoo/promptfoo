@@ -258,7 +258,7 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenA
   export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
   ```
 
-- **Native Reasoning Effort**: `reasoning_effort` supports `minimal`, `low`, `medium`, and `high`.
+- **Native Reasoning Effort**: `reasoning_effort` supports `none`, `low`, `medium`, `high`, and `xhigh` (`minimal` is not supported by these Bedrock models).
 - **Region-gated**: Request model access in a supported region before running.
 
 These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.

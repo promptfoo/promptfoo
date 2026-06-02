@@ -1003,7 +1003,7 @@ providers:
     config:
       region: us-east-2 # gpt-5.5: us-east-2; gpt-5.4: us-east-2 or us-west-2
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
-      reasoning_effort: low # minimal | low | medium | high
+      reasoning_effort: low # none | low | medium | high | xhigh
       max_output_tokens: 2048
 ```
 
@@ -1048,8 +1048,9 @@ Both families accept the native `reasoning_effort` request parameter, which prom
 forwards as-is so the API validates it for the specific model:
 
 - **GPT OSS** (`openai.gpt-oss-*`): `low`, `medium`, `high`
-- **Frontier** (`openai.gpt-5.x`): also support `minimal` and `none`
+- **Frontier** (`openai.gpt-5.x`): `none`, `low`, `medium`, `high`, `xhigh`
 
+Note that `minimal` is **not** a valid value for these Bedrock models (the API rejects it).
 Higher effort produces more thorough reasoning at the cost of latency and output tokens.
 
 #### Reasoning Output and `showThinking` (GPT OSS only)
