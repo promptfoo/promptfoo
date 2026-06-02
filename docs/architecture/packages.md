@@ -72,6 +72,11 @@ Mixed modules that do not yet have a stable package owner belong to
 `legacy-runtime`. This keeps migration debt visible. New checked source files
 must be assigned to a layer instead of silently becoming unclassified.
 
+`src/evaluator/runtime.ts` defines the evaluator's narrow runtime port. Its
+default `src/node/evaluatorRuntime.ts` adapter owns result persistence, JSONL
+writer construction, and resume append behavior while the evaluator continues
+to orchestrate evaluation behavior.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
