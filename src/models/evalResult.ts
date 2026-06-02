@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -19,7 +21,7 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { REDACTED, sanitizeObject } from '../util/sanitizer';
+import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingRequest,
@@ -226,11 +228,30 @@ function isSensitiveResponseHeader(headerName: string): boolean {
   return SENSITIVE_RESPONSE_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
-function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string, unknown> | null {
+// Request headers can carry credentials the response-header list doesn't enumerate
+// (api-key / x-api-key / x-auth-token / bearer …); fold in the shared secret-field matcher.
+function isSensitiveRequestHeader(headerName: string): boolean {
+  return isSensitiveResponseHeader(headerName) || isSecretField(headerName);
+}
+
+// Redact sensitive headers, but only when the value originates from `sourceHeaders` (the
+// transport headers). The provenance check matters for the legacy top-level `metadata.headers`
+// slot, which also holds arbitrary user metadata: a header is redacted only if it deep-equals
+// the value the transport actually sent. For the canonical `metadata.http.*` slots the source
+// is the slot itself, so the guard reduces to the plain name check.
+function redactSensitiveHeaders(
+  headers: Record<string, unknown>,
+  sourceHeaders: Record<string, unknown> = headers,
+  isSensitiveHeader: (headerName: string) => boolean = isSensitiveResponseHeader,
+): Record<string, unknown> | null {
   let mutated = false;
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (isSensitiveResponseHeader(key)) {
+    if (
+      Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
+      isDeepStrictEqual(sourceHeaders[key], value) &&
+      isSensitiveHeader(key)
+    ) {
       next[key] = REDACTED;
       mutated = true;
     } else {
@@ -240,39 +261,83 @@ function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string
   return mutated ? next : null;
 }
 
-// Redact `metadata.http.headers` and `metadata.http.requestHeaders` on a single
-// metadata object. Does NOT recurse into other keys (e.g. `output`, `audio`,
-// arbitrary model output) — providers populate transport metadata at the canonical
-// `metadata.http` slot only, and walking arbitrary subtrees risks rewriting
-// user-controlled content that legitimately uses an `http` key (see
+// Redact transport headers on a single metadata object. Providers populate
+// `metadata.http.headers` / `requestHeaders`, while some legacy integrations still use a
+// top-level `metadata.headers`. The legacy slot is only redacted when its transport source
+// is known (`redactLegacyHeaders` for a response's own metadata, or `legacyHeadersSource` for
+// result-level metadata that echoes the response) because top-level result metadata also holds
+// arbitrary user-authored test metadata. Does NOT recurse into other keys (e.g. `output`,
+// `audio`, arbitrary model output) — walking arbitrary subtrees risks rewriting user-controlled
+// content that legitimately uses an `http` key (see
 // https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
-function redactHttpHeadersOnMetadata<T>(metadata: T): T {
+function redactHttpHeadersOnMetadata<T>(
+  metadata: T,
+  options?: { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean },
+): T {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return metadata;
   }
 
   const m = metadata as Record<string, unknown>;
+  let nextMetadata: Record<string, unknown> | undefined;
+
+  const legacyHeaders = m.headers;
+  const legacyHeadersSource = options?.redactLegacyHeaders
+    ? legacyHeaders
+    : (options?.legacyHeadersSource as Record<string, unknown> | undefined)?.headers;
+  if (
+    legacyHeaders &&
+    typeof legacyHeaders === 'object' &&
+    !Array.isArray(legacyHeaders) &&
+    legacyHeadersSource &&
+    typeof legacyHeadersSource === 'object' &&
+    !Array.isArray(legacyHeadersSource)
+  ) {
+    // The legacy slot mirrors transport request/response headers, so use the request-header
+    // matcher (a strict superset) — otherwise api-key / x-auth-token / bearer would be redacted
+    // in metadata.http.requestHeaders but leak in cleartext here.
+    const redacted = redactSensitiveHeaders(
+      legacyHeaders as Record<string, unknown>,
+      legacyHeadersSource as Record<string, unknown>,
+      isSensitiveRequestHeader,
+    );
+    if (redacted) {
+      nextMetadata = { ...m, headers: redacted };
+    }
+  }
+
   const http = m.http;
   if (!http || typeof http !== 'object' || Array.isArray(http)) {
-    return metadata;
+    return (nextMetadata ?? metadata) as T;
   }
 
   const httpRecord = http as Record<string, unknown>;
-  let mutated = false;
-  const nextHttp: Record<string, unknown> = { ...httpRecord };
+  let nextHttp: Record<string, unknown> | undefined;
 
   for (const slot of ['headers', 'requestHeaders'] as const) {
     const slotValue = httpRecord[slot];
     if (slotValue && typeof slotValue === 'object' && !Array.isArray(slotValue)) {
-      const redacted = redactSensitiveHeaders(slotValue as Record<string, unknown>);
+      const redacted =
+        slot === 'requestHeaders'
+          ? redactSensitiveHeaders(
+              slotValue as Record<string, unknown>,
+              slotValue as Record<string, unknown>,
+              isSensitiveRequestHeader,
+            )
+          : redactSensitiveHeaders(slotValue as Record<string, unknown>);
       if (redacted) {
+        nextHttp ??= { ...httpRecord };
         nextHttp[slot] = redacted;
-        mutated = true;
       }
     }
   }
 
-  return (mutated ? { ...m, http: nextHttp } : metadata) as T;
+  if (!nextHttp) {
+    return (nextMetadata ?? metadata) as T;
+  }
+  nextMetadata ??= { ...m };
+  nextMetadata.http = nextHttp;
+  return nextMetadata as T;
 }
 
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
@@ -318,19 +383,119 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata);
+  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+    redactLegacyHeaders: true,
+  });
   if (redactedMetadata === (response as ProviderResponse).metadata) {
     return response;
   }
   return { ...response, metadata: redactedMetadata } as T;
 }
 
-function sanitizeMetadataForDb<T>(metadata: T): T {
-  return redactHttpHeadersOnMetadata(metadata);
+// `responseMetadata` is the (pre-redaction) provider response metadata, used as the provenance
+// source so a legacy top-level `metadata.headers` is redacted only where it echoes the
+// transport — leaving user-authored test metadata headers intact.
+function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
+  return redactHttpHeadersOnMetadata(metadata, {
+    legacyHeadersSource: sanitizeForDb(responseMetadata),
+  });
 }
 
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
+}
+
+// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
+// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
+// `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
+export const PROMPTFOO_METADATA_KEY = '__promptfoo';
+const TRACE_LINKAGE_KEY = 'traceLinkage';
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+export function persistTraceMetadata(
+  metadata: EvaluateResult['metadata'],
+  traceId: EvaluateResult['traceId'],
+  evaluationId: EvaluateResult['evaluationId'],
+): EvaluateResult['metadata'] {
+  if (!traceId && !evaluationId) {
+    return stripTraceLinkageFromMetadata(metadata);
+  }
+
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
+    logger.warn(
+      `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal trace linkage; the key is reserved for promptfoo internals.`,
+    );
+  }
+  if (promptfooMetadata && TRACE_LINKAGE_KEY in promptfooMetadata) {
+    logger.warn(
+      `[EvalResult] Overwriting metadata.${PROMPTFOO_METADATA_KEY}.${TRACE_LINKAGE_KEY} with internal trace linkage; the path is reserved for promptfoo internals.`,
+    );
+  }
+
+  // `traceId`/`evaluationId` are only persisted when truthy — JSON.stringify strips
+  // undefined values, and `surfaceTraceMetadata` requires `typeof === 'string'` on read.
+  return {
+    ...metadataRecord,
+    [PROMPTFOO_METADATA_KEY]: {
+      ...(promptfooMetadata ?? {}),
+      [TRACE_LINKAGE_KEY]: { traceId, evaluationId },
+    },
+  };
+}
+
+export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> | null | undefined>(
+  metadata: T,
+): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(TRACE_LINKAGE_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [TRACE_LINKAGE_KEY]: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+
+  return strippedMetadata as T;
+}
+
+function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
+  traceId?: string;
+  evaluationId?: string;
+  metadata: Record<string, unknown>;
+} {
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
+
+  const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
+  const evaluationId =
+    typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
+
+  // Strip the reserved namespace whenever a `traceLinkage` entry exists — even if the
+  // stored ids are malformed (non-string), the internal namespace must never surface to
+  // users. Gate on presence of the key, not on whether the ids read back as valid strings.
+  const hasTraceLinkage = promptfooMetadata != null && TRACE_LINKAGE_KEY in promptfooMetadata;
+  if (!hasTraceLinkage) {
+    return { traceId, evaluationId, metadata: metadataRecord };
+  }
+
+  return {
+    traceId,
+    evaluationId,
+    metadata: stripTraceLinkageFromMetadata(metadataRecord),
+  };
 }
 
 // Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
@@ -354,7 +519,13 @@ function redactSensitiveResultFieldsForDb<
   return {
     response: sanitizeResponseForDb(fields.response),
     gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
-    metadata: sanitizeMetadataForDb(fields.metadata),
+    // Pass the response metadata as the legacy-header provenance source (see
+    // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
+    // cleartext here and can be matched against an echoed result-level metadata.headers.
+    metadata: sanitizeMetadataForDb(
+      fields.metadata,
+      (fields.response as ProviderResponse | null | undefined)?.metadata,
+    ),
   };
 }
 
@@ -458,7 +629,13 @@ export default class EvalResult {
       metadata,
       failureReason,
       testCase,
+      traceId,
+      evaluationId,
     } = result;
+
+    // Persist trace linkage inside a private metadata namespace so it survives
+    // EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -498,7 +675,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(metadata),
+      metadata: sanitizeForDb(persistedMetadata),
       failureReason,
     };
     if (persist) {
@@ -538,15 +715,20 @@ export default class EvalResult {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`.
+        // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
+        // via `persistTraceMetadata`; strip the top-level fields so the DB write
+        // only carries known-schema columns.
+        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
         const sanitizedResult = {
-          ...result,
+          ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
           ...redactSensitiveResultFieldsForDb({
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
-            metadata: sanitizeForDb(result.metadata),
+            metadata: sanitizeForDb(
+              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+            ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
@@ -698,6 +880,8 @@ export default class EvalResult {
   cost: number;
   // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata: Record<string, any>;
+  traceId?: string;
+  evaluationId?: string;
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
@@ -741,7 +925,11 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    this.metadata = opts.metadata || {};
+    ({
+      metadata: this.metadata,
+      traceId: this.traceId,
+      evaluationId: this.evaluationId,
+    } = surfaceTraceMetadata(opts.metadata));
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -751,15 +939,24 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
+    // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
+    // testCase metadata in the constructor, and trace linkage travels inside the metadata
+    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
+    // explicitly keeps the write payload aligned with the schema.
+    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    const persistedValues = {
+      ...rest,
+      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+    };
     //check if this exists in the db
     if (this.persisted) {
       await db
         .update(evalResultsTable)
-        .set({ ...this, updatedAt: getCurrentTimestamp() })
+        .set({ ...persistedValues, updatedAt: getCurrentTimestamp() })
         .where(eq(evalResultsTable.id, this.id))
         .run();
     } else {
-      const result = await db.insert(evalResultsTable).values(this).returning();
+      const result = await db.insert(evalResultsTable).values(persistedValues).returning();
       this.id = result[0].id;
       this.persisted = true;
     }
@@ -808,6 +1005,8 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
+      ...(this.traceId ? { traceId: this.traceId } : {}),
+      ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,

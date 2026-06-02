@@ -229,7 +229,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
-  'tracing/evaluatorTracing.test.ts',
   'tracing/integration.test.ts',
   'util/agent/fsOperations.test.ts',
   'util/config/load.test.ts',

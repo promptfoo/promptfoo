@@ -1,4 +1,5 @@
 import readline from 'readline';
+import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -537,6 +538,33 @@ function logGroupedGradingStatus({
   }
 }
 
+// When an afterEach hook replaces response.metadata, a legacy top-level metadata.headers that
+// was copied from the OLD transport headers becomes stale — and would persist as stale (and
+// possibly sensitive) headers. Only re-sync when the original top-level headers provably came
+// from the original transport (deep-equal) and the hook left that top-level copy unchanged;
+// otherwise the hook owns metadata.headers and we leave it alone.
+function synchronizeLegacyTransportHeaders(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  hookMetadata: Record<string, unknown> | undefined,
+  hookResponseMetadata: Record<string, unknown> | undefined,
+) {
+  const originalHeaders = originalMetadata?.headers;
+  if (
+    originalHeaders === undefined ||
+    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
+    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
+  ) {
+    return hookMetadata;
+  }
+
+  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
+  if (hookResponseMetadata?.headers === undefined) {
+    return metadataWithoutHeaders;
+  }
+  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
+}
+
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
@@ -803,41 +831,32 @@ function tryParseJson(value: string): unknown {
 async function callProviderForRunEval({
   abortSignal,
   evalId,
-  evaluateOptions,
   filters,
   promptForRender,
-  promptIdx,
   provider,
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
   test,
-  testIdx,
-  testSuite,
+  traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
-  | 'evaluateOptions'
   | 'nunjucksFilters'
-  | 'promptIdx'
   | 'provider'
   | 'rateLimitRegistry'
   | 'repeatIndex'
   | 'test'
-  | 'testIdx'
-  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
   const startTime = Date.now();
-  const traceContext = test.providerOutput
-    ? null
-    : await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx, testSuite);
   const response = test.providerOutput
     ? {
         output: test.providerOutput,
@@ -1023,6 +1042,8 @@ function createEvaluateResult({
   setup,
   test,
   testIdx,
+  traceContext,
+  evalId,
   vars,
 }: {
   fileMetadata: Record<string, unknown>;
@@ -1034,6 +1055,8 @@ function createEvaluateResult({
   setup: RunEvalSetup;
   test: AtomicTestCase;
   testIdx: number;
+  traceContext?: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
+  evalId?: string;
   vars: Vars;
 }): EvaluateResult {
   const ret: EvaluateResult = {
@@ -1059,6 +1082,7 @@ function createEvaluateResult({
     testCase: test,
     promptId: prompt.id || '',
     tokenUsage: createEmptyTokenUsage(),
+    ...getTraceLinkage(traceContext, evalId),
   };
 
   if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
@@ -1308,12 +1332,46 @@ async function transformRunEvalResponse({
   };
 }
 
-function getTraceId(traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>) {
+export function getTraceId(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
+) {
   if (!traceContext?.traceparent) {
     return undefined;
   }
+  // W3C traceparent: `version-traceId-spanId-flags`. Version 00 has exactly 4 dash-separated
+  // parts; future versions MAY append fields after flags. Validate the required fields before
+  // surfacing linkage so malformed or sentinel IDs never become persisted row metadata.
   const parts = traceContext.traceparent.split('-');
-  return parts.length >= 3 ? parts[1] : undefined;
+  const [version, traceId, parentId, flags] = parts;
+  const validPartCount = version === '00' ? parts.length === 4 : parts.length >= 4;
+  const validTraceId = /^[0-9a-f]{32}$/.test(traceId) && !/^0+$/.test(traceId);
+  const validParentId = /^[0-9a-f]{16}$/.test(parentId) && !/^0+$/.test(parentId);
+  if (
+    !/^[0-9a-f]{2}$/.test(version) ||
+    version === 'ff' ||
+    !validPartCount ||
+    !validTraceId ||
+    !validParentId ||
+    !/^[0-9a-f]{2}$/.test(flags)
+  ) {
+    logger.warn(`[Evaluator] Malformed traceparent; dropping trace linkage on this row.`);
+    return undefined;
+  }
+  return traceId;
+}
+
+export function getTraceLinkage(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
+  evalId?: string,
+) {
+  const traceId = getTraceId(traceContext);
+  // Only set evaluationId when a trace context exists. Pairing it with traceId keeps
+  // the field's presence as a "this row was traced" signal for downstream consumers.
+  const evaluationId = traceContext ? (traceContext.evaluationId ?? evalId) : undefined;
+  return {
+    ...(traceId ? { traceId } : {}),
+    ...(evaluationId ? { evaluationId } : {}),
+  };
 }
 
 /**
@@ -1389,6 +1447,7 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1402,26 +1461,32 @@ async function runEvalInternal({
     });
     setup = rendered.setup;
 
+    traceContext = test.providerOutput
+      ? null
+      : await generateTraceContextIfNeeded(
+          test,
+          evaluateOptions,
+          testIndex,
+          promptIndex,
+          testSuite,
+        );
     const providerCall = await callProviderForRunEval({
       abortSignal,
       evalId,
-      evaluateOptions,
       filters,
       promptForRender: {
         ...state.promptForRender,
         config: rendered.setup.prompt.config,
       },
-      promptIdx: promptIndex,
       provider,
       rateLimitRegistry,
       renderedPrompt: rendered.renderedPrompt,
       repeatIndex,
       test,
-      testIdx: testIndex,
-      testSuite,
+      traceContext,
       vars: state.vars,
     });
-    const { response, traceContext } = providerCall;
+    const { response } = providerCall;
     latencyMs = providerCall.latencyMs;
 
     updateConversationHistory({
@@ -1457,6 +1522,8 @@ async function runEvalInternal({
       setup,
       test,
       testIdx: testIndex,
+      traceContext,
+      evalId,
       vars: persistedVars,
     });
 
@@ -1525,6 +1592,7 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...getTraceLinkage(traceContext, evalId),
       },
     ];
   }
@@ -3303,6 +3371,8 @@ class Evaluator {
       // so in-place mutations don't corrupt the row on hook failure.
       if (context.testSuite.extensions?.length) {
         try {
+          const originalMetadata = row.metadata;
+          const originalResponseMetadata = row.response?.metadata;
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,
             result: {
@@ -3317,7 +3387,14 @@ class Evaluator {
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          row.metadata = afterEachOut.result.metadata;
+          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
+          // from the old transport would otherwise persist as stale credentials. Re-sync it.
+          row.metadata = synchronizeLegacyTransportHeaders(
+            originalMetadata,
+            originalResponseMetadata,
+            afterEachOut.result.metadata,
+            afterEachOut.result.response?.metadata,
+          );
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;
           }
@@ -4660,8 +4737,6 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    await startOtlpReceiverIfNeeded(this.testSuite);
-
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -4670,15 +4745,20 @@ class Evaluator {
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-
-    if (tracingEnabled) {
-      logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-      const otelConfig = getDefaultOtelConfig();
-      initializeOtel(otelConfig);
-    }
+    let otelInitialized = false;
+    let otlpReceiverAcquired = false;
 
     let evaluationError: unknown;
     try {
+      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.evalRecord.id);
+
+      if (tracingEnabled) {
+        logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+        const otelConfig = getDefaultOtelConfig();
+        initializeOtel(otelConfig);
+        otelInitialized = true;
+      }
+
       return await this._runEvaluation();
     } catch (error) {
       evaluationError = error;
@@ -4698,18 +4778,18 @@ class Evaluator {
       let cleanupError: unknown;
       try {
         // Flush and shutdown OTEL SDK
-        if (tracingEnabled) {
+        if (otelInitialized) {
           logger.debug('[Evaluator] Flushing OTEL spans...');
           await flushOtel();
           await shutdownOtel();
         }
 
-        if (isOtlpReceiverStarted()) {
+        if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
           // Add a delay to allow providers to finish exporting spans
           logger.debug('[Evaluator] Waiting for span exports to complete...');
           await sleep(3000);
         }
-        await stopOtlpReceiverIfNeeded();
+        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.evalRecord.id);
 
         // Clean up Python worker pools to prevent resource leaks
         await providerRegistry.shutdownAll();
