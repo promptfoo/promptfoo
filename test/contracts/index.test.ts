@@ -5,6 +5,8 @@ import {
   CompletionTokenDetailsSchema,
   DocumentMediaInjectionPlacementSchema,
   DocxInjectionPlacementSchema,
+  EmailSchema,
+  GetUserResponseSchema,
   getInputDescription,
   getInputType,
   InputDefinitionObjectSchema,
@@ -33,6 +35,8 @@ describe('contracts leaf surface', () => {
       expect(StringOrFunctionSchema.safeParse('output.trim()').success).toBe(true);
       expect(StringOrFunctionSchema.safeParse(() => 'ok').success).toBe(true);
       expect(isTransformFunction(() => 'ok')).toBe(true);
+      expect(EmailSchema.safeParse('user@example.com').success).toBe(true);
+      expect(GetUserResponseSchema.safeParse({ email: 'user@example.com' }).success).toBe(true);
     });
   });
 
