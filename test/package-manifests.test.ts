@@ -122,17 +122,31 @@ describe('package manifests', () => {
   });
 
   it('detects extension-unsafe relative specifiers across module syntax', () => {
+    // The contracts files are dominated by type-only imports/exports, so the detector that the
+    // extension-safety guard relies on MUST catch those forms, not just runtime imports.
     expect(
       findExtensionUnsafeRelativeSpecifiers(
         `
           import './side-effect';
           export { value } from './exported';
           import('./dynamic');
+          import type { A } from './type-import';
+          export type { B } from './type-export';
+          import { type C, D } from './inline-type';
+          import type Default from './default-type';
           export { schema } from './schema.json';
         `,
         'fixture.ts',
       ),
-    ).toEqual(['./side-effect', './exported', './dynamic']);
+    ).toEqual([
+      './side-effect',
+      './exported',
+      './dynamic',
+      './type-import',
+      './type-export',
+      './inline-type',
+      './default-type',
+    ]);
   });
 
   it('pins root TypeScript compilation to noEmit', () => {

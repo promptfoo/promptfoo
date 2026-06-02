@@ -1,8 +1,9 @@
-import { AIStudioChatProvider, AIStudioEmbeddingProvider } from '../google/ai.studio';
-import { VertexChatProvider, VertexEmbeddingProvider } from '../google/vertex';
-
 import type { ProviderFactory } from '../registryTypes';
 
+// Every provider class is imported lazily inside its factory so that merely
+// loading this family module (which happens on any `vertex:`/`google:`/`palm:`
+// lookup) stays cheap: a given path pulls in only the provider it actually
+// constructs, never the whole Google provider surface.
 export const googleProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
@@ -18,6 +19,7 @@ export const googleProviderFactories: ProviderFactory[] = [
           config: { ...providerOptions.config, vertexai: true },
         });
       }
+      const { VertexChatProvider, VertexEmbeddingProvider } = await import('../google/vertex');
       if (firstPart === 'chat') {
         return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
       }
@@ -59,6 +61,7 @@ export const googleProviderFactories: ProviderFactory[] = [
               `Missing model name for ${providerPath}. Use e.g. google:embedding:gemini-embedding-001.`,
             );
           }
+          const { AIStudioEmbeddingProvider } = await import('../google/ai.studio');
           return new AIStudioEmbeddingProvider(modelName, providerOptions);
         }
       }
@@ -73,6 +76,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         return new GeminiImageProvider(modelName, providerOptions);
       }
 
+      const { AIStudioChatProvider } = await import('../google/ai.studio');
       return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
