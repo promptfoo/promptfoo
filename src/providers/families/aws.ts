@@ -16,13 +16,14 @@ export const awsProviderFactories: ProviderFactory[] = [
       // APIs. Route them before the per-type handlers so `bedrock:openai.gpt-5.5`,
       // `bedrock:converse:openai.gpt-5.5`, and `bedrock:completion:openai.gpt-5.5` all resolve
       // correctly. Open-weight gpt-oss models fall through to InvokeModel/Converse below.
-      const { isBedrockOpenAiResponsesModel } = await import('../bedrock/openaiResponses');
+      const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } = await import(
+        '../bedrock/openaiResponses'
+      );
       const candidateOpenAiModel =
         modelType === 'converse' || modelType === 'completion'
           ? modelName
           : splits.slice(1).join(':');
       if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
-        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
         return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
           ...providerOptions,
           id: providerOptions.id ?? providerPath,

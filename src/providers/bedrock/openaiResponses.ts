@@ -59,12 +59,6 @@ function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string 
 }
 
 /**
- * Construct an OpenAI Responses provider configured for a Bedrock frontier model. Resolves
- * the region (config → AWS_BEDROCK_REGION → AWS_REGION → default) and the Amazon Bedrock
- * API key (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle endpoint
- * unless the caller supplies an explicit `apiBaseUrl`.
- */
-/**
  * OpenAI Responses provider for Bedrock frontier models. Behaves exactly like the OpenAI
  * Platform provider (shared request/response/usage handling) but strips the `openai.`
  * prefix from the model id when resolving billing rates, so cost is computed from the
@@ -76,6 +70,12 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   }
 }
 
+/**
+ * Construct an OpenAI Responses provider configured for a Bedrock frontier model. Resolves
+ * the region (config → AWS_BEDROCK_REGION → AWS_REGION → default) and the Amazon Bedrock
+ * API key (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle endpoint
+ * unless the caller supplies an explicit `apiBaseUrl`.
+ */
 export function createBedrockOpenAiResponsesProvider(
   modelName: string,
   providerOptions: ProviderOptions & { id?: string } = {},
