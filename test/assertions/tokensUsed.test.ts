@@ -124,6 +124,37 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 250');
   });
 
+  it('uses the larger component total when an aggregate trace attribute undercounts', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 150, source: 'trace' } },
+      renderedValue: { max: 150, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 's1',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 100,
+              attributes: {
+                'gen_ai.usage.input_tokens': 100,
+                'gen_ai.usage.output_tokens': 100,
+                'gen_ai.usage.total_tokens': 100,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 200');
+  });
+
   it('avoids double counting nested trace spans that repeat token totals', () => {
     const params: AssertionParams = {
       ...baseParams,

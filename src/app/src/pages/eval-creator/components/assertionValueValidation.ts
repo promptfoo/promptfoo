@@ -1,3 +1,15 @@
+import {
+  notTrajectoryToolUsedBoundsError,
+  tokensUsedConfigError,
+  traceErrorSpansConfigError,
+  traceSpanCountBoundsError,
+  traceSpanDurationConfigError,
+  trajectoryCountBoundsError,
+  trajectoryGoalSuccessTimeoutError,
+  trajectoryRedactArgsError,
+  trajectoryToolSequenceModeError,
+  trajectoryToolSetConfigError,
+} from '@promptfoo/util/traceAssertionConfig';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -418,45 +430,21 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  if (value.min === undefined && value.max === undefined) {
-    return 'Enter JSON with a minimum or maximum trace span count.';
-  }
-  return getNonNegativeIntegerRangeError(value, 'trace span count limits');
+  // Delegate the bound rules (at-least-one, finite non-negative integers, max >= min) to the
+  // shared validator the runtime uses, so save-time and run-time validation cannot drift.
+  return traceSpanCountBoundsError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value.max !== 'number' ||
-    !Number.isFinite(value.max) ||
-    value.max < 0
-  ) {
+  if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
   if (value.pattern !== undefined && !hasNonBlankString(value.pattern)) {
-    return 'Enter the optional trace span duration pattern as non-empty text.';
+    return 'Enter the optional trace span name pattern as non-empty text.';
   }
-  if (value.requirePresence !== undefined && typeof value.requirePresence !== 'boolean') {
-    return 'Set trace span duration requirePresence to true or false.';
-  }
-  if (
-    value.percentile !== undefined &&
-    (typeof value.percentile !== 'number' ||
-      !Number.isFinite(value.percentile) ||
-      value.percentile < 0 ||
-      value.percentile > 100)
-  ) {
-    return 'Enter a trace span percentile from 0 to 100.';
-  }
-  if (
-    value.percentile !== undefined &&
-    value.method !== undefined &&
-    value.method !== 'nearest' &&
-    value.method !== 'linear'
-  ) {
-    return 'Set trace span duration method to "nearest" or "linear".';
-  }
-  return undefined;
+  // Shared validator enforces non-negative max, pattern, requirePresence, and the
+  // percentile/method rules exactly as the runtime does.
+  return traceSpanDurationConfigError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -469,17 +457,32 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
   if (value.mode !== undefined && value.mode !== 'partial' && value.mode !== 'exact') {
     return 'Set trajectory tool args mode to "partial" or "exact".';
   }
-  return undefined;
+  // A non-boolean redactArgsInFailures must fail loud here too, not fail open at eval time.
+  return trajectoryRedactArgsError(value);
 }
 
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || (value.min === undefined && value.max === undefined)) {
     return 'Enter JSON with a minimum or maximum trajectory step count.';
   }
-  return getNonNegativeIntegerRangeError(value, 'trajectory step count limits');
+  return trajectoryCountBoundsError(value, 'trajectory:step-count');
+}
+
+function getTraceErrorSpansValueError(value: unknown): string | undefined {
+  // A number (max error-span count) or an object with max_count/max_percentage/pattern/
+  // requirePresence; any other value resolves to defaults at runtime and is accepted.
+  return traceErrorSpansConfigError(value);
 }
 
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
+  // The object form carries an optional mode; mirror the runtime "in_order"/"exact" check
+  // (validated before steps, as the runtime resolves mode before the empty-steps guard).
+  if (isRecord(value)) {
+    const modeError = trajectoryToolSequenceModeError(value);
+    if (modeError) {
+      return modeError;
+    }
+  }
   const steps = getTrajectoryToolSequenceSteps(value);
   if (!steps || steps.length === 0) {
     return 'Enter a non-empty JSON tool sequence.';
@@ -494,52 +497,20 @@ function getTokensUsedValueError(value: unknown): string | undefined {
   if (!isRecord(value)) {
     return 'Enter JSON with a minimum or maximum token budget.';
   }
-
-  const { max, min, pattern, source } = value;
-  if (min === undefined && max === undefined) {
-    return 'Enter JSON with a minimum or maximum token budget.';
-  }
-  if (
-    (min !== undefined && (typeof min !== 'number' || !Number.isFinite(min) || min < 0)) ||
-    (max !== undefined && (typeof max !== 'number' || !Number.isFinite(max) || max < 0))
-  ) {
-    return 'Enter token budgets as numbers, 0 or greater.';
-  }
-  if (typeof min === 'number' && typeof max === 'number' && min > max) {
-    return 'Minimum token usage cannot exceed maximum token usage.';
-  }
-  if (source !== undefined && source !== 'trace' && source !== 'response' && source !== 'auto') {
-    return 'Set token usage source to "trace", "response", or "auto".';
-  }
-  if (pattern !== undefined && !hasNonBlankString(pattern)) {
-    return 'Enter the optional token usage span pattern as non-empty text.';
-  }
-
-  return undefined;
+  return tokensUsedConfigError(value);
 }
 
 function getTrajectoryToolSetValueError(value: unknown): string | undefined {
+  const configError = trajectoryToolSetConfigError(value);
+  if (configError) {
+    return configError;
+  }
   const tools = Array.isArray(value)
     ? value
-    : isRecord(value) && Array.isArray(value.tools)
-      ? value.tools
-      : undefined;
-
-  if (!tools || tools.length === 0) {
-    return 'Enter a non-empty JSON tool set.';
-  }
+    : ((value as Record<string, unknown>).tools as unknown[]);
   if (!tools.every(isUsableTrajectorySequenceStep)) {
     return 'Each trajectory tool set entry needs a name or pattern.';
   }
-  if (
-    isRecord(value) &&
-    value.mode !== undefined &&
-    value.mode !== 'subset' &&
-    value.mode !== 'exact'
-  ) {
-    return 'Set trajectory tool set mode to "subset" or "exact".';
-  }
-
   return undefined;
 }
 
@@ -581,6 +552,23 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   }
   if (assertion.type === 'trajectory:tool-set' || assertion.type === 'not-trajectory:tool-set') {
     return getTrajectoryToolSetValueError(assertion.value);
+  }
+  if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
+    return getTraceErrorSpansValueError(assertion.value);
+  }
+  if (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') {
+    // tool-used can be a string/array (no count bounds) or an object carrying min/max counts.
+    // Presence is validated by getNamedMatcherValueError; only the count bounds live here, and
+    // they are checked first to match the runtime (bounds resolve before the name/pattern check).
+    if (isRecord(assertion.value)) {
+      const boundsError = trajectoryCountBoundsError(assertion.value, 'trajectory:tool-used');
+      if (boundsError) {
+        return boundsError;
+      }
+      if (assertion.type === 'not-trajectory:tool-used') {
+        return notTrajectoryToolUsedBoundsError(assertion.value);
+      }
+    }
   }
 
   return undefined;
@@ -678,23 +666,18 @@ function getBasicExpectedValueError(assertion: Assertion): string | undefined {
 }
 
 function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
+  if (!TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)) {
+    return undefined;
+  }
   if (
-    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
     !(isRecord(assertion.value) && hasNonBlankString(assertion.value.goal))
   ) {
     return 'Enter the goal that the agent should achieve.';
   }
-
-  if (
-    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
-    isRecord(assertion.value) &&
-    assertion.value.timeoutMs !== undefined &&
-    (typeof assertion.value.timeoutMs !== 'number' ||
-      !Number.isFinite(assertion.value.timeoutMs) ||
-      assertion.value.timeoutMs <= 0)
-  ) {
-    return 'Enter a positive trajectory goal timeout in milliseconds.';
+  // Goal is present; mirror the runtime check that an optional timeoutMs is a positive number.
+  if (isRecord(assertion.value)) {
+    return trajectoryGoalSuccessTimeoutError(assertion.value);
   }
 
   return undefined;
@@ -737,18 +720,6 @@ function getSkillCountValueError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
-function getTrajectoryToolCountValueError(assertion: Assertion): string | undefined {
-  if (
-    (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') &&
-    isRecord(assertion.value) &&
-    hasMatcherName(assertion.value)
-  ) {
-    return getNonNegativeIntegerRangeError(assertion.value, 'trajectory tool count limits');
-  }
-
-  return undefined;
-}
-
 function getExpectedValueError(assertion: Assertion): string | undefined {
   return (
     getModerationValueError(assertion) ||
@@ -756,8 +727,7 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
     getRequiredStringValueError(assertion) ||
     getTrajectoryGoalValueError(assertion) ||
     getNamedMatcherValueError(assertion) ||
-    getSkillCountValueError(assertion) ||
-    getTrajectoryToolCountValueError(assertion)
+    getSkillCountValueError(assertion)
   );
 }
 

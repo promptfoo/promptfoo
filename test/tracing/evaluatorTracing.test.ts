@@ -19,6 +19,7 @@ import type { TestCase, TestSuite } from '../../src/types/index';
 const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockStopOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
+const mockRegisterOTLPReceiverTracePolicy = vi.hoisted(() => vi.fn());
 const mockCreateTrace = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
@@ -42,6 +43,7 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: mockStartOTLPReceiver,
   stopOTLPReceiver: mockStopOTLPReceiver,
   updateOTLPReceiverOptions: mockUpdateOTLPReceiverOptions,
+  registerOTLPReceiverTracePolicy: mockRegisterOTLPReceiverTracePolicy,
 }));
 
 describe('evaluatorTracing', () => {
@@ -52,6 +54,7 @@ describe('evaluatorTracing', () => {
     mockStopOTLPReceiver.mockReset();
     mockStopOTLPReceiver.mockResolvedValue(undefined);
     mockUpdateOTLPReceiverOptions.mockReset();
+    mockRegisterOTLPReceiverTracePolicy.mockReset();
     mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
@@ -516,6 +519,37 @@ describe('evaluatorTracing', () => {
       });
     });
 
+    it('should pass the current evaluation policy when starting the OTLP receiver', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite, 'eval-current');
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json', 'protobuf'], {
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+        tracePolicy: {
+          evaluationId: 'eval-current',
+          commandToolNames: ['bash'],
+          redactAttributes: ['authorization'],
+        },
+      });
+    });
+
     it('should default acceptFormats to both when omitted', async () => {
       const testSuite = {
         providers: [],
@@ -605,6 +639,48 @@ describe('evaluatorTracing', () => {
       } as unknown as TestSuite);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
+    });
+
+    it('should register the current evaluation policy when reusing an active receiver', async () => {
+      await startOtlpReceiverIfNeeded(
+        {
+          providers: [],
+          prompts: [],
+          tracing: {
+            enabled: true,
+            otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+          },
+        } as unknown as TestSuite,
+        'eval-a',
+      );
+
+      await startOtlpReceiverIfNeeded(
+        {
+          providers: [],
+          prompts: [],
+          tracing: {
+            enabled: true,
+            commandToolNames: ['bash'],
+            otlp: {
+              http: {
+                enabled: true,
+                port: 4318,
+                host: '127.0.0.1',
+                redactAttributes: ['authorization'],
+              },
+            },
+          },
+        } as unknown as TestSuite,
+        'eval-b',
+      );
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockRegisterOTLPReceiverTracePolicy).toHaveBeenCalledWith({
+        evaluationId: 'eval-b',
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
       expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
     });
 

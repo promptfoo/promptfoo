@@ -711,6 +711,8 @@ tests:
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `name` or `pattern`, plus optional `min` and `max` count bounds. A max-only object defaults to `min: 0`.
 
+For `not-trajectory:tool-used`, object values are forbidden-use checks. Omit count bounds or set `max: 0`; other count ranges are rejected to avoid ambiguous double-negative semantics.
+
 ### trajectory:tool-set {#trajectorytool-set}
 
 The `trajectory:tool-set` assertion checks that traced tool usage contains a required set of tools, regardless of order.
@@ -767,7 +769,7 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
-- optional `redactArgsInFailures`, which defaults to `true` and hides expected and traced argument payloads from passing and failing assertion reasons; set it to `false` only when the arguments are known to be non-sensitive and reason-level diagnostics are required
+- optional `redactArgsInFailures` (boolean), which defaults to `true` and hides expected and observed argument payloads from passing and failing assertion reasons; set it to `false` only when the arguments are known to be non-sensitive and reason-level diagnostics are required. The expected args still appear in the assertion config, as they do for any assertion
 - optional `defaults`, a map of argument names to their default values
 - optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
@@ -1117,6 +1119,8 @@ For traced usage, matching token-bearing spans are deduplicated by hierarchy. Wh
 matched parent and matched descendants both report token totals, Promptfoo uses the
 larger covered total for that span subtree so nested aggregate spans do not double-count
 usage or discard a parent aggregate that covers more work than its children.
+Within each span, Promptfoo also uses the largest available aggregate or component total
+so incomplete or inconsistent token attributes do not undercount the budget.
 
 ### Trace-Span-Duration
 
@@ -1153,8 +1157,8 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds (a finite non-negative number)
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
-- `method` (optional): Percentile method, either `nearest` (default) or `linear`
+- `percentile` (optional): Check a percentile across matching spans instead of every span (e.g., 95 for the 95th percentile)
+- `method` (optional): Percentile method, either `nearest` (default, nearest-rank) or `linear` (interpolated). The default `nearest` returns an actual observed duration; use `linear` for an interpolated value — e.g. the true median when `percentile: 50` on an even number of spans
 - `requirePresence` (optional): Fail when no matching spans with complete timing data are present
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
