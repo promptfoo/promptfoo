@@ -28,10 +28,11 @@ interface AddProviderDialogProps {
 type DiscardDestination = 'close' | 'select';
 
 const PROVIDER_PREFIX_TYPES: ReadonlyArray<readonly [string, string]> = [
+  ['bedrock:agent:', 'bedrock-agent'],
   ['openai:', 'openai'],
   ['anthropic:', 'anthropic'],
-  ['bedrock:', 'bedrock'],
   ['bedrock-agent:', 'bedrock-agent'],
+  ['bedrock:', 'bedrock'],
   ['azure:', 'azure'],
   ['vertex:', 'vertex'],
   ['google:', 'google'],
@@ -40,19 +41,50 @@ const PROVIDER_PREFIX_TYPES: ReadonlyArray<readonly [string, string]> = [
   ['groq:', 'groq'],
   ['deepseek:', 'deepseek'],
   ['perplexity:', 'perplexity'],
+  ['cohere:', 'cohere'],
+  ['ai21:', 'ai21'],
+  ['xai:', 'xai'],
+  ['sagemaker:', 'sagemaker'],
+  ['fireworks:', 'fireworks'],
+  ['together:', 'together'],
+  ['cerebras:', 'cerebras'],
+  ['hyperbolic:', 'hyperbolic'],
+  ['aimlapi:', 'aimlapi'],
+  ['huggingface:', 'huggingface'],
+  ['github:', 'github'],
+  ['cloudflare-ai:', 'cloudflare-ai'],
+  ['databricks:', 'databricks'],
+  ['replicate:', 'replicate'],
+  ['fal:', 'fal'],
+  ['voyage:', 'voyage'],
+  ['ollama:', 'ollama'],
+  ['vllm:', 'vllm'],
+  ['llama.cpp:', 'llama.cpp'],
+  ['localai:', 'localai'],
+  ['llamafile:', 'llamafile'],
+  ['text-generation-webui:', 'text-generation-webui'],
+  ['python:', 'python'],
+  ['golang:', 'go'],
+  ['a2a:', 'a2a'],
+  ['mcp:', 'mcp'],
 ];
 
 const EXACT_PROVIDER_TYPES = new Map<string, string>([
   ['http', 'http'],
   ['websocket', 'websocket'],
   ['browser', 'browser'],
+  ['a2a', 'a2a'],
   ['mcp', 'mcp'],
 ]);
 
-const FILE_PROVIDER_TYPES: ReadonlyArray<readonly [string, string]> = [
-  ['.py', 'python'],
-  ['.js', 'javascript'],
-  ['.go', 'go'],
+const FILE_EXTENSION_PROVIDER_TYPES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\.py(?::[^/\\]+)?$/i, 'python'],
+  [/\.(?:js|cjs|mjs|ts|cts|mts)(?::[^/\\]+)?$/i, 'javascript'],
+  [/\.go(?::[^/\\]+)?$/i, 'go'],
+];
+const JAVASCRIPT_PROVIDER_PATH_PATTERN = /\.(?:js|cjs|mjs|ts|cts|mts)$/i;
+
+const FILE_FRAMEWORK_PROVIDER_TYPES: ReadonlyArray<readonly [string, string]> = [
   ['langchain', 'langchain'],
   ['autogen', 'autogen'],
   ['crewai', 'crewai'],
@@ -323,7 +355,15 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
   }
 
   if (id.startsWith('file://')) {
-    return FILE_PROVIDER_TYPES.find(([marker]) => id.includes(marker))?.[1] ?? 'generic-agent';
+    return (
+      FILE_EXTENSION_PROVIDER_TYPES.find(([pattern]) => pattern.test(id))?.[1] ??
+      FILE_FRAMEWORK_PROVIDER_TYPES.find(([marker]) => id.includes(marker))?.[1] ??
+      'generic-agent'
+    );
+  }
+
+  if (JAVASCRIPT_PROVIDER_PATH_PATTERN.test(id)) {
+    return 'javascript';
   }
 
   return 'custom';

@@ -91,7 +91,11 @@ const PasswordField: React.FC<{
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className="pr-10"
-          autoComplete="off"
+          autoComplete="new-password"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           required={required}
           aria-invalid={Boolean(error)}
           aria-describedby={describedBy || undefined}
@@ -542,7 +546,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 <Input
                   id="key-name"
                   required
-                  value={auth?.keyName || 'X-API-Key'}
+                  value={auth?.keyName || ''}
                   onChange={(e) => updateAuthField('keyName', e.target.value)}
                   placeholder="X-API-Key"
                   {...fieldErrorProps('keyName')}

@@ -772,6 +772,29 @@ describe('HttpAdvancedConfiguration', () => {
     }
   });
 
+  it('opts protected authorization values out of browser and password-manager autofill', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: { auth: { type: 'bearer', token: '' } },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    const token = document.getElementById('bearer-token');
+    expect(token).not.toBeNull();
+    expect(token).toHaveAttribute('autocomplete', 'new-password');
+    expect(token).toHaveAttribute('spellcheck', 'false');
+    expect(token).toHaveAttribute('data-1p-ignore');
+    expect(token).toHaveAttribute('data-lpignore', 'true');
+    expect(token).toHaveAttribute('data-form-type', 'other');
+  });
+
   it('reveals and preserves blocking authorization field feedback', async () => {
     const user = userEvent.setup();
     const selectedTarget: ProviderOptions = {
@@ -809,6 +832,8 @@ describe('HttpAdvancedConfiguration', () => {
     const keyValue = document.getElementById('api-key-value');
     expect(keyName).not.toBeNull();
     expect(keyValue).not.toBeNull();
+    expect(keyName).toHaveValue('');
+    expect(keyName).toHaveAttribute('placeholder', 'X-API-Key');
     expect(keyName).toHaveAttribute('aria-invalid', 'true');
     expect(keyName).toHaveAccessibleDescription('Key Name is required for API key authentication');
     expect(keyValue).toHaveAttribute('aria-invalid', 'true');

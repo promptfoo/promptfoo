@@ -1,3 +1,4 @@
+import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -5,6 +6,8 @@ import {
   getRunnableAssertionValueError,
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
+
+const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
 
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
@@ -20,9 +23,13 @@ describe('getRunnableAssertionValueError', () => {
       );
     });
 
-    it('accepts numeric 0 as a contains value', () => {
-      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toBeUndefined();
-      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toBeUndefined();
+    it('rejects numeric 0 because runtime treats it as an absent contains value', () => {
+      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toMatch(
+        /Enter an expected value/,
+      );
+      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toMatch(
+        /Enter an expected value/,
+      );
     });
 
     it('accepts non-blank strings and finite numbers', () => {
@@ -310,6 +317,45 @@ describe('required string assertions', () => {
     expect(getRunnableAssertionValueError(make({ type: 'meteor', value: '' }))).toMatch(
       /reference answer/,
     );
+    expect(getRunnableAssertionValueError(make({ type: 'levenshtein', value: '' }))).toMatch(
+      /expected value/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'not-levenshtein', value: '' }))).toMatch(
+      /expected value/,
+    );
+  });
+});
+
+describe('skill-used object values', () => {
+  it('requires finite non-negative integer count limits', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'skill-used', value: { name: 'search', min: '2' } as any }),
+      ),
+    ).toMatch(/whole numbers/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'skill-used', value: { name: 'search', min: 3, max: 2 } as any }),
+      ),
+    ).toMatch(/Maximum skill count/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'skill-used', value: { name: 'search', min: 1, max: 2 } as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('limits inverse object assertions to the runtime-supported maximum of zero', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-skill-used', value: { pattern: 'web.*', min: 0 } as any }),
+      ),
+    ).toMatch(/Forbidden skill checks/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-skill-used', value: { pattern: 'web.*', max: 0 } as any }),
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -331,6 +377,54 @@ describe('moderation', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'not-moderation', value: '   ' })),
     ).toBeUndefined();
+  });
+
+  it('rejects an empty array, which is truthy and crashes the runtime invariant', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'moderation', value: [] as any }))).toMatch(
+      /comma-separated list/,
+    );
+    expect(
+      getRunnableAssertionValueError(make({ type: 'not-moderation', value: [] as any })),
+    ).toMatch(/comma-separated list/);
+  });
+
+  it('accepts a non-empty string array of categories', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'moderation', value: ['harassment'] as any })),
+    ).toBeUndefined();
+  });
+});
+
+describe('named matcher assertions', () => {
+  it('requires an expected traced tool name for trajectory:tool-used', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trajectory:tool-used', value: '' })),
+    ).toMatch(/traced tool name/);
+    expect(
+      getRunnableAssertionValueError(make({ type: 'not-trajectory:tool-used', value: '' })),
+    ).toMatch(/traced tool name/);
+  });
+
+  it('accepts a tool name, a string array, or a name/pattern object', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trajectory:tool-used', value: 'search' })),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: ['search'] as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-used', value: { name: 'search' } as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('uses the skill wording for skill-used', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'skill-used', value: '' }))).toMatch(
+      /skill name/,
+    );
   });
 });
 
@@ -391,6 +485,9 @@ describe('getFirstRunnableAssertionValueError', () => {
     expect(getRunnableAssertionValueError(make({ type: 'containz' as any }))).toMatch(
       /supported assertion type/,
     );
+    expect(getRunnableAssertionValueError(make({ type: 'human' as any }))).toMatch(
+      /supported assertion type/,
+    );
   });
 
   it('returns the first error it sees', () => {
@@ -426,5 +523,21 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
+  });
+});
+
+describe('supported assertion type coverage', () => {
+  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
+  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
+  // are valid — not that the list is complete. A base type added to the schema but
+  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
+  // valid assertion. This test fails if that ever happens.
+  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
+    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
+      UNSUPPORTED_TYPE_MESSAGE,
+    );
+    expect(
+      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
+    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

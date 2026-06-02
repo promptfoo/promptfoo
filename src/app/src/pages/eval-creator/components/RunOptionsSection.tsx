@@ -49,6 +49,9 @@ const getMaxConcurrencyError = (value: string): string | undefined => {
   return undefined;
 };
 
+const numberToDraft = (value: number | undefined): string =>
+  value === undefined ? '' : value.toString();
+
 function useNumericPropToDraftSync(
   prop: number | undefined,
   setDraft: Dispatch<SetStateAction<string>>,
@@ -61,7 +64,7 @@ function useNumericPropToDraftSync(
     lastPropRef.current = prop;
     setDraft((current) => {
       const parsed = current === '' ? undefined : Number(current);
-      return parsed === prop ? current : prop?.toString() || '';
+      return parsed === prop ? current : numberToDraft(prop);
     });
   }, [prop, setDraft]);
 }
@@ -74,10 +77,10 @@ export function RunOptionsSection({
   readiness,
 }: RunOptionsSectionProps) {
   const [showOptionalSettings, setShowOptionalSettings] = useState(
-    Boolean(description || delay || maxConcurrency),
+    Boolean(description || delay !== undefined || maxConcurrency !== undefined),
   );
-  const [delayDraft, setDelayDraft] = useState(delay?.toString() || '');
-  const [maxConcurrencyDraft, setMaxConcurrencyDraft] = useState(maxConcurrency?.toString() || '');
+  const [delayDraft, setDelayDraft] = useState(numberToDraft(delay));
+  const [maxConcurrencyDraft, setMaxConcurrencyDraft] = useState(numberToDraft(maxConcurrency));
   const delayError = getDelayError(delayDraft);
   const maxConcurrencyError = getMaxConcurrencyError(maxConcurrencyDraft);
   const canSetDelay = maxConcurrencyDraft === '' || Number(maxConcurrencyDraft) === 1;

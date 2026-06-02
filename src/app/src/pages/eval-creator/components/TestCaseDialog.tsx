@@ -16,6 +16,7 @@ import {
   getMissingAssertionVariables,
   getRequiredAssertionVariables,
 } from './assertionPrerequisites';
+import { hasExternalVarsReference } from './setupReadiness';
 import VarsForm from './VarsForm';
 import type { Assertion, AssertionOrSet, TestCase } from '@promptfoo/types';
 
@@ -24,10 +25,15 @@ interface TestCaseFormProps {
   onAdd: (testCase: TestCase, shouldClose: boolean) => void;
   varsList: string[];
   inheritedAssertions?: AssertionOrSet[];
-  inheritedVars?: Record<string, unknown>;
+  inheritedVars?: unknown;
   initialValues?: TestCase;
   onCancel: () => void;
 }
+
+const getRecordVars = (value: unknown): Record<string, string> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, string>)
+    : {};
 
 const getTestCaseVars = (
   varsList: string[],
@@ -57,7 +63,8 @@ const TestCaseForm = ({
   initialValues,
   onCancel,
 }: TestCaseFormProps) => {
-  const initialValuesVars = (initialValues?.vars || {}) as Record<string, string>;
+  const initialValuesVars = getRecordVars(initialValues?.vars);
+  const inheritedVarValues = getRecordVars(inheritedVars);
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState<Record<string, string>>(initialValuesVars);
   const [touchedVars, setTouchedVars] = useState<Set<string>>(() => new Set());
@@ -72,10 +79,14 @@ const TestCaseForm = ({
   const assertionVariables = getRequiredAssertionVariables(effectiveAssertions);
   const editableVarsList = Array.from(new Set([...varsList, ...assertionVariables]));
   const persistedVars = getPersistedVars(vars, initialValuesVars, touchedVars);
-  const missingAssertionVariables = getMissingAssertionVariables(effectiveAssertions, {
-    ...inheritedVars,
-    ...persistedVars,
-  });
+  const missingAssertionVariables = getMissingAssertionVariables(
+    effectiveAssertions,
+    {
+      ...inheritedVarValues,
+      ...persistedVars,
+    },
+    hasExternalVarsReference(inheritedVars) || hasExternalVarsReference(initialValues?.vars),
+  );
   const canSave = assertsValid && missingAssertionVariables.length === 0;
   const saveHelpIds = [
     assertsValid ? undefined : 'test-case-assertion-error',
@@ -89,7 +100,7 @@ const TestCaseForm = ({
       return;
     }
 
-    const nextInitialVars = (initialValues?.vars || {}) as Record<string, string>;
+    const nextInitialVars = getRecordVars(initialValues?.vars);
     if (initialValues) {
       setDescription(initialValues.description || '');
       setVars(nextInitialVars);

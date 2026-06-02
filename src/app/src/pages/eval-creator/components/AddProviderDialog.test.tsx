@@ -69,6 +69,7 @@ describe('getProviderTypeFromId', () => {
     ['openai:gpt-4', 'openai'],
     ['anthropic:claude-3', 'anthropic'],
     ['bedrock:model-id', 'bedrock'],
+    ['bedrock:agent:agent-id', 'bedrock-agent'],
     ['bedrock-agent:agent-id', 'bedrock-agent'],
     ['azure:deployment-name', 'azure'],
     ['vertex:model-name', 'vertex'],
@@ -78,6 +79,32 @@ describe('getProviderTypeFromId', () => {
     ['groq:model-id', 'groq'],
     ['deepseek:model-id', 'deepseek'],
     ['perplexity:model-id', 'perplexity'],
+    ['cohere:model-id', 'cohere'],
+    ['ai21:model-id', 'ai21'],
+    ['xai:model-id', 'xai'],
+    ['sagemaker:endpoint-name', 'sagemaker'],
+    ['fireworks:model-id', 'fireworks'],
+    ['together:model-id', 'together'],
+    ['cerebras:model-id', 'cerebras'],
+    ['hyperbolic:model-id', 'hyperbolic'],
+    ['aimlapi:model-id', 'aimlapi'],
+    ['huggingface:model-id', 'huggingface'],
+    ['github:model-id', 'github'],
+    ['cloudflare-ai:model-id', 'cloudflare-ai'],
+    ['databricks:model-id', 'databricks'],
+    ['replicate:model-id', 'replicate'],
+    ['fal:image:model-id', 'fal'],
+    ['voyage:model-id', 'voyage'],
+    ['ollama:model-id', 'ollama'],
+    ['vllm:model-id', 'vllm'],
+    ['llama.cpp:model-id', 'llama.cpp'],
+    ['localai:model-id', 'localai'],
+    ['llamafile:model-id', 'llamafile'],
+    ['text-generation-webui:model-id', 'text-generation-webui'],
+    ['python:script.py', 'python'],
+    ['golang:script.go', 'go'],
+    ['a2a:https://example.test/agent-card.json', 'a2a'],
+    ['mcp:stdio', 'mcp'],
   ])('detects prefix-based provider %s as %s', (id, expected) => {
     expect(getProviderTypeFromId(id)).toBe(expected);
   });
@@ -86,6 +113,7 @@ describe('getProviderTypeFromId', () => {
     ['http', 'http'],
     ['websocket', 'websocket'],
     ['browser', 'browser'],
+    ['a2a', 'a2a'],
     ['mcp', 'mcp'],
   ])('detects exact match provider %s as %s', (id, expected) => {
     expect(getProviderTypeFromId(id)).toBe(expected);
@@ -96,8 +124,25 @@ describe('getProviderTypeFromId', () => {
   });
 
   it.each([
+    './provider.js',
+    './provider.cjs',
+    './provider.mjs',
+    './provider.ts',
+    './provider.cts',
+    './provider.mts',
+  ])('detects bare JavaScript or TypeScript provider path %s', (id) => {
+    expect(getProviderTypeFromId(id)).toBe('javascript');
+  });
+
+  it.each([
     ['file://script.py', 'python'],
     ['file://script.js', 'javascript'],
+    ['file://script.cjs', 'javascript'],
+    ['file://script.mjs', 'javascript'],
+    ['file://script.ts', 'javascript'],
+    ['file://script.cts', 'javascript'],
+    ['file://script.mts', 'javascript'],
+    ['file://script.ts:callApi', 'javascript'],
     ['file://script.go', 'go'],
   ])('detects file:// language %s as %s', (id, expected) => {
     expect(getProviderTypeFromId(id)).toBe(expected);
@@ -125,6 +170,8 @@ describe('getProviderTypeFromId', () => {
 
   it('returns generic-agent for file:// without specific markers', () => {
     expect(getProviderTypeFromId('file://path/to/agent.txt')).toBe('generic-agent');
+    expect(getProviderTypeFromId('file://path/to/agent.tsx')).toBe('generic-agent');
+    expect(getProviderTypeFromId('file://path/.ts-helpers/agent')).toBe('generic-agent');
   });
 
   it('returns custom for unrecognized provider ids', () => {

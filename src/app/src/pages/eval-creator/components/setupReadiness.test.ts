@@ -94,7 +94,7 @@ describe('setupReadiness', () => {
       ]);
     });
 
-    it('preserves arrays and filters malformed legacy map entries', () => {
+    it('preserves arrays and string labels while filtering malformed legacy map entries', () => {
       const promptArray = ['inline prompt', { raw: 'raw prompt', label: 'Raw prompt' }];
 
       expect(normalizePromptsForJob(promptArray)).toEqual(promptArray);
@@ -104,7 +104,10 @@ describe('setupReadiness', () => {
           '': 'Missing raw',
           'file://blank.txt': '   ',
         }),
-      ).toEqual([{ raw: 'file://prompt.txt', label: 'Prompt label' }]);
+      ).toEqual([
+        { raw: 'file://prompt.txt', label: 'Prompt label' },
+        { raw: 'file://blank.txt', label: '   ' },
+      ]);
       expect(normalizePromptsForJob(undefined)).toEqual([]);
     });
   });
@@ -735,7 +738,10 @@ describe('setupReadiness', () => {
         ],
       });
 
-      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+      // Two providers, one prompt → the fix is on the shorter (prompt) axis, step 2.
+      expect(readiness.issues).toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs', stepId: 2 }),
+      );
     });
 
     it('requires multiple outputs after applying default test provider and prompt filters', () => {
@@ -750,6 +756,79 @@ describe('setupReadiness', () => {
           prompts: ['Short prompt'],
         },
         tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+    });
+
+    it('defers comparison output count checks for file-backed prompts expanded at runtime', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['file://prompts.csv'],
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+      expect(readiness.isReadyToRun).toBe(true);
+    });
+
+    it('defers filtered comparison checks when prompt labels are produced by file loading', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['file://prompts.csv'],
+        defaultTest: { prompts: ['Expanded CSV Label'] },
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+    });
+
+    it('defers comparison checks for modular provider files expanded at runtime', () => {
+      const readiness = getSetupReadiness({
+        providers: ['file://providers.yaml'],
+        prompts: ['Write a reply'],
+        defaultTest: { providers: ['Expanded provider label'] },
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+    });
+
+    it('warns when a test filters to one static prompt despite an unrelated dynamic prompt', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: [
+          { raw: 'Write a reply', label: 'Static prompt' },
+          { raw: 'file://other.txt', label: 'Dynamic prompt' },
+        ],
+        tests: [
+          {
+            prompts: ['Static prompt'],
+            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+          },
+        ],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+      expect(readiness.isReadyToRun).toBe(false);
+    });
+
+    it('warns when a test filters to one static provider despite an unrelated dynamic provider', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'file://providers.yaml'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            providers: ['openai:gpt-4.1'],
+            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+          },
+        ],
       });
 
       expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
@@ -813,6 +892,40 @@ describe('setupReadiness', () => {
       });
     });
 
+    it('ignores comparison assertions nested in an assert-set, matching the runtime', () => {
+      // The runtime only runs select-best/max-score declared at the top level of
+      // test.assert and silently skips any nested in an assert-set, so a single
+      // output here is fine — readiness must not block on it.
+      const selectBest = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+              },
+            ],
+          },
+        ],
+      });
+      expect(selectBest.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+      expect(selectBest.isReadyToRun).toBe(true);
+
+      const maxScore = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [{ assert: [{ type: 'assert-set', assert: [{ type: 'max-score' }] }] }],
+      });
+      expect(maxScore.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonScoring' }),
+      );
+      expect(maxScore.isReadyToRun).toBe(true);
+    });
+
     it('validates default max-score assertions for external and string-array tests', () => {
       const externalTests = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
@@ -867,6 +980,16 @@ describe('setupReadiness', () => {
       expect(readiness.isReadyToRun).toBe(true);
       expect(readiness.plannedBaseRequestCount).toBeUndefined();
     });
+
+    it('multiplies providers, prompts, and test cases for the base request count', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        prompts: ['Write a reply', 'Write a summary'],
+        tests: [{ vars: {} }, { vars: {} }, { vars: {} }],
+      });
+
+      expect(readiness.plannedBaseRequestCount).toBe(12);
+    });
   });
 
   describe('extractVariablesFromPrompts', () => {
@@ -887,6 +1010,35 @@ describe('setupReadiness', () => {
           '{% if not audience %}Tailor the response{% endif %}',
         ]),
       ).toEqual(['topic', 'user', 'audience']);
+    });
+
+    it('does not treat the runtime env global as a required test variable', () => {
+      expect(extractVariablesFromPrompts(['Use {{ env.OPENAI_API_KEY }} for {{ topic }}'])).toEqual(
+        ['topic'],
+      );
+    });
+
+    it('handles Nunjucks whitespace-control markers', () => {
+      expect(extractVariablesFromPrompts(['{{- topic -}}'])).toEqual(['topic']);
+      expect(
+        extractVariablesFromPrompts([
+          '{%- for item in items -%}{{- item -}}{%- endfor -%}Afterward: {{ item }}',
+        ]),
+      ).toEqual(['items', 'item']);
+    });
+
+    it('extracts from large unbalanced loop templates without catastrophic backtracking', () => {
+      const pathological = '{% for x in y %}'.repeat(2000);
+      const start = performance.now();
+      const variables = extractVariablesFromPrompts([pathological]);
+      expect(performance.now() - start).toBeLessThan(1000);
+      expect(variables).toEqual(['y']);
+    });
+
+    it('closes a loop scope on an endfor tag with trailing content', () => {
+      expect(extractVariablesFromPrompts(['{% for x in items %}{% endfor junk %}{{ x }}'])).toEqual(
+        ['items', 'x'],
+      );
     });
 
     it('does not treat loop locals as required vars inside loops only', () => {

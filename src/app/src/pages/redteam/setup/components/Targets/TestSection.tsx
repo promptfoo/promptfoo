@@ -78,7 +78,11 @@ const TestResultAlert = ({ testResult }: { testResult: TestResult }) => {
 
   return (
     <Alert variant={variant}>
-      {testResult.success ? <CheckCircle className="size-4" /> : <AlertCircle className="size-4" />}
+      {testResult.success && !testResult.changes_needed ? (
+        <CheckCircle className="size-4" />
+      ) : (
+        <AlertCircle className="size-4" />
+      )}
       <AlertContent>
         <AlertDescription className="text-sm">
           <p className="font-medium">{resultTitle}</p>

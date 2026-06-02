@@ -6,7 +6,11 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 
 import type {
@@ -79,9 +83,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       getRemoteGenerationUrl(),
       {
         body,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         method: 'POST',
       },
       options?.abortSignal,

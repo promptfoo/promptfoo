@@ -57,7 +57,7 @@ function getVars(testCase: Record<string, unknown>): Record<string, unknown> {
   return isRecord(testCase.vars) ? testCase.vars : {};
 }
 
-function hasExternalVarsReference(value: unknown): boolean {
+export function hasExternalVarsReference(value: unknown): boolean {
   if (typeof value === 'string') {
     return value.trim() !== '';
   }
@@ -122,6 +122,10 @@ function hasInvalidAssertionValue(testCase: unknown): boolean {
   return Boolean(getFirstRunnableAssertionValueError(testCase.assert));
 }
 
+// Deliberately shallow (top-level) — does NOT descend into assert-sets. The
+// runtime detects comparison assertions (select-best / max-score) only at the top
+// level of test.assert and silently skips any nested inside an assert-set, so the
+// readiness gate mirrors that to avoid falsely blocking a config the runtime runs.
 function getAssertions(testCase: unknown): AssertionOrSet[] {
   return isRecord(testCase) && Array.isArray(testCase.assert)
     ? (testCase.assert.filter(
@@ -287,6 +291,78 @@ function countPlannedBaseRequests(
   );
 }
 
+function mayLoadMultiplePromptsAtRuntime(rawPrompt: string): boolean {
+  return (
+    rawPrompt.startsWith('file://') ||
+    rawPrompt.startsWith('exec:') ||
+    /[*?[\]]/.test(rawPrompt) ||
+    /\.(?:csv|j2|jsonl?|md|mjs|cjs|js|ts|py|txt|ya?ml|sh|bash|rb|pl|ps1|bat|cmd)$/i.test(rawPrompt)
+  );
+}
+
+function mayLoadMultipleProvidersAtRuntime(provider: ProviderOptions): boolean {
+  return hasRunnableProviderId(provider) && /^file:\/\/.*\.(?:json|ya?ml)$/i.test(provider.id);
+}
+
+// A reference (test/defaultTest `prompts` or `providers` entry) that matches no
+// static candidate may still resolve against a dynamic candidate's runtime-expanded
+// labels, so such an unresolved reference keeps dynamic candidates in scope.
+function hasUnresolvedReference<T>(
+  references: unknown,
+  candidates: T[],
+  matches: (candidate: T, reference: string) => boolean,
+): boolean {
+  return (
+    Array.isArray(references) &&
+    references.some(
+      (reference) =>
+        typeof reference === 'string' &&
+        !candidates.some((candidate) => matches(candidate, reference)),
+    )
+  );
+}
+
+function hasDynamicOutputForTest(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+  providers: ProviderOptions[],
+  prompts: NormalizedPrompt[],
+): boolean {
+  const promptReferences = getEffectiveReferences(testCase, defaultTest, 'prompts');
+  const providerReferences = getEffectiveReferences(testCase, defaultTest, 'providers');
+  const promptReferenceUnresolved = hasUnresolvedReference(
+    promptReferences,
+    prompts,
+    promptMatchesReference,
+  );
+  const providerReferenceUnresolved = hasUnresolvedReference(
+    providerReferences,
+    providers,
+    providerMatchesReference,
+  );
+  // A candidate is in scope for the test if it is allowed by the test's references,
+  // or if it is dynamic and an unresolved reference might resolve to its expansion.
+  const promptInScope = (prompt: NormalizedPrompt): boolean =>
+    isAllowedByReferences(prompt, promptReferences, promptMatchesReference) ||
+    (promptReferenceUnresolved && mayLoadMultiplePromptsAtRuntime(prompt.raw));
+  const providerInScope = (provider: ProviderOptions): boolean =>
+    isAllowedByReferences(provider, providerReferences, providerMatchesReference) ||
+    (providerReferenceUnresolved && mayLoadMultipleProvidersAtRuntime(provider));
+
+  const hasSelectedProvider = providers.some(providerInScope);
+
+  return (
+    (hasSelectedProvider &&
+      prompts.some(
+        (prompt) => mayLoadMultiplePromptsAtRuntime(prompt.raw) && promptInScope(prompt),
+      )) ||
+    (prompts.some(promptInScope) &&
+      providers.some(
+        (provider) => mayLoadMultipleProvidersAtRuntime(provider) && providerInScope(provider),
+      ))
+  );
+}
+
 function hasMaxScoreWithoutScoringAssertion(
   tests: UnifiedConfig['tests'] | undefined,
   defaultTest: Record<string, unknown>,
@@ -326,17 +402,23 @@ function getComparisonSetupIssues(
     for (const testCase of tests.map((testCase) => (isRecord(testCase) ? testCase : {}))) {
       const assertions = getEffectiveAssertions(testCase, defaultAssertions);
       const outputCount = countOutputsForTest(testCase, defaultTest, providers, prompts);
+      const hasDynamicOutput = hasDynamicOutputForTest(testCase, defaultTest, providers, prompts);
       hasInsufficientSelectBest ||=
-        outputCount < 2 && containsComparisonAssertion(assertions, 'select-best');
+        outputCount < 2 &&
+        !hasDynamicOutput &&
+        containsComparisonAssertion(assertions, 'select-best');
       hasInsufficientMaxScore ||=
-        outputCount < 2 && containsComparisonAssertion(assertions, 'max-score');
+        outputCount < 2 &&
+        !hasDynamicOutput &&
+        containsComparisonAssertion(assertions, 'max-score');
     }
   } else if (countTests(tests) > 0) {
     const outputCount = countOutputsForTest(defaultTest, {}, providers, prompts);
+    const hasDynamicOutput = hasDynamicOutputForTest(defaultTest, {}, providers, prompts);
     hasInsufficientSelectBest = containsComparisonAssertion(defaultAssertions, 'select-best');
     hasInsufficientMaxScore = containsComparisonAssertion(defaultAssertions, 'max-score');
-    hasInsufficientSelectBest &&= outputCount < 2;
-    hasInsufficientMaxScore &&= outputCount < 2;
+    hasInsufficientSelectBest &&= outputCount < 2 && !hasDynamicOutput;
+    hasInsufficientMaxScore &&= outputCount < 2 && !hasDynamicOutput;
   }
 
   if (hasInsufficientSelectBest || hasInsufficientMaxScore) {
@@ -361,6 +443,11 @@ function getComparisonSetupIssues(
   return issues;
 }
 
+// Intentionally separate from the backend `extractVariablesFromTemplate`
+// (src/util/templates.ts): this gate runs in the browser and needs filter,
+// conditional, and loop-scope awareness to avoid flagging false "missing variable"
+// prerequisites, which the backend's simpler regex extractor does not provide.
+// Keep the two in mind together if variable-detection rules change.
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
   const variables = new Set<string>();
 
@@ -372,16 +459,21 @@ export function extractVariablesFromPrompts(prompts: string[]): string[] {
   return Array.from(variables);
 }
 
-const VARIABLE_TAG_PATTERN = /{{\s*([\s\S]*?)\s*}}/g;
-const CONDITIONAL_TAG_PATTERN = /{%\s*(?:if|elif)\s+([\s\S]*?)%}/g;
-const LOOP_BLOCK_PATTERN =
-  /{%\s*for\s+([\s\S]*?)\s+in\s+([\s\S]*?)\s*%}([\s\S]*?){%\s*endfor\s*%}/g;
+// Match a single Nunjucks tag at a time — either an output (`{{ ... }}`) or a block
+// (`{% ... %}`) — tolerating whitespace-control markers (`{%-`, `-%}`, `{{-`, `-}}`).
+// Matching one tag per iteration keeps extraction linear; the previous
+// block-spanning regex with several lazy groups backtracked catastrophically on
+// unbalanced `{% for %}` templates (a freeze risk while editing a prompt).
+const NUNJUCKS_TAG_PATTERN = /{{-?\s*([\s\S]*?)\s*-?}}|{%-?\s*([\s\S]*?)\s*-?%}/g;
+const LOOP_TAG_PATTERN = /^for\s+([\s\S]+?)\s+in\s+([\s\S]+)$/;
+const CONDITIONAL_TAG_PATTERN = /^(?:if|elif)\s+([\s\S]+)$/;
 const STRING_LITERAL_PATTERN = /(["'])(?:\\.|(?!\1)[\s\S])*\1/g;
 const IDENTIFIER_PATTERN = /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g;
 const IGNORED_NUNJUCKS_IDENTIFIERS = new Set([
   'and',
   'defined',
   'else',
+  'env',
   'false',
   'for',
   'if',
@@ -410,29 +502,6 @@ function addVariablesFromExpression(
   }
 }
 
-function addVariablesFromVariableTags(
-  template: string,
-  variables: Set<string>,
-  localVariables: Set<string>,
-): void {
-  for (const match of template.matchAll(VARIABLE_TAG_PATTERN)) {
-    const expression = match[1].split('|', 1)[0].trim();
-    if (expression !== '' && !/\s/.test(expression)) {
-      addVariablesFromExpression(expression, variables, localVariables);
-    }
-  }
-}
-
-function addVariablesFromConditionalTags(
-  template: string,
-  variables: Set<string>,
-  localVariables: Set<string>,
-): void {
-  for (const match of template.matchAll(CONDITIONAL_TAG_PATTERN)) {
-    addVariablesFromExpression(match[1], variables, localVariables);
-  }
-}
-
 function getLoopVariables(loopTarget: string): string[] {
   return loopTarget
     .split(',')
@@ -440,27 +509,43 @@ function getLoopVariables(loopTarget: string): string[] {
     .filter((target) => /^[A-Za-z_$][\w$]*$/.test(target));
 }
 
-function collectTemplateVariables(
-  template: string,
-  variables: Set<string>,
-  localVariables = new Set<string>(),
-): void {
-  let cursor = 0;
-  for (const match of template.matchAll(LOOP_BLOCK_PATTERN)) {
-    const matchIndex = match.index ?? 0;
-    const beforeLoop = template.slice(cursor, matchIndex);
-    addVariablesFromVariableTags(beforeLoop, variables, localVariables);
-    addVariablesFromConditionalTags(beforeLoop, variables, localVariables);
+function collectTemplateVariables(template: string, variables: Set<string>): void {
+  // Track loop-local variables with a scope stack so a name used only inside a
+  // `{% for %}` body is not reported as required, while the same name used outside
+  // the loop still is. Pairing `for`/`endfor` linearly over the tag stream (instead
+  // of matching whole blocks with one regex) avoids catastrophic backtracking.
+  const scopeStack: Set<string>[] = [new Set<string>()];
 
-    addVariablesFromExpression(match[2], variables, localVariables);
-    const nestedLocalVariables = new Set([...localVariables, ...getLoopVariables(match[1])]);
-    collectTemplateVariables(match[3], variables, nestedLocalVariables);
-    cursor = matchIndex + match[0].length;
+  for (const match of template.matchAll(NUNJUCKS_TAG_PATTERN)) {
+    const currentLocals = scopeStack[scopeStack.length - 1];
+    const outputExpression = match[1];
+    if (outputExpression !== undefined) {
+      const expression = outputExpression.split('|', 1)[0].trim();
+      if (expression !== '' && !/\s/.test(expression)) {
+        addVariablesFromExpression(expression, variables, currentLocals);
+      }
+      continue;
+    }
+
+    const blockExpression = (match[2] ?? '').trim();
+    const loopMatch = LOOP_TAG_PATTERN.exec(blockExpression);
+    if (loopMatch) {
+      // The iterable is evaluated in the enclosing scope, before loop locals exist.
+      addVariablesFromExpression(loopMatch[2], variables, currentLocals);
+      scopeStack.push(new Set([...currentLocals, ...getLoopVariables(loopMatch[1])]));
+      continue;
+    }
+    if (/^endfor\b/.test(blockExpression)) {
+      if (scopeStack.length > 1) {
+        scopeStack.pop();
+      }
+      continue;
+    }
+    const conditionalMatch = CONDITIONAL_TAG_PATTERN.exec(blockExpression);
+    if (conditionalMatch) {
+      addVariablesFromExpression(conditionalMatch[1], variables, currentLocals);
+    }
   }
-
-  const afterLastLoop = template.slice(cursor);
-  addVariablesFromVariableTags(afterLastLoop, variables, localVariables);
-  addVariablesFromConditionalTags(afterLastLoop, variables, localVariables);
 }
 
 export function normalizeProviders(
@@ -580,7 +665,7 @@ export function normalizePromptsForJob(
     return Object.entries(prompts)
       .filter(
         (entry): entry is [string, string] =>
-          entry[0].trim() !== '' && typeof entry[1] === 'string' && entry[1].trim() !== '',
+          entry[0].trim() !== '' && typeof entry[1] === 'string',
       )
       .map(([raw, label]) => ({ raw, label }));
   }

@@ -1167,5 +1167,34 @@ describe('ProviderTypeSelector', () => {
       expect(callArgs.config.enabled).toBe(true);
       expect(callArgs.config.verbose).toBe(false);
     });
+
+    it('should use minimal defaults when switching to A2A provider', async () => {
+      const user = userEvent.setup();
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'python',
+        label: 'Python Integration',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="python"
+        />,
+      );
+
+      const a2aProviderCard = screen.getByText('A2A Agent').closest('button');
+      expect(a2aProviderCard).toBeInTheDocument();
+      if (a2aProviderCard) {
+        await user.click(a2aProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.label).toBe('Python Integration');
+      expect(callArgs.id).toBe('a2a');
+      expect(callArgs.config).toEqual({ url: '' });
+    });
   });
 });

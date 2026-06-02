@@ -43,6 +43,21 @@ describe('TestSection', () => {
     expect(resultAlert).toHaveTextContent('The endpoint returned 401 Unauthorized.');
   });
 
+  it('uses a warning icon when a successful request still needs configuration changes', () => {
+    renderSection({
+      testResult: {
+        success: true,
+        changes_needed: true,
+        message: 'Update the response parser before continuing.',
+      },
+    });
+
+    const resultAlert = screen.getByRole('alert');
+    expect(resultAlert).toHaveTextContent('Configuration Changes Needed');
+    expect(resultAlert.querySelector('.lucide-circle-alert')).toBeInTheDocument();
+    expect(resultAlert.querySelector('.lucide-circle-check')).not.toBeInTheDocument();
+  });
+
   it('announces an in-progress provider test and describes the busy button', () => {
     renderSection({ isTestRunning: true });
 

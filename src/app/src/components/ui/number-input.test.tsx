@@ -16,6 +16,15 @@ describe('NumberInput', () => {
     expect(screen.getByLabelText('Test Label')).toBeInTheDocument();
   });
 
+  it('keeps a stable hook order when the id prop changes', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<NumberInput id="configured-id" onChange={onChange} />);
+    expect(screen.getByRole('spinbutton')).toHaveAttribute('id', 'configured-id');
+
+    rerender(<NumberInput onChange={onChange} />);
+    expect(screen.getByRole('spinbutton')).not.toHaveAttribute('id', 'configured-id');
+  });
+
   it('renders with helperText', () => {
     render(<NumberInput helperText="Helper text here" onChange={vi.fn()} />);
     expect(screen.getByText('Helper text here')).toBeInTheDocument();

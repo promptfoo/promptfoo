@@ -171,6 +171,18 @@ describe('RunOptionsSection', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('keeps an imported zero concurrency value visible and blocks running', () => {
+    render(<RunOptionsSection readiness={readySetup} maxConcurrency={0} onChange={vi.fn()} />);
+
+    const concurrencyInput = screen.getByLabelText('Maximum concurrent requests');
+    expect(concurrencyInput).toHaveValue(0);
+    expect(concurrencyInput).toHaveAttribute('aria-invalid', 'true');
+    expect(concurrencyInput).toHaveAccessibleDescription(
+      'Enter a whole number of concurrent requests, 1 or greater.',
+    );
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeDisabled();
+  });
+
   it('stores a valid delay and sets serial execution explicitly', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

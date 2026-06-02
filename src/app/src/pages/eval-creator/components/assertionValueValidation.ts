@@ -1,6 +1,7 @@
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -69,7 +70,7 @@ const BASE_ASSERTION_TYPES = [
 ] as const satisfies AssertionType[];
 
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BASE_ASSERTION_TYPES);
-const SPECIAL_ASSERTION_TYPES = new Set<string>(['human', 'max-score', 'select-best']);
+const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
 
 function isSupportedAssertionType(type: string): boolean {
   return (
@@ -140,6 +141,8 @@ export const RAG_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'agent-rubric',
+  'not-agent-rubric',
   'llm-rubric',
   'not-llm-rubric',
   'g-eval',
@@ -195,6 +198,8 @@ const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
   'not-factuality',
   'finish-reason',
   'not-finish-reason',
+  'levenshtein',
+  'not-levenshtein',
   'model-graded-closedqa',
   'not-model-graded-closedqa',
   'model-graded-factuality',
@@ -260,6 +265,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasMatcherName(value: Record<string, unknown>): boolean {
   return hasNonBlankString(value.name) || hasNonBlankString(value.pattern);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+  );
 }
 
 function getTrajectoryToolSequenceSteps(value: unknown): unknown[] | undefined {
@@ -510,19 +521,27 @@ function getRequiredStringValueError(assertion: Assertion): string | undefined {
   return 'Enter an expected value before saving this check.';
 }
 
-function getExpectedValueError(assertion: Assertion): string | undefined {
+function getModerationValueError(assertion: Assertion): string | undefined {
   if (
     (assertion.type === 'moderation' || assertion.type === 'not-moderation') &&
     assertion.value !== undefined &&
     !(
       (typeof assertion.value === 'string' && assertion.value.trim() === '') ||
+      // An empty array is truthy, so the runtime handler's invariant
+      // (`!value || (Array.isArray(value) && typeof value[0] === 'string')`)
+      // throws on `[]`. Require a non-empty string array to match that.
       (Array.isArray(assertion.value) &&
+        assertion.value.length > 0 &&
         assertion.value.every((value) => typeof value === 'string'))
     )
   ) {
     return 'Enter moderation categories as a comma-separated list.';
   }
 
+  return undefined;
+}
+
+function getBasicExpectedValueError(assertion: Assertion): string | undefined {
   if (
     ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankStringOrStringArray(assertion.value)
@@ -533,14 +552,13 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
   if (
     REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
-    !(typeof assertion.value === 'number' && Number.isFinite(assertion.value))
+    !(
+      typeof assertion.value === 'number' &&
+      Number.isFinite(assertion.value) &&
+      assertion.value !== 0
+    )
   ) {
     return 'Enter an expected value before saving this check.';
-  }
-
-  const requiredStringValueError = getRequiredStringValueError(assertion);
-  if (requiredStringValueError) {
-    return requiredStringValueError;
   }
 
   if (
@@ -558,6 +576,10 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
     return 'Enter at least one reference answer for this check.';
   }
 
+  return undefined;
+}
+
+function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
   if (
     TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
@@ -566,6 +588,10 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
     return 'Enter the goal that the agent should achieve.';
   }
 
+  return undefined;
+}
+
+function getNamedMatcherValueError(assertion: Assertion): string | undefined {
   if (
     NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
@@ -578,6 +604,44 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
   }
 
   return undefined;
+}
+
+function getSkillCountValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'skill-used' || assertion.type === 'not-skill-used') &&
+    isRecord(assertion.value) &&
+    hasMatcherName(assertion.value)
+  ) {
+    const { min, max } = assertion.value;
+    if (
+      (min !== undefined && !isNonNegativeInteger(min)) ||
+      (max !== undefined && !isNonNegativeInteger(max))
+    ) {
+      return 'Enter skill count limits as whole numbers, 0 or greater.';
+    }
+    if (typeof min === 'number' && typeof max === 'number' && max < min) {
+      return 'Maximum skill count cannot be less than minimum skill count.';
+    }
+    if (
+      assertion.type === 'not-skill-used' &&
+      (min !== undefined || (max !== undefined && max !== 0))
+    ) {
+      return 'Forbidden skill checks only support no count limit or a maximum of 0.';
+    }
+  }
+
+  return undefined;
+}
+
+function getExpectedValueError(assertion: Assertion): string | undefined {
+  return (
+    getModerationValueError(assertion) ||
+    getBasicExpectedValueError(assertion) ||
+    getRequiredStringValueError(assertion) ||
+    getTrajectoryGoalValueError(assertion) ||
+    getNamedMatcherValueError(assertion) ||
+    getSkillCountValueError(assertion)
+  );
 }
 
 export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
@@ -593,6 +657,9 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
   );
 }
 
+// Save-time entry point. Currently identical to the run-time check, but kept as a
+// distinct seam: the editor saves an assertion before it is runnable, and save-time
+// validation is expected to diverge (e.g. allow drafts) from run-time validation.
 export function getAssertionValueError(assertion: Assertion): string | undefined {
   return getRunnableAssertionValueError(assertion);
 }

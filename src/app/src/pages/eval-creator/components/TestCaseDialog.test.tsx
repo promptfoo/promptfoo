@@ -268,6 +268,29 @@ describe('TestCaseForm', () => {
     );
   });
 
+  it('accepts external inherited vars for context assertions without saving local overrides', async () => {
+    renderComponent({
+      varsList: [],
+      inheritedAssertions: [{ type: 'context-faithfulness' }],
+      inheritedVars: 'file://defaults.yaml',
+    });
+
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    expect(addButton).toBeEnabled();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await userEvent.click(addButton);
+
+    expect(onAdd).toHaveBeenCalledWith(
+      {
+        description: '',
+        vars: {},
+        assert: [],
+      },
+      true,
+    );
+  });
+
   it("should call onAdd with the updated form state and shouldClose=true, then reset the form and call onCancel when the 'Update Test Case' button is clicked in edit mode", async () => {
     const initialValues: TestCase = {
       description: 'Initial description',

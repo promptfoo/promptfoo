@@ -25,7 +25,7 @@ import { testCaseFromCsvRow } from '@promptfoo/csv';
 import { TestCaseSchema } from '@promptfoo/types';
 import { getMissingAssertionVariables } from './assertionPrerequisites';
 import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
-import { getRequiredVariablesForTest } from './setupReadiness';
+import { getRequiredVariablesForTest, hasExternalVarsReference } from './setupReadiness';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 
@@ -182,24 +182,37 @@ interface TestCaseIssues {
   missingAssertionVariables: string[];
 }
 
+function getRecordVars(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function getTestCaseIssues(
   testCase: TestCase,
   requiredPromptVariables: string[],
   defaultTest: TestCase | undefined,
 ): TestCaseIssues {
-  const testCaseVars = Object.keys(testCase.vars || {});
-  const defaultTestVars = Object.keys(defaultTest?.vars || {});
+  const testCaseVarValues = getRecordVars(testCase.vars);
+  const defaultTestVarValues = getRecordVars(defaultTest?.vars);
+  const testCaseVars = Object.keys(testCaseVarValues);
+  const defaultTestVars = Object.keys(defaultTestVarValues);
+  const varsMayComeFromExternalFile =
+    hasExternalVarsReference(testCase.vars) || hasExternalVarsReference(defaultTest?.vars);
   const inheritedAssertions =
     testCase.options?.disableDefaultAsserts === true ? [] : defaultTest?.assert || [];
 
   return {
-    missingPromptVariables: requiredPromptVariables.filter(
-      (variable) => !testCaseVars.includes(variable) && !defaultTestVars.includes(variable),
-    ),
+    missingPromptVariables: varsMayComeFromExternalFile
+      ? []
+      : requiredPromptVariables.filter(
+          (variable) => !testCaseVars.includes(variable) && !defaultTestVars.includes(variable),
+        ),
     assertionError: getFirstRunnableAssertionValueError(testCase.assert),
     missingAssertionVariables: getMissingAssertionVariables(
       [...inheritedAssertions, ...(testCase.assert || [])],
-      { ...(defaultTest?.vars || {}), ...(testCase.vars || {}) },
+      { ...defaultTestVarValues, ...testCaseVarValues },
+      varsMayComeFromExternalFile,
     ),
   };
 }

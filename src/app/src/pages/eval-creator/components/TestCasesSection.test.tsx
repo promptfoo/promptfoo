@@ -206,6 +206,30 @@ describe('TestCasesSection', () => {
     expect(screen.queryByText('Missing variables: input.')).toBeNull();
   });
 
+  it('does not report prompt or assertion variables supplied by external default vars as missing', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        providers: [{ id: 'openai:gpt-4.1' }],
+        prompts: ['Hello {{input}}'],
+        defaultTest: {
+          vars: 'file://defaults.yaml',
+          assert: [{ type: 'context-faithfulness' }],
+        },
+        tests: [{ description: 'Test 1', vars: {} }],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={['input']} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.queryByText('Missing variables: input.')).toBeNull();
+    expect(screen.queryByText(/Context assertions need values for:/)).toBeNull();
+  });
+
   it('does not report variables from prompts excluded by test-case routing', () => {
     (useStore as any).mockReturnValue({
       config: {

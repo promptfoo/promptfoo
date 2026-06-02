@@ -64,7 +64,8 @@ function NumberInput({
   'aria-invalid': ariaInvalid,
   ...props
 }: NumberInputProps) {
-  const inputId = id || React.useId();
+  const generatedInputId = React.useId();
+  const inputId = id || generatedInputId;
   const feedbackId = React.useId();
   const inputMode = allowDecimals ? 'decimal' : 'numeric';
   const pattern = allowDecimals ? '[0-9]*\\.?[0-9]*' : '[0-9]*';
@@ -151,12 +152,7 @@ function NumberInput({
         )}
       </div>
       {hasFeedback && (
-        <HelperText
-          id={feedbackId}
-          error={hasError}
-          role={hasError ? 'alert' : undefined}
-          className={cn(disabled && 'opacity-50')}
-        >
+        <HelperText id={feedbackId} error={hasError} className={cn(disabled && 'opacity-50')}>
           {errorMessage || helperText}
         </HelperText>
       )}
