@@ -57,9 +57,27 @@ export interface FilterOptions {
   range?: string;
   /** Number of random tests to sample */
   sample?: number | string;
+  /** Seed used to make random sampling repeatable */
+  sampleSeed?: number;
 }
 
 type Tests = NonNullable<TestSuite['tests']>;
+
+function createSeededRandom(seed: number): () => number {
+  const stringSeed = String(seed);
+  let state = 2166136261;
+  for (let i = 0; i < stringSeed.length; i++) {
+    state = Math.imul(state ^ stringSeed.charCodeAt(i), 16777619);
+  }
+
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 /**
  * Filters a test suite to only include all tests that did not pass (failures + errors)
@@ -273,9 +291,11 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     }
 
     // Fisher-Yates shuffle and take first n elements
+    const random =
+      options.sampleSeed === undefined ? Math.random : createSeededRandom(options.sampleSeed);
     const shuffled = [...tests];
     for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     tests = shuffled.slice(0, count);

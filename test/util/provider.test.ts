@@ -88,6 +88,7 @@ describe('normalizeProviderRef', () => {
       'config',
       'prompts',
       'transform',
+      'transformCanSetTestResult',
       'delay',
       'env',
       'inputs',
@@ -546,6 +547,15 @@ describe('checkProviderApiKeys', () => {
     const result = checkProviderApiKeys([provider]);
     expect(result.size).toBe(1);
     expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+  });
+
+  it('uses descriptions only when requested for user-facing error output', () => {
+    const provider = providerWithKey('openai:gpt-4', { label: 'primary' });
+
+    expect(checkProviderApiKeys([provider]).get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+    expect(
+      checkProviderApiKeys([provider], { useDescriptions: true }).get('OPENAI_API_KEY'),
+    ).toEqual(['primary (openai:gpt-4)']);
   });
 
   it('skips providers with valid key, no getApiKey method, or requiresApiKey false', () => {

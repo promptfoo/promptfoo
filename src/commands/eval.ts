@@ -39,7 +39,12 @@ import {
   resolveConfigs,
 } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import {
+  printBorder,
+  setupEnv,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+} from '../util/index';
 import invariant from '../util/invariant';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -52,6 +57,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
+import { collectKeyValueOption, normalizeTagOption } from './options';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
@@ -74,6 +80,18 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+function runtimeTagsForEval(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+): Record<string, string> | undefined {
+  const tags = {
+    ...(commandLineOptions?.tags || {}),
+    ...(cmdObj.tags || {}),
+  };
+
+  return Object.keys(tags).length > 0 ? tags : undefined;
+}
 
 export class EvalRunError extends Error {
   readonly exitCode: number;
@@ -265,6 +283,20 @@ export async function doEval(
     if (resumeRaw && retryErrors) {
       return failEvalRun(
         'Cannot use --resume and --retry-errors together. Please use one or the other.',
+        isCliInvocation,
+      );
+    }
+
+    const hasRuntimeTags = Boolean(cmdObj.tags && Object.keys(cmdObj.tags).length > 0);
+    if (resumeRaw && hasRuntimeTags) {
+      return failEvalRun(
+        'Cannot use --tag with --resume. Resumed evaluations keep their original tags.',
+        isCliInvocation,
+      );
+    }
+    if (retryErrors && hasRuntimeTags) {
+      return failEvalRun(
+        'Cannot use --tag with --retry-errors. Retried evaluations keep their original tags.',
         isCliInvocation,
       );
     }
@@ -481,6 +513,7 @@ export async function doEval(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
@@ -497,13 +530,26 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
-    const shouldApplyRangeToImplicitDefaultTest =
-      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const hasActiveTestFilter =
+      filterRange !== undefined ||
+      cmdObj.filterFailing !== undefined ||
+      cmdObj.filterFailingOnly !== undefined ||
+      cmdObj.filterErrorsOnly !== undefined ||
+      cmdObj.filterFirstN !== undefined ||
+      cmdObj.filterMetadata !== undefined ||
+      cmdObj.filterPattern !== undefined ||
+      filterSample !== undefined;
+    const shouldApplyFiltersToImplicitDefaultTest =
+      hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
-      if (shouldApplyRangeToImplicitDefaultTest) {
-        testSuite.tests = [{}];
+      if (shouldApplyFiltersToImplicitDefaultTest) {
+        const defaultMetadata =
+          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
+        testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
@@ -513,15 +559,14 @@ export async function doEval(
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
-        sample: cmdObj.filterSample,
+        sample: filterSample,
+        sampleSeed: filterSampleSeed,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
-      if (
-        filterRange !== undefined &&
-        !hasScenarios &&
-        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
-        testSuite.tests.length === 0
-      ) {
+      const shouldSuppressImplicitDefaultTest =
+        testSuite.tests.length === 0 &&
+        ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
+      if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
       }
     }
@@ -550,16 +595,16 @@ export async function doEval(
     }
 
     // Check for missing API keys after provider filtering
-    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
 
     if (missingApiKeys.size > 0) {
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
-        .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
+        .map(([envVar, providerDescriptions]) => `${envVar} (${providerDescriptions.join(', ')})`)
         .join('; ')}`;
       return failEvalRun(missingKeysMessage, isCliInvocation, {
         logForCli: () => {
-          for (const [envVar, providerIds] of missingApiKeys) {
-            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+          for (const [envVar, providerDescriptions] of missingApiKeys) {
+            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerDescriptions.join(', ')})`));
           }
           logger.error('');
           logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
@@ -616,6 +661,12 @@ export async function doEval(
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
+    }
+    const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
+    if (runtimeTags) {
+      // config.tags is the persisted sink (Eval.create reads it); cliState.config
+      // is the same object reference, and nothing reads testSuite.tags.
+      config.tags = { ...(config.tags || {}), ...runtimeTags };
     }
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
@@ -762,8 +813,11 @@ export async function doEval(
       return ret;
     }
 
-    // Clear results from memory to avoid memory issues
-    evalRecord.clearResults();
+    // Persisted evals can reload results later. No-write evals only have the
+    // in-memory results left for table and output rendering.
+    if (evalRecord.persisted) {
+      evalRecord.clearResults();
+    }
 
     // Determine sharing using shared utility (DRY - same logic as retry command)
     const wantsToShare = shouldShareResults({
@@ -837,9 +891,11 @@ export async function doEval(
 
     const { outputPath } = config;
 
-    // We're removing JSONL from paths since we already wrote to that during the evaluation
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
+      (p): p is string => typeof p === 'string' && p.length > 0,
     );
 
     const isRedteam = Boolean(config.redteam);
@@ -938,6 +994,7 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
+    warnOnDegradedJsonlRecovery(evalRecord, paths);
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
@@ -1125,14 +1182,17 @@ export function evalCommand(
     .option(
       '--var <key=value>',
       'Set a variable in key=value format',
-      (value, previous) => {
-        const [key, val] = value.split('=');
-        if (!key || val === undefined) {
-          throw new Error('--var must be specified in key=value format.');
-        }
-        return { ...previous, [key]: val };
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--var', value, previous);
       },
       {},
+    )
+    .option(
+      '--tag <key=value>',
+      'Set an eval tag in key=value format. Can be specified multiple times; CLI tags override config tags.',
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--tag', value, previous);
+      },
     )
 
     // Execution control
@@ -1168,6 +1228,7 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
+    .option('--filter-sample-seed <number>', 'Numeric seed used to make --filter-sample repeatable')
     .option(
       '--filter-failing <path or id>',
       'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
@@ -1231,7 +1292,10 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        validatedOpts = EvalCommandSchema.parse(opts);
+        const optsWithAliases = normalizeTagOption(
+          opts as EvalCommandOptions & { tag?: Record<string, string> },
+        );
+        validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
         Invalid command options:

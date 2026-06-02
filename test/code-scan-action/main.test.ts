@@ -157,6 +157,11 @@ interface NpmExecCall {
   options?: { env?: Record<string, string> };
 }
 
+interface PromptfooAndNpmExecCalls {
+  npmInstall: NpmExecCall;
+  promptfoo: PromptfooExecCall;
+}
+
 function setupMocks() {
   mocks.github.context.eventName = 'pull_request';
   mocks.github.context.repo = {
@@ -287,6 +292,40 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   };
 }
 
+async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpmExecCalls> {
+  await import('../../code-scan-action/src/main');
+
+  const calls = await vi.waitFor(() => {
+    const promptfooCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+    );
+    const npmCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) =>
+        command === 'npm' &&
+        Array.isArray(args) &&
+        args[0] === 'install' &&
+        args[1] === '-g' &&
+        args[2] === 'promptfoo',
+    );
+
+    if (!promptfooCall || !Array.isArray(promptfooCall[1]) || !npmCall) {
+      throw new Error('expected promptfoo and npm install exec calls not found');
+    }
+
+    return { npmCall, promptfooCall };
+  });
+
+  return {
+    npmInstall: {
+      options: calls.npmCall[2] as NpmExecCall['options'],
+    },
+    promptfoo: {
+      args: calls.promptfooCall[1],
+      options: calls.promptfooCall[2] as PromptfooExecCall['options'],
+    },
+  };
+}
+
 function expectCliArg(args: string[], name: string, value: string): void {
   const argIndex = args.indexOf(name);
   expect(argIndex).toBeGreaterThan(-1);
@@ -297,6 +336,27 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
   expect(options?.env).toEqual(expect.any(Object));
   expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
   expect(options?.env?.npm_config_before).toBeUndefined();
+}
+
+function mockInheritedActionAuthEnv() {
+  mockProcessEnv({
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'inherited-id-token-request-token',
+    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.example/request',
+    GH_TOKEN: 'inherited-gh-token',
+    GITHUB_OIDC_TOKEN: 'stale-oidc-token',
+    GITHUB_TOKEN: 'inherited-github-token',
+    'INPUT_GITHUB-TOKEN': 'input-github-token',
+    INPUT_GITHUB_TOKEN: 'input-github-token-compat',
+  });
+}
+
+function expectNoActionAuthEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
+  expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBeUndefined();
+  expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_URL).toBeUndefined();
+  expect(options?.env?.GH_TOKEN).toBeUndefined();
+  expect(options?.env?.GITHUB_TOKEN).toBeUndefined();
+  expect(options?.env?.['INPUT_GITHUB-TOKEN']).toBeUndefined();
+  expect(options?.env?.INPUT_GITHUB_TOKEN).toBeUndefined();
 }
 
 function setPullRequestRepos(headRepoFullName: string, baseRepoFullName = 'test-owner/test-repo') {
@@ -372,6 +432,35 @@ describe('code-scan-action main', () => {
       const { options } = await importActionAndGetNpmInstallCall();
 
       expectSanitizedExecEnv(options);
+    });
+
+    it('should pass the OIDC token only to the scan command if token minting succeeds', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockInheritedActionAuthEnv();
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectNoActionAuthEnv(npmInstall.options);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
+      expectNoActionAuthEnv(promptfoo.options);
+      expect(process.env.GITHUB_OIDC_TOKEN).toBe('stale-oidc-token');
+    });
+
+    it('should not pass stale OIDC credentials to subprocesses if token minting fails', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockInheritedActionAuthEnv();
+      mocks.core.getIDToken.mockRejectedValue(new Error('OIDC not configured'));
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectNoActionAuthEnv(npmInstall.options);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectNoActionAuthEnv(promptfoo.options);
+      expect(mocks.core.info).toHaveBeenCalledWith(
+        'OIDC token not available: Failed to get GitHub OIDC token: OIDC not configured',
+      );
     });
   });
 
@@ -452,6 +541,71 @@ describe('code-scan-action main', () => {
       expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
       expect(mocks.core.getIDToken).toHaveBeenCalled();
     });
+
+    it('should surface skipReason when fork PR scanning awaits maintainer approval', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      const skipMessage =
+        'Fork PR scanning requires maintainer approval. See PR comment for options.';
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [],
+                  skipReason: skipMessage,
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(`🔀 Scan skipped: ${skipMessage}`);
+      });
+
+      // The generic "Comments posted to PR by scan server" log should NOT fire for skips —
+      // that message was misleading because no scan findings were actually posted.
+      expect(mocks.core.info).not.toHaveBeenCalledWith('✅ Comments posted to PR by scan server');
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('should preserve legacy text fork-authorization skips during CLI rollout', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options:
+            | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
+            | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stderr) {
+            options.listeners.stderr(Buffer.from('Fork PR scanning not authorized'));
+            return 1;
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Scan skipped: Fork PR scanning requires maintainer approval. See PR comment for options.',
+        );
+      });
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
   });
 
   describe('SARIF output', () => {
@@ -508,6 +662,40 @@ describe('code-scan-action main', () => {
       expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
     });
 
+    it('does not write SARIF when the scanner returns a skipReason without completing a scan', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [],
+                  skipReason: 'Fork PR scanning requires maintainer approval.',
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Scan skipped: Fork PR scanning requires maintainer approval.',
+        );
+      });
+
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
     it('does not write SARIF when a setup PR is skipped', async () => {
       mocks.actionGithub.getPRFiles.mockResolvedValue([
         {
@@ -531,35 +719,6 @@ describe('code-scan-action main', () => {
         expect.anything(),
         expect.anything(),
       );
-    });
-
-    it('does not write SARIF when fork PR scanning awaits maintainer approval', async () => {
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          _args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
-            options.listeners.stdout(Buffer.from('Fork PR scanning not authorized'));
-            return 1;
-          }
-          return 0;
-        },
-      );
-
-      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
-
-      await vi.waitFor(() => {
-        expect(mocks.exec.exec).toHaveBeenCalledWith(
-          'promptfoo',
-          expect.anything(),
-          expect.anything(),
-        );
-      });
-
-      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
-      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
     it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {
@@ -650,6 +809,81 @@ describe('code-scan-action main', () => {
 
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('minimum severity input resolution', () => {
+    function mockSeverityInputs(values: {
+      'min-severity'?: string;
+      'minimum-severity'?: string;
+    }): void {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity') {
+          return values['min-severity'] ?? '';
+        }
+        if (name === 'minimum-severity') {
+          return values['minimum-severity'] ?? '';
+        }
+        return '';
+      });
+    }
+
+    it('uses min-severity when only min-severity is set', async () => {
+      mockSeverityInputs({ 'min-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('uses minimum-severity when only the alias is set (regression test for #9427)', async () => {
+      mockSeverityInputs({ 'minimum-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('falls back to medium when neither input is set', async () => {
+      mockSeverityInputs({});
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('prefers min-severity and warns when both inputs disagree', async () => {
+      mockSeverityInputs({ 'min-severity': 'high', 'minimum-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined);
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Both min-severity (high) and minimum-severity (critical) are set'),
+      );
+    });
+
+    it('does not warn when both inputs are set to the same value', async () => {
+      mockSeverityInputs({ 'min-severity': 'high', 'minimum-severity': 'high' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('trims whitespace from severity inputs', async () => {
+      mockSeverityInputs({ 'minimum-severity': '  critical  ' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
     });
   });
 });

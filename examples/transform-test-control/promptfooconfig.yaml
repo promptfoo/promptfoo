@@ -10,6 +10,7 @@ providers:
 defaultTest:
   options:
     transform: file://transform.js
+    transformCanSetTestResult: true
 
 tests:
   - vars:

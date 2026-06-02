@@ -32,11 +32,15 @@ import type {
 } from '../types/providers';
 
 type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+  Pick<
+    ApiProvider,
+    'label' | 'transform' | 'transformCanSetTestResult' | 'delay' | 'inputs' | 'config'
+  >;
 
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
   'transform',
+  'transformCanSetTestResult',
   'delay',
   'inputs',
   'config',
@@ -138,6 +142,8 @@ export async function loadApiProvider(
       // Allow local overrides for these fields
       label: options.label ?? cloudProvider.label,
       transform: options.transform ?? cloudProvider.transform,
+      transformCanSetTestResult:
+        options.transformCanSetTestResult ?? cloudProvider.transformCanSetTestResult,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs: options.inputs ?? cloudProvider.inputs,
@@ -201,6 +207,7 @@ export async function loadApiProvider(
     if (factory.test(renderedProviderPath)) {
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;
+      ret.transformCanSetTestResult = options.transformCanSetTestResult;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
@@ -273,7 +280,9 @@ export async function resolveProvider(
     const descriptor = normalizeProviderRef(provider);
     return createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id);
   } else {
-    throw new Error('Invalid provider type');
+    throw new Error(
+      `Invalid provider type. Expected a string (provider id), an object with an 'id' field, a ProviderOptionsMap, or a function. Got: ${typeof provider}`,
+    );
   }
 }
 

@@ -7,11 +7,11 @@ npx promptfoo@latest init --example transform-test-control
 cd transform-test-control
 ```
 
-This example shows how a transform can decide whether a test passes or fails by returning a `testResult` object. It uses the built-in `echo` provider, so no API keys are required.
+This example shows how a transform can decide whether a test passes or fails by returning a `testResult` object with the explicit `transformCanSetTestResult` opt-in. It uses the built-in `echo` provider, so no API keys are required.
 
 ## Usage
 
-Run the evaluation:
+Run the eval:
 
 ```bash
 promptfoo eval

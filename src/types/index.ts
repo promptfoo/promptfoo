@@ -128,8 +128,10 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
+  filterSampleSeed: z.coerce.number().int().safe().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
@@ -189,6 +191,7 @@ export const OutputConfigSchema = z.object({
    */
   postprocess: StringOrFunctionSchema.optional(),
   transform: StringOrFunctionSchema.optional(),
+  transformCanSetTestResult: z.boolean().optional(),
   transformVars: StringOrFunctionSchema.optional(),
 
   // The name of the variable to store the output of this test case
@@ -198,8 +201,8 @@ export const OutputConfigSchema = z.object({
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 /**
- * Transform functions can return this special object to control test outcomes.
- * This allows transforms to auto-pass or auto-fail tests based on response characteristics.
+ * Output transforms can return this special object to control test outcomes when
+ * `transformCanSetTestResult` is enabled.
  *
  * @example
  * ```javascript
@@ -236,9 +239,9 @@ export interface TransformTestResult {
 }
 
 /**
- * Special return type for transforms that want to control test outcomes.
- * When a transform returns this object, the test result is determined by
- * the testResult field instead of running assertions.
+ * Special return type for output transforms that want to control test outcomes.
+ * With `transformCanSetTestResult` enabled, the test result is determined by the
+ * `testResult` field instead of running assertions.
  */
 export interface TransformReturnWithTestResult {
   /** Special key that signals transform is controlling test outcome */
@@ -249,12 +252,41 @@ export interface TransformReturnWithTestResult {
 }
 
 /**
- * Union type for all possible transform return values.
- * Can be a string, object, or specifically a TransformReturnWithTestResult.
- * Using `unknown` here maintains backwards compatibility with existing transform code
- * while still allowing type checking for the testResult pattern.
+ * Runtime check for a valid transform-controlled test result.
  */
-export type TransformReturn = unknown;
+export function isTransformReturnWithTestResult(
+  value: unknown,
+): value is TransformReturnWithTestResult {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !Object.prototype.hasOwnProperty.call(value, 'testResult')
+  ) {
+    return false;
+  }
+  const testResult = (value as { testResult?: unknown }).testResult;
+  if (typeof testResult !== 'object' || testResult === null) {
+    return false;
+  }
+  const candidate = testResult as Partial<TransformTestResult>;
+  return (
+    typeof candidate.pass === 'boolean' &&
+    typeof candidate.score === 'number' &&
+    Number.isFinite(candidate.score) &&
+    typeof candidate.reason === 'string' &&
+    (candidate.namedScores === undefined ||
+      (typeof candidate.namedScores === 'object' &&
+        candidate.namedScores !== null &&
+        !Array.isArray(candidate.namedScores) &&
+        Object.values(candidate.namedScores).every(
+          (score) => typeof score === 'number' && Number.isFinite(score),
+        ))) &&
+    (candidate.metadata === undefined ||
+      (typeof candidate.metadata === 'object' &&
+        candidate.metadata !== null &&
+        !Array.isArray(candidate.metadata)))
+  );
+}
 
 export type EvalConversations = Record<
   string,
@@ -454,6 +486,14 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  /**
+   * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
+   * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
+   * Absent when tracing is disabled — its presence implies a trace context exists.
+   */
+  evaluationId?: string;
+  /** W3C trace ID generated for this row when tracing is enabled. */
+  traceId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -580,6 +620,9 @@ export interface GradingResult {
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
+  // Whether this result should count as an assertion request. Defaults to true.
+  countAsAssertionRequest?: boolean;
+
   // List of results for each component of the assertion
   componentResults?: GradingResult[];
 
@@ -627,6 +670,8 @@ export function isGradingResult(result: any): result is GradingResult {
     (typeof result.namedScoreWeights === 'undefined' ||
       typeof result.namedScoreWeights === 'object') &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
+    (typeof result.countAsAssertionRequest === 'undefined' ||
+      typeof result.countAsAssertionRequest === 'boolean') &&
     (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
@@ -636,6 +681,7 @@ export function isGradingResult(result: any): result is GradingResult {
 }
 
 export const BaseAssertionTypesSchema = z.enum([
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -765,7 +811,7 @@ export const AssertionSchema = z.object({
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
+  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
 
   // Override the grading rubric
@@ -799,6 +845,8 @@ export interface AssertionValueFunctionContext {
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
   trace?: TraceData;
+  /** Shortcut to providerResponse?.metadata for convenience */
+  metadata?: ProviderResponse['metadata'];
 }
 
 export type AssertionValueFunction = (
@@ -1151,6 +1199,8 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1159,6 +1209,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1171,7 +1222,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
@@ -1290,6 +1345,16 @@ export const TestSuiteConfigSchema = z.object({
     .object({
       enabled: z.boolean().prefault(false),
 
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().optional(),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
+
       // OTLP receiver configuration
       otlp: z
         .object({
@@ -1297,8 +1362,11 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1406,6 +1474,8 @@ export interface ResultsFile {
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
+  /** Persisted display order for table variable columns. */
+  vars?: string[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }
@@ -1443,6 +1513,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1450,6 +1527,10 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state

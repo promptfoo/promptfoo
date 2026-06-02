@@ -12,6 +12,7 @@ import {
   CommandLineOptionsSchema,
   GradingConfigSchema,
   isGradingResult,
+  isTransformReturnWithTestResult,
   MAX_SUGGESTIONS_COUNT,
   OutputConfigSchema,
   TestCaseSchema,
@@ -155,6 +156,7 @@ describe('isGradingResult', () => {
       reason: 'Test failed',
       namedScores: { accuracy: 0.5 },
       tokensUsed: { total: 100 },
+      countAsAssertionRequest: false,
       componentResults: [],
       assertion: { type: 'equals', value: 'expected' },
       comment: 'Needs improvement',
@@ -167,6 +169,7 @@ describe('isGradingResult', () => {
       { pass: true, score: 1, reason: 'Perfect' },
       { pass: false, score: 0, reason: 'Failed', namedScores: { accuracy: 0 } },
       { pass: true, score: 0.5, reason: 'Partial', tokensUsed: { total: 100 } },
+      { pass: true, score: 1, reason: 'External result', countAsAssertionRequest: false },
       { pass: true, score: 1, reason: 'Good', componentResults: [] },
       { pass: false, score: 0, reason: 'Bad' },
       { pass: true, score: 1, reason: 'Excellent', comment: 'Great job!' },
@@ -201,6 +204,7 @@ describe('isGradingResult', () => {
       { pass: true, score: 1, reason: 42 },
       { pass: true, score: 1, reason: 'Valid', namedScores: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', tokensUsed: 'invalid' },
+      { pass: true, score: 1, reason: 'Valid', countAsAssertionRequest: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', componentResults: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', assertion: 'invalid' },
       { pass: true, score: 1, reason: 'Valid', comment: 42 },
@@ -232,6 +236,46 @@ describe('isGradingResult', () => {
         componentResults: 'invalid',
         assertion: 'invalid',
         comment: 123,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('isTransformReturnWithTestResult', () => {
+  it('accepts valid transform-controlled test results', () => {
+    expect(
+      isTransformReturnWithTestResult({
+        output: 'display output',
+        testResult: {
+          pass: true,
+          score: 0.75,
+          reason: 'accepted',
+          namedScores: { guardrail: 0.75 },
+          metadata: { source: 'transform' },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects malformed or inherited test results', () => {
+    const inherited = Object.create({
+      testResult: { pass: true, score: 1, reason: 'inherited' },
+    });
+
+    expect(isTransformReturnWithTestResult(inherited)).toBe(false);
+    expect(
+      isTransformReturnWithTestResult({
+        testResult: { pass: true, score: Number.NaN, reason: 'invalid score' },
+      }),
+    ).toBe(false);
+    expect(
+      isTransformReturnWithTestResult({
+        testResult: {
+          pass: true,
+          score: 1,
+          reason: 'invalid metrics',
+          namedScores: { x: Infinity },
+        },
       }),
     ).toBe(false);
   });
@@ -335,6 +379,7 @@ describe('TestCaseSchema options (merged schema properties)', () => {
       vars: { input: 'test' },
       options: {
         transform: 'output.toUpperCase()',
+        transformCanSetTestResult: true,
         storeOutputAs: 'myOutput',
       },
     };
@@ -374,6 +419,7 @@ describe('TestCaseSchema options (merged schema properties)', () => {
         suffix: 'Be concise.',
         // From OutputConfigSchema
         transform: 'output.trim()',
+        transformCanSetTestResult: true,
         storeOutputAs: 'answer',
         // From GradingConfigSchema
         provider: 'openai:gpt-4o-mini',
@@ -604,6 +650,23 @@ describe('CommandLineOptionsSchema', () => {
     );
   });
 
+  it('should validate runtime tags', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      tags: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    };
+    expect(CommandLineOptionsSchema.parse(options)).toMatchObject({
+      tags: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    });
+  });
+
   it('should validate options without filterErrorsOnly', () => {
     const options = {
       providers: ['provider1'],
@@ -685,11 +748,44 @@ describe('CommandLineOptionsSchema', () => {
       filterProviders: 'provider1',
       filterRange: '1:3',
       filterSample: 5,
+      filterSampleSeed: 42,
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+
+  it('should coerce numeric filter sample seed arguments to numbers', () => {
+    expect(
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: '42',
+      }),
+    ).toMatchObject({
+      filterSampleSeed: 42,
+    });
+  });
+
+  it('should reject nonnumeric filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: 'repeatable-run',
+      }),
+    ).toThrow();
+  });
+
+  it('should reject unsafe integer filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow();
   });
 
   it('should reject invalid filterRange values', () => {
@@ -834,6 +930,23 @@ describe('TestSuiteConfigSchema', () => {
         : { id: 'test-provider', config: { someConfig: true } };
 
       expect(Object.keys(testProvider)).toContain('env');
+    });
+  });
+
+  describe('tracing property', () => {
+    it('defaults the OTLP HTTP receiver to loopback', () => {
+      const result = TestSuiteConfigSchema.parse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {},
+          },
+        },
+      });
+
+      expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
     });
   });
 

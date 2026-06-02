@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { looksLikeSecret, redactAzureBlobSasTokens } from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -26,6 +27,1204 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   evaluateOptions: {},
   scenarios: [],
   extensions: [],
+};
+
+const CREDENTIAL_TOKEN_PATTERN =
+  /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
+
+// Field names whose value is always credential material (inline key/keystore
+// bytes), even when the name itself does not match the credential token regex.
+const INLINE_CREDENTIAL_MATERIAL_NAMES = new Set([
+  'certificate_content',
+  'jks_content',
+  'key_content',
+  'keystore_content',
+  'pfx',
+  'pfx_content',
+]);
+
+// Bare auth-carrier header names that escape the main regex. Only consulted
+// when the parent key is the `headers` bag.
+const HEADER_CREDENTIAL_NAMES = new Set([
+  'auth',
+  'x_auth',
+  'x_honeycomb_team',
+  'proxy_authorization',
+  'x_amz_security_token',
+]);
+// Bare parameter aliases are credential carriers only in HTTP request data
+// (query params, form bodies, and multipart fields).
+const BARE_CREDENTIAL_PARAMETER_NAMES = new Set(['auth', 'passwd', 'pwd']);
+
+const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
+  /(?:^|_)api_bearer_token_envar$/,
+  /(?:^|_)api_key_envar$/,
+  /(?:^|_)api_key_required$/,
+  /(?:^|_)azure_token_scope$/,
+  /(?:^|_)langfuse_public_key$/,
+  /(?:^|_)key_alias$/,
+  /(?:^|_)key_filename$/,
+  /(?:^|_)key_name$/,
+  /(?:^|_)key_path$/,
+  /(?:^|_)max(?:_[a-z0-9]+)*_tokens?(?:_[a-z0-9]+)*$/,
+  /(?:^|_)pay_per_token$/,
+  /(?:^|_)private_key_path$/,
+  /(?:^|_)prompt_cache_key$/,
+  /(?:^|_)session_key$/,
+  /(?:^|_)signature_auth$/,
+  /(?:^|_)signature_(?:algorithm|validity_ms|data_template|refresh_buffer_ms)$/,
+  /(?:^|_)token_estimation$/,
+  /(?:^|_)token_url$/,
+];
+
+// Provider-config subtrees that are model-facing contracts, not credentials.
+// Walking them would corrupt JSON schemas (e.g. a tool parameter literally
+// named `password`). The check fires at the entry point — children of an
+// opaque key are protected transitively.
+const OPAQUE_PROVIDER_CONFIG_KEYS = new Set([
+  'tools',
+  'functions',
+  'tool_choice',
+  'response_format',
+  'output_schema',
+  'json_schema',
+]);
+
+// Normalize so the credential regex can match any casing convention
+// (camelCase, PascalCase, ALL_CAPS, kebab-case, all-caps acronyms).
+const normalizeCredentialName = (name: string): string =>
+  name
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/-/g, '_')
+    .toLowerCase();
+
+const looksLikeCredential = (name: string): boolean => {
+  const normalized = normalizeCredentialName(name);
+  if (NON_SECRET_CREDENTIAL_NAME_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+  return (
+    CREDENTIAL_TOKEN_PATTERN.test(normalized) || INLINE_CREDENTIAL_MATERIAL_NAMES.has(normalized)
+  );
+};
+
+const looksLikeCredentialHeader = (headerName: string): boolean => {
+  const normalized = normalizeCredentialName(headerName);
+  return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
+};
+
+const looksLikeRequestCredentialParameter = (name: string): boolean =>
+  BARE_CREDENTIAL_PARAMETER_NAMES.has(normalizeCredentialName(name)) || looksLikeCredential(name);
+
+const URL_USERINFO = /^((?:webhook:)?[a-z][a-z0-9+.-]*:\/\/)([^/?#@\r\n]+)@/i;
+const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
+const URL_PATH_SEGMENT = /\/([^/?#\s]+)/g;
+const URL_PROTOCOL = /^(?:webhook:)?[a-z][a-z0-9+.-]*:\/\//i;
+const URL_HOST = /^(?:webhook:)?[a-z][a-z0-9+.-]*:\/\/(?:[^/?#@\r\n]+@)?([^/:?#\s]+)(?::\d+)?/i;
+const NUNJUCKS_REFERENCE = /\{\{[^{}]*\}\}/g;
+const NUNJUCKS_NAME_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*/;
+const NUNJUCKS_BRACKET_SEGMENT = /\[(?:"([^"\\\r\n]+)"|'([^'\\\r\n]+)')\]/y;
+const SAFE_CREDENTIAL_TEMPLATE_FILTERS = new Set(['trim', 'urlencode']);
+
+const serializeCredentialTemplatePath = (path: string[]): string => JSON.stringify(path);
+
+const deserializeCredentialTemplatePath = (path: string): string[] => JSON.parse(path) as string[];
+
+const parseSafeNunjucksPath = (path: string): string[] | undefined => {
+  const initial = path.match(NUNJUCKS_NAME_PREFIX);
+  if (!initial) {
+    return undefined;
+  }
+  const segments = [initial[0]];
+  let index = initial[0].length;
+  while (index < path.length) {
+    while (path[index] !== undefined && /\s/.test(path[index])) {
+      index += 1;
+    }
+    if (path[index] === '.') {
+      index += 1;
+      while (path[index] !== undefined && /\s/.test(path[index])) {
+        index += 1;
+      }
+      const name = path.slice(index).match(NUNJUCKS_NAME_PREFIX)?.[0];
+      if (!name) {
+        return undefined;
+      }
+      segments.push(name);
+      index += name.length;
+      continue;
+    }
+    NUNJUCKS_BRACKET_SEGMENT.lastIndex = index;
+    const bracketMatch = NUNJUCKS_BRACKET_SEGMENT.exec(path);
+    const bracketKey = bracketMatch?.[1] ?? bracketMatch?.[2];
+    if (!bracketMatch || !bracketKey) {
+      return undefined;
+    }
+    segments.push(bracketKey);
+    index = NUNJUCKS_BRACKET_SEGMENT.lastIndex;
+  }
+  return segments;
+};
+
+const getNunjucksReferencePath = (reference: string): string[] | undefined => {
+  const [path] = reference
+    .slice(2, -2)
+    .split('|')
+    .map((part) => part.trim());
+  return parseSafeNunjucksPath(path);
+};
+
+const getSafeNunjucksPath = (reference: string): string[] | undefined => {
+  const [, ...filters] = reference
+    .slice(2, -2)
+    .split('|')
+    .map((part) => part.trim());
+  const safePath = getNunjucksReferencePath(reference);
+  const safeFilters = filters.every((filter) => SAFE_CREDENTIAL_TEMPLATE_FILTERS.has(filter));
+  return safePath && safeFilters ? safePath : undefined;
+};
+
+const stripSafeNunjucksReferences = (value: string): string =>
+  value.replace(NUNJUCKS_REFERENCE, (reference) =>
+    getSafeNunjucksPath(reference) === undefined ? reference : '',
+  );
+
+const recordCredentialTemplatePaths = (value: string, paths?: Set<string>): void => {
+  if (!paths) {
+    return;
+  }
+  for (const match of value.matchAll(NUNJUCKS_REFERENCE)) {
+    const path = getNunjucksReferencePath(match[0]);
+    if (path) {
+      paths.add(serializeCredentialTemplatePath(path));
+    }
+  }
+};
+
+const isTemplatedCredentialReference = (value: unknown): boolean => {
+  if (typeof value !== 'string' || !value.includes('{{')) {
+    return false;
+  }
+  const literal = stripSafeNunjucksReferences(value);
+  if (literal === value) {
+    return false;
+  }
+  const trimmedLiteral = literal.trim();
+  return trimmedLiteral === '' || /^(?:bearer|basic|token|api[-_]?key)$/i.test(trimmedLiteral);
+};
+
+const preserveCredentialTemplate = (value: unknown, paths?: Set<string>): boolean => {
+  if (typeof value === 'string') {
+    recordCredentialTemplatePaths(value, paths);
+  }
+  if (!isTemplatedCredentialReference(value)) {
+    return false;
+  }
+  return true;
+};
+
+const isTemplatedUrlUserinfo = (value: string, paths?: Set<string>): boolean => {
+  if (!value.includes('{{')) {
+    return false;
+  }
+  recordCredentialTemplatePaths(value, paths);
+  const literal = stripSafeNunjucksReferences(value);
+  const templated = literal !== value && /^:?$/.test(literal.trim());
+  return templated;
+};
+
+const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
+  let name = rawName;
+  try {
+    name = decodeURIComponent(rawName);
+  } catch {
+    // Keep malformed parameter names unchanged for conservative matching.
+  }
+  return (
+    normalizeCredentialName(name) === 'sig' ||
+    looksLikeRequestCredentialParameter(name) ||
+    looksLikeCredentialHeader(name)
+  );
+};
+
+const looksLikeCredentialPathSegment = (rawValue: string): boolean => {
+  let value = rawValue;
+  try {
+    value = decodeURIComponent(rawValue);
+  } catch {
+    // Keep malformed segments unchanged for conservative matching.
+  }
+  return looksLikeSecret(value);
+};
+
+const scrubCredentialPathSegments = (value: string): string =>
+  value.replace(URL_PATH_SEGMENT, (match, segment) =>
+    looksLikeCredentialPathSegment(segment) ? '/[REDACTED]' : match,
+  );
+
+const scrubKnownWebhookPathCredentials = (value: string): string => {
+  const hostname = value.match(URL_HOST)?.[1]?.toLowerCase();
+  if (hostname === 'hooks.slack.com') {
+    return value.replace(/(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
+  }
+  if (
+    hostname === 'discord.com' ||
+    hostname?.endsWith('.discord.com') ||
+    hostname === 'discordapp.com' ||
+    hostname?.endsWith('.discordapp.com')
+  ) {
+    return value.replace(/(\/api\/webhooks\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
+  }
+  return value;
+};
+
+// Operate on URL text so Nunjucks placeholders remain intact and safe query
+// settings retain their exact representation.
+const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string => {
+  const scrubbed = value
+    .replace(URL_USERINFO, (match, prefix, userinfo) =>
+      isTemplatedUrlUserinfo(userinfo, templatePaths) ? match : `${prefix}[REDACTED]@`,
+    )
+    .replace(URL_QUERY_PARAMETER, (match, separator, name, parameterValue) =>
+      looksLikeUrlCredentialParameter(name) &&
+      !preserveCredentialTemplate(parameterValue, templatePaths)
+        ? `${separator}${name}=[REDACTED]`
+        : match,
+    );
+  return URL_PROTOCOL.test(scrubbed)
+    ? scrubKnownWebhookPathCredentials(scrubCredentialPathSegments(scrubbed))
+    : scrubbed;
+};
+
+const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
+  !isTemplatedCredentialReference(value) &&
+  (looksLikeSecret(value.trim()) || scrubProviderUrl(value, templatePaths) !== value);
+
+const looksLikeHeaderCredential = (
+  headerName: string,
+  value: unknown,
+  templatePaths?: Set<string>,
+): boolean =>
+  looksLikeCredentialHeader(headerName) ||
+  (typeof value === 'string' && looksLikeCredentialValue(value, templatePaths));
+
+const FORM_PARAMETER = /(^|&)([^=&#]+)=([^&]*)/g;
+const MULTIPART_BOUNDARY_PARAMETER =
+  /^Content-Type\s*:\s*multipart\/form-data[^\r\n]*?\bboundary=(?:"([^"]+)"|([^;\s]+))/im;
+const MULTIPART_FIELD_NAME = /Content-Disposition\s*:[^\r\n]*\bname=(?:"([^"]+)"|([^;\s]+))/i;
+
+const scrubHttpBodyString = (body: string, templatePaths?: Set<string>): string => {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      return JSON.stringify(walkValue(parsed, 'body', new WeakSet<object>(), 0, templatePaths));
+    }
+  } catch {
+    // Handle non-JSON request bodies below.
+  }
+
+  if (!body.includes('=')) {
+    return looksLikeCredentialValue(body, templatePaths) ? '[REDACTED]' : body;
+  }
+
+  const scrubbed = body.replace(FORM_PARAMETER, (match, separator, key, value) =>
+    (looksLikeUrlCredentialParameter(key) || looksLikeCredentialValue(value, templatePaths)) &&
+    !preserveCredentialTemplate(value, templatePaths)
+      ? `${separator}${key}=[REDACTED]`
+      : match,
+  );
+  return scrubbed !== body || !looksLikeCredentialValue(body, templatePaths)
+    ? scrubbed
+    : '[REDACTED]';
+};
+
+const scrubRawMultipartBody = (
+  body: string,
+  boundary: string,
+  templatePaths?: Set<string>,
+): string =>
+  body
+    .split(`--${boundary}`)
+    .map((part) => {
+      const nameMatch = part.match(MULTIPART_FIELD_NAME);
+      const name = nameMatch?.[1] ?? nameMatch?.[2];
+      const separator = part.match(/\r?\n\r?\n/);
+      if (!name || !separator) {
+        return part;
+      }
+      const valueStart = (separator.index ?? 0) + separator[0].length;
+      const ending = part.endsWith('\r\n') ? '\r\n' : part.endsWith('\n') ? '\n' : '';
+      const value = part.slice(valueStart, part.length - ending.length);
+      const credentialField = looksLikeRequestCredentialParameter(name);
+      if (credentialField) {
+        if (preserveCredentialTemplate(value.trim(), templatePaths)) {
+          return part;
+        }
+        return `${part.slice(0, valueStart)}[REDACTED]${ending}`;
+      }
+      const scrubbedValue = scrubHttpBodyString(value, templatePaths);
+      return scrubbedValue === value
+        ? part
+        : `${part.slice(0, valueStart)}${scrubbedValue}${ending}`;
+    })
+    .join(`--${boundary}`);
+
+// Only scan the header block, so body content that happens to resemble a
+// credential header is not rewritten during persistence.
+const scrubRawHttpRequest = (raw: string, templatePaths?: Set<string>): string => {
+  const boundary = raw.match(/\r?\n\r?\n/);
+  const headerEnd = boundary?.index ?? raw.length;
+  const headerBlock = raw.slice(0, headerEnd);
+  const separator = boundary?.[0] ?? '';
+  const body = boundary ? raw.slice(headerEnd + separator.length) : '';
+  const multipartBoundary = headerBlock.match(MULTIPART_BOUNDARY_PARAMETER);
+  const requestLine = /^(\S+[ \t]+)([^\r\n]*?)([ \t]+HTTP\/\d(?:\.\d)?[^\r\n]*)$/im;
+  const headerLine = /^([ \t]*)([^:\r\n]+)([ \t]*:[ \t]*)(.*)$/gm;
+
+  return (
+    headerBlock
+      .replace(
+        requestLine,
+        (_match, method, target, protocol) =>
+          `${method}${scrubCredentialPathSegments(scrubProviderUrl(target, templatePaths))}${protocol}`,
+      )
+      .replace(headerLine, (match, indent, name, headerSeparator, value) =>
+        looksLikeHeaderCredential(name, value, templatePaths) &&
+        !preserveCredentialTemplate(value, templatePaths)
+          ? `${indent}${name}${headerSeparator}[REDACTED]`
+          : match,
+      ) +
+    separator +
+    (boundary
+      ? multipartBoundary
+        ? scrubRawMultipartBody(
+            body,
+            multipartBoundary[1] ?? multipartBoundary[2] ?? '',
+            templatePaths,
+          )
+        : scrubHttpBodyString(body, templatePaths)
+      : body)
+  );
+};
+
+const isMultipartFieldPart = (value: Record<string, unknown>): boolean =>
+  value.kind === 'field' && typeof value.name === 'string';
+
+// Guard against pathological user input: a cycle or extreme nesting in the
+// in-memory config must not throw and bypass redaction. Both limits are far
+// above any realistic provider config.
+const MAX_WALK_DEPTH = 64;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const hasOwn = (value: object, key: PropertyKey): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
+const CREDENTIAL_ENV_SELECTOR_NAMES = new Set([
+  'api_key_envar',
+  'api_bearer_token_envar',
+  'cf_aig_token_envar',
+]);
+
+const collectCredentialEnvSelectors = (
+  value: unknown,
+  selectors: Set<string>,
+  seen: WeakSet<object>,
+  depth: number,
+  parentKey?: string,
+): void => {
+  if (!value || typeof value !== 'object' || depth > MAX_WALK_DEPTH || seen.has(value as object)) {
+    return;
+  }
+  const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+  if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+    return;
+  }
+  seen.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      value.forEach((item) =>
+        collectCredentialEnvSelectors(item, selectors, seen, depth + 1, parentKey),
+      );
+      return;
+    }
+    Object.entries(value as Record<string, unknown>).forEach(([key, nestedValue]) => {
+      if (
+        CREDENTIAL_ENV_SELECTOR_NAMES.has(normalizeCredentialName(key)) &&
+        typeof nestedValue === 'string'
+      ) {
+        selectors.add(nestedValue);
+      }
+      collectCredentialEnvSelectors(nestedValue, selectors, seen, depth + 1, key);
+    });
+  } finally {
+    seen.delete(value as object);
+  }
+};
+
+const omitOpaqueToolCredentials = (tool: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(tool) || tool.type !== 'mcp') {
+    return tool;
+  }
+
+  const { authorization: _authorization, ...toolWithoutAuthorization } = tool;
+  return {
+    ...toolWithoutAuthorization,
+    ...(preserveCredentialTemplate(tool.authorization, templatePaths)
+      ? { authorization: tool.authorization }
+      : {}),
+    ...(typeof tool.server_url === 'string'
+      ? { server_url: scrubProviderUrl(tool.server_url, templatePaths) }
+      : {}),
+    ...(isRecord(tool.headers)
+      ? {
+          headers: Object.fromEntries(
+            Object.entries(tool.headers).filter(
+              ([key, value]) =>
+                !looksLikeHeaderCredential(key, value, templatePaths) ||
+                preserveCredentialTemplate(value, templatePaths),
+            ),
+          ),
+        }
+      : {}),
+  };
+};
+
+const walkValue = (
+  value: unknown,
+  parentKey: string | undefined,
+  seen: WeakSet<object>,
+  depth: number,
+  templatePaths?: Set<string>,
+  inHttpBody = false,
+  credentialEnvSelectors?: ReadonlySet<string>,
+): unknown => {
+  if (typeof value === 'string') {
+    if (parentKey === 'request') {
+      return scrubRawHttpRequest(value, templatePaths);
+    }
+    if (parentKey === 'body') {
+      return scrubHttpBodyString(value, templatePaths);
+    }
+    const scrubbedUrl = scrubProviderUrl(value, templatePaths);
+    return scrubbedUrl !== value || !looksLikeSecret(value.trim()) ? scrubbedUrl : '[REDACTED]';
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (depth > MAX_WALK_DEPTH || seen.has(value as object)) {
+    // Fail closed: drop the subtree rather than persist it unredacted.
+    return Array.isArray(value) ? [] : {};
+  }
+  seen.add(value as object);
+
+  try {
+    const normalizedParent =
+      parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+    const isHttpBody = inHttpBody || normalizedParent === 'body';
+
+    if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+      if (normalizedParent === 'tools') {
+        return Array.isArray(value)
+          ? value.map((tool) => omitOpaqueToolCredentials(tool, templatePaths))
+          : omitOpaqueToolCredentials(value, templatePaths);
+      }
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        walkValue(
+          item,
+          parentKey,
+          seen,
+          depth + 1,
+          templatePaths,
+          isHttpBody,
+          credentialEnvSelectors,
+        ),
+      );
+    }
+
+    const record = value as Record<string, unknown>;
+
+    // HTTP multipart values are request-body content; credential field names
+    // remove their value, while neutral fields still get body-string scrubbing.
+    if (isMultipartFieldPart(record)) {
+      const credentialField = looksLikeRequestCredentialParameter(record.name as string);
+      return Object.fromEntries(
+        Object.entries(record).flatMap(([key, nested]) => {
+          if (key === 'value' && credentialField) {
+            return preserveCredentialTemplate(nested, templatePaths) ? [[key, nested]] : [];
+          }
+          if (key === 'value' && typeof nested === 'string') {
+            return [[key, scrubHttpBodyString(nested, templatePaths)]];
+          }
+          if (credentialField && looksLikeCredential(key)) {
+            return preserveCredentialTemplate(nested, templatePaths) ? [[key, nested]] : [];
+          }
+          return [
+            [
+              key,
+              walkValue(nested, key, seen, depth + 1, templatePaths, true, credentialEnvSelectors),
+            ],
+          ];
+        }),
+      );
+    }
+
+    const isApiKeyAuth = normalizedParent === 'auth' && record.type === 'api_key';
+    const isHeaders = normalizedParent === 'headers';
+    const isQueryParams = normalizedParent === 'query_params';
+    const isEnv = normalizedParent === 'env';
+
+    return Object.fromEntries(
+      Object.entries(record).flatMap(([key, nestedValue]) => {
+        const credential = isHeaders
+          ? looksLikeHeaderCredential(key, nestedValue)
+          : isQueryParams
+            ? looksLikeUrlCredentialParameter(key)
+            : isHttpBody
+              ? looksLikeRequestCredentialParameter(key)
+              : looksLikeCredential(key);
+        if (
+          credential ||
+          (isApiKeyAuth && key === 'value') ||
+          (isEnv && credentialEnvSelectors?.has(key))
+        ) {
+          return preserveCredentialTemplate(nestedValue, templatePaths) ? [[key, nestedValue]] : [];
+        }
+        return [
+          [
+            key,
+            walkValue(
+              nestedValue,
+              key,
+              seen,
+              depth + 1,
+              templatePaths,
+              isHttpBody,
+              credentialEnvSelectors,
+            ),
+          ],
+        ];
+      }),
+    );
+  } finally {
+    seen.delete(value as object);
+  }
+};
+
+// A provider can supply its own env overrides, which are merged before
+// credential templates in its headers or URLs are rendered. Remove only
+// provider-local env values referenced from those credential-bearing fields.
+const omitReferencedProviderEnv = (
+  value: unknown,
+  templatePaths: Set<string>,
+  parentKey?: string,
+): unknown => {
+  if (!value || typeof value !== 'object' || templatePaths.size === 0) {
+    return value;
+  }
+  const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
+  if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => omitReferencedProviderEnv(item, templatePaths, parentKey));
+  }
+  if (normalizedParent === 'env' && isRecord(value)) {
+    return Array.from(templatePaths, deserializeCredentialTemplatePath)
+      .filter((path) => path[0] === 'env')
+      .reduce<Record<string, unknown>>(
+        (sanitized, path) => omitNestedPath(sanitized, path.slice(1)),
+        value,
+      );
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      omitReferencedProviderEnv(nestedValue, templatePaths, key),
+    ]),
+  );
+};
+
+const omitProviderCredentials = (
+  value: unknown,
+  parentKey?: string,
+  templatePaths?: Set<string>,
+): unknown => {
+  const credentialEnvSelectors = new Set<string>();
+  const providerTemplatePaths = new Set<string>();
+  collectCredentialEnvSelectors(value, credentialEnvSelectors, new WeakSet<object>(), 0);
+  credentialEnvSelectors.forEach((name) =>
+    providerTemplatePaths.add(serializeCredentialTemplatePath(['env', name])),
+  );
+  const sanitized = walkValue(
+    value,
+    parentKey,
+    new WeakSet<object>(),
+    0,
+    providerTemplatePaths,
+    false,
+    credentialEnvSelectors,
+  );
+  providerTemplatePaths.forEach((path) => templatePaths?.add(path));
+  return omitReferencedProviderEnv(sanitized, providerTemplatePaths);
+};
+
+const PROVIDER_OPTION_KEYS = new Set([
+  'id',
+  'label',
+  'config',
+  'prompts',
+  'transform',
+  'transformCanSetTestResult',
+  'delay',
+  'env',
+  'inputs',
+]);
+
+const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
+  scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
+
+const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
+  isRecord(value) &&
+  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
+  Object.values(value).every(isRecord);
+
+const omitConfiguredProvidersCredentials = (
+  providers: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!Array.isArray(providers)) {
+    return omitProviderCredentials(providers, undefined, templatePaths);
+  }
+  return providers.map((provider) =>
+    isProviderOptionsMap(provider)
+      ? Object.fromEntries(
+          Object.entries(provider).map(([id, options]) => [
+            scrubProviderIdentifier(id, templatePaths),
+            omitProviderCredentials(options, undefined, templatePaths),
+          ]),
+        )
+      : omitProviderCredentials(provider, undefined, templatePaths),
+  );
+};
+
+const omitAssertionProviderCredentials = (
+  assertions: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!Array.isArray(assertions)) {
+    return assertions;
+  }
+
+  return assertions.map((assertion) => {
+    if (!isRecord(assertion)) {
+      return assertion;
+    }
+
+    const assertionType = typeof assertion.type === 'string' ? assertion.type.toLowerCase() : '';
+    return {
+      ...assertion,
+      ...(typeof assertion.value === 'string' &&
+      (assertionType === 'webhook' || assertionType === 'not-webhook')
+        ? { value: scrubProviderUrl(redactAzureBlobSasTokens(assertion.value), templatePaths) }
+        : {}),
+      ...(hasOwn(assertion, 'provider')
+        ? { provider: omitProviderCredentials(assertion.provider, undefined, templatePaths) }
+        : {}),
+      ...(hasOwn(assertion, 'config')
+        ? { config: omitProviderCredentials(assertion.config, undefined, templatePaths) }
+        : {}),
+      ...(hasOwn(assertion, 'assert')
+        ? { assert: omitAssertionProviderCredentials(assertion.assert, templatePaths) }
+        : {}),
+    };
+  });
+};
+
+// `test.options` is merged into provider config at runtime, so any field on it
+// (`headers`, `transform`, etc.) can end up holding credential material. We
+// walk it the same way we walk a provider config.
+const omitTestOptionsCredentials = (options: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(options)) {
+    return options;
+  }
+  return omitProviderCredentials(options, undefined, templatePaths);
+};
+
+// Redteam execution reads plugin and strategy configuration from test metadata.
+// Keep ordinary metadata intact, but scrub those provider-like configuration surfaces.
+const omitTestMetadataCredentials = (metadata: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(metadata)) {
+    return metadata;
+  }
+
+  return {
+    ...metadata,
+    ...(hasOwn(metadata, 'pluginConfig')
+      ? { pluginConfig: omitProviderCredentials(metadata.pluginConfig, undefined, templatePaths) }
+      : {}),
+    ...(hasOwn(metadata, 'strategyConfig')
+      ? {
+          strategyConfig: omitProviderCredentials(
+            metadata.strategyConfig,
+            undefined,
+            templatePaths,
+          ),
+        }
+      : {}),
+  };
+};
+
+const omitTestCaseProviderCredentials = (
+  testCase: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(testCase)) {
+    return testCase;
+  }
+
+  return {
+    ...testCase,
+    ...(hasOwn(testCase, 'provider')
+      ? { provider: omitProviderCredentials(testCase.provider, undefined, templatePaths) }
+      : {}),
+    ...(Array.isArray(testCase.providers)
+      ? {
+          providers: testCase.providers.map((provider) =>
+            typeof provider === 'string'
+              ? scrubProviderIdentifier(provider, templatePaths)
+              : provider,
+          ),
+        }
+      : {}),
+    ...(hasOwn(testCase, 'options')
+      ? { options: omitTestOptionsCredentials(testCase.options, templatePaths) }
+      : {}),
+    ...(hasOwn(testCase, 'assert')
+      ? { assert: omitAssertionProviderCredentials(testCase.assert, templatePaths) }
+      : {}),
+    ...(hasOwn(testCase, 'metadata')
+      ? { metadata: omitTestMetadataCredentials(testCase.metadata, templatePaths) }
+      : {}),
+  };
+};
+
+const omitTestGeneratorCredentials = (
+  testGenerator: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(testGenerator) || typeof testGenerator.path !== 'string') {
+    return omitTestCaseProviderCredentials(testGenerator, templatePaths);
+  }
+
+  return {
+    ...testGenerator,
+    ...(hasOwn(testGenerator, 'config')
+      ? { config: omitProviderCredentials(testGenerator.config, undefined, templatePaths) }
+      : {}),
+  };
+};
+
+const omitTestsCredentials = (tests: unknown, templatePaths?: Set<string>): unknown => {
+  if (typeof tests === 'string') {
+    return redactAzureBlobSasTokens(tests);
+  }
+  if (Array.isArray(tests)) {
+    return tests.map((test) =>
+      typeof test === 'string'
+        ? redactAzureBlobSasTokens(test)
+        : omitTestGeneratorCredentials(test, templatePaths),
+    );
+  }
+  return omitTestGeneratorCredentials(tests, templatePaths);
+};
+
+const omitScenarioProviderCredentials = (
+  scenario: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(scenario)) {
+    return scenario;
+  }
+
+  return {
+    ...scenario,
+    ...(Array.isArray(scenario.config)
+      ? {
+          config: scenario.config.map((test) =>
+            omitTestCaseProviderCredentials(test, templatePaths),
+          ),
+        }
+      : {}),
+    ...(Array.isArray(scenario.tests)
+      ? {
+          tests: scenario.tests.map((test) => omitTestCaseProviderCredentials(test, templatePaths)),
+        }
+      : {}),
+  };
+};
+
+const omitRedteamProviderCredentials = (redteam: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(redteam)) {
+    return redteam;
+  }
+
+  return {
+    ...redteam,
+    ...(hasOwn(redteam, 'provider')
+      ? { provider: omitProviderCredentials(redteam.provider, undefined, templatePaths) }
+      : {}),
+    ...(Array.isArray(redteam.plugins)
+      ? {
+          plugins: redteam.plugins.map((plugin) =>
+            isRecord(plugin) && hasOwn(plugin, 'config')
+              ? {
+                  ...plugin,
+                  config: omitProviderCredentials(plugin.config, undefined, templatePaths),
+                }
+              : plugin,
+          ),
+        }
+      : {}),
+    ...(Array.isArray(redteam.strategies)
+      ? {
+          strategies: redteam.strategies.map((strategy) => {
+            if (!isRecord(strategy) || !hasOwn(strategy, 'config')) {
+              return strategy;
+            }
+            return {
+              ...strategy,
+              config: omitProviderCredentials(strategy.config, undefined, templatePaths),
+            };
+          }),
+        }
+      : {}),
+  };
+};
+
+// Prompts can be either strings or `{ raw, label, config }` objects whose
+// `config` is merged into provider config at runtime. Walk the embedded
+// configs so we do not bypass redaction via the prompt slot.
+const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): unknown => {
+  if (typeof prompts === 'string' || prompts === undefined || prompts === null) {
+    return prompts;
+  }
+  if (Array.isArray(prompts)) {
+    return prompts.map((prompt) => omitPromptCredentials(prompt, templatePaths));
+  }
+  if (!isRecord(prompts)) {
+    return prompts;
+  }
+  if (!hasOwn(prompts, 'config')) {
+    return Object.fromEntries(
+      Object.entries(prompts).map(([key, value]) => [redactAzureBlobSasTokens(key), value]),
+    );
+  }
+  return {
+    ...prompts,
+    config: omitProviderCredentials(prompts.config, undefined, templatePaths),
+  };
+};
+
+// OTLP trace forwarding can carry an `Authorization` header. The rest of the
+// tracing block is non-secret runtime config.
+const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+    return tracing;
+  }
+  const forwarding = tracing.forwarding;
+  return {
+    ...tracing,
+    forwarding: {
+      ...forwarding,
+      ...(typeof forwarding.endpoint === 'string'
+        ? { endpoint: scrubProviderUrl(forwarding.endpoint, templatePaths) }
+        : {}),
+      ...(isRecord(forwarding.headers)
+        ? {
+            headers: Object.fromEntries(
+              Object.entries(forwarding.headers).filter(
+                ([key, value]) =>
+                  !looksLikeHeaderCredential(key, value, templatePaths) ||
+                  preserveCredentialTemplate(value, templatePaths),
+              ),
+            ),
+          }
+        : {}),
+    },
+  };
+};
+
+const omitSharingCredentials = (sharing: unknown, templatePaths?: Set<string>): unknown => {
+  if (!isRecord(sharing)) {
+    return sharing;
+  }
+
+  return {
+    ...sharing,
+    ...(typeof sharing.apiBaseUrl === 'string'
+      ? { apiBaseUrl: scrubProviderUrl(sharing.apiBaseUrl, templatePaths) }
+      : {}),
+    ...(typeof sharing.appBaseUrl === 'string'
+      ? { appBaseUrl: scrubProviderUrl(sharing.appBaseUrl, templatePaths) }
+      : {}),
+  };
+};
+
+const omitProviderPromptMapCredentials = (
+  providerPromptMap: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(providerPromptMap)) {
+    return providerPromptMap;
+  }
+  return Object.fromEntries(
+    Object.entries(providerPromptMap).map(([providerId, prompts]) => [
+      scrubProviderIdentifier(providerId, templatePaths),
+      prompts,
+    ]),
+  );
+};
+
+const omitCommandLineOptionsCredentials = (
+  commandLineOptions: unknown,
+  templatePaths?: Set<string>,
+): unknown => {
+  if (!isRecord(commandLineOptions)) {
+    return commandLineOptions;
+  }
+  return {
+    ...commandLineOptions,
+    ...(typeof commandLineOptions.grader === 'string'
+      ? { grader: scrubProviderIdentifier(commandLineOptions.grader, templatePaths) }
+      : {}),
+    ...(Array.isArray(commandLineOptions.providers)
+      ? {
+          providers: commandLineOptions.providers.map((provider) =>
+            typeof provider === 'string'
+              ? scrubProviderIdentifier(provider, templatePaths)
+              : provider,
+          ),
+        }
+      : {}),
+  };
+};
+
+const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedConfig>['env'] => {
+  if (!env || typeof env !== 'object') {
+    return env;
+  }
+  const filtered = Object.fromEntries(
+    Object.entries(env).filter(
+      ([key, value]) =>
+        !looksLikeCredential(key) &&
+        !(typeof value === 'string' && looksLikeCredentialValue(value)),
+    ),
+  );
+  return filtered as Partial<UnifiedConfig>['env'];
+};
+
+const omitNestedPath = (
+  record: Record<string, unknown>,
+  path: string[],
+): Record<string, unknown> => {
+  const [head, ...tail] = path;
+  if (!head || !hasOwn(record, head)) {
+    return record;
+  }
+  if (tail.length === 0) {
+    const { [head]: _removed, ...rest } = record;
+    return rest;
+  }
+  if (!isRecord(record[head])) {
+    return record;
+  }
+  return { ...record, [head]: omitNestedPath(record[head], tail) };
+};
+
+const omitReferencedCredentialVars = (vars: unknown, templatePaths: Set<string>): unknown => {
+  if (!isRecord(vars) || templatePaths.size === 0) {
+    return vars;
+  }
+  return Array.from(templatePaths, deserializeCredentialTemplatePath)
+    .filter((path) => path[0] !== 'env')
+    .reduce((sanitized, path) => omitNestedPath(sanitized, path), vars);
+};
+
+const omitReferencedCredentialEnv = (
+  env: Partial<UnifiedConfig>['env'],
+  templatePaths: Set<string>,
+): Partial<UnifiedConfig>['env'] => {
+  if (!isRecord(env) || templatePaths.size === 0) {
+    return env;
+  }
+  return Array.from(templatePaths, deserializeCredentialTemplatePath)
+    .filter((path) => path[0] === 'env')
+    .reduce(
+      (sanitized, path) => omitNestedPath(sanitized, path.slice(1)),
+      env,
+    ) as Partial<UnifiedConfig>['env'];
+};
+
+const omitTestCaseCredentialVars = (testCase: unknown, templatePaths: Set<string>): unknown => {
+  if (!isRecord(testCase) || !hasOwn(testCase, 'vars')) {
+    return testCase;
+  }
+  return { ...testCase, vars: omitReferencedCredentialVars(testCase.vars, templatePaths) };
+};
+
+const omitTestsCredentialVars = (tests: unknown, templatePaths: Set<string>): unknown =>
+  Array.isArray(tests)
+    ? tests.map((test) => omitTestCaseCredentialVars(test, templatePaths))
+    : omitTestCaseCredentialVars(tests, templatePaths);
+
+const omitScenarioCredentialVars = (scenario: unknown, templatePaths: Set<string>): unknown => {
+  if (!isRecord(scenario)) {
+    return scenario;
+  }
+  return {
+    ...scenario,
+    ...(Array.isArray(scenario.config)
+      ? { config: scenario.config.map((test) => omitTestCaseCredentialVars(test, templatePaths)) }
+      : {}),
+    ...(Array.isArray(scenario.tests)
+      ? { tests: scenario.tests.map((test) => omitTestCaseCredentialVars(test, templatePaths)) }
+      : {}),
+  };
+};
+
+const omitRedteamContextCredentialVars = (
+  redteam: unknown,
+  templatePaths: Set<string>,
+): unknown => {
+  if (!isRecord(redteam) || !Array.isArray(redteam.contexts)) {
+    return redteam;
+  }
+  return {
+    ...redteam,
+    contexts: redteam.contexts.map((context) =>
+      isRecord(context) && hasOwn(context, 'vars')
+        ? { ...context, vars: omitReferencedCredentialVars(context.vars, templatePaths) }
+        : context,
+    ),
+  };
+};
+
+const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
+  const templatePaths = new Set<string>();
+  const configWithoutAzureSas = redactAzureBlobSasTokens(config);
+  // The YAML editor may contain untyped fields before server-side schema parsing.
+  const rawEditorConfig = configWithoutAzureSas as Partial<UnifiedConfig> & {
+    providerPromptMap?: unknown;
+  };
+  const sanitized = {
+    ...configWithoutAzureSas,
+    env: omitSensitiveEnv(configWithoutAzureSas.env),
+    providers: omitConfiguredProvidersCredentials(
+      configWithoutAzureSas.providers,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['providers'],
+    targets: omitConfiguredProvidersCredentials(
+      configWithoutAzureSas.targets,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['targets'],
+    prompts: omitPromptCredentials(
+      configWithoutAzureSas.prompts,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['prompts'],
+    defaultTest: omitTestCaseProviderCredentials(
+      configWithoutAzureSas.defaultTest,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['defaultTest'],
+    tests: omitTestsCredentials(
+      configWithoutAzureSas.tests,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['tests'],
+    scenarios: Array.isArray(configWithoutAzureSas.scenarios)
+      ? (configWithoutAzureSas.scenarios.map((scenario) =>
+          omitScenarioProviderCredentials(scenario, templatePaths),
+        ) as Partial<UnifiedConfig>['scenarios'])
+      : configWithoutAzureSas.scenarios,
+    redteam: omitRedteamProviderCredentials(
+      configWithoutAzureSas.redteam,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['redteam'],
+    ...(hasOwn(configWithoutAzureSas, 'tracing')
+      ? {
+          tracing: omitTracingCredentials(
+            configWithoutAzureSas.tracing,
+            templatePaths,
+          ) as Partial<UnifiedConfig>['tracing'],
+        }
+      : {}),
+    ...(hasOwn(configWithoutAzureSas, 'sharing')
+      ? {
+          sharing: omitSharingCredentials(
+            configWithoutAzureSas.sharing,
+            templatePaths,
+          ) as Partial<UnifiedConfig>['sharing'],
+        }
+      : {}),
+    ...(hasOwn(rawEditorConfig, 'providerPromptMap')
+      ? {
+          providerPromptMap: omitProviderPromptMapCredentials(
+            rawEditorConfig.providerPromptMap,
+            templatePaths,
+          ),
+        }
+      : {}),
+    ...(hasOwn(configWithoutAzureSas, 'commandLineOptions')
+      ? {
+          commandLineOptions: omitCommandLineOptionsCredentials(
+            configWithoutAzureSas.commandLineOptions,
+            templatePaths,
+          ) as Partial<UnifiedConfig>['commandLineOptions'],
+        }
+      : {}),
+  };
+  return {
+    ...sanitized,
+    env: omitReferencedCredentialEnv(sanitized.env, templatePaths),
+    defaultTest: omitTestCaseCredentialVars(
+      sanitized.defaultTest,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['defaultTest'],
+    tests: omitTestsCredentialVars(
+      sanitized.tests,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['tests'],
+    scenarios: Array.isArray(sanitized.scenarios)
+      ? (sanitized.scenarios.map((scenario) =>
+          omitScenarioCredentialVars(scenario, templatePaths),
+        ) as Partial<UnifiedConfig>['scenarios'])
+      : sanitized.scenarios,
+    redteam: omitRedteamContextCredentialVars(
+      sanitized.redteam,
+      templatePaths,
+    ) as Partial<UnifiedConfig>['redteam'],
+  };
+};
+
+// Fail closed: if redaction throws (e.g. on a pathological config) we must
+// never let zustand persist the raw state instead. Returning the defaults
+// loses unsaved UI work but never leaks credentials.
+const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
+  try {
+    return buildSanitizedConfig(config);
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[evalConfig] credential redaction failed; persisting defaults', err);
+    }
+    return { ...DEFAULT_CONFIG };
+  }
 };
 
 export const useStore = create<EvalConfigState>()(
@@ -64,6 +1263,25 @@ export const useStore = create<EvalConfigState>()(
     {
       name: 'promptfoo',
       skipHydration: true,
+      partialize: (state) => ({
+        config: omitPersistedSensitiveValues(state.config),
+      }),
+      merge: (persistedState, currentState) => {
+        const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
+
+        return {
+          ...currentState,
+          ...(persistedState as Partial<EvalConfigState> | undefined),
+          config: omitPersistedSensitiveValues({
+            ...DEFAULT_CONFIG,
+            ...persistedConfig,
+          }),
+        };
+      },
+      onRehydrateStorage: () => (state) => {
+        // Re-persist so credentials dropped during merge are also cleared from storage.
+        state?.setConfig(state.config);
+      },
     },
   ),
 );

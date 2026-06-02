@@ -25,7 +25,7 @@ Here is the main structure of the promptfoo configuration file:
 | Property                        | Type                                                                                                                                                  | Required                       | Description                                                                                                                                                                                                                     |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | description                     | string                                                                                                                                                | No                             | Optional description of what your LLM is trying to do                                                                                                                                                                           |
-| tags                            | Record\<string, string\>                                                                                                                              | No                             | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                                       |
+| tags                            | Record\<string, string\>                                                                                                                              | No                             | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`). Use `promptfoo eval --tag` for run-specific tags.                                                                                    |
 | providers                       | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `targets` is set   | One or more [LLM APIs](/docs/providers) to use. Exactly one of `providers` or `targets` must be set.                                                                                                                            |
 | targets                         | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `providers` is set | Alias for `providers`, commonly used in [red team](/docs/red-team) configs. Exactly one of `targets` or `providers` must be set.                                                                                                |
 | prompts                         | string \| string[] \| Record\<string, string\> \| Prompt[]                                                                                            | Yes                            | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
@@ -55,33 +55,34 @@ Here is the main structure of the promptfoo configuration file:
 
 A test case represents a single example input that is fed into all prompts and providers.
 
-| Property                       | Type                                                              | Required | Description                                                                                                                                                                                                                     |
-| ------------------------------ | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| description                    | string                                                            | No       | Description of what you're testing                                                                                                                                                                                              |
-| vars                           | Record\<string, [VarValue](#varvalue)\> \| string \| string[]     | No       | Key-value pairs to substitute in the prompt. If `vars` is a string or string array, promptfoo loads test vars from those file paths. See [Test Case Configuration](/docs/configuration/test-cases) for loading vars from files. |
-| provider                       | string \| ProviderOptions \| ApiProvider                          | No       | Override the default [provider](/docs/providers) for this specific test case                                                                                                                                                    |
-| providers                      | string[]                                                          | No       | Filter which providers this test runs against. Supports labels, IDs, and wildcards (e.g., `openai:*`). See [filtering tests by provider](/docs/configuration/test-cases#filtering-tests-by-provider).                           |
-| prompts                        | string[]                                                          | No       | Filter this test to run only with specific prompts (by label or ID). Supports wildcards like `Math:*`. See [Filtering Tests by Prompt](/docs/configuration/test-cases#filtering-tests-by-prompt).                               |
-| providerOutput                 | string \| Record\<string, unknown\>                               | No       | Precomputed provider output. When set, promptfoo skips calling the provider and runs assertions directly against this output.                                                                                                   |
-| assert                         | ([Assertion](#assertion) \| [Assertion Set](#assertion-set))[]    | No       | List of automatic checks to run on the LLM output. See [assertions & metrics](/docs/configuration/expected-outputs) for all available types.                                                                                    |
-| assertScoringFunction          | `file://` JavaScript/Python path \| function                      | No       | Custom scoring function that combines named assertion scores into the final grading result.                                                                                                                                     |
-| threshold                      | number                                                            | No       | Test will fail if the combined score of assertions is less than this number                                                                                                                                                     |
-| metadata                       | Record\<string, any\>                                             | No       | Additional metadata to include with the test case, useful for [filtering](/docs/configuration/test-cases#metadata-in-csv) or grouping results                                                                                   |
-| options                        | Object                                                            | No       | Additional configuration settings for the test case                                                                                                                                                                             |
-| options.transformVars          | string \| function                                                | No       | A filepath (js or py), JavaScript snippet, or Node.js function that runs on the vars before they are substituted into the prompt. See [transforming input variables](/docs/configuration/guide#transforming-input-variables).   |
-| options.transform              | string \| function                                                | No       | A filepath (js or py), JavaScript snippet, or Node.js function that runs on LLM output before assertions. See [transforming outputs](/docs/configuration/guide#transforming-outputs).                                           |
-| options.postprocess            | string \| function                                                | No       | Deprecated alias for `options.transform`                                                                                                                                                                                        |
-| options.prefix                 | string                                                            | No       | Text to prepend to the prompt                                                                                                                                                                                                   |
-| options.suffix                 | string                                                            | No       | Text to append to the prompt                                                                                                                                                                                                    |
-| options.provider               | string \| ProviderOptions \| ApiProvider \| Record\<string, any\> | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                 |
-| options.rubricPrompt           | string \| string[] \| ChatMessage[]                               | No       | Custom prompt for [model-graded](/docs/configuration/expected-outputs/model-graded) assertions                                                                                                                                  |
-| options.factuality             | object                                                            | No       | Score weights for factuality assertions (`subset`, `superset`, `agree`, `disagree`, `differButFactual`)                                                                                                                         |
-| options.disableVarExpansion    | boolean                                                           | No       | If true, arrays in `vars` are not expanded into multiple test cases                                                                                                                                                             |
-| options.disableConversationVar | boolean                                                           | No       | If true, promptfoo does not include the implicit `_conversation` variable in the prompt                                                                                                                                         |
-| options.disableDefaultAsserts  | boolean                                                           | No       | If true, this test case does not inherit assertions from `defaultTest.assert`; other `defaultTest` properties still apply                                                                                                       |
-| options.runSerially            | boolean                                                           | No       | If true, run this test case without concurrency regardless of global settings                                                                                                                                                   |
-| options.storeOutputAs          | string                                                            | No       | The output of this test will be stored as a variable, which can be used in subsequent tests. See [multi-turn conversations](/docs/configuration/chat#using-storeoutputas).                                                      |
-| options.\<provider-specific\>  | any                                                               | No       | Provider-specific config fields (e.g., `response_format`, `responseSchema`) are passed through to the provider. Use `file://` to load from external files. See [Per-test provider config](#per-test-provider-config).           |
+| Property                          | Type                                                              | Required | Description                                                                                                                                                                                                                     |
+| --------------------------------- | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| description                       | string                                                            | No       | Description of what you're testing                                                                                                                                                                                              |
+| vars                              | Record\<string, [VarValue](#varvalue)\> \| string \| string[]     | No       | Key-value pairs to substitute in the prompt. If `vars` is a string or string array, promptfoo loads test vars from those file paths. See [Test Case Configuration](/docs/configuration/test-cases) for loading vars from files. |
+| provider                          | string \| ProviderOptions \| ApiProvider                          | No       | Override the default [provider](/docs/providers) for this specific test case                                                                                                                                                    |
+| providers                         | string[]                                                          | No       | Filter which providers this test runs against. Supports labels, IDs, and wildcards (e.g., `openai:*`). See [filtering tests by provider](/docs/configuration/test-cases#filtering-tests-by-provider).                           |
+| prompts                           | string[]                                                          | No       | Filter this test to run only with specific prompts (by label or ID). Supports wildcards like `Math:*`. See [Filtering Tests by Prompt](/docs/configuration/test-cases#filtering-tests-by-prompt).                               |
+| providerOutput                    | string \| Record\<string, unknown\>                               | No       | Precomputed provider output. When set, promptfoo skips calling the provider and runs assertions directly against this output.                                                                                                   |
+| assert                            | ([Assertion](#assertion) \| [Assertion Set](#assertion-set))[]    | No       | List of automatic checks to run on the LLM output. See [assertions & metrics](/docs/configuration/expected-outputs) for all available types.                                                                                    |
+| assertScoringFunction             | `file://` JavaScript/Python path \| function                      | No       | Custom scoring function that combines named assertion scores into the final grading result.                                                                                                                                     |
+| threshold                         | number                                                            | No       | Test will fail if the combined score of assertions is less than this number                                                                                                                                                     |
+| metadata                          | Record\<string, any\>                                             | No       | Additional metadata to include with the test case, useful for [filtering](/docs/configuration/test-cases#metadata-in-csv) or grouping results                                                                                   |
+| options                           | Object                                                            | No       | Additional configuration settings for the test case                                                                                                                                                                             |
+| options.transformVars             | string \| function                                                | No       | A filepath (js or py), JavaScript snippet, or Node.js function that runs on the vars before they are substituted into the prompt. See [transforming input variables](/docs/configuration/guide#transforming-input-variables).   |
+| options.transform                 | string \| function                                                | No       | A filepath (js or py), JavaScript snippet, or Node.js function that runs on LLM output before assertions. See [transforming outputs](/docs/configuration/guide#transforming-outputs).                                           |
+| options.transformCanSetTestResult | boolean                                                           | No       | Allow this output transform to control the test outcome by returning a `testResult` object. See [transform-controlled test outcomes](#transform-controlled-test-outcomes).                                                      |
+| options.postprocess               | string \| function                                                | No       | Deprecated alias for `options.transform`                                                                                                                                                                                        |
+| options.prefix                    | string                                                            | No       | Text to prepend to the prompt                                                                                                                                                                                                   |
+| options.suffix                    | string                                                            | No       | Text to append to the prompt                                                                                                                                                                                                    |
+| options.provider                  | string \| ProviderOptions \| ApiProvider \| Record\<string, any\> | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                 |
+| options.rubricPrompt              | string \| string[] \| ChatMessage[]                               | No       | Custom prompt for [model-graded](/docs/configuration/expected-outputs/model-graded) assertions                                                                                                                                  |
+| options.factuality                | object                                                            | No       | Score weights for factuality assertions (`subset`, `superset`, `agree`, `disagree`, `differButFactual`)                                                                                                                         |
+| options.disableVarExpansion       | boolean                                                           | No       | If true, arrays in `vars` are not expanded into multiple test cases                                                                                                                                                             |
+| options.disableConversationVar    | boolean                                                           | No       | If true, promptfoo does not include the implicit `_conversation` variable in the prompt                                                                                                                                         |
+| options.disableDefaultAsserts     | boolean                                                           | No       | If true, this test case does not inherit assertions from `defaultTest.assert`; other `defaultTest` properties still apply                                                                                                       |
+| options.runSerially               | boolean                                                           | No       | If true, run this test case without concurrency regardless of global settings                                                                                                                                                   |
+| options.storeOutputAs             | string                                                            | No       | The output of this test will be stored as a variable, which can be used in subsequent tests. See [multi-turn conversations](/docs/configuration/chat#using-storeoutputas).                                                      |
+| options.\<provider-specific\>     | any                                                               | No       | Provider-specific config fields (e.g., `response_format`, `responseSchema`) are passed through to the provider. Use `file://` to load from external files. See [Per-test provider config](#per-test-provider-config).           |
 
 ### Test Generator Config
 
@@ -192,6 +193,7 @@ Set default values for command-line options. These defaults will be used unless 
 | delay                    | number             | Delay between API calls in milliseconds                                                                                                                                                             |
 | grader                   | string             | [Provider](/docs/providers) that will grade [model-graded](/docs/configuration/expected-outputs/model-graded) outputs                                                                               |
 | var                      | object             | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                                                                                                     |
+| tags                     | object             | Default eval tags applied before `--tag` values; runtime tags override top-level `tags` when keys match.                                                                                            |
 | **Filtering**            |                    |                                                                                                                                                                                                     |
 | filterPattern            | string             | Only run tests whose description matches the regular expression pattern                                                                                                                             |
 | filterPrompts            | string             | Only run tests with prompts whose `id` or `label` matches this regex                                                                                                                                |
@@ -200,6 +202,7 @@ Set default values for command-line options. These defaults will be used unless 
 | filterFirstN             | number             | Only run the first N test cases                                                                                                                                                                     |
 | filterRange              | string             | Run test cases in a zero-based `start:end` range. The end index is exclusive                                                                                                                        |
 | filterSample             | number             | Run a random sample of N test cases                                                                                                                                                                 |
+| filterSampleSeed         | number             | Numeric seed used to make `filterSample` select the same test cases on repeated runs                                                                                                                |
 | filterMetadata           | string \| string[] | Only run tests matching metadata filters in `key=value` format. Multiple filters are combined with AND logic.                                                                                       |
 | filterErrorsOnly         | string             | Only run tests that resulted in errors from a previous output path or eval ID                                                                                                                       |
 | filterFailing            | string             | Only run non-passing tests (assertion failures and errors) from a previous output path or eval ID                                                                                                   |
@@ -252,6 +255,7 @@ commandLineOptions:
   filterProviders: 'openai.*' # Only test OpenAI providers
   filterRange: '0:100' # Run tests 0 through 99
   filterSample: 50 # Random sample of 50 tests
+  filterSampleSeed: 42 # Repeat the same random sample
 
   # Prompt modifications
   promptPrefix: 'You are a helpful assistant. '
@@ -715,13 +719,13 @@ tests:
 
 ### Transform-Controlled Test Outcomes
 
-Transforms can control test pass/fail without running assertions by returning a special `testResult` object. This is useful when you need **inverted logic** or **complex conditional pass/fail rules** that assertions can't handle.
+Provider and test output transforms can control test pass/fail without running assertions by returning a special `testResult` object. Enable `transformCanSetTestResult` on the same provider or test options to opt in.
 
 :::tip When to Use This Pattern
 
-Use transform-controlled outcomes when you need **conditional logic** that assertions don't support:
+Use transform-controlled outcomes when you need conditional logic that assertions do not support:
 
-- **Inverted logic**: Pass when guardrails DON'T trigger (red team/jailbreak testing)
+- **Inverted logic**: Pass when guardrails do not trigger (red team/jailbreak testing)
 - **Multi-field validation**: Pass/fail based on combination of vars + response metadata
 - **Fail-fast on errors**: Skip expensive assertions if infrastructure failed
 - **State-dependent logic**: Different success criteria based on test type/category
@@ -749,11 +753,13 @@ return {
 
 #### Behavior
 
-When a transform returns a `testResult` object:
+When `transformCanSetTestResult` is enabled and an output transform returns a `testResult` object:
 
 1. **Assertions are skipped** - More efficient, no LLM grading calls
 2. **Test outcome is determined by transform** - `pass` and `score` from `testResult` are used
 3. **Provider transform takes precedence** - If both provider and test transforms set results, provider wins
+
+Without the opt-in flag, a result-shaped object is treated as ordinary transformed output and assertions still run. This prevents parsed or model-generated output from grading itself.
 
 For a complete working example, see [transform-test-control example](https://github.com/promptfoo/promptfoo/tree/main/examples/transform-test-control).
 
@@ -829,6 +835,9 @@ interface ProviderOptions {
   // Transform the output, either with inline Javascript, external py/js script, or a function
   // See /docs/configuration/guide#transforming-outputs
   transform?: string | TransformFunction;
+
+  // Allow the output transform to control the test outcome with a testResult object
+  transformCanSetTestResult?: boolean;
 
   // Sleep this long before each request
   delay?: number;
@@ -1306,6 +1315,10 @@ interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  // Trace linkage (only set when tracing is enabled for this row).
+  // Pass `evaluationId` to GET /api/traces/evaluation/:evaluationId to fetch all traces for the eval.
+  evaluationId?: string;
+  traceId?: string;
 }
 ```
 

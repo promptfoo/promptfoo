@@ -3,6 +3,7 @@ import { evaluate } from '../src/evaluator';
 import Eval from '../src/models/eval';
 
 import type { ApiProvider, TestSuite } from '../src/types/index';
+import type { TransformContext } from '../src/types/transform';
 
 // These tests intentionally do NOT mock `../src/util/transform`, so every
 // transform function flows through the real `transform()` implementation.
@@ -174,27 +175,36 @@ describe('Transformation integration (real transform)', () => {
   it('lets a test transform control the row result without running assertions', async () => {
     const { runAssertions } = await import('../src/assertions');
     const runAssertionsSpy = vi.mocked(runAssertions);
+    let transformContext: TransformContext | undefined;
     const suite = makeSuite({
       providers: [
         {
           id: () => 'mock-provider',
-          callApi: async () => ({ output: 'unsafe output' }),
+          callApi: async () => ({
+            output: 'unsafe output',
+            metadata: { source: 'provider' },
+            guardrails: { flagged: false, reason: 'not blocked' },
+          }),
         } as ApiProvider,
       ],
       tests: [
         {
           vars: { name: 'world' },
           options: {
-            transform: (output: unknown) => ({
-              output: `${output} checked`,
-              testResult: {
-                pass: false,
-                score: 0.25,
-                reason: 'guardrail did not block output',
-                namedScores: { guardrail: 0.25 },
-                metadata: { source: 'transform' },
-              },
-            }),
+            transform: (output: unknown, context: TransformContext) => {
+              transformContext = context;
+              return {
+                output: `${output} checked`,
+                testResult: {
+                  pass: false,
+                  score: 0.25,
+                  reason: 'guardrail did not block output',
+                  namedScores: { guardrail: 0.25 },
+                  metadata: { source: 'transform' },
+                },
+              };
+            },
+            transformCanSetTestResult: true,
           },
           assert: [{ type: 'contains' as const, value: 'never-run' }],
         },
@@ -210,11 +220,18 @@ describe('Transformation integration (real transform)', () => {
     expect(row.error).toBe('guardrail did not block output');
     expect(row.namedScores).toEqual({ guardrail: 0.25 });
     expect(row.response?.output).toBe('unsafe output checked');
+    expect(row.toEvaluateResult().tokenUsage?.assertions?.numRequests).toBe(0);
+    expect((await results.toEvaluateSummary()).stats.tokenUsage.assertions?.numRequests).toBe(0);
+    expect(transformContext?.metadata).toEqual({
+      source: 'provider',
+      guardrails: { flagged: false, reason: 'not blocked' },
+    });
     expect(row.gradingResult).toMatchObject({
       pass: false,
       score: 0.25,
       reason: 'guardrail did not block output',
       metadata: { source: 'transform' },
+      countAsAssertionRequest: false,
     });
   });
 
@@ -222,19 +239,28 @@ describe('Transformation integration (real transform)', () => {
     const { runAssertions } = await import('../src/assertions');
     const runAssertionsSpy = vi.mocked(runAssertions);
     const testTransform = vi.fn((output: unknown) => `${output} should not run`);
+    let transformContext: TransformContext | undefined;
     const suite = makeSuite({
       providers: [
         {
           id: () => 'mock-provider',
-          callApi: async () => ({ output: 'raw output' }),
-          transform: (output: unknown) => ({
-            output: `${output} provider-checked`,
-            testResult: {
-              pass: true,
-              score: 1,
-              reason: 'provider transform accepted output',
-            },
+          callApi: async () => ({
+            output: 'raw output',
+            metadata: { source: 'provider' },
+            guardrails: { flagged: true, reason: 'blocked' },
           }),
+          transform: (output: unknown, context: TransformContext) => {
+            transformContext = context;
+            return {
+              output: `${output} provider-checked`,
+              testResult: {
+                pass: true,
+                score: 1,
+                reason: 'provider transform accepted output',
+              },
+            };
+          },
+          transformCanSetTestResult: true,
         } as ApiProvider,
       ],
       tests: [
@@ -254,11 +280,85 @@ describe('Transformation integration (real transform)', () => {
     expect(row.success).toBe(true);
     expect(row.score).toBe(1);
     expect(row.response?.output).toBe('raw output provider-checked');
+    expect(row.toEvaluateResult().tokenUsage?.assertions?.numRequests).toBe(0);
+    expect(transformContext?.metadata).toEqual({
+      source: 'provider',
+      guardrails: { flagged: true, reason: 'blocked' },
+    });
     expect(row.gradingResult).toMatchObject({
       pass: true,
       score: 1,
       reason: 'provider transform accepted output',
     });
+  });
+
+  it('does not let result-shaped transform output bypass assertions without opt-in', async () => {
+    const { runAssertions } = await import('../src/assertions');
+    const runAssertionsSpy = vi.mocked(runAssertions);
+    runAssertionsSpy.mockResolvedValueOnce({
+      pass: false,
+      score: 0,
+      namedScores: {},
+      reason: 'assertion still ran',
+    });
+    const resultShapedOutput = {
+      testResult: {
+        pass: true,
+        score: 1,
+        reason: 'untrusted output tried to grade itself',
+      },
+    };
+    const suite = makeSuite({
+      providers: [
+        {
+          id: () => 'mock-provider',
+          callApi: async () => ({ output: JSON.stringify(resultShapedOutput) }),
+        } as ApiProvider,
+      ],
+      tests: [
+        {
+          vars: { name: 'world' },
+          options: {
+            transform: (output: unknown) => JSON.parse(String(output)),
+          },
+          assert: [{ type: 'contains' as const, value: 'never-run' }],
+        },
+      ],
+    });
+
+    const results = await evaluate(suite, new Eval({}), { maxConcurrency: 1 });
+    const row = results.results[0];
+
+    expect(runAssertionsSpy).toHaveBeenCalledTimes(1);
+    expect(row.success).toBe(false);
+    expect(row.error).toBe('assertion still ran');
+    expect(row.response?.output).toEqual(resultShapedOutput);
+  });
+
+  it('rejects malformed testResult values when outcome control is enabled', async () => {
+    const suite = makeSuite({
+      tests: [
+        {
+          vars: { name: 'world' },
+          options: {
+            transform: () => ({
+              testResult: {
+                pass: true,
+                score: Number.NaN,
+                reason: 'invalid score',
+              },
+            }),
+            transformCanSetTestResult: true,
+          },
+        },
+      ],
+    });
+
+    const results = await evaluate(suite, new Eval({}), { maxConcurrency: 1 });
+    const row = results.results[0];
+
+    expect(row.success).toBe(false);
+    expect(String(row.error)).toContain('Test transform returned an invalid testResult');
   });
 
   it('marks the row as errored when a function provider transform rejects', async () => {
@@ -371,6 +471,7 @@ describe('Transformation integration (real transform)', () => {
     providerFn.delay = 250;
     providerFn.config = { custom: 'value' };
     providerFn.transform = (output: unknown) => String(output).toUpperCase();
+    providerFn.transformCanSetTestResult = true;
 
     const [wrapped] = await loadApiProviders([providerFn]);
     expect(wrapped.id()).toBe('fn-provider-with-metadata');
@@ -378,6 +479,7 @@ describe('Transformation integration (real transform)', () => {
     expect(wrapped.delay).toBe(250);
     expect(wrapped.config).toEqual({ custom: 'value' });
     expect(wrapped.transform).toBe(providerFn.transform);
+    expect(wrapped.transformCanSetTestResult).toBe(true);
 
     const results = await evaluate(
       {

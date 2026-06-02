@@ -9,7 +9,7 @@ import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
-import { writeMultipleOutputs, writeOutput } from '../src/util/index';
+import { warnOnDegradedJsonlRecovery, writeMultipleOutputs, writeOutput } from '../src/util/index';
 import { createMockProvider } from './factories/provider';
 
 vi.mock('../src/cache');
@@ -114,6 +114,7 @@ describe('index.ts exports', () => {
     'isProviderOptions',
     'isResultFailureReason',
     'isTransformFunction',
+    'isTransformReturnWithTestResult',
     'loadApiProvider',
     'loadApiProviders',
     'normalizeInputDefinition',
@@ -239,6 +240,7 @@ describe('evaluate function', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
+    vi.mocked(warnOnDegradedJsonlRecovery).mockImplementation(() => {});
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -557,7 +559,39 @@ describe('evaluate function', () => {
       outputPath: 'test.json',
     };
     await evaluate(testSuite);
-    expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.json'], expect.any(Eval), null);
+  });
+
+  it('should finalize JSONL files streamed during evaluation', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: 'test.jsonl',
+    };
+    await evaluate(testSuite);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['test.jsonl'], expect.any(Eval), null);
+  });
+
+  it('finalizes every output path (JSONL included) and warns on degraded recovery', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: ['test.jsonl', 'test.json'],
+    };
+
+    await evaluate(testSuite);
+
+    // JSONL is no longer filtered out post-run — both paths are finalized — and the recovery
+    // warning hook is consulted with the full path list.
+    expect(warnOnDegradedJsonlRecovery).toHaveBeenCalledWith(expect.any(Eval), [
+      'test.jsonl',
+      'test.json',
+    ]);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['test.jsonl', 'test.json'],
+      expect.any(Eval),
+      null,
+    );
   });
 
   it('should skip writing output when outputPath is empty', async () => {
@@ -575,11 +609,11 @@ describe('evaluate function', () => {
     const testSuite = {
       prompts: ['test'],
       providers: [],
-      outputPath: ['test1.json', 'test2.json'],
+      outputPath: ['test1.json', 'test2.jsonl', 'test3.json'],
     };
     await evaluate(testSuite);
     expect(writeMultipleOutputs).toHaveBeenCalledWith(
-      ['test1.json', 'test2.json'],
+      ['test1.json', 'test2.jsonl', 'test3.json'],
       expect.any(Eval),
       null,
     );
@@ -692,7 +726,7 @@ describe('evaluate function', () => {
               {
                 type: 'equals' as const,
                 value: 'expected',
-                provider: 'existing-provider', // Should resolve by ID
+                provider: 'echo',
               },
             ],
           },
@@ -701,14 +735,13 @@ describe('evaluate function', () => {
 
       await evaluate(testSuite);
 
-      // Verify the evaluation completed successfully using the fallback provider
       expect(doEvaluate).toHaveBeenCalledWith(
         expect.objectContaining({
           tests: expect.arrayContaining([
             expect.objectContaining({
               assert: expect.arrayContaining([
                 expect.objectContaining({
-                  provider: mockExistingProvider,
+                  provider: expect.not.objectContaining({ id: mockExistingProvider.id }),
                 }),
               ]),
             }),
@@ -717,6 +750,12 @@ describe('evaluate function', () => {
         expect.anything(),
         expect.anything(),
       );
+      const runtimeSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+      const runtimeAssertion = runtimeSuite?.tests?.[0].assert?.[0];
+      if (!runtimeAssertion || runtimeAssertion.type === 'assert-set') {
+        throw new Error('Expected a regular assertion with a fallback provider');
+      }
+      expect(runtimeAssertion.provider.id()).toBe('echo');
     });
 
     it('should handle providers without labels in providerMap', async () => {
@@ -749,6 +788,49 @@ describe('evaluate function', () => {
               assert: expect.arrayContaining([
                 expect.objectContaining({
                   provider: mockProvider,
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('does not let a provider label silently shadow another provider id', async () => {
+      const providerById = createMockProvider({ id: 'judge' });
+      const providerWithCollidingLabel = createMockProvider({
+        id: 'litellm:judge',
+        label: 'judge',
+      });
+      loadApiProvidersSpy.mockResolvedValueOnce([providerById, providerWithCollidingLabel]);
+
+      const testSuite = {
+        prompts: ['test'],
+        providers: ['judge', 'litellm:judge'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals' as const,
+                value: 'expected',
+                provider: 'judge',
+              },
+            ],
+          },
+        ],
+      };
+
+      await evaluate(testSuite);
+
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: providerById,
                 }),
               ]),
             }),
@@ -920,6 +1002,165 @@ describe('evaluate function', () => {
         );
       });
 
+      it('should resolve configured providers within grading provider type maps', async () => {
+        const mockLiteLLMProvider = createMockProvider({ id: 'litellm:judge' });
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
+
+        const testSuite = {
+          prompts: ['Test prompt'],
+          providers: ['litellm:judge'],
+          defaultTest: {
+            options: {
+              provider: { text: { id: 'litellm:judge' } },
+            },
+          },
+          tests: [
+            {
+              options: {
+                provider: { text: 'litellm:judge' },
+              },
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                  provider: { text: 'litellm:judge' },
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultTest: expect.objectContaining({
+              options: expect.objectContaining({
+                provider: { text: mockLiteLLMProvider },
+              }),
+            }),
+            tests: expect.arrayContaining([
+              expect.objectContaining({
+                options: expect.objectContaining({
+                  provider: { text: mockLiteLLMProvider },
+                }),
+                assert: expect.arrayContaining([
+                  expect.objectContaining({
+                    provider: { text: mockLiteLLMProvider },
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('does not eagerly load unused provider types from grading provider maps', async () => {
+        const mockLiteLLMProvider = createMockProvider({ id: 'litellm:judge' });
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
+
+        const testSuite = {
+          prompts: ['Test prompt'],
+          providers: ['litellm:judge'],
+          defaultTest: {
+            options: {
+              provider: {
+                text: 'litellm:judge',
+                embedding: 'unsupported-provider:unused-embedding',
+              },
+            },
+          },
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultTest: expect.objectContaining({
+              options: expect.objectContaining({
+                provider: {
+                  text: mockLiteLLMProvider,
+                  embedding: 'unsupported-provider:unused-embedding',
+                },
+              }),
+            }),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('preserves suite env for deferred grading provider map entries', async () => {
+        const mockTargetProvider = createMockProvider({ id: 'echo' });
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
+
+        const testSuite = {
+          env: { GRADER_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          defaultTest: {
+            options: {
+              provider: {
+                text: {
+                  id: 'litellm:inline-judge',
+                  config: { apiKey: '{{ env.GRADER_API_KEY }}' },
+                },
+                embedding: 'unsupported-provider:unused-embedding',
+              },
+            },
+          },
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultTest: expect.objectContaining({
+              options: expect.objectContaining({
+                provider: {
+                  text: {
+                    id: 'litellm:inline-judge',
+                    config: { apiKey: '{{ env.GRADER_API_KEY }}' },
+                    env: { GRADER_API_KEY: 'suite-key' },
+                  },
+                  embedding: {
+                    id: 'unsupported-provider:unused-embedding',
+                    env: { GRADER_API_KEY: 'suite-key' },
+                  },
+                },
+              }),
+            }),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
         const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 
@@ -935,7 +1176,7 @@ describe('evaluate function', () => {
                 {
                   type: 'g-eval' as const,
                   value: 'Evaluate response',
-                  provider: 'litellm:gpt-4', // Use existing provider from main array
+                  provider: 'echo',
                 },
               ],
             },
@@ -944,7 +1185,6 @@ describe('evaluate function', () => {
 
         await evaluate(testSuite);
 
-        // Verify the evaluation completed successfully using the fallback provider
         expect(doEvaluate).toHaveBeenCalledWith(
           expect.objectContaining({
             tests: expect.arrayContaining([
@@ -952,7 +1192,7 @@ describe('evaluate function', () => {
                 assert: expect.arrayContaining([
                   expect.objectContaining({
                     type: 'g-eval',
-                    provider: mockMainProvider,
+                    provider: expect.not.objectContaining({ id: mockMainProvider.id }),
                   }),
                 ]),
               }),
@@ -961,6 +1201,12 @@ describe('evaluate function', () => {
           expect.anything(),
           expect.anything(),
         );
+        const runtimeSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+        const runtimeAssertion = runtimeSuite?.tests?.[0].assert?.[0];
+        if (!runtimeAssertion || runtimeAssertion.type === 'assert-set') {
+          throw new Error('Expected a regular assertion with a fallback provider');
+        }
+        expect(runtimeAssertion.provider.id()).toBe('echo');
       });
     });
   });

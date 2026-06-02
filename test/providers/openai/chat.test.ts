@@ -83,6 +83,8 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(requestHeaders['X-OpenAI-Originator']).toBe('promptfoo');
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
@@ -766,6 +768,66 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
+    it.each([
+      {
+        label: 'isError result',
+        callToolResult: { content: 'Path traversal not allowed', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): Path traversal not allowed',
+      },
+      {
+        label: 'thrown error surfaced via the error field',
+        callToolResult: { content: '', error: 'Connection refused' },
+        expectedOutput: 'MCP Tool Error (read_file): Connection refused',
+      },
+      {
+        label: 'error result without content',
+        callToolResult: { content: '', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): Tool returned an error result',
+      },
+    ])('should surface MCP tool error results in chat tool callbacks ($label)', async ({
+      callToolResult,
+      expectedOutput,
+    }) => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'read_file',
+                      arguments: '{"path":"../../../etc/passwd"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue(callToolResult),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const result = await provider.callApi('Read the file');
+
+      expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
+        path: '../../../etc/passwd',
+      });
+      expect(result.output).toBe(expectedOutput);
+    });
+
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
         data: {
@@ -1033,6 +1095,72 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'test/callbacks.js'),
+          'testFunction',
+        );
+        expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
+        expect(result.output).toBe('External function result');
+        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
+      });
+
+      it('should load external function callbacks from Windows-style file paths', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'external_function',
+                        arguments: '{"param": "test_value"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
+        mockImportModule.mockResolvedValue({
+          testFunction: mockExternalFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      param: { type: 'string' },
+                    },
+                    required: ['param'],
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              external_function: 'file://C:/test/callbacks.js:testFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call external function');
+
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'C:/test/callbacks.js'),
           'testFunction',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');

@@ -59,6 +59,7 @@ describe('isProviderOptions', () => {
         config: { temperature: 0.7 },
         prompts: ['Hello, {{name}}!'],
         transform: 'toLowerCase()',
+        transformCanSetTestResult: true,
         delay: 1000,
         env: { OPENAI_API_KEY: 'test-key' },
       },
