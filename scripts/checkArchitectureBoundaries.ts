@@ -6,7 +6,7 @@ import {
   computeCrossLayerEdges,
   computeStronglyConnectedComponents,
   findBackEdges,
-  findForbiddenDependencyEdges,
+  findForbiddenDependencyViolations,
   findUnclassifiedFiles,
   findViolations,
   readEdgeBaseline,
@@ -139,17 +139,21 @@ if (improvements.length > 0) {
 }
 
 // 3. Explicit forbidden-dependency locks (pairs whose cycle is fully broken).
-const forbiddenEdges = findForbiddenDependencyEdges(config, edges);
-if (forbiddenEdges.length > 0) {
+const forbiddenDependencyViolations = findForbiddenDependencyViolations(config, edges);
+if (forbiddenDependencyViolations.length > 0) {
   console.error('Forbidden cross-layer dependencies found:');
-  for (const edge of forbiddenEdges) {
-    console.error(`- ${edge.from} -> ${edge.to}: ${edge.count} imports (forbidden)`);
-    for (const file of edge.files) {
-      console.error(`    ${file}`);
+  for (const violation of forbiddenDependencyViolations) {
+    const layerPath = [violation.from, ...violation.path.map((edge) => edge.to)].join(' -> ');
+    console.error(`- ${violation.from} depends on ${violation.to} via ${layerPath} (forbidden)`);
+    for (const edge of violation.path) {
+      console.error(`    ${edge.from} -> ${edge.to}: ${edge.count} imports`);
+      for (const file of edge.files) {
+        console.error(`      ${file}`);
+      }
     }
   }
   console.error(
-    '\nThese layer pairs are locked acyclic via forbiddenDependencies and must not regress.',
+    '\nThese layer pairs are locked acyclic via forbiddenDependencies and must not regress directly or transitively.',
   );
 }
 
@@ -167,7 +171,8 @@ if (config.tierOrder !== undefined) {
   }
 }
 
-const dagChecksFailed = sccRatchetFailed || regressions.length > 0 || forbiddenEdges.length > 0;
+const dagChecksFailed =
+  sccRatchetFailed || regressions.length > 0 || forbiddenDependencyViolations.length > 0;
 
 if (violations.length > 0 || unclassifiedFiles.length > 0 || dagChecksFailed) {
   process.exitCode = 1;
