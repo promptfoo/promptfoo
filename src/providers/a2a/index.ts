@@ -552,6 +552,39 @@ function parseSseFrame(frame: string): unknown | undefined {
   return JSON.parse(data);
 }
 
+function getStreamErrorMessage(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+  const error = (payload as Record<string, unknown>).error;
+  if (!error) {
+    return undefined;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    const errorObject = error as Record<string, unknown>;
+    const message = nonEmptyString(errorObject.message);
+    const code = errorObject.code;
+    if (message && code !== undefined) {
+      return `${message} (code: ${String(code)})`;
+    }
+    if (message) {
+      return message;
+    }
+    return safeJsonStringify(errorObject) ?? 'Unknown A2A stream error';
+  }
+  return `Unknown A2A stream error: ${String(error)}`;
+}
+
+function throwForStreamError(payload: unknown): void {
+  const message = getStreamErrorMessage(payload);
+  if (message) {
+    throw new Error(`A2A stream error: ${message}`);
+  }
+}
+
 export class A2AProvider implements ApiProvider {
   config: A2AProviderConfig;
   private readonly providerId: string;
@@ -936,6 +969,7 @@ export class A2AProvider implements ApiProvider {
           if (!eventPayload) {
             continue;
           }
+          throwForStreamError(eventPayload);
           const event = A2AStreamResponseSchema.parse(eventPayload);
           events.push(eventPayload);
           current = mergeStreamEvent(event, current);
@@ -958,6 +992,7 @@ export class A2AProvider implements ApiProvider {
     if (buffer.trim()) {
       const eventPayload = parseSseFrame(buffer);
       if (eventPayload) {
+        throwForStreamError(eventPayload);
         const event = A2AStreamResponseSchema.parse(eventPayload);
         events.push(eventPayload);
         current = mergeStreamEvent(event, current);

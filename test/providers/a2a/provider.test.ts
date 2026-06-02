@@ -1090,6 +1090,30 @@ describe('A2AProvider', () => {
     expect(result.error).toContain('A2A Provider error');
   });
 
+  it('returns a provider error for SSE protocol error events instead of prior partial output', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      sseResponse([
+        {
+          message: {
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'partial output' }],
+          },
+        },
+        {
+          error: {
+            code: -32000,
+            message: 'stream failed',
+          },
+        },
+      ]),
+    );
+
+    const result = await provider({ mode: 'stream' }).callApi('hi');
+
+    expect(result.output).toBeUndefined();
+    expect(result.error).toContain('A2A stream error: stream failed (code: -32000)');
+  });
+
   it('forwards abort signals to requests', async () => {
     const controller = new AbortController();
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
