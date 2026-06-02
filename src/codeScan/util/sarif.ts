@@ -108,7 +108,7 @@ interface SarifLog {
   }>;
 }
 
-export function isReportableFinding(comment: Comment): boolean {
+function isReportableFinding(comment: Comment): boolean {
   // GitHub Code Scanning needs an artifact location to display a result, so we require
   // `file`. `line` is optional — SARIF allows results without a region (file-level
   // findings). CommentSchema marks `severity` optional and toSarifLevel falls back to
