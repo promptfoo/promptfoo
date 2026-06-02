@@ -148,6 +148,24 @@ describe('A2AProvider', () => {
     });
   });
 
+  it('returns sessionId from direct message contextId', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          contextId: 'a2a-context-1',
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'context response' }],
+        },
+      }),
+    );
+
+    const result = await provider().callApi('hello');
+
+    expect(result.output).toBe('context response');
+    expect(result.sessionId).toBe('a2a-context-1');
+    expect(result.metadata?.a2a).toMatchObject({ contextId: 'a2a-context-1' });
+  });
+
   it('adds image strategy media to default A2A messages', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({
@@ -828,6 +846,7 @@ describe('A2AProvider', () => {
       .mockResolvedValueOnce(
         jsonResponse({
           id: 'task-1',
+          contextId: 'a2a-task-context',
           status: { state: 'TASK_STATE_COMPLETED' },
           artifacts: [{ parts: [{ text: 'done later' }] }],
         }),
@@ -836,6 +855,7 @@ describe('A2AProvider', () => {
     const result = await provider({ polling: { intervalMs: 0, timeoutMs: 1000 } }).callApi('hi');
 
     expect(result.output).toBe('done later');
+    expect(result.sessionId).toBe('a2a-task-context');
     expect(fetchWithTimeout).toHaveBeenNthCalledWith(
       2,
       'https://agent.example.com/a2a/v1/tasks/task-1',
@@ -1056,6 +1076,7 @@ describe('A2AProvider', () => {
         },
         {
           statusUpdate: {
+            contextId: 'a2a-stream-context',
             taskId: 'task-1',
             status: { state: 'TASK_STATE_COMPLETED' },
           },
@@ -1066,7 +1087,9 @@ describe('A2AProvider', () => {
     const result = await provider({ mode: 'stream' }).callApi('hi');
 
     expect(result.output).toBe('partial artifact');
+    expect(result.sessionId).toBe('a2a-stream-context');
     expect(result.metadata?.a2a).toMatchObject({
+      contextId: 'a2a-stream-context',
       mode: 'stream',
       taskId: 'task-1',
       taskState: 'TASK_STATE_COMPLETED',

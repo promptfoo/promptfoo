@@ -213,6 +213,14 @@ function getSessionId(context?: CallApiContextParams): string | undefined {
   return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
 }
 
+function getFinalContextId(final: A2AFinalResponse): string | undefined {
+  return (
+    nonEmptyString(final.message?.contextId) ??
+    nonEmptyString(final.task?.contextId) ??
+    nonEmptyString(final.task?.status?.message?.contextId)
+  );
+}
+
 function getInterfaceBinding(entry: A2AAgentInterface): string | undefined {
   return (entry.protocolBinding ?? entry.transport)?.toUpperCase();
 }
@@ -684,12 +692,15 @@ export class A2AProvider implements ApiProvider {
         task: final.task,
       };
       const transformed = await (await this.transformResponse)(final, output, transformContext);
+      const sessionId = getFinalContextId(final);
       return {
         ...transformed,
         raw: transformed.raw ?? final.raw,
+        sessionId: transformed.sessionId ?? sessionId,
         metadata: {
           ...transformed.metadata,
           a2a: {
+            contextId: sessionId,
             events: final.events,
             mode,
             taskId: final.task?.id,
