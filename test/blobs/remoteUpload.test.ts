@@ -3,7 +3,7 @@ import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from '../../src/blobs
 import { getEnvBool } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
-import { fetchWithProxy } from '../../src/util/fetch';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
 vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
@@ -24,7 +24,7 @@ vi.mock('../../src/globalConfig/cloud', () => ({
   },
 }));
 
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 

@@ -2,7 +2,6 @@ import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
-import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalResultsTable,
@@ -42,15 +41,24 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
-import { clearStandaloneEvalCache } from '../util/standaloneEvalCache';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  invalidateEvaluationCache,
+  notifyEvaluationChanged,
+  notifyEvaluationsDeleted,
+} from './evalMutation';
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult from './evalResult';
+import EvalResult, {
+  getResultIndexKey,
+  PROMPTFOO_METADATA_KEY,
+  persistTraceMetadata,
+  stripTraceLinkageFromMetadata,
+} from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -228,7 +236,9 @@ export class EvalQueries {
         LIMIT 1000
       `;
       const results = await db.all<MetadataKeyResult>(query);
-      return results.map((r) => r.key);
+      // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+      // it through the metadata-keys API — pair this with the value-side filter below.
+      return results.map((r) => r.key).filter((key) => key !== PROMPTFOO_METADATA_KEY);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
@@ -248,6 +258,14 @@ export class EvalQueries {
     const db = await getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
+      return [];
+    }
+    // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+    // it through the metadata-values API even though it lives in the same JSON column.
+    if (
+      trimmedKey === PROMPTFOO_METADATA_KEY ||
+      trimmedKey.startsWith(`${PROMPTFOO_METADATA_KEY}.`)
+    ) {
       return [];
     }
 
@@ -298,6 +316,15 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  resultPersistenceFailed: boolean = false;
+  private failedResults = new Map<string, EvaluateResult>();
+  // Reconstructed EvalResults for rows that failed to persist, cached so comparison
+  // assertions reuse the SAME instance across passes (select-best then max-score).
+  // Persisted rows compose successive comparison grading via the DB round-trip
+  // (mutate -> save -> re-fetch); failed rows have no DB copy, so the shared in-memory
+  // instance is what lets later grading build on earlier grading instead of a stale row.
+  private failedEvalResults = new Map<string, EvalResult>();
+  private finalJsonlResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -505,7 +532,14 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
+          .values(
+            opts.results?.map((r) => ({
+              ...r,
+              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              evalId,
+              id: crypto.randomUUID(),
+            })),
+          )
           .run();
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
@@ -558,7 +592,7 @@ export default class Eval {
       }
     });
 
-    clearStandaloneEvalCache();
+    invalidateEvaluationCache(evalId);
 
     return new Eval(config, {
       id: evalId,
@@ -661,7 +695,7 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    clearStandaloneEvalCache();
+    notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
 
@@ -717,11 +751,63 @@ export default class Eval {
     }
     if (this.persisted) {
       // Notify watchers that new results are available, passing the eval ID
-      updateSignalFile(this.id);
+      notifyEvaluationChanged(this.id);
     }
   }
 
+  recordFinalJsonlResult(result: EvaluateResult) {
+    this.finalJsonlResults.set(getResultIndexKey(result), result);
+  }
+
+  getFinalJsonlResults() {
+    return Array.from(this.finalJsonlResults.values());
+  }
+
+  recordResultPersistenceFailure(result: EvaluateResult) {
+    this.resultPersistenceFailed = true;
+    const key = getResultIndexKey(result);
+    // Keep the row so comparison assertions (max-score / select-best) can still grade the
+    // full output set — the DB is missing this row — and the failed row receives canonical
+    // grading rather than being emitted in its stale, pre-comparison state.
+    this.failedResults.set(key, result);
+    // Drop any cached reconstruction so the next comparison rehydrates from this raw row.
+    this.failedEvalResults.delete(key);
+  }
+
+  hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    return this.failedResults.has(getResultIndexKey(result));
+  }
+
+  // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
+  // so the comparison input (which otherwise reads only the database) sees the full set.
+  // The reconstruction is cached and reused: when a test has both select-best and max-score,
+  // select-best mutates the instance and max-score must build on that mutation rather than
+  // re-reading the stale pre-comparison row (which would erase the earlier grading from the
+  // finalized artifact). This mirrors how persisted rows compose grading via save() + re-fetch.
+  async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
+    const reconstructed: EvalResult[] = [];
+    for (const [key, row] of this.failedResults) {
+      if (row.testIdx !== testIdx) {
+        continue;
+      }
+      let evalResult = this.failedEvalResults.get(key);
+      if (!evalResult) {
+        evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+        this.failedEvalResults.set(key, evalResult);
+      }
+      reconstructed.push(evalResult);
+    }
+    return reconstructed;
+  }
+
   async *fetchResultsBatched(batchSize: number = 100) {
+    if (!this.persisted) {
+      for (let offset = 0; offset < this.results.length; offset += batchSize) {
+        yield this.results.slice(offset, offset + batchSize);
+      }
+      return;
+    }
+
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
       yield batch;
     }
@@ -1037,7 +1123,9 @@ export default class Eval {
         sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
         sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        sql`json_extract(metadata, '$') LIKE ${searchPattern}`,
+        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
+        // (trace linkage) so a query can't match on internal data the UI never shows.
+        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
       ];
@@ -1260,8 +1348,7 @@ export default class Eval {
       await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
-      updateSignalFile(this.id);
-      clearStandaloneEvalCache();
+      notifyEvaluationChanged(this.id);
     }
   }
 
@@ -1271,9 +1358,15 @@ export default class Eval {
       const db = await getDb();
       await db
         .insert(evalResultsTable)
-        .values(results.map((r) => ({ ...r, evalId: this.id })))
+        .values(
+          results.map((r) => ({
+            ...r,
+            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            evalId: this.id,
+          })),
+        )
         .run();
-      clearStandaloneEvalCache();
+      notifyEvaluationChanged(this.id);
     }
     this._resultsLoaded = true;
   }
@@ -1417,7 +1510,7 @@ export default class Eval {
     return results;
   }
 
-  async delete() {
+  async delete({ notify = true }: { notify?: boolean } = {}) {
     const db = await getDb();
     await db.transaction(async (tx) => {
       await deleteTraceRecordsForEvals(tx, [this.id]);
@@ -1427,6 +1520,9 @@ export default class Eval {
       await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+    if (notify) {
+      notifyEvaluationsDeleted([this.id]);
+    }
   }
 
   /**
@@ -1571,6 +1667,7 @@ export default class Eval {
           id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
+          metadata: stripTraceLinkageFromMetadata(result.metadata),
           updatedAt: now,
         }));
 
@@ -1590,7 +1687,7 @@ export default class Eval {
       }
     });
 
-    clearStandaloneEvalCache();
+    notifyEvaluationChanged(newEvalId);
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,

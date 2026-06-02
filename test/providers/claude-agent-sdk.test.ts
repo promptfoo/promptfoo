@@ -97,8 +97,12 @@ vi.mock('fs/promises', () => {
 const mockQuery = vi.fn();
 const mockTransformMCPConfigToClaudeCode = vi.mocked(transformMCPConfigToClaudeCode);
 
+type MockUsage = NonNullableUsage & {
+  output_tokens_details?: { thinking_tokens: number } | null;
+};
+
 // Helper to create a complete NonNullableUsage object
-const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
+const createMockUsage = (input = 0, output = 0): MockUsage => ({
   input_tokens: input,
   output_tokens: output,
   cache_creation_input_tokens: 0,

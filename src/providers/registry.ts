@@ -5,6 +5,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { isMissingPackageImportError } from '../util/packageImportErrors';
+import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -126,6 +127,16 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
 }
 
 export const providerMap: ProviderFactory[] = [
+  {
+    test: (providerPath: string) => providerPath === 'a2a' || providerPath.startsWith('a2a:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new A2AProvider(providerPath, providerOptions);
+    },
+  },
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
@@ -1725,5 +1736,15 @@ export async function getProviderFactories(
       }
     }),
   );
-  return [...providerMap, ...extraFactorySets.flat()];
+  // Family factories take precedence over the module-scoped providerMap so a
+  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:, redteam) is
+  // not first intercepted by a broader providerMap entry — notably the generic
+  // JS/TS-file factory (`isJavascriptFile`), which is a prefix-agnostic suffix
+  // match and would otherwise hijack any AWS path whose final segment ends in
+  // .js/.cjs/.mjs/.ts/.cts/.mts and try to load it as a custom module. Each
+  // family is gated by `canHandle`, and the family prefixes are disjoint from
+  // one another and from every concrete providerMap prefix, so prepending only
+  // changes precedence against that file-suffix catch-all — which is the bug we
+  // are fixing — and is otherwise order-neutral.
+  return [...extraFactorySets.flat(), ...providerMap];
 }
