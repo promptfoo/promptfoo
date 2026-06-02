@@ -149,20 +149,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
+  /**
+   * Model id used for OpenAI capability and billing lookups. Defaults to the request model
+   * name. Subclasses (e.g. Bedrock frontier models, which carry an `openai.` prefix) override
+   * this to strip a vendor prefix so gpt-5 / o-series detection and the billing tables still
+   * match, while the request itself still sends the real `this.modelName`.
+   */
+  protected getCapabilityModelName(): string {
+    return this.modelName;
+  }
+
   protected isGPT5Model(): boolean {
     // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    const model = this.getCapabilityModelName();
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
   protected isReasoningModel(): boolean {
+    const model = this.getCapabilityModelName();
     return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.modelName === 'codex-mini-latest' ||
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.startsWith('o4') ||
+      model.includes('/o1') ||
+      model.includes('/o3') ||
+      model.includes('/o4') ||
+      model === 'codex-mini-latest' ||
       this.isGPT5Model()
     );
   }
@@ -174,7 +186,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+    return this.getCapabilityModelName();
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -399,13 +411,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
-    // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
-    if ('max_tokens' in body) {
-      delete body.max_tokens;
-    }
-
-    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
-    // The responses API uses max_output_tokens, never max_tokens.
+    // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it
+    // leaked in via passthrough or YAML anchors.
     if ('max_tokens' in body) {
       delete body.max_tokens;
     }
@@ -495,7 +502,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
     let timeout = getRequestTimeoutMs();
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);

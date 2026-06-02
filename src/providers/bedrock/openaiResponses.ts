@@ -3,7 +3,6 @@ import { OpenAiResponsesProvider } from '../openai/responses';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
-import type { OpenAiCompletionOptions } from '../openai/types';
 
 /**
  * OpenAI's frontier models on Amazon Bedrock (gpt-5.5, gpt-5.4, ...) are NOT served
@@ -70,18 +69,13 @@ function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string 
  * mirrors OpenAI first-party rates, so the OpenAI billing tables apply.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
-  /** Model id without the Bedrock `openai.` prefix, for OpenAI capability/billing lookups. */
-  private bareModelName(): string {
+  /**
+   * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
+   * detection and the OpenAI billing tables match. The request still sends the real
+   * `this.modelName` (e.g. `openai.gpt-5.5`) as the model id.
+   */
+  protected getCapabilityModelName(): string {
     return this.modelName.replace(/^openai\./, '');
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.bareModelName();
-  }
-
-  protected isGPT5Model(): boolean {
-    const model = this.bareModelName();
-    return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 }
 
