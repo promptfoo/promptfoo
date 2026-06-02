@@ -59,7 +59,10 @@ import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy/index';
 import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
-import { PrivacyPolicyConsistencyPlugin } from './privacyPolicyConsistency';
+import {
+  PrivacyPolicyConsistencyPlugin,
+  validatePrivacyPolicyConsistencyConfig,
+} from './privacyPolicyConsistency';
 import {
   PrivacyRightsRequestWorkflowIntegrityPlugin,
   validatePrivacyRightsRequestWorkflowIntegrityConfig,
@@ -515,13 +518,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory<{ privacyPolicy?: string; privacyPolicyContent?: string }>(
     PrivacyPolicyConsistencyPlugin,
     'privacy-policy-consistency',
-    (config: { privacyPolicy?: string; privacyPolicyContent?: string }) =>
-      invariant(
-        (typeof config.privacyPolicyContent === 'string' &&
-          config.privacyPolicyContent.trim() !== '') ||
-          (typeof config.privacyPolicy === 'string' && config.privacyPolicy.trim() !== ''),
-        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
-      ),
+    validatePrivacyPolicyConsistencyConfig,
   ),
   createPluginFactory(
     PrivacyRightsRequestWorkflowIntegrityPlugin,

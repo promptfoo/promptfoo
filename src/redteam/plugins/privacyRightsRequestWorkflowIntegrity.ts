@@ -27,12 +27,15 @@ const FILE_REF_PREFIX = 'file://';
 const URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 const URI_SCHEME_ERROR =
   'Privacy Rights Request Workflow Integrity plugin requires file-backed URI references to use the file:// scheme.';
+const FILE_LOAD_ERROR =
+  'Privacy Rights Request Workflow Integrity plugin could not load `config.rightsRequestPolicy` from the provided file:// reference.';
 const GEOGRAPHY_CONFIG_ERROR =
   'Privacy Rights Request Workflow Integrity plugin requires `config.geographies` with at least one supported privacy geography.';
 const UNSUPPORTED_GEOGRAPHY_ERROR =
   'Privacy Rights Request Workflow Integrity plugin supports only these `config.geographies` values: california-ccpa, eu-gdpr.';
 const LEGACY_FRAMEWORK_ERROR =
   'Privacy Rights Request Workflow Integrity plugin supports only these legacy `config.frameworks` values: ccpa, cpra, gdpr. Use `config.geographies` for new configs.';
+const NUNJUCKS_ENDRAW_TAG_PATTERN = /\{%-?\s*endraw\s*-?%\}/gi;
 
 const DEFAULT_EXAMPLES = dedent`
   <Example>
@@ -93,14 +96,22 @@ function resolveOptionalFileBackedText(
     return uploadedContent;
   }
 
-  const value = config[fieldName]?.trim();
-  if (!value) {
+  const rawValue = config[fieldName];
+  if (rawValue === undefined || (typeof rawValue === 'string' && rawValue.trim() === '')) {
     return undefined;
   }
 
+  assertOptionalText(rawValue, fieldName);
+  const value = rawValue.trim();
   invariant(value.startsWith(FILE_REF_PREFIX) || !URI_SCHEME_PATTERN.test(value), URI_SCHEME_ERROR);
 
-  const loaded = value.startsWith(FILE_REF_PREFIX) ? maybeLoadFromExternalFile(value) : value;
+  let loaded: unknown;
+  try {
+    loaded = value.startsWith(FILE_REF_PREFIX) ? maybeLoadFromExternalFile(value) : value;
+  } catch {
+    invariant(false, FILE_LOAD_ERROR);
+  }
+
   assertOptionalText(loaded, fieldName);
 
   return loaded;
@@ -149,13 +160,13 @@ function normalizeLegacyFrameworks(frameworks: unknown): PrivacyRightsGeography[
 
 export function normalizePrivacyRightsGeographies(config: PluginConfig): PrivacyRightsGeography[] {
   const normalizedGeographies = normalizeStringList(config.geographies, 'geographies');
-  const legacyGeographies = normalizeLegacyFrameworks(config.frameworks);
 
   if (normalizedGeographies && normalizedGeographies.length > 0) {
     invariant(normalizedGeographies.every(isPrivacyRightsGeography), UNSUPPORTED_GEOGRAPHY_ERROR);
     return [...new Set(normalizedGeographies)];
   }
 
+  const legacyGeographies = normalizeLegacyFrameworks(config.frameworks);
   invariant(legacyGeographies.length > 0, GEOGRAPHY_CONFIG_ERROR);
   return legacyGeographies;
 }
@@ -165,10 +176,15 @@ function buildRawContextBlock(label: string, value: string | undefined): string 
     return '';
   }
 
+  const escapedValue = value.replace(
+    NUNJUCKS_ENDRAW_TAG_PATTERN,
+    (tag) => `{% endraw %}{{ ${JSON.stringify(tag)} }}{% raw %}`,
+  );
+
   return dedent`
     {% raw %}
     <${label}>
-    ${value.replace(/\{% endraw %\}/g, '{% endraw_placeholder %}')}
+    ${escapedValue}
     </${label}>
     {% endraw %}
   `;

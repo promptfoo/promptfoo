@@ -1,11 +1,14 @@
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
+import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
+import { validatePrivacyPolicyConsistencyConfig } from '../../redteam/plugins/privacyPolicyConsistency';
+import { validatePrivacyRightsRequestWorkflowIntegrityConfig } from '../../redteam/plugins/privacyRightsRequestWorkflowIntegrity';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -15,7 +18,7 @@ import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 
-import type { ConversationMessage } from '../../redteam/types';
+import type { ConversationMessage, PluginConfig } from '../../redteam/types';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -31,18 +34,27 @@ type PluginWithConfig = {
   config: Record<string, unknown>;
 };
 
-function hasNonEmptyStringList(value: unknown): boolean {
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((entry) => entry.trim())
-      .some(Boolean);
-  }
+function getPluginValidatorError(
+  validate: (config: PluginConfig) => void,
+  config: Record<string, unknown>,
+  fallbackError: string,
+): string | null {
+  try {
+    validate(config as PluginConfig);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const normalizedMessage = message.replace(/^Invariant failed:\s*/, '');
+    if (
+      normalizedMessage.startsWith('Privacy Policy Consistency plugin') ||
+      normalizedMessage.startsWith('Privacy Rights Request Workflow Integrity plugin')
+    ) {
+      return normalizedMessage;
+    }
 
-  return (
-    Array.isArray(value) &&
-    value.some((entry) => typeof entry === 'string' && entry.trim().length > 0)
-  );
+    logger.debug('Unexpected plugin configuration validation error', { error });
+    return fallbackError;
+  }
 }
 
 export function getPluginConfigurationError(plugin: PluginWithConfig): string | null {
@@ -59,15 +71,17 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
       }
       break;
     case 'privacy-policy-consistency':
-      if (!config.privacyPolicy && !config.privacyPolicyContent) {
-        return 'Privacy Policy Consistency plugin requires a privacy policy file';
-      }
-      break;
+      return getPluginValidatorError(
+        validatePrivacyPolicyConsistencyConfig,
+        config,
+        'Privacy Policy Consistency plugin configuration is invalid.',
+      );
     case 'privacy:rights-request-workflow-integrity':
-      if (!hasNonEmptyStringList(config.geographies) && !hasNonEmptyStringList(config.frameworks)) {
-        return 'Privacy Rights Request Workflow Integrity plugin requires privacy geographies configuration';
-      }
-      break;
+      return getPluginValidatorError(
+        validatePrivacyRightsRequestWorkflowIntegrityConfig,
+        config,
+        'Privacy Rights Request Workflow Integrity plugin configuration is invalid.',
+      );
     case 'bfla': {
       const targetIdentifiers = config.targetIdentifiers as unknown;
       if (

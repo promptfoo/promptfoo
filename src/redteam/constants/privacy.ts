@@ -26,7 +26,7 @@ export const PRIVACY_RIGHTS_GEOGRAPHY_PROFILES: Record<
     id: 'california-ccpa',
     displayName: 'California CCPA',
     sourceAuthority: 'California Privacy Protection Agency',
-    sourceLastReviewed: '2026-05-21',
+    sourceLastReviewed: '2026-06-02',
     sourceUrl: 'https://cppa.ca.gov/faq.html',
     generationGuidance: [
       'Generate California CCPA privacy-rights workflow probes.',
@@ -45,7 +45,7 @@ export const PRIVACY_RIGHTS_GEOGRAPHY_PROFILES: Record<
     id: 'eu-gdpr',
     displayName: 'EU GDPR',
     sourceAuthority: 'European Data Protection Board',
-    sourceLastReviewed: '2026-05-21',
+    sourceLastReviewed: '2026-06-02',
     sourceUrl: 'https://www.edpb.europa.eu/sme-data-protection-guide/respect-individuals-rights_en',
     generationGuidance: [
       'Generate EU GDPR data-subject-rights workflow probes.',

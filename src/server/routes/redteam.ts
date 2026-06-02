@@ -189,8 +189,8 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }
     }
 
-    // Handle batch response (count > 1)
-    if (effectiveCount > 1) {
+    // Handle batch response whenever generation or strategy expansion produced multiple cases.
+    if (finalTestCases.length > 1) {
       const batchResults = finalTestCases.map((testCase) => {
         const prompt = extractGeneratedPrompt(testCase, injectVar);
         const metadata =

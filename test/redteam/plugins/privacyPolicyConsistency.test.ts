@@ -36,6 +36,36 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
     );
   });
 
+  it('should reject non-file URI references instead of grading against the URL text', () => {
+    expect(() => {
+      new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        privacyPolicy: 'https://example.com/privacy-policy',
+      });
+    }).toThrow(
+      'Privacy Policy Consistency plugin requires file-backed URI references to use the file:// scheme.',
+    );
+  });
+
+  it('should reject unreadable file references without exposing the resolved path', () => {
+    const missingPath = path.join(policyFixtureDir, 'missing-policy.md');
+
+    expect(() => {
+      new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        privacyPolicy: `file://${missingPath}`,
+      });
+    }).toThrow(
+      'Privacy Policy Consistency plugin could not load `config.privacyPolicy` from the provided file:// reference.',
+    );
+
+    try {
+      new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        privacyPolicy: `file://${missingPath}`,
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(missingPath);
+    }
+  });
+
   it('should include privacyPolicy in test metadata', async () => {
     const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
       privacyPolicyContent: mockPrivacyPolicy,
@@ -55,9 +85,6 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
           [mockInjectVar]: expect.any(String),
         }),
         metadata: expect.objectContaining({
-          pluginConfig: expect.not.objectContaining({
-            privacyPolicyContent: expect.any(String),
-          }),
           privacyPolicy: mockPrivacyPolicy,
         }),
         assert: [
@@ -68,6 +95,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
         ],
       }),
     ]);
+    expect(tests[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicy');
+    expect(tests[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicyContent');
+    expect(tests[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicyFileName');
   });
 
   it('should load privacyPolicy from a file:// reference', async () => {
@@ -158,12 +188,19 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
     expect(PrivacyPolicyConsistencyPlugin.canGenerateRemote).toBe(false);
   });
 
-  it('should accept privacyPolicy contents resolved from a file reference', () => {
+  it('should accept privacyPolicy contents resolved from a file reference without duplicating them in plugin config', async () => {
     const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
       privacyPolicy: mockPrivacyPolicy,
     });
 
-    expect(plugin.id).toBe('promptfoo:redteam:privacy-policy-consistency');
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
+      output: 'Prompt: Enable analytics sharing for this opted-out user.',
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+
+    expect(tests[0].metadata?.privacyPolicy).toBe(mockPrivacyPolicy);
+    expect(tests[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicy');
   });
 
   it('should throw when a file:// reference resolves to structured data instead of text', () => {

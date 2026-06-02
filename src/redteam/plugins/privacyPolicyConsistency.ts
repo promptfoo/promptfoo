@@ -6,8 +6,14 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:privacy-policy-consistency';
+const FILE_REF_PREFIX = 'file://';
+const URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 const CONFIG_ERROR =
   'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.';
+const URI_SCHEME_ERROR =
+  'Privacy Policy Consistency plugin requires file-backed URI references to use the file:// scheme.';
+const FILE_LOAD_ERROR =
+  'Privacy Policy Consistency plugin could not load `config.privacyPolicy` from the provided file:// reference.';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -47,14 +53,29 @@ function resolvePrivacyPolicy(config: PluginConfig): string {
   }
 
   const privacyPolicy = config.privacyPolicy;
-
   invariant(typeof privacyPolicy === 'string' && privacyPolicy.trim() !== '', CONFIG_ERROR);
 
-  const loaded = maybeLoadFromExternalFile(privacyPolicy);
+  const normalizedPrivacyPolicy = privacyPolicy.trim();
+  invariant(
+    normalizedPrivacyPolicy.startsWith(FILE_REF_PREFIX) ||
+      !URI_SCHEME_PATTERN.test(normalizedPrivacyPolicy),
+    URI_SCHEME_ERROR,
+  );
+
+  let loaded: unknown;
+  try {
+    loaded = maybeLoadFromExternalFile(normalizedPrivacyPolicy);
+  } catch {
+    invariant(false, FILE_LOAD_ERROR);
+  }
 
   assertNonEmptyPolicy(loaded);
 
   return loaded;
+}
+
+export function validatePrivacyPolicyConsistencyConfig(config: PluginConfig): void {
+  resolvePrivacyPolicy(config);
 }
 
 export class PrivacyPolicyConsistencyPlugin extends RedteamPluginBase {
@@ -116,8 +137,12 @@ export class PrivacyPolicyConsistencyPlugin extends RedteamPluginBase {
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
     const tests = await super.generateTests(n, delayMs);
     return tests.map((test) => {
-      const { privacyPolicyContent: _privacyPolicyContent, ...pluginConfig } = (test.metadata
-        ?.pluginConfig || {}) as PluginConfig;
+      const {
+        privacyPolicy: _privacyPolicy,
+        privacyPolicyContent: _privacyPolicyContent,
+        privacyPolicyFileName: _privacyPolicyFileName,
+        ...pluginConfig
+      } = (test.metadata?.pluginConfig || {}) as PluginConfig;
 
       return {
         ...test,

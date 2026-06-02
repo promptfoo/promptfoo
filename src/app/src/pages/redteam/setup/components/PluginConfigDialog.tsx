@@ -13,16 +13,15 @@ import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
+import {
+  getConfiguredPrivacyRightsGeographies,
+  PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS,
+} from '../constants';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
-
-const PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS = [
-  { id: 'california-ccpa', label: 'California CCPA' },
-  { id: 'eu-gdpr', label: 'EU GDPR' },
-] as const;
 
 interface PluginConfigDialogProps {
   open: boolean;
@@ -98,12 +97,14 @@ export default function PluginConfigDialog({
 
   const togglePrivacyRightsGeography = (geography: string, checked: boolean) => {
     setLocalConfig((prev) => {
-      const current = Array.isArray(prev.geographies) ? (prev.geographies as string[]) : [];
+      const current = getConfiguredPrivacyRightsGeographies(prev);
       const geographies = checked
         ? [...new Set([...current, geography])]
         : current.filter((entry) => entry !== geography);
+      const configWithoutLegacyFrameworks = { ...prev };
+      delete configWithoutLegacyFrameworks.frameworks;
       return {
-        ...prev,
+        ...configWithoutLegacyFrameworks,
         geographies,
       };
     });
@@ -262,10 +263,7 @@ export default function PluginConfigDialog({
                   <input
                     type="checkbox"
                     aria-label={label}
-                    checked={
-                      Array.isArray(localConfig.geographies) &&
-                      (localConfig.geographies as string[]).includes(id)
-                    }
+                    checked={getConfiguredPrivacyRightsGeographies(localConfig).includes(id)}
                     onChange={(e) => togglePrivacyRightsGeography(id, e.target.checked)}
                   />
                   {label}
@@ -415,6 +413,12 @@ export default function PluginConfigDialog({
       // Remove empty graderGuidance
       if (!configToSave.graderGuidance || (configToSave.graderGuidance as string).trim() === '') {
         delete configToSave.graderGuidance;
+      }
+      if (
+        typeof configToSave.rightsRequestPolicy === 'string' &&
+        configToSave.rightsRequestPolicy.trim() === ''
+      ) {
+        delete configToSave.rightsRequestPolicy;
       }
 
       if (JSON.stringify(config) !== JSON.stringify(configToSave)) {

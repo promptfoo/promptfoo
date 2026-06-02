@@ -94,7 +94,7 @@ export const PluginConfigSchema = z.object({
   privacyPolicy: z.string().optional(),
   privacyPolicyContent: z.string().optional(),
   privacyPolicyFileName: z.string().optional(),
-  geographies: z.array(z.string()).optional(),
+  geographies: z.union([z.string(), z.array(z.string())]).optional(),
   frameworks: z.union([z.string(), z.array(z.string())]).optional(),
   rightsRequestPolicy: z.string().optional(),
   rightsRequestPolicyContent: z.string().optional(),

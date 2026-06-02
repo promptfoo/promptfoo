@@ -65,6 +65,8 @@ const redTeamSidebar = [
           'red-team/plugins/memory-poisoning',
           'red-team/plugins/pii',
           'red-team/plugins/prompt-extraction',
+          'red-team/plugins/privacy-policy-consistency',
+          'red-team/plugins/privacy-rights-request-workflow-integrity',
           'red-team/plugins/rag-document-exfiltration',
           'red-team/plugins/rag-poisoning',
           'red-team/plugins/rbac',

@@ -148,6 +148,43 @@ describe('redteamTestCaseGenerationService', () => {
   });
 
   describe('getPluginConfigurationError', () => {
+    it('validates privacy policy consistency config before preview generation', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: {},
+        }),
+      ).toBe(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: { privacyPolicy: 'https://example.com/privacy-policy' },
+        }),
+      ).toBe(
+        'Privacy Policy Consistency plugin requires file-backed URI references to use the file:// scheme.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: { privacyPolicyContent: 'Resolved policy contents.' },
+        }),
+      ).toBeNull();
+      const missingPolicyError = getPluginConfigurationError({
+        id: 'privacy-policy-consistency',
+        config: { privacyPolicy: 'file:///definitely/does/not/exist/privacy-policy.md' },
+      });
+      expect(missingPolicyError).toBe(
+        'Privacy Policy Consistency plugin could not load `config.privacyPolicy` from the provided file:// reference.',
+      );
+      expect(missingPolicyError).not.toContain('/definitely/does/not/exist');
+    });
+
     it('requires privacy geographies for privacy rights workflow test generation', async () => {
       const { getPluginConfigurationError } = await import(
         '../../../src/server/services/redteamTestCaseGenerationService'
@@ -159,7 +196,15 @@ describe('redteamTestCaseGenerationService', () => {
           config: {},
         }),
       ).toBe(
-        'Privacy Rights Request Workflow Integrity plugin requires privacy geographies configuration',
+        'Privacy Rights Request Workflow Integrity plugin requires `config.geographies` with at least one supported privacy geography.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { geographies: ['unsupported'] },
+        }),
+      ).toBe(
+        'Privacy Rights Request Workflow Integrity plugin supports only these `config.geographies` values: california-ccpa, eu-gdpr.',
       );
       expect(
         getPluginConfigurationError({
@@ -170,9 +215,26 @@ describe('redteamTestCaseGenerationService', () => {
       expect(
         getPluginConfigurationError({
           id: 'privacy:rights-request-workflow-integrity',
+          config: { geographies: ['eu-gdpr'], frameworks: ['unsupported'] },
+        }),
+      ).toBeNull();
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
           config: { frameworks: ['gdpr'] },
         }),
       ).toBeNull();
+      const missingWorkflowError = getPluginConfigurationError({
+        id: 'privacy:rights-request-workflow-integrity',
+        config: {
+          geographies: ['eu-gdpr'],
+          rightsRequestPolicy: 'file:///definitely/does/not/exist/privacy-workflow.md',
+        },
+      });
+      expect(missingWorkflowError).toBe(
+        'Privacy Rights Request Workflow Integrity plugin could not load `config.rightsRequestPolicy` from the provided file:// reference.',
+      );
+      expect(missingWorkflowError).not.toContain('/definitely/does/not/exist');
     });
   });
 });

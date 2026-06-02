@@ -115,6 +115,45 @@ describe('Redteam Routes', () => {
         expect(response.body.prompt).toBe('generated test prompt');
       });
 
+      it('should return a batch when a plugin expands a single requested test into multiple cases', async () => {
+        const mockPluginFactory = {
+          key: 'privacy:rights-request-workflow-integrity',
+          action: vi
+            .fn()
+            .mockResolvedValue([
+              { vars: { query: 'California privacy request' } },
+              { vars: { query: 'EU privacy request' } },
+            ]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        mockedExtractGeneratedPrompt.mockImplementation((testCase) => String(testCase.vars?.query));
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'privacy:rights-request-workflow-integrity',
+              config: { geographies: ['california-ccpa', 'eu-gdpr'] },
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockPluginFactory.action).toHaveBeenCalledWith(expect.objectContaining({ n: 1 }));
+        expect(response.body).toMatchObject({
+          count: 2,
+          testCases: [{ prompt: 'California privacy request' }, { prompt: 'EU privacy request' }],
+        });
+      });
+
       it('should exclude dataset-exempt plugins with multi-input config', async () => {
         // 'beavertails' is a DATASET_EXEMPT_PLUGIN - should be excluded with inputs
         const response = await request(app)
