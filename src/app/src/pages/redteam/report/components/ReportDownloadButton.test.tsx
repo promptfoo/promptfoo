@@ -1,3 +1,4 @@
+import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { mockObjectUrl, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
@@ -32,6 +33,7 @@ describe('ReportDownloadButton', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetCallApiMock();
     mockObjectUrl();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
@@ -43,9 +45,7 @@ describe('ReportDownloadButton', () => {
 
   it('fetches the full evaluation when downloading JSON', async () => {
     const fullEvalData = { ...compactEvalData, traces: [{ traceId: 'trace-1' }] };
-    vi.mocked(callApi).mockResolvedValue(
-      new Response(JSON.stringify({ data: fullEvalData }), { status: 200 }),
-    );
+    mockCallApiResponse({ data: fullEvalData });
     const user = userEvent.setup();
 
     renderWithProviders(
