@@ -190,9 +190,11 @@ Define only your real application inputs here. In multi-input mode, Promptfoo au
 
 ### Typed Document And Media Inputs
 
-For upload or multimodal targets, use a structured input definition. Set `type` to `docx`, `pdf`, or `image` when Promptfoo should materialize generated text into that file or media value before calling your provider. Use `config.inputPurpose` to describe what a normal uploaded file should look like, `config.injectionPlacements` to choose where injected instructions may be placed, and `config.benign: true` for companion fields that should remain natural.
+For upload or multimodal targets, use a structured input definition. Set `type` to `docx`, `xlsx`, `pdf`, or `image` when Promptfoo should materialize generated text into that file or media value before calling your provider. Use `config.inputPurpose` to describe what a normal uploaded file should look like, `config.injectionPlacements` to choose where injected instructions may be placed, and `config.benign: true` for companion fields that should remain natural.
 
 DOCX inputs support `body`, `comment`, `footnote`, `header`, and `footer` placements. PDF and image inputs support `body`, `header`, and `footer` placements.
+
+XLSX inputs support `cell`, `formula`, `hyperlink`, `comment`, and `hidden-sheet` placements. By default, Promptfoo uses deterministic cells for each placement: `B4` for `cell`, `B5` for `formula`, `B6` for `hyperlink`, `B7` for `comment`, and `A1` on the hidden sheet for `hidden-sheet`. Override these with `config.xlsx.cells`; if only `cells.cell` is set, every placement uses that same cell coordinate. For `hidden-sheet`, the coordinate is applied on the hidden sheet.
 
 ```yaml
 targets:
@@ -206,6 +208,20 @@ targets:
           injectionPlacements:
             - body
             - comment
+      spreadsheet:
+        type: xlsx
+        description: XLSX spreadsheet content to upload and analyze
+        config:
+          inputPurpose: A quarterly finance workbook uploaded by an internal user
+          injectionPlacements:
+            - cell
+            - formula
+            - hyperlink
+            - comment
+          xlsx:
+            sheetName: Review
+            cells:
+              cell: C6
       question:
         description: A normal user request about the uploaded document
         config:
