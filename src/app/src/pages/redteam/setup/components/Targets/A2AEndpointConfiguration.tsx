@@ -31,6 +31,7 @@ interface A2AEndpointConfigurationProps {
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
+  onAdvancedConfigErrorChange?: (error: string | null) => void;
 }
 
 type A2AAuthConfig = {
@@ -172,6 +173,7 @@ const A2AEndpointConfiguration = ({
   rawConfigJson,
   setRawConfigJson,
   bodyError,
+  onAdvancedConfigErrorChange,
 }: A2AEndpointConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
@@ -193,7 +195,13 @@ const A2AEndpointConfiguration = ({
     initializedTargetId.current = targetKey;
     setRawConfigJson(JSON.stringify(getA2AAdvancedConfig(selectedTarget.config), null, 2));
     setAdvancedConfigError(null);
-  }, [selectedTarget.config, selectedTarget.id, setRawConfigJson]);
+    onAdvancedConfigErrorChange?.(null);
+  }, [onAdvancedConfigErrorChange, selectedTarget.config, selectedTarget.id, setRawConfigJson]);
+
+  const updateAdvancedConfigError = (error: string | null) => {
+    setAdvancedConfigError(error);
+    onAdvancedConfigErrorChange?.(error);
+  };
 
   const handleTargetIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -212,17 +220,17 @@ const A2AEndpointConfiguration = ({
         parsedConfig === null ||
         Array.isArray(parsedConfig)
       ) {
-        setAdvancedConfigError('Advanced configuration must be a JSON object');
+        updateAdvancedConfigError('Advanced configuration must be a JSON object');
         return;
       }
 
-      setAdvancedConfigError(null);
+      updateAdvancedConfigError(null);
       updateCustomTarget('config', {
         ...parsedConfig,
         ...getA2AStructuredConfig(selectedTarget.config),
       });
     } catch {
-      setAdvancedConfigError('Invalid JSON configuration');
+      updateAdvancedConfigError('Invalid JSON configuration');
     }
   };
 
@@ -239,7 +247,7 @@ const A2AEndpointConfiguration = ({
         ...parsed,
         ...getA2AStructuredConfig(selectedTarget.config),
       });
-      setAdvancedConfigError(null);
+      updateAdvancedConfigError(null);
     } catch {
       // Error state is already shown via bodyError/advancedConfigError.
     }

@@ -28,6 +28,7 @@ const renderA2AConfiguration = (
 ) => {
   const updateSpy = vi.fn();
   const setRawConfigJsonSpy = vi.fn();
+  const onAdvancedConfigErrorChangeSpy = vi.fn();
 
   const Harness = () => {
     const [target, setTarget] = React.useState(initialTarget);
@@ -66,13 +67,14 @@ const renderA2AConfiguration = (
         rawConfigJson={rawConfigJson}
         setRawConfigJson={setRawConfigJsonWithSpy}
         bodyError={null}
+        onAdvancedConfigErrorChange={onAdvancedConfigErrorChangeSpy}
       />
     );
   };
 
   render(<Harness />);
 
-  return { updateSpy, setRawConfigJsonSpy };
+  return { updateSpy, setRawConfigJsonSpy, onAdvancedConfigErrorChangeSpy };
 };
 
 describe('A2AEndpointConfiguration', () => {
@@ -155,5 +157,32 @@ describe('A2AEndpointConfiguration', () => {
         auth: { type: 'bearer', token: '{{A2A_API_KEY}}' },
       });
     });
+  });
+
+  it('should report malformed advanced JSON without saving stale config', async () => {
+    const user = userEvent.setup();
+    const { updateSpy, onAdvancedConfigErrorChangeSpy } = renderA2AConfiguration(
+      {
+        id: 'a2a',
+        config: {
+          url: 'https://agent.example.com/a2a',
+          mode: 'send',
+        },
+      },
+      JSON.stringify({ mode: 'send' }, null, 2),
+    );
+
+    updateSpy.mockClear();
+    onAdvancedConfigErrorChangeSpy.mockClear();
+
+    const editor = screen.getByTestId('code-editor');
+    await user.clear(editor);
+    await user.paste('{');
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid JSON configuration')).toBeInTheDocument();
+      expect(onAdvancedConfigErrorChangeSpy).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    });
+    expect(updateSpy).not.toHaveBeenCalledWith('config', expect.anything());
   });
 });

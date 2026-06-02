@@ -60,6 +60,7 @@ function ProviderConfigEditor({
     JSON.stringify(provider.config, null, 2),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
+  const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -276,6 +277,9 @@ function ProviderConfigEditor({
         if (!hasUrl && !hasShorthandUrl && !hasAgentCardUrl) {
           errors.push('A valid A2A endpoint URL or Agent Card URL is required');
         }
+        if (a2aAdvancedConfigError) {
+          errors.push(a2aAdvancedConfigError);
+        }
       }
     }
 
@@ -297,6 +301,7 @@ function ProviderConfigEditor({
     provider,
     bodyError,
     extensionErrors,
+    a2aAdvancedConfigError,
     setError,
     onValidate,
     validateUrl,
@@ -364,6 +369,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          onAdvancedConfigErrorChange={setA2AAdvancedConfigError}
         />
       )}
 
