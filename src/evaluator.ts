@@ -4737,8 +4737,6 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    await startOtlpReceiverIfNeeded(this.testSuite);
-
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -4747,15 +4745,20 @@ class Evaluator {
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-
-    if (tracingEnabled) {
-      logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-      const otelConfig = getDefaultOtelConfig();
-      initializeOtel(otelConfig);
-    }
+    let otelInitialized = false;
+    let otlpReceiverAcquired = false;
 
     let evaluationError: unknown;
     try {
+      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.evalRecord.id);
+
+      if (tracingEnabled) {
+        logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+        const otelConfig = getDefaultOtelConfig();
+        initializeOtel(otelConfig);
+        otelInitialized = true;
+      }
+
       return await this._runEvaluation();
     } catch (error) {
       evaluationError = error;
@@ -4775,18 +4778,18 @@ class Evaluator {
       let cleanupError: unknown;
       try {
         // Flush and shutdown OTEL SDK
-        if (tracingEnabled) {
+        if (otelInitialized) {
           logger.debug('[Evaluator] Flushing OTEL spans...');
           await flushOtel();
           await shutdownOtel();
         }
 
-        if (isOtlpReceiverStarted()) {
+        if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
           // Add a delay to allow providers to finish exporting spans
           logger.debug('[Evaluator] Waiting for span exports to complete...');
           await sleep(3000);
         }
-        await stopOtlpReceiverIfNeeded();
+        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.evalRecord.id);
 
         // Clean up Python worker pools to prevent resource leaks
         await providerRegistry.shutdownAll();
