@@ -521,4 +521,88 @@ describe('handleTraceSpanDuration', () => {
     expect(result.reason).toContain('not-trace-span-duration');
     expect(result.reason).toContain('latency budget for pattern "cache.*" was satisfied');
   });
+
+  it('clamps clock-skewed (endTime < startTime) durations to 0 instead of reporting negative ms', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 100, percentile: 0 } },
+      renderedValue: { max: 100, percentile: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'skewed-trace',
+          evaluationId: 'e',
+          testCaseId: 'tc',
+          metadata: {},
+          spans: [
+            { spanId: '1', name: 'skewed', startTime: 500, endTime: 100 }, // raw duration -400ms
+            { spanId: '2', name: 'ok', startTime: 0, endTime: 50 },
+          ],
+        },
+      },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(true); // clamped 0ms is within the 100ms budget
+    expect(result.reason).toContain('0.00ms');
+    expect(result.reason).not.toContain('-400');
+  });
+
+  it('handles percentile boundary values 0 (min) and 100 (max)', () => {
+    const trace = {
+      traceId: 'pct-bounds',
+      evaluationId: 'e',
+      testCaseId: 'tc',
+      metadata: {},
+      spans: [
+        { spanId: '1', name: 'op', startTime: 0, endTime: 10 },
+        { spanId: '2', name: 'op', startTime: 0, endTime: 20 },
+        { spanId: '3', name: 'op', startTime: 0, endTime: 30 },
+      ],
+    };
+    const run = (value: any) =>
+      handleTraceSpanDuration({
+        ...defaultParams,
+        assertion: { type: 'trace-span-duration', value },
+        renderedValue: value,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace },
+      } as AssertionParams);
+
+    const p0 = run({ max: 15, percentile: 0 }); // p0 = min = 10ms <= 15
+    expect(p0.pass).toBe(true);
+    expect(p0.reason).toContain('10.00ms');
+
+    const p100 = run({ max: 25, percentile: 100 }); // p100 = max = 30ms > 25
+    expect(p100.pass).toBe(false);
+    expect(p100.reason).toContain('30.00ms');
+  });
+
+  it('throws for a non-string pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 100, pattern: 123 as any } },
+      renderedValue: { max: 100, pattern: 123 as any },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion pattern must be a non-empty string',
+    );
+  });
+
+  it('throws for a non-boolean requirePresence', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 100, requirePresence: 'yes' as any },
+      },
+      renderedValue: { max: 100, requirePresence: 'yes' as any },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion requirePresence must be a boolean',
+    );
+  });
 });

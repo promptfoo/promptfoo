@@ -1491,6 +1491,26 @@ describe('trajectory assertions', () => {
       expect(result.reason).toContain('[redacted]');
     });
 
+    it('throws when redactArgsInFailures is not a boolean (must not silently fail open)', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: { name: 'search_orders', args: { id: 1 }, redactArgsInFailures: 'true' as any },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          args: { id: 1 },
+          redactArgsInFailures: 'true' as any,
+        },
+      };
+
+      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+        'trajectory:tool-args-match assertion redactArgsInFailures must be a boolean',
+      );
+    });
+
     it('rejects values without args', () => {
       const params: AssertionParams = {
         ...defaultParams,

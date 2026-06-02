@@ -742,7 +742,7 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
-- optional `redactArgsInFailures`, which hides traced argument payloads from assertion reasons (applies to both passing and failing reasons, so args never leak into reports or logs)
+- optional `redactArgsInFailures` (boolean), which replaces the **observed** (traced) argument payloads in this assertion's reasons with `[redacted]` (both passing and failing) so traced args don't leak into reports or logs. The `expected` args you configure still appear in the result's assertion config, as they do for any assertion
 - optional `defaults`, a map of argument names to their default values
 - optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
@@ -1096,8 +1096,8 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds (a finite non-negative number)
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
-- `method` (optional): Percentile method, either `nearest` (default) or `linear`
+- `percentile` (optional): Check a percentile across matching spans instead of every span (e.g., 95 for the 95th percentile)
+- `method` (optional): Percentile method, either `nearest` (default, nearest-rank) or `linear` (interpolated). The default `nearest` returns an actual observed duration; use `linear` for an interpolated value — e.g. the true median when `percentile: 50` on an even number of spans
 - `requirePresence` (optional): Fail when no matching spans with complete timing data are present
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.

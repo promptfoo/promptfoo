@@ -453,11 +453,18 @@ function resolveToolArgsMatchValue(value: unknown) {
     );
   }
 
+  // Validate the redaction toggle instead of silently coercing: a stringy value like "true"
+  // (or any non-boolean) must fail loud rather than fail open and leak traced args.
+  const redactArgsInFailures = (value as TrajectoryToolArgsMatchValue).redactArgsInFailures;
+  if (redactArgsInFailures !== undefined && typeof redactArgsInFailures !== 'boolean') {
+    throw new Error('trajectory:tool-args-match assertion redactArgsInFailures must be a boolean');
+  }
+
   return {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
-    redactArgsInFailures: (value as TrajectoryToolArgsMatchValue).redactArgsInFailures === true,
+    redactArgsInFailures: redactArgsInFailures === true,
     defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
     ignore: resolveToolArgsMatchIgnore((value as TrajectoryToolArgsMatchValue).ignore),
   } as const;

@@ -122,7 +122,9 @@ export const handleTraceSpanDuration = ({
   const spanDurations = matchingSpans.map((span) => {
     return {
       name: span.name,
-      duration: span.endTime! - span.startTime,
+      // Clamp to 0: a clock-skewed span (endTime < startTime) would otherwise yield a negative
+      // duration that sorts as "fast" and renders a nonsensical negative-ms reason.
+      duration: Math.max(0, span.endTime! - span.startTime),
     };
   });
 
