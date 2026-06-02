@@ -468,6 +468,16 @@ describe('shared trace/trajectory hardening parity', () => {
         make({ type: 'trajectory:tool-used', value: { name: 'search', min: 1, max: 2 } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-trajectory:tool-used', value: { name: 'search', max: 0 } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-trajectory:tool-used', value: { name: 'search', min: 1 } as any }),
+      ),
+    ).toMatch(/only support name\/pattern with no count bounds, or max: 0/);
   });
 
   it('rejects non-boolean trajectory:tool-args-match redactArgsInFailures', () => {

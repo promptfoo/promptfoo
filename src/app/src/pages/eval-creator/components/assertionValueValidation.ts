@@ -1,4 +1,5 @@
 import {
+  notTrajectoryToolUsedBoundsError,
   tokensUsedConfigError,
   traceErrorSpansConfigError,
   traceSpanCountBoundsError,
@@ -563,6 +564,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
       const boundsError = trajectoryCountBoundsError(assertion.value, 'trajectory:tool-used');
       if (boundsError) {
         return boundsError;
+      }
+      if (assertion.type === 'not-trajectory:tool-used') {
+        return notTrajectoryToolUsedBoundsError(assertion.value);
       }
     }
   }

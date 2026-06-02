@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import { renderVarsInObject } from '../util/render';
 import {
+  notTrajectoryToolUsedBoundsError,
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
@@ -17,6 +18,7 @@ import {
   matchesTrajectoryStep,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
+  type TrajectoryStep,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
 
@@ -175,6 +177,61 @@ function resolveToolMatchers(
   );
 }
 
+function handleCountedToolUsed(
+  params: AssertionParams,
+  steps: TrajectoryStep[],
+  matcher: TrajectoryCountValue,
+): GradingResult {
+  if (params.inverse) {
+    const inverseBoundsError = notTrajectoryToolUsedBoundsError(matcher);
+    if (inverseBoundsError) {
+      throw new Error(inverseBoundsError);
+    }
+  }
+  const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
+  const max = matcher.max;
+  if (!matcher.pattern && !matcher.name) {
+    throw new Error(
+      'trajectory:tool-used assertion object must include a name or pattern property',
+    );
+  }
+
+  const matchingSteps = steps.filter((step) => matchesTrajectoryStep(step, matcher));
+  const count = matchingSteps.length;
+  const matcherLabel = matcher.pattern || matcher.name || '*';
+
+  if (params.inverse) {
+    const pass = count === 0;
+    const actualTools = steps.map(formatTrajectoryStep);
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? `Forbidden tool "${matcherLabel}" was not used. Actual tools: ${formatStepList(actualTools)}`
+        : `Forbidden tool "${matcherLabel}" was used ${count} time(s). Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`,
+      assertion: params.assertion,
+    };
+  }
+
+  const pass = count >= min && (max === undefined || count <= max);
+  let reason = `Matched tool "${matcherLabel}" ${count} time(s)`;
+  if (max === undefined) {
+    reason += ` (expected at least ${min})`;
+  } else {
+    reason += ` (expected ${min}-${max})`;
+  }
+  if (matchingSteps.length > 0) {
+    reason += `. Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`;
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason,
+    assertion: params.assertion,
+  };
+}
+
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const steps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
@@ -221,43 +278,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
     };
   }
 
-  const matcher = expected.matcher;
-  const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
-  const max = matcher.max;
-  if (!matcher.pattern && !matcher.name) {
-    throw new Error(
-      'trajectory:tool-used assertion object must include a name or pattern property',
-    );
-  }
-
-  const matchingSteps = steps.filter((step) => matchesTrajectoryStep(step, matcher));
-  const count = matchingSteps.length;
-  const basePass = count >= min && (max === undefined || count <= max);
-  const pass = applyInverse(basePass, params.inverse);
-  const matcherLabel = matcher.pattern || matcher.name || '*';
-
-  let reason = `Matched tool "${matcherLabel}" ${count} time(s)`;
-  if (max === undefined) {
-    reason += ` (expected at least ${min})`;
-  } else {
-    reason += ` (expected ${min}-${max})`;
-  }
-  if (matchingSteps.length > 0) {
-    reason += `. Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`;
-  }
-
-  if (params.inverse) {
-    reason = basePass
-      ? `Tool "${matcherLabel}" matched ${count} time(s), which violates the inverse assertion`
-      : `Tool "${matcherLabel}" did not satisfy the forbidden match condition`;
-  }
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
+  return handleCountedToolUsed(params, steps, expected.matcher);
 };
 
 interface TrajectoryToolSetValue {

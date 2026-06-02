@@ -711,6 +711,8 @@ tests:
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `name` or `pattern`, plus optional `min` and `max` count bounds. A max-only object defaults to `min: 0`.
 
+For `not-trajectory:tool-used`, object values are forbidden-use checks. Omit count bounds or set `max: 0`; other count ranges are rejected to avoid ambiguous double-negative semantics.
+
 ### trajectory:tool-set {#trajectorytool-set}
 
 The `trajectory:tool-set` assertion checks that traced tool usage contains a required set of tools, regardless of order.

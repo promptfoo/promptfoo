@@ -220,6 +220,22 @@ export function trajectoryCountBoundsError(
   );
 }
 
+/**
+ * not-trajectory:tool-used object values are forbidden-use checks, matching not-skill-used.
+ * Count ranges other than max: 0 are ambiguous after applying the `not-` prefix.
+ */
+export function notTrajectoryToolUsedBoundsError(value: {
+  min?: unknown;
+  max?: unknown;
+}): string | undefined {
+  const hasExplicitMin = value.min !== undefined;
+  const hasExplicitMax = value.max !== undefined;
+  if (hasExplicitMin || (hasExplicitMax && value.max !== 0)) {
+    return 'not-trajectory:tool-used object assertions only support name/pattern with no count bounds, or max: 0';
+  }
+  return undefined;
+}
+
 /** trajectory:goal-success: an optional `timeoutMs` must be a finite positive number. */
 export function trajectoryGoalSuccessTimeoutError(value: {
   timeoutMs?: unknown;
