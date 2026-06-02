@@ -609,6 +609,40 @@ describe('code-scan-action main', () => {
   });
 
   describe('SARIF output', () => {
+    function mockFallbackPosting() {
+      const createReview = vi.fn().mockResolvedValue({});
+      const createComment = vi.fn().mockResolvedValue({});
+      mocks.github.getOctokit.mockReturnValue({
+        rest: {
+          pulls: {
+            createReview,
+            get: vi.fn().mockResolvedValue({
+              data: { base: { ref: 'main' } },
+            }),
+          },
+          issues: {
+            createComment,
+          },
+        },
+      });
+      return { createComment, createReview };
+    }
+
+    function mockPromptfooScanResponse(response: unknown) {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(Buffer.from(JSON.stringify(response)));
+          }
+          return 0;
+        },
+      );
+    }
+
     async function triggerSarifAction(rawPath: string) {
       mocks.core.getInput.mockImplementation((name: string) => {
         if (name === 'github-token') {
@@ -696,85 +730,129 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
-    it('writes SARIF findings when the scanner also returns a skipReason', async () => {
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          _args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
-            options.listeners.stdout(
-              Buffer.from(
-                JSON.stringify({
-                  success: true,
-                  comments: [
-                    {
-                      file: 'src/handler.ts',
-                      line: 12,
-                      finding: 'User input reaches the model prompt without sanitization.',
-                      severity: 'high',
-                    },
-                  ],
-                  commentsPosted: true,
-                  skipReason: 'Unexpected mixed response.',
-                }),
-              ),
-            );
-          }
-          return 0;
-        },
-      );
+    it('posts line-level mixed-skip findings as fallback comments and writes SARIF', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'User input reaches the model prompt without sanitization.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
 
       await triggerSarifAction('reports/promptfoo-code-scan.sarif');
 
       await vi.waitFor(() => {
-        expect(mocks.fs.writeFileSync).toHaveBeenCalled();
+        expect(createReview).toHaveBeenCalled();
       });
 
       expect(mocks.core.warning).toHaveBeenCalledWith(
-        'Scan response included reportable findings alongside a skipReason ("Unexpected mixed response."); processing findings.',
+        'Scan response included findings alongside a skipReason ("Unexpected mixed response."); processing findings.',
+      );
+      expect(createReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comments: [
+            expect.objectContaining({
+              path: 'src/handler.ts',
+              line: 12,
+            }),
+          ],
+        }),
+      );
+      expect(createComment).not.toHaveBeenCalled();
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+    });
+
+    it('posts file-only mixed-skip findings as general fallback comments and writes SARIF', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/file-only.ts',
+            line: null,
+            finding: 'This file configures an unsafe model tool.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/file-only.ts**'),
+        }),
       );
       const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
       expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
     });
 
-    it('does not write SARIF when a skipReason carries only non-reportable comments', async () => {
-      // scanResponseToSarif drops severity:none and fileless comments, so this skip
-      // response has comments.length > 0 but serializes to zero results. Emitting it would
-      // upload an empty SARIF and clear existing Code Scanning alerts — gate on reportable
-      // findings, not raw comment count.
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          _args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
-            options.listeners.stdout(
-              Buffer.from(
-                JSON.stringify({
-                  success: true,
-                  comments: [
-                    {
-                      file: 'src/handler.ts',
-                      line: 12,
-                      finding: 'No issue found on this line.',
-                      severity: 'none',
-                    },
-                    {
-                      finding: 'General advisory not pinned to a file.',
-                      severity: 'high',
-                    },
-                  ],
-                  skipReason: 'Fork PR scanning requires maintainer approval.',
-                }),
-              ),
-            );
-          }
-          return 0;
-        },
+    it('posts fileless mixed-skip findings as general fallback comments without empty SARIF', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: null,
+            line: null,
+            finding: 'The scan found a PR-wide unsafe agent behavior.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('The scan found a PR-wide unsafe agent behavior.'),
+        }),
       );
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
+    it('does not process mixed skips with findings that are neither SARIF-reportable nor PR-postable', async () => {
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'No issue found on this line.',
+            severity: 'none',
+          },
+          {
+            file: null,
+            line: null,
+            finding: 'General advisory not pinned to a file.',
+            severity: 'none',
+          },
+        ],
+        skipReason: 'Fork PR scanning requires maintainer approval.',
+      });
 
       await triggerSarifAction('reports/promptfoo-code-scan.sarif');
 

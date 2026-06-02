@@ -2217,12 +2217,10 @@ describe('trajectory assertions', () => {
         };
 
         expect(
-          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value))
-            .pass,
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value)).pass,
         ).toBe(true);
         expect(
-          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value))
-            .pass,
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value)).pass,
         ).toBe(true);
       });
 
@@ -2284,12 +2282,7 @@ describe('trajectory assertions', () => {
         const result = handleTrajectoryToolArgsMatch(
           makeIgnoreParams(
             { status: 'Q', request_id: 'abc' },
-            {
-              name: 'search_orders',
-              mode: 'partial',
-              args: { status: 'Q' },
-              ignore: ['request_id'],
-            },
+            { name: 'search_orders', mode: 'partial', args: { status: 'Q' }, ignore: ['request_id'] },
           ),
         );
         expect(result.pass).toBe(true);

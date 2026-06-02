@@ -10,8 +10,8 @@ import * as path from 'path';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import { prepareComments } from '../../src/codeScan/util/github';
-import { hasReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
+import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -384,6 +384,11 @@ function buildCommentBody(comment: Comment): string {
   return body;
 }
 
+function buildGeneralCommentBody(comment: Comment): string {
+  const body = buildCommentBody(comment);
+  return comment.file ? `**${comment.file}**\n\n${body}` : body;
+}
+
 function toReviewComment(comment: Comment) {
   return {
     path: comment.file!,
@@ -437,7 +442,7 @@ async function postGeneralComments(
       owner: context.owner,
       repo: context.repo,
       issue_number: context.number,
-      body: buildCommentBody(comment),
+      body: buildGeneralCommentBody(comment),
     });
   }
 
@@ -612,13 +617,14 @@ async function handleScanResponse(
   context: PullRequestContext,
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
+  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
+  const hasPrFindings = hasPrPostableFindings(comments);
 
   // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran. Gate the
-  // bypass on reportable findings rather than raw comment count: scanResponseToSarif drops
-  // severity:none and fileless comments, so a skip carrying only those would still serialize
-  // to a zero-result SARIF and clear existing alerts — the exact case this guard prevents.
-  if (skipReason && !hasReportableFindings(scanResponse)) {
+  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
+  // responses still need processing when a finding can be surfaced through SARIF or PR
+  // comments, because those output channels intentionally support different locations.
+  if (skipReason && !hasSarifFindings && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
@@ -628,15 +634,18 @@ async function handleScanResponse(
     // findings) signals a server-side bug, and the reason text is the operator's only
     // clue to which path produced it.
     core.warning(
-      `Scan response included reportable findings alongside a skipReason ("${skipReason}"); processing findings.`,
+      `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
     );
   }
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  emitConfiguredSarifOutput(scanResponse, inputs);
+  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
+  if (!skipReason || hasSarifFindings) {
+    emitConfiguredSarifOutput(scanResponse, inputs);
+  }
 
-  if ((comments.length > 0 || review) && commentsPosted === false) {
+  if ((hasPrFindings || review) && commentsPosted === false) {
     await postFallbackComments(
       inputs.githubToken,
       context,
