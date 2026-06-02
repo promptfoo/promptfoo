@@ -17,10 +17,12 @@ import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
   clearCachedAuth,
+  collectGroundingMetadata,
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
@@ -2647,6 +2649,34 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.001, 10);
     });
 
+    it('should calculate cost for gemini-3.1-flash-lite (GA)', () => {
+      // gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
+      const cost = calculateGoogleCost('gemini-3.1-flash-lite', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.001, 10);
+    });
+
+    it('should calculate cost for gemini-3.5-flash', () => {
+      // gemini-3.5-flash: input=1.5/1M, output=9.0/1M
+      const cost = calculateGoogleCost('gemini-3.5-flash', {}, 1000, 500);
+      // Expected: (1000 * 1.5 + 500 * 9.0) / 1M = (1500 + 4500) / 1M = 0.006
+      expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should not apply long-context tiered pricing to gemini-3.5-flash', () => {
+      // gemini-3.5-flash is flat-rate: prompts above 200k tokens bill at the
+      // standard rate (unlike the tiered gemini-3.1-pro-preview).
+      const cost = calculateGoogleCost('gemini-3.5-flash', {}, 250000, 50000);
+      // Expected: (250000 * 1.5 + 50000 * 9.0) / 1M = (375000 + 450000) / 1M = 0.825
+      expect(cost).toBeCloseTo(0.825, 10);
+    });
+
+    it('should calculate cost for gemini-embedding-2', () => {
+      // gemini-embedding-2: input=0.2/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-2', {}, 10000, 0);
+      // Expected: (10000 * 0.2) / 1M = 0.002
+      expect(cost).toBeCloseTo(0.002, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2935,6 +2965,25 @@ describe('util', () => {
     });
   });
 
+  describe('mergeParts', () => {
+    it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
+      const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
+      const secondChunk = [{ text: 'done' }];
+
+      const accumulator = mergeParts(undefined, firstChunk);
+      if (!Array.isArray(accumulator)) {
+        throw new Error('Expected multipart output');
+      }
+
+      expect(accumulator).not.toBe(firstChunk);
+      expect(mergeParts(accumulator, secondChunk)).toBe(accumulator);
+      expect(accumulator).toEqual([...firstChunk, ...secondChunk]);
+      expect(firstChunk).toEqual([
+        { functionCall: { name: 'look_up', args: { query: 'weather' } } },
+      ]);
+    });
+  });
+
   describe('mergeGoogleCompletionOptions', () => {
     it('treats prompt-level undefined as "not set" and preserves base policy', () => {
       const merged = mergeGoogleCompletionOptions(
@@ -2958,6 +3007,95 @@ describe('util', () => {
       expect(merged.tool_choice).toBe('none');
       expect(merged.toolConfig).toBeUndefined();
       expect(merged.tool_config).toBeUndefined();
+    });
+  });
+
+  describe('collectGroundingMetadata', () => {
+    it('returns empty object when no candidates carry grounding signals', () => {
+      const result = collectGroundingMetadata([
+        { candidates: [{ content: { parts: [{ text: 'plain' }] } }] } as any,
+      ]);
+      expect(result).toEqual({});
+    });
+
+    it('returns the single candidate metadata as-is', () => {
+      const groundingMetadata = {
+        webSearchQueries: ['q'],
+        groundingChunks: [{ web: { uri: 'https://x' } }],
+      };
+      const result = collectGroundingMetadata([
+        {
+          candidates: [{ content: { parts: [{ text: 't' }] }, groundingMetadata }],
+        } as any,
+      ]);
+      expect(result.groundingMetadata).toEqual(groundingMetadata);
+    });
+
+    it('concatenates array fields across nested groundingMetadata chunks and keeps the last refinement', () => {
+      const result = collectGroundingMetadata([
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'a' }] },
+              groundingMetadata: {
+                webSearchQueries: ['q1'],
+                groundingChunks: [{ web: { uri: 'https://1' } }],
+                searchEntryPoint: { renderedContent: 'old' },
+              },
+            },
+          ],
+        } as any,
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'b' }] },
+              groundingMetadata: {
+                webSearchQueries: ['q2'],
+                groundingChunks: [{ web: { uri: 'https://2' } }],
+                groundingSupports: [{ segment: { startIndex: 0, endIndex: 1 } }],
+                searchEntryPoint: { renderedContent: 'new' },
+                retrievalMetadata: { dynamicRetrievalScore: 0.9 },
+              },
+            },
+          ],
+        } as any,
+      ]);
+      const merged = result.groundingMetadata as Record<string, any>;
+      expect(merged.webSearchQueries).toEqual(['q1', 'q2']);
+      expect(merged.groundingChunks).toEqual([
+        { web: { uri: 'https://1' } },
+        { web: { uri: 'https://2' } },
+      ]);
+      expect(merged.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 1 } }]);
+      expect(merged.searchEntryPoint).toEqual({ renderedContent: 'new' });
+      expect(merged.retrievalMetadata).toEqual({ dynamicRetrievalScore: 0.9 });
+    });
+
+    it('concatenates flat grounding fields when candidates carry them directly', () => {
+      const result = collectGroundingMetadata([
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'a' }] },
+              webSearchQueries: ['x'],
+              groundingChunks: [{ web: { uri: 'https://x' } }],
+            },
+          ],
+        } as any,
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'b' }] },
+              webSearchQueries: ['y'],
+              groundingSupports: [{ segment: { startIndex: 0, endIndex: 1 } }],
+            },
+          ],
+        } as any,
+      ]);
+      expect(result.webSearchQueries).toEqual(['x', 'y']);
+      expect(result.groundingChunks).toEqual([{ web: { uri: 'https://x' } }]);
+      expect(result.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 1 } }]);
+      expect(result.groundingMetadata).toBeUndefined();
     });
   });
 });

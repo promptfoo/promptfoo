@@ -7,7 +7,7 @@ import {
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
 
-vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/util/fetch/index');
 
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 

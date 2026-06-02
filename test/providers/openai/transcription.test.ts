@@ -175,6 +175,7 @@ describe('OpenAiTranscriptionProvider', () => {
           method: 'POST',
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
+            'X-OpenAI-Originator': 'promptfoo',
           }),
         }),
         expect.any(Number),

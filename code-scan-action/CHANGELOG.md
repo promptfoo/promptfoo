@@ -2,6 +2,29 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.7](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.6...code-scan-action-0.1.7) (2026-05-29)
+
+### Bug Fixes
+
+- **code-scan:** emit structured fork PR skip output ([#9426](https://github.com/promptfoo/promptfoo/issues/9426)) ([61c624c](https://github.com/promptfoo/promptfoo/commit/61c624c7f91808a6f59d8b837dbb3896dd9a74c0))
+- **code-scan:** honor minimum-severity alias when min-severity is unset ([#9433](https://github.com/promptfoo/promptfoo/issues/9433)) ([ea5ea9e](https://github.com/promptfoo/promptfoo/commit/ea5ea9e741da0968431de25c0d67337f2e0e6e20))
+- **eval:** show test descriptions in HTML output ([#9390](https://github.com/promptfoo/promptfoo/issues/9390)) ([206f1dd](https://github.com/promptfoo/promptfoo/commit/206f1dd9848607ed9d4eba1f7998f90b8f87f0ff))
+- **providers:** honor Vertex default host overrides ([#9389](https://github.com/promptfoo/promptfoo/issues/9389)) ([11a8d9b](https://github.com/promptfoo/promptfoo/commit/11a8d9b1c4edf214e8e15dd6794690ab49d24430))
+
+## [0.1.6](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.5...code-scan-action-0.1.6) (2026-05-21)
+
+### Features
+
+- **code-scan:** add SARIF output support ([#9161](https://github.com/promptfoo/promptfoo/issues/9161)) ([4da26e9](https://github.com/promptfoo/promptfoo/commit/4da26e95e4837ad9fd3363dfb52a86e5e1ceb66d))
+- **code-scan:** refine SARIF output ergonomics ([#9159](https://github.com/promptfoo/promptfoo/issues/9159)) ([ea3a655](https://github.com/promptfoo/promptfoo/commit/ea3a65521c55a7360cc315efa5f971673fb1f981))
+
+### Bug Fixes
+
+- **code-scan:** honor enable-fork-prs ([#8938](https://github.com/promptfoo/promptfoo/issues/8938)) ([517ec9d](https://github.com/promptfoo/promptfoo/commit/517ec9d3a0589be726bf024ea7d38bc28bb46702))
+- **code-scan:** isolate action OIDC token env ([#9309](https://github.com/promptfoo/promptfoo/issues/9309)) ([30c99e9](https://github.com/promptfoo/promptfoo/commit/30c99e924e02160db90385eff6f668c0ee551bc3))
+- **code-scan:** scope OIDC token to scan subprocess ([#9308](https://github.com/promptfoo/promptfoo/issues/9308)) ([178b57a](https://github.com/promptfoo/promptfoo/commit/178b57adb39d96d50012afd92a5e1b8e8e12ff75))
+- **deps:** update dependency undici to ^7.25.0 ([#9017](https://github.com/promptfoo/promptfoo/issues/9017)) ([5be6015](https://github.com/promptfoo/promptfoo/commit/5be6015ed51bccbaad03fc3c5a48e099f1f552cd))
+
 ## [0.1.5](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.4...code-scan-action-0.1.5) (2026-04-14)
 
 ### Bug Fixes

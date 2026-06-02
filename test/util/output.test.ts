@@ -6,10 +6,17 @@ import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
-import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
+import {
+  createOutputMetadata,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+  writeOutput,
+} from '../../src/util/output';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -42,6 +49,10 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
+  stat: vi.fn().mockResolvedValue({ mode: 0o644 }),
+  chmod: vi.fn(),
   mkdir: vi.fn(),
   open: vi.fn().mockResolvedValue(mockFileHandle),
 }));
@@ -61,9 +72,14 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
+    // Restore the stat implementation that vi.resetAllMocks() clears; the atomic JSONL rewrite
+    // reads the destination's mode through it before renaming the temp file into place.
+    vi.mocked(fsPromises.stat).mockResolvedValue({ mode: 0o644 } as Awaited<
+      ReturnType<typeof fsPromises.stat>
+    >);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -84,7 +100,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -149,6 +165,7 @@ describe('writeOutput', () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
       description: 'Test config',
+      tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
@@ -176,6 +193,7 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
+    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
   });
 
   it.each([
@@ -311,6 +329,141 @@ describe('writeOutput', () => {
     }
   });
 
+  it('omits trace vars from JSON output when test variable stripping is enabled', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-vars',
+        evaluationId: 'eval-strip-vars',
+        testCaseId: 'case-strip-vars',
+        metadata: {
+          testIdx: 0,
+          promptIdx: 0,
+          source: 'trace export',
+          vars: {
+            customerEmail: 'trace-var-secret@example.com',
+          },
+        },
+        spans: [],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0].metadata).toEqual({
+        testIdx: 0,
+        promptIdx: 0,
+        source: 'trace export',
+      });
+      expect(written).not.toContain('trace-var-secret@example.com');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
+  it('omits trace metadata when stripped vars are the only metadata', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-only-vars',
+        evaluationId: 'eval-strip-only-vars',
+        testCaseId: 'case-strip-only-vars',
+        metadata: {
+          vars: {
+            customerEmail: 'trace-only-var-secret@example.com',
+          },
+        },
+        spans: [],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0]).not.toHaveProperty('metadata');
+      expect(written).not.toContain('trace-only-var-secret@example.com');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
+  it('omits trace metadata from JSON output when metadata stripping is enabled', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-metadata',
+        evaluationId: 'eval-strip-metadata',
+        testCaseId: 'case-strip-metadata',
+        metadata: {
+          note: 'trace-metadata-secret',
+          vars: {
+            customerEmail: 'trace-var-secret@example.com',
+          },
+        },
+        spans: [],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0]).not.toHaveProperty('metadata');
+      expect(written).not.toContain('trace-metadata-secret');
+      expect(written).not.toContain('trace-var-secret@example.com');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
+  it('omits stripped prompt and response bodies from trace span attributes', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+    });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-bodies',
+        evaluationId: 'eval-strip-bodies',
+        testCaseId: 'case-strip-bodies',
+        spans: [
+          {
+            spanId: 'span-strip-bodies',
+            name: 'provider',
+            startTime: 1,
+            attributes: {
+              'promptfoo.request.body': 'trace-prompt-secret',
+              'promptfoo.response.body': 'trace-response-secret',
+              operation: 'provider-call',
+            },
+          },
+        ],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
+      expect(written).not.toContain('trace-prompt-secret');
+      expect(written).not.toContain('trace-response-secret');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
   it('preserves deep non-secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
@@ -355,6 +508,28 @@ describe('writeOutput', () => {
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'yaml',
+    'txt',
+  ])('sanitizes runtime options before writing %s output for in-memory evals', async (extension) => {
+    const eval_ = new Eval(
+      {},
+      {
+        runtimeOptions: {
+          cache: false,
+          abortSignal: new AbortController().signal,
+          progressCallback: vi.fn(),
+        },
+      },
+    );
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
+    expect(parsed.runtimeOptions).toEqual({ cache: false });
   });
 
   it('redacts env and secret config fields in YAML output', async () => {
@@ -898,7 +1073,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -926,7 +1101,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockReturnValue({
+    vi.mocked(getDb).mockResolvedValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -948,7 +1123,127 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval(config);
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
-    expect(fsPromises.writeFile).toHaveBeenCalledWith(outputPath, '');
+    // JSONL is rebuilt in a temp file then atomically renamed over the destination, so the
+    // empty truncation lands on the temp path and the swap targets the real output path.
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringContaining(outputPath), '');
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+  });
+
+  it('preserves the existing output file permissions across the atomic JSONL rewrite', async () => {
+    const outputPath = 'output.jsonl';
+    vi.mocked(fsPromises.stat).mockResolvedValueOnce({ mode: 0o600 } as Awaited<
+      ReturnType<typeof fsPromises.stat>
+    >);
+
+    const eval_ = new Eval({});
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    // The temp file is chmod'd to the destination's prior mode before the rename, so a
+    // restricted (0600) reused path is not silently widened to the umask default.
+    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringContaining(outputPath), 0o600);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+  });
+
+  it('skips the chmod when the JSONL output file does not yet exist', async () => {
+    const outputPath = 'output.jsonl';
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
+    );
+
+    const eval_ = new Eval({});
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    expect(fsPromises.chmod).not.toHaveBeenCalled();
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+  });
+
+  it('keeps newly streamed retry rows ahead of stale persisted rows after a save failure', async () => {
+    const outputPath = 'output.jsonl';
+    const staleResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { error: 'stale persisted error' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const retriedResult: EvaluateResult = {
+      ...staleResult,
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      response: { output: 'fresh streamed retry' },
+    };
+    const eval_ = new Eval({});
+    eval_.recordResultPersistenceFailure(retriedResult);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(staleResult)}\n${JSON.stringify(retriedResult)}\n`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {
+      yield [staleResult as any];
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({
+        failureReason: ResultFailureReason.NONE,
+        response: { output: 'fresh streamed retry' },
+        score: 1,
+        success: true,
+      }),
+    ]);
+  });
+
+  it('skips a malformed (truncated) streamed JSONL row during recovery instead of aborting', async () => {
+    const outputPath = 'output.jsonl';
+    const goodResult: EvaluateResult = {
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 10,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: { output: 'recovered streamed row' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt',
+    };
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+    // A complete row followed by a truncated final row, as a killed/crashed run can leave.
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      `${JSON.stringify(goodResult)}\n{"testIdx":1,"promptIdx":0,"resp`,
+    );
+    vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(async function* () {});
+
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+
+    const written = vi.mocked(fsPromises.appendFile).mock.calls[0][1] as string;
+    expect(
+      written
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({ testIdx: 0, response: { output: 'recovered streamed row' } }),
+    ]);
   });
 
   it('writeOutput with json and txt output', async () => {
@@ -967,13 +1262,180 @@ describe('writeOutput', () => {
     const templateContent = realFs.readFileSync(templatePath, 'utf-8');
 
     // Check that the template has escape filters on all user-provided content
+    expect(templateContent).toContain("{{ config.description | default('Eval Output') | escape }}");
     expect(templateContent).toContain('{{ header | escape }}');
-    expect(templateContent).toContain('{{ cell | escape }}');
+    expect(templateContent).toContain('{{ cell.text | escape }}');
+    expect(templateContent).toContain('{{ cell.reason | escape }}');
+    expect(templateContent).toContain('{{ cell.error | escape }}');
+    expect(templateContent).toContain('{{ cell.description | escape }}');
 
-    // Ensure both data-content attribute and cell content are escaped
-    const cellRegex =
-      /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
-    expect(templateContent).toMatch(cellRegex);
+    // Ensure structured output content and derived search fields are escaped.
+    expect(templateContent).toContain('data-search="{{ cell.statusLabel | escape }}');
+    expect(templateContent).toContain('{{ cell.error | escape }}"');
+    expect(templateContent).toContain('data-report-search');
+    expect(templateContent).toContain('data-status-filter');
+    expect(templateContent).toContain('data-visible-count');
+    expect(templateContent).toContain('data-output-cell="true"');
+    expect(templateContent).toContain('data-status="{{ cell.status | escape }}"');
+    expect(templateContent).toContain('data-variable-name="{{ cell.name | escape }}"');
+    expect(templateContent).toContain('status-pill {{ cell.status | escape }}');
+    expect(templateContent).toContain('data-open-detail');
+    expect(templateContent).toContain('data-detail-drawer');
+    expect(templateContent).toContain('data-detail-template');
+    expect(templateContent).toContain('appendVariableDetails(trigger);');
+    expect(templateContent).not.toContain('{% for variable in cell.variables %}');
+  });
+
+  it('writeOutput with HTML includes report summary values', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    const eval_ = new Eval({ description: 'HTML facelift report' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Passing output' },
+      vars: { input: 'one' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'one' }, description: 'Passing <test> description' },
+      promptId: 'prompt',
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'Passing reason',
+      },
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Failing output' },
+      vars: { input: 'two' },
+      promptIdx: 0,
+      testIdx: 1,
+      testCase: { vars: { input: 'two' } },
+      promptId: 'prompt',
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Failing reason',
+      },
+    });
+
+    await writeOutput('output.html', eval_, null);
+
+    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(html).toContain('HTML facelift report');
+    expect(html).toContain('<p class="metric-label">Total Results</p>');
+    expect(html).toContain('<p class="metric-value">2</p>');
+    expect(html).toContain('50.0%');
+    expect(html).toContain('>PASS<');
+    expect(html).toContain('>FAIL<');
+    expect(html).toContain('Score 1.00');
+    expect(html).toContain('Score 0.00');
+    expect(html).toContain('Passing output');
+    expect(html).toContain('Failing output');
+    expect(html).toContain('Passing &lt;test&gt; description');
+    expect(html).not.toContain('Passing <test> description');
+    expect(html).toContain('Passing reason');
+    expect(html).toContain('Failing reason');
+    expect(html).toContain('View detail');
+    expect(html).toContain('Result detail - row 1, prompt 1');
+    expect(html).toContain('Prompt');
+    expect(html).toContain('Variables');
+    expect(html).toContain('data-report-search');
+    expect(html).toContain('No rows match the current search and status filters.');
+  });
+
+  it('writeOutput with HTML classifies non-error failures as failures', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    const eval_ = new Eval({ description: 'HTML failure classification' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.NONE,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: '' },
+      vars: { input: 'missing-output' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'missing-output' } },
+      promptId: 'prompt',
+    });
+
+    await writeOutput('output.html', eval_, null);
+
+    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(html).toContain('data-status="fail"');
+    expect(html).toContain('>FAIL<');
+  });
+
+  it('writeOutput with HTML keeps visible runtime errors searchable without pre-rendering row variables per output', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    const eval_ = new Eval({ description: 'HTML error search' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Visible output despite failure' },
+      error: 'provider timed out',
+      vars: { input: 'shared value' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'shared value' } },
+      promptId: 'prompt',
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Evaluation failed',
+      },
+    });
+
+    await writeOutput('output.html', eval_, null);
+
+    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(html).toContain(
+      'data-search="ERROR 0.00 provider timed out Evaluation failed provider timed out"',
+    );
+    expect(html).toContain('data-variable-name="input"');
+    expect(html).not.toContain('<span class="detail-variable-name">');
+    expect(html).toContain('appendVariableDetails(trigger);');
   });
 
   it('writes output to Google Sheets', async () => {
@@ -1072,6 +1534,45 @@ describe('writeOutput', () => {
     const columnKeys = Object.keys(rows[0]);
     expect(columnKeys).toContain('[openai:gpt-4] Test Prompt');
     expect(columnKeys).toContain('[anthropic:claude-3] Test Prompt');
+  });
+});
+
+describe('warnOnDegradedJsonlRecovery', () => {
+  it('warns once when a row failed to persist and a JSONL artifact is being reconciled', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+
+    warnOnDegradedJsonlRecovery(eval_, [
+      'results.jsonl',
+      'results.JSONL',
+      'results.json',
+      'results.yaml',
+    ]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when no row failed to persist', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+
+    warnOnDegradedJsonlRecovery(eval_, ['results.jsonl', 'results.json']);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when the persistence failure does not touch a JSONL artifact', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = new Eval({});
+    eval_.resultPersistenceFailed = true;
+
+    warnOnDegradedJsonlRecovery(eval_, ['results.json', 'results.yaml']);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 
