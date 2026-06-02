@@ -187,7 +187,14 @@
         "src/updates",
         "src/version.ts"
       ],
-      "allowedDependencies": ["core", "legacy-contracts", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "node",
+        "providers",
+        "redteam"
+      ]
     }
   ]
 }
