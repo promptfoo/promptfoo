@@ -9,8 +9,13 @@ const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use 
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
-// Configure OTLP exporter
-const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://127.0.0.1:4318/v1/traces';
+// Configure OTLP exporter. The generic endpoint is a base URL; the trace-specific
+// endpoint is already the full export URL.
+const exporterUrl =
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
+  (process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/+$/, '')}/v1/traces`
+    : 'http://127.0.0.1:4318/v1/traces');
 console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
 const exporter = new OTLPTraceExporter({
   url: exporterUrl,

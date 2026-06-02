@@ -194,8 +194,11 @@ Open any test result and switch to the **Traces** tab to see the timeline showin
 Configure OpenTelemetry using standard environment variables:
 
 ```bash
-# Custom endpoint (defaults to Promptfoo's receiver)
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318/v1/traces"
+# Generic OTLP HTTP base endpoint (the provider appends /v1/traces)
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
+
+# Or override the full trace export URL directly
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:4318/v1/traces"
 
 # Headers for authentication with external collectors
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"

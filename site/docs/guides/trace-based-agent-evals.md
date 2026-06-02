@@ -377,7 +377,7 @@ All trace and trajectory assertions accept a `not-` prefix that flips the result
 
 - `not-trace-span-count` passes when the matched span count falls **outside** the `min`/`max` range (useful for "must not be exactly N"). For "must not occur at all" the simpler `trace-span-count` with `max: 0` is still preferred.
 - `not-trace-error-spans` passes when the error budget was **not** met (i.e. errors are present). Useful in negative tests where you intentionally trigger a tool failure.
-- `not-trace-span-duration` passes when at least one matching span exceeds the budget. Useful when proving that a slow path actually triggers your latency guardrail.
+- `not-trace-span-duration` passes when the corresponding positive duration assertion fails. Without a percentile, that means at least one matching span exceeds the budget; with a percentile, it means the computed percentile exceeds the budget. Useful when proving that a slow path actually triggers your latency guardrail.
 
 `trace-span-duration` and `trace-error-spans` pass by default when no spans match. Their inverse forms flip that no-match pass into a failure. Use `requirePresence: true` on the positive form, or add an explicit `trace-span-count`, whenever missing trace data should fail independently of the budget.
 
@@ -616,7 +616,7 @@ For full retrieval-quality scoring (precision@k, recall, MRR, faithfulness), see
 
 A trace from a single eval row covers one turn. Multi-turn agents add two requirements:
 
-1. **Stitch turns into a session.** Set the OTel attribute `gen_ai.conversation.id` on every span emitted during the same conversation, and set the same value as `metadata.conversationId` on each test row. Promptfoo does not group rows by conversation in the UI today, but matching IDs let you reassemble a session in `output.json` (e.g. `jq 'group_by(.testCase.metadata.conversationId)'`) or in your trace backend.
+1. **Stitch turns into a session.** Set the OTel attribute `gen_ai.conversation.id` on every span emitted during the same conversation, and set the same value as `metadata.conversationId` on each test row. Promptfoo does not group rows by conversation in the UI today, but matching IDs let you reassemble a session in `output.json` (e.g. `jq '.results.results | map(select(.testCase.metadata.conversationId != null)) | group_by(.testCase.metadata.conversationId)' output.json`) or in your trace backend.
 2. **Assert per-turn and across turns.** Per-turn assertions live on each row as usual. Cross-turn assertions (e.g. "the agent never re-asks for the user's email") are most reliable when one row drives the full conversation in a single `callApi` invocation and emits one parent span per turn.
 
 ```yaml
@@ -746,7 +746,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-output-${{ github.run_id }}
+          name: eval-output-${{ github.ref_name == 'main' && 'main' || github.run_id }}
           path: eval-output.json
 ```
 
@@ -804,7 +804,7 @@ Agents that loop have unbounded cost. Use the built-in `tokens-used` assertion t
     source: auto # auto (default) | trace | response
 ```
 
-`source: auto` uses trace token attributes when matched spans include them. If the default `pattern: '*'` sees spans but none of them carry token-usage attributes, it falls back to `providerResponse.tokenUsage`; with a custom `pattern`, it stays on the trace path so the filter is not silently ignored. For each matched span, Promptfoo prefers an aggregate total such as `gen_ai.usage.total_tokens`, `llm.usage.total_tokens`, or `tokens.used`; otherwise it sums one matching input/output token family. When matched parents and descendants both carry totals, Promptfoo uses the larger of the parent aggregate and the covered descendant total for each token-bearing subtree. This avoids double-counting repeated hierarchy totals without discarding a broader parent aggregate. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
+`source: auto` uses trace token attributes when matched spans include them. If the default `pattern: '*'` sees spans but none of them carry token-usage attributes, it falls back to `providerResponse.tokenUsage`; with a custom `pattern`, it stays on the trace path so the filter is not silently ignored. For each matched span, Promptfoo uses the largest available aggregate total or input/output component-family total so incomplete or inconsistent attributes do not undercount the budget. When matched parents and descendants both carry totals, Promptfoo uses the larger of the parent aggregate and the covered descendant total for each token-bearing subtree. This avoids double-counting repeated hierarchy totals without discarding a broader parent aggregate. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
 
 Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
 
@@ -820,8 +820,10 @@ Pair this with a tool-call ceiling to detect runaway loops directly from the spa
 A common CI ask is "did this PR regress p95 latency vs main?" Today the cleanest route is two artefacts and a `jq`/`javascript` step. Run the eval on `main` nightly with the same config, store the artefact, then in PR runs compare. The snippet below regexes the measured max or percentile duration out of the assertion `reason` field as a quick demo — for a durable check, prefer reading structured fields (`componentResults[i].score`, span events) instead of parsing prose:
 
 ```bash
-# In PR job, fetch latest main artefact
-gh run download -n eval-output-main -D ./baseline
+# In PR job, fetch the latest successful main artefact from the workflow above
+MAIN_RUN_ID=$(gh run list --workflow agent-eval.yml --branch main --status success \
+  --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run download "$MAIN_RUN_ID" -n eval-output-main -D ./baseline
 
 # Then in a JS assertion or post-step:
 node -e '

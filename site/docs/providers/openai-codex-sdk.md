@@ -33,7 +33,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                         |
 | Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                   |
-| Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                 |
+| Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of successful commands that reference `SKILL.md` paths, not a first-class SDK skill event.                                                                                                                                                                                                                             |
 | Multi-turn thread persistence      | Partial    | `persist_threads` pools by prompt template + config, not by rendered prompt values. `deep_tracing` disables thread persistence.                                                                                                                                                                                                                                   |
 | Embeddings/moderation/image APIs   | No         | Use the standard `openai:*` providers for those API surfaces.                                                                                                                                                                                                                                                                                                     |
 | Live partial-token streaming       | No         | `enable_streaming` is used to aggregate Codex events and emit traces; promptfoo still receives the final response after the turn completes.                                                                                                                                                                                                                       |
@@ -434,6 +434,12 @@ providers:
 
 The OTLP receiver defaults to `host: '127.0.0.1'`, which keeps a single-machine eval bound to loopback. Set `host: '0.0.0.0'` (or another interface address) explicitly when a Codex subprocess or external provider must reach the receiver from another host or container.
 
+:::warning
+
+Promptfoo's built-in OTLP receiver is unauthenticated and uses plain HTTP. Do not expose it to the public internet or an untrusted network. For non-loopback use, bind a specific interface when possible, enforce network-level access controls, and route through an authenticated, TLS-terminating collector when traffic crosses a trust boundary. Also configure appropriate `redactAttributes` and avoid placing secrets in trace payloads.
+
+:::
+
 ### Streaming Mode Tracing
 
 Enable `enable_streaming` to capture Codex operations as OpenTelemetry spans:
@@ -529,7 +535,7 @@ tests:
           type: command
           min: 1
 
-      # Did Codex read a particular skill file?
+      # Did Codex run a command that referenced a particular skill file?
       - type: trajectory:step-count
         value:
           type: command
@@ -763,12 +769,12 @@ providers:
 
 Codex loads [agent skills](https://developers.openai.com/codex/skills) from `.agents/skills/` directories in the `working_dir` hierarchy. Promptfoo does not enable skills via a provider-specific toggle; instead, you point `working_dir` at a repository that already contains the skill files you want Codex to discover.
 
-Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from Codex command text that directly references a local `SKILL.md` file:
+Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from successful Codex command text that references a local `SKILL.md` path. This is path-reference evidence, not proof that Codex read the file:
 
 | Field    | Type   | Description                                           |
 | -------- | ------ | ----------------------------------------------------- |
 | `name`   | string | Skill name inferred from the `SKILL.md` path          |
-| `path`   | string | Skill instruction file path read by Codex             |
+| `path`   | string | Referenced skill instruction file path                |
 | `source` | string | Evidence source. For Codex this is always `heuristic` |
 
 ```yaml title="promptfooconfig.yaml"
@@ -801,7 +807,7 @@ The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional.
 
 `metadata.skillCalls` is a heuristic. The Codex SDK currently does not expose a first-class skill invocation event, so promptfoo infers skill usage from successful shell commands that directly reference `SKILL.md` files under `.agents/skills/<name>/`, absolute `working_dir/.agents/skills/<name>/` paths, the nearest git root's `.agents/skills/<name>/`, `CODEX_HOME/skills/<name>/`, `~/.codex/skills/<name>/`, or `/etc/codex/skills/<name>/`.
 
-Wildcard paths such as `.agents/skills/*/SKILL.md` are ignored, and absolute `.agents/...` paths outside the active repo are ignored. `metadata.attemptedSkillCalls` is emitted only when promptfoo sees more candidate `SKILL.md` paths than confirmed successful reads; because this is heuristic metadata, attempted and successful lists can overlap when a skill path is retried.
+Wildcard paths such as `.agents/skills/*/SKILL.md` are ignored, and absolute `.agents/...` paths outside the active repo are ignored. `metadata.attemptedSkillCalls` is emitted only when promptfoo sees more candidate `SKILL.md` paths than successful command references; because this is heuristic metadata, attempted and successful lists can overlap when a skill path is retried.
 
 :::
 
@@ -809,7 +815,7 @@ For reproducible CI runs, use `cli_env.CODEX_HOME` to point Codex at a project-l
 
 For ChatGPT-login runs, that project-local `CODEX_HOME` must already contain auth state. The checked-in sample fixture intentionally does not, so either run those examples with an API key or set `CODEX_HOME_OVERRIDE="$HOME/.codex"` when you want to reuse your local Codex login.
 
-Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attributes when it detects skill reads. That makes it easier to debug routing in OTEL backends while keeping the main eval assertion surface on `skill-used`.
+Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attributes when it detects skill path references. That makes it easier to debug routing in OTEL backends while keeping the main eval assertion surface on `skill-used`.
 
 To trace what Codex does inside a skill, enable `deep_tracing` on the provider and root-level OTLP tracing in your config. That lets you assert on traced shell commands, MCP tool calls, search steps, and reasoning with the standard trace and trajectory assertions:
 
