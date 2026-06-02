@@ -739,6 +739,58 @@ describe('code-scan-action main', () => {
       expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
     });
 
+    it('does not write SARIF when a skipReason carries only non-reportable comments', async () => {
+      // scanResponseToSarif drops severity:none and fileless comments, so this skip
+      // response has comments.length > 0 but serializes to zero results. Emitting it would
+      // upload an empty SARIF and clear existing Code Scanning alerts — gate on reportable
+      // findings, not raw comment count.
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  comments: [
+                    {
+                      file: 'src/handler.ts',
+                      line: 12,
+                      finding: 'No issue found on this line.',
+                      severity: 'none',
+                    },
+                    {
+                      finding: 'General advisory not pinned to a file.',
+                      severity: 'high',
+                    },
+                  ],
+                  skipReason: 'Fork PR scanning requires maintainer approval.',
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Scan skipped: Fork PR scanning requires maintainer approval.',
+        );
+      });
+
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(
+        'Scan response included both skipReason and findings; processing findings',
+      );
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
     it('does not write SARIF when a setup PR is skipped', async () => {
       mocks.actionGithub.getPRFiles.mockResolvedValue([
         {

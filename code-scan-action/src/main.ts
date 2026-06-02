@@ -11,7 +11,7 @@ import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
 import { prepareComments } from '../../src/codeScan/util/github';
-import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { hasReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -614,8 +614,11 @@ async function handleScanResponse(
   const { comments, commentsPosted, review, skipReason } = scanResponse;
 
   // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran.
-  if (skipReason && comments.length === 0) {
+  // existing Code Scanning findings or imply that authorization-gated work ran. Gate the
+  // bypass on reportable findings rather than raw comment count: scanResponseToSarif drops
+  // severity:none and fileless comments, so a skip carrying only those would still serialize
+  // to a zero-result SARIF and clear existing alerts — the exact case this guard prevents.
+  if (skipReason && !hasReportableFindings(scanResponse)) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
