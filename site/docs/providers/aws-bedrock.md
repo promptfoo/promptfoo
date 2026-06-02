@@ -188,19 +188,19 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 
 ### Configuration Options
 
-| Option                | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `maxTokens`           | Maximum output tokens                           |
-| `temperature`         | Sampling temperature (0-1)                      |
-| `topP`                | Nucleus sampling parameter                      |
-| `stopSequences`       | Array of stop sequences                         |
-| `thinking`            | Extended thinking configuration (Claude models) |
-| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
-| `showThinking`        | Include thinking in output (default: true)      |
-| `performanceConfig`   | Performance settings (`latency: optimized`)     |
-| `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
-| `guardrailIdentifier` | Guardrail ID for content filtering              |
-| `guardrailVersion`    | Guardrail version (default: DRAFT)              |
+| Option                | Description                                                                   |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                                                         |
+| `temperature`         | Sampling temperature (0-1)                                                    |
+| `topP`                | Nucleus sampling parameter                                                    |
+| `stopSequences`       | Array of stop sequences                                                       |
+| `thinking`            | Extended thinking configuration (Claude models)                               |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)                                |
+| `showThinking`        | Include thinking in output (default: true; gpt-oss models default to `false`) |
+| `performanceConfig`   | Performance settings (`latency: optimized`)                                   |
+| `serviceTier`         | Service tier (`priority`, `default`, or `flex`)                               |
+| `guardrailIdentifier` | Guardrail ID for content filtering                                            |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)                                            |
 
 ### Performance Configuration
 
@@ -1061,6 +1061,14 @@ promptfoo **strips the reasoning block by default**, so `output` is the clean fi
 answer. Set `showThinking: true` to surface it, formatted as
 `Thinking: <reasoning>\n\n<answer>` (the same format the OpenAI chat provider uses). The
 frontier models return clean output already, so this option does not apply to them.
+
+:::note Behavior change
+
+Earlier versions returned the raw `<reasoning>...</reasoning>` block in gpt-oss `output`.
+It now defaults to the clean final answer; set `showThinking: true` to restore the reasoning
+in the output.
+
+:::
 
 :::note Codex on Bedrock
 
