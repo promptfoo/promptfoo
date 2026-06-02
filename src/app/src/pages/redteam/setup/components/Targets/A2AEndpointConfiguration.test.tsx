@@ -141,7 +141,7 @@ describe('A2AEndpointConfiguration', () => {
       headers: {
         'X-Trace-Id': '{{traceId}}',
       },
-      transformResponse: 'return result.output;',
+      transformResponse: 'text',
     };
 
     const editor = screen.getByTestId('code-editor');
