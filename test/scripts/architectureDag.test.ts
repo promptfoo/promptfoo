@@ -11,7 +11,7 @@ import {
   computeStronglyConnectedComponents,
   edgeKey,
   findBackEdges,
-  findForbiddenDependencyEdges,
+  findForbiddenDependencyViolations,
   type LayerConfig,
   readEdgeBaseline,
   readLayerConfig,
@@ -196,8 +196,8 @@ describe('readEdgeBaseline', () => {
   });
 });
 
-describe('findForbiddenDependencyEdges', () => {
-  it('flags edges that violate an explicit forbiddenDependencies lock', () => {
+describe('findForbiddenDependencyViolations', () => {
+  it('flags direct dependencies that violate an explicit forbiddenDependencies lock', () => {
     const config = configWith([
       { name: 'a', roots: ['src/a'], allowedDependencies: ['c'], forbiddenDependencies: ['b'] },
       { name: 'b', roots: ['src/b'], allowedDependencies: [] },
@@ -205,7 +205,22 @@ describe('findForbiddenDependencyEdges', () => {
     ]);
     const edges = [edge('a', 'b', 1), edge('a', 'c', 3)];
 
-    expect(findForbiddenDependencyEdges(config, edges)).toEqual([edge('a', 'b', 1)]);
+    expect(findForbiddenDependencyViolations(config, edges)).toEqual([
+      { from: 'a', to: 'b', path: [edge('a', 'b', 1)] },
+    ]);
+  });
+
+  it('flags transitive dependencies that violate an explicit forbiddenDependencies lock', () => {
+    const config = configWith([
+      { name: 'a', roots: ['src/a'], allowedDependencies: ['c'], forbiddenDependencies: ['b'] },
+      { name: 'b', roots: ['src/b'], allowedDependencies: [] },
+      { name: 'c', roots: ['src/c'], allowedDependencies: ['b'] },
+    ]);
+    const edges = [edge('a', 'c', 3), edge('c', 'b', 2)];
+
+    expect(findForbiddenDependencyViolations(config, edges)).toEqual([
+      { from: 'a', to: 'b', path: [edge('a', 'c', 3), edge('c', 'b', 2)] },
+    ]);
   });
 });
 

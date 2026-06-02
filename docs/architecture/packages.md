@@ -91,8 +91,8 @@ toward a directed acyclic graph without regressing:
   layer cycle.
 - `architecture/edge-baseline.json` limits every existing cross-layer edge to
   its reviewed import count and rejects new edges.
-- `forbiddenDependencies` permanently locks layer pairs whose dependency has
-  been removed.
+- `forbiddenDependencies` permanently locks layer pairs whose direct or
+  transitive dependency has been removed.
 - `tierOrder` lists every layer in the intended bottom-to-top topology so the
   checker can report the remaining back-edges.
 
