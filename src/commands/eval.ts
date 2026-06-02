@@ -39,7 +39,12 @@ import {
   resolveConfigs,
 } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import {
+  printBorder,
+  setupEnv,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+} from '../util/index';
 import invariant from '../util/invariant';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -886,9 +891,11 @@ export async function doEval(
 
     const { outputPath } = config;
 
-    // We're removing JSONL from paths since we already wrote to that during the evaluation
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
+      (p): p is string => typeof p === 'string' && p.length > 0,
     );
 
     const isRedteam = Boolean(config.redteam);
@@ -987,6 +994,7 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
+    warnOnDegradedJsonlRecovery(evalRecord, paths);
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));

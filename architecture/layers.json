@@ -15,7 +15,14 @@
     {
       "name": "app",
       "roots": ["src/app"],
-      "allowedDependencies": ["contracts", "legacy-contracts", "legacy-runtime", "node", "providers", "redteam"],
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ],
       "allowedImportPaths": [
         "src/contracts.ts",
         "src/csv.ts",
@@ -34,7 +41,6 @@
         "src/tracing/store.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
-        "src/types/api/user.ts",
         "src/types/email.ts",
         "src/types/index.ts",
         "src/types/modelAudit.ts",
@@ -119,7 +125,14 @@
     {
       "name": "core",
       "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
-      "allowedDependencies": ["contracts", "legacy-contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ]
     },
     {
       "name": "legacy-contracts",

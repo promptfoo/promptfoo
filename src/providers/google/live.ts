@@ -1,7 +1,6 @@
 import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 
-import type WebSocket from 'ws';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
@@ -21,6 +20,7 @@ import {
   stripExecutableToolFileReferences,
   validateFunctionCall,
 } from './util';
+import type WebSocket from 'ws';
 
 import type {
   ApiProvider,
