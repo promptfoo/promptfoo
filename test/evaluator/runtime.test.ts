@@ -3,6 +3,7 @@ import './setup';
 import { randomUUID } from 'node:crypto';
 
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type TestSuite } from '../../src/types/index';
@@ -23,7 +24,6 @@ function createRuntime(resultWriters = [createResultWriter()]): EvaluatorRuntime
   return {
     createResultWriters: vi.fn().mockReturnValue(resultWriters),
     persistResult: vi.fn((evalRecord, result) => evalRecord.addResult(result)),
-    updateResumeSignal: vi.fn(),
   };
 }
 
@@ -44,14 +44,27 @@ describeEvaluator('evaluator runtime ports', () => {
 
     await evaluate(testSuite, evalRecord, {}, runtime);
 
-    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl');
+    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl', { append: false });
     expect(runtime.persistResult).toHaveBeenCalledOnce();
     expect(resultWriter.write).toHaveBeenCalledOnce();
     expect(vi.mocked(runtime.persistResult).mock.invocationCallOrder[0]).toBeLessThan(
       resultWriter.write.mock.invocationCallOrder[0],
     );
-    expect(runtime.updateResumeSignal).toHaveBeenCalledWith(evalRecord.id);
     expect(resultWriter.close).toHaveBeenCalledOnce();
+  });
+
+  it('passes resume append semantics to result writers', async () => {
+    const runtime = createRuntime([]);
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [],
+      tests: [],
+    };
+    cliState.resume = true;
+
+    await evaluate(testSuite, createEvalRecord(), {}, runtime);
+
+    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl', { append: true });
   });
 
   it('continues streaming output when result persistence fails', async () => {
@@ -87,7 +100,7 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(resultWriter.close).toHaveBeenCalledOnce();
   });
 
-  it('continues closing writers when one close fails', async () => {
+  it('surfaces a close failure after attempting every writer', async () => {
     const failingWriter = createResultWriter();
     failingWriter.close.mockRejectedValue(new Error('close unavailable'));
     const healthyWriter = createResultWriter();
@@ -98,7 +111,9 @@ describeEvaluator('evaluator runtime ports', () => {
       tests: [{}],
     };
 
-    await expect(evaluate(testSuite, createEvalRecord(), {}, runtime)).resolves.toBeDefined();
+    await expect(evaluate(testSuite, createEvalRecord(), {}, runtime)).rejects.toThrow(
+      'close unavailable',
+    );
 
     expect(failingWriter.close).toHaveBeenCalledOnce();
     expect(healthyWriter.close).toHaveBeenCalledOnce();

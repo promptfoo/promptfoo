@@ -53,9 +53,12 @@ The older `src/types` and `src/validators` paths remain as compatibility shims o
 mixed transitional modules. They are useful public/internal surfaces today, but
 they are not yet clean enough to call a package boundary.
 
-Leaf layers may import only themselves plus external packages. The same
-architecture check enforces that rule so this first extracted surface cannot
-quietly grow back upward into Node, provider, or redteam code.
+Leaf layers may import only themselves plus the external packages on their
+`allowedExternal` allowlist in `architecture/layers.json` (`contracts` allows only
+`zod`). The same architecture check enforces both halves of the rule, so this first
+extracted surface can neither grow back upward into Node, provider, or redteam code,
+nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
+`node:` prefix is ignored when matching, so `"fs"` and `"node:fs"` are equivalent.
 
 ## Layer Dependency Ratchet
 
@@ -71,13 +74,31 @@ must be assigned to a layer instead of silently becoming unclassified.
 
 `src/evaluator/runtime.ts` defines the evaluator's narrow runtime port. Its
 default `src/node/evaluatorRuntime.ts` adapter owns result persistence, JSONL
-writer construction, and resume checkpoint updates while the evaluator
-continues to orchestrate evaluation behavior.
+writer construction, and resume append behavior while the evaluator continues
+to orchestrate evaluation behavior.
 
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
 relative import.
+
+## DAG Progress Ratchets
+
+The architecture check also measures the layer dependency graph so it can move
+toward a directed acyclic graph without regressing:
+
+- `maxStronglyConnectedComponentSize` limits the size of the largest remaining
+  layer cycle.
+- `architecture/edge-baseline.json` limits every existing cross-layer edge to
+  its reviewed import count and rejects new edges.
+- `forbiddenDependencies` permanently locks layer pairs whose dependency has
+  been removed.
+- `tierOrder` lists every layer in the intended bottom-to-top topology so the
+  checker can report the remaining back-edges.
+
+After intentionally reducing or otherwise reviewing cross-layer coupling, run
+`npm run architecture:baseline` and include the baseline change in review. Do
+not refresh the baseline merely to make a newly introduced dependency pass.
 
 ## Browser Import Ratchet
 

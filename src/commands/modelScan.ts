@@ -28,6 +28,9 @@ import type { Command } from 'commander';
 
 import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
+// Preserve the existing deep-import surface while the implementation lives in the node layer.
+export { checkModelAuditInstalled };
+
 // ============================================================================
 // Types
 // ============================================================================

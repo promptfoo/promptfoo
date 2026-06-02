@@ -224,6 +224,7 @@ export class TraceStore {
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
+          createdAt: Date.now(),
           metadata: trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
@@ -383,6 +384,23 @@ export class TraceStore {
     }
   }
 
+  async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
+    try {
+      logger.debug(`[TraceStore] Fetching metadata for trace ${traceId}`);
+      const db = await this.getDatabase();
+      const traces = await db
+        .select({ metadata: tracesTable.metadata })
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId))
+        .limit(1);
+
+      return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
+    } catch (error) {
+      logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
+      throw error;
+    }
+  }
+
   async deleteOldTraces(retentionDays: number): Promise<void> {
     try {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
@@ -390,6 +408,7 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
       const cutoffCondition = traceCreatedBefore(cutoffTime);
 
+      // `spans.trace_id` is FK-enforced without ON DELETE CASCADE.
       await db.transaction(async (tx) => {
         await tx
           .delete(spansTable)
