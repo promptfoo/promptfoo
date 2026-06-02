@@ -30,5 +30,5 @@ redteam:
 
   strategies:
     - jailbreak:meta
-    - prompt-injection
+    - jailbreak-templates
     - crescendo
