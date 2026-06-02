@@ -624,7 +624,12 @@ async function handleScanResponse(
   }
 
   if (skipReason) {
-    core.warning('Scan response included both skipReason and findings; processing findings');
+    // Carry the skipReason into the warning: a contradictory response (skip + real
+    // findings) signals a server-side bug, and the reason text is the operator's only
+    // clue to which path produced it.
+    core.warning(
+      `Scan response included reportable findings alongside a skipReason ("${skipReason}"); processing findings.`,
+    );
   }
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);

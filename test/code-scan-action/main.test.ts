@@ -733,7 +733,7 @@ describe('code-scan-action main', () => {
       });
 
       expect(mocks.core.warning).toHaveBeenCalledWith(
-        'Scan response included both skipReason and findings; processing findings',
+        'Scan response included reportable findings alongside a skipReason ("Unexpected mixed response."); processing findings.',
       );
       const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
       expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
@@ -785,7 +785,7 @@ describe('code-scan-action main', () => {
       });
 
       expect(mocks.core.warning).not.toHaveBeenCalledWith(
-        'Scan response included both skipReason and findings; processing findings',
+        expect.stringContaining('processing findings'),
       );
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
