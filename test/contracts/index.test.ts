@@ -17,6 +17,7 @@ import {
   PromptSchema,
   ProviderEnvOverridesSchema,
   StringOrFunctionSchema,
+  XlsxInjectionPlacementSchema,
 } from '../../src/contracts';
 
 describe('contracts leaf surface', () => {
@@ -143,7 +144,7 @@ describe('contracts leaf surface', () => {
     });
   });
 
-  describe('Docx and DocumentMedia placement schemas', () => {
+  describe('Docx, Xlsx, and DocumentMedia placement schemas', () => {
     it('accepts each docx placement', () => {
       for (const placement of ['body', 'comment', 'footnote', 'header', 'footer']) {
         expect(DocxInjectionPlacementSchema.safeParse(placement).success).toBe(true);
@@ -156,6 +157,12 @@ describe('contracts leaf surface', () => {
       expect(DocumentMediaInjectionPlacementSchema.safeParse('footer').success).toBe(true);
       expect(DocumentMediaInjectionPlacementSchema.safeParse('comment').success).toBe(false);
       expect(DocumentMediaInjectionPlacementSchema.safeParse('footnote').success).toBe(false);
+    });
+
+    it('accepts each xlsx placement', () => {
+      for (const placement of ['cell', 'formula', 'hyperlink', 'comment', 'hidden-sheet']) {
+        expect(XlsxInjectionPlacementSchema.safeParse(placement).success).toBe(true);
+      }
     });
   });
 
@@ -184,6 +191,57 @@ describe('contracts leaf surface', () => {
           config: { injectionPlacements: ['header'] },
         }).success,
       ).toBe(true);
+    });
+
+    it('accepts xlsx placement and config for xlsx inputs', () => {
+      expect(
+        InputDefinitionObjectSchema.safeParse({
+          description: 'sheet',
+          type: 'xlsx',
+          config: {
+            injectionPlacements: ['formula'],
+            xlsx: {
+              cells: {
+                cell: 'C6',
+                formula: 'D8',
+              },
+              hiddenSheetName: '_review_notes',
+              sheetName: 'Review',
+            },
+          },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('rejects invalid xlsx placements and config', () => {
+      expect(
+        InputDefinitionObjectSchema.safeParse({
+          description: 'sheet',
+          type: 'xlsx',
+          config: { injectionPlacements: ['body'] },
+        }).success,
+      ).toBe(false);
+      expect(
+        InputDefinitionObjectSchema.safeParse({
+          description: 'sheet',
+          type: 'xlsx',
+          config: { xlsx: { cells: { cell: 'A1:B2' } } },
+        }).success,
+      ).toBe(false);
+      expect(
+        InputDefinitionObjectSchema.safeParse({
+          description: 'sheet',
+          type: 'xlsx',
+          config: { xlsx: { sheetName: 'Invalid/Sheet' } },
+        }).success,
+      ).toBe(false);
+      expect(
+        InputDefinitionObjectSchema.safeParse({
+          description: 'doc',
+          type: 'docx',
+          config: { xlsx: { cells: { cell: 'C6' } } },
+        }).success,
+      ).toBe(false);
     });
   });
 
@@ -245,6 +303,9 @@ describe('contracts leaf surface', () => {
       );
       expect(buildInputPromptDescription({ description: 'x', type: 'docx' })).toContain(
         'DOCX document',
+      );
+      expect(buildInputPromptDescription({ description: 'x', type: 'xlsx' })).toContain(
+        'XLSX spreadsheet',
       );
       expect(buildInputPromptDescription({ description: 'x', type: 'image' })).toContain('image');
     });

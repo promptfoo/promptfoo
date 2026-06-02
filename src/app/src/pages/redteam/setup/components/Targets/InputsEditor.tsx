@@ -49,6 +49,7 @@ const INPUT_TYPE_OPTIONS: Array<{ value: InputType; label: string }> = [
   { value: 'text', label: 'Text' },
   { value: 'pdf', label: 'PDF' },
   { value: 'docx', label: 'DOCX' },
+  { value: 'xlsx', label: 'XLSX' },
   { value: 'image', label: 'Image' },
 ];
 
@@ -62,6 +63,15 @@ function toStoredInputDefinition(variable: Variable): InputDefinition {
     description: variable.description,
     type: variable.type,
   };
+}
+
+function getConfigForInputType(config: InputConfig | undefined, type: InputType) {
+  if (!config || type === 'xlsx') {
+    return config;
+  }
+
+  const { xlsx: _xlsx, ...rest } = config;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 export default function InputsEditor({
@@ -171,7 +181,7 @@ export default function InputsEditor({
     onChange({
       ...inputs,
       [name]: toStoredInputDefinition({
-        config: normalizedInput?.config,
+        config: getConfigForInputType(normalizedInput?.config, type),
         name,
         description: normalizedInput?.description ?? '',
         type,
@@ -324,7 +334,9 @@ export default function InputsEditor({
                 The LLM generates contextual values based on your description (e.g., realistic user
                 IDs, session tokens, roles)
               </li>
-              <li>PDF, DOCX, and image variables are wrapped into real file payloads at runtime</li>
+              <li>
+                PDF, DOCX, XLSX, and image variables are wrapped into real file payloads at runtime
+              </li>
               <li>
                 Values are generated fresh for each test case alongside the adversarial prompt
               </li>
