@@ -23,20 +23,27 @@ export const awsProviderFactories: ProviderFactory[] = [
       // always two segments. This prevents sub-typed forms whose id merely contains `openai.`
       // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
       // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
-      const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } = await import(
-        '../bedrock/openaiResponses'
-      );
       const candidateOpenAiModel =
         modelType === 'converse' || modelType === 'completion'
           ? modelName
           : splits.length === 2
             ? splits[1]
             : undefined;
-      if (candidateOpenAiModel && isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
-        return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
-          ...providerOptions,
-          id: providerOptions.id ?? providerPath,
-        });
+      // Gate the (heavy) openaiResponses import — which pulls in the OpenAI Responses stack —
+      // behind a cheap `openai.` prefix check, like every other handler import below, so the
+      // common non-OpenAI bedrock: models don't load it at construction. The prefix is a
+      // necessary condition; isBedrockOpenAiResponsesModel remains the source of truth for the
+      // frontier-vs-gpt-oss decision (a gpt-oss id passes the prefix gate but is rejected there
+      // and falls through to InvokeModel below).
+      if (candidateOpenAiModel?.startsWith('openai.')) {
+        const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } =
+          await import('../bedrock/openaiResponses');
+        if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
+          return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
+            ...providerOptions,
+            id: providerOptions.id ?? providerPath,
+          });
+        }
       }
 
       // Handle Converse API
