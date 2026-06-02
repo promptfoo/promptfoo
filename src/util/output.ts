@@ -337,6 +337,30 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   };
 };
 
+const outputToHtmlReportTableCell = (
+  output: EvaluateTableOutput | null | undefined,
+  options: {
+    rowIndex: number;
+    outputIndex: number;
+    description: string;
+  },
+) => {
+  if (output == null) {
+    return output;
+  }
+  return {
+    kind: 'output',
+    detailId: `result-detail-${options.rowIndex}-${options.outputIndex}`,
+    detailTitle: `Result detail - row ${options.rowIndex + 1}, prompt ${options.outputIndex + 1}`,
+    description: options.description,
+    ...outputToHtmlReportCell(output),
+  };
+};
+
+const isEvaluateTableOutput = (
+  output: EvaluateTableOutput | null | undefined,
+): output is EvaluateTableOutput => output != null;
+
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   return sanitizeObject(config, {
     context: 'output config',
@@ -453,12 +477,10 @@ export function createOutputMetadata(evalRecord: Eval) {
   };
 }
 
-// Redact credential-bearing headers from a summary's result rows before it is serialized to a
-// file artifact (json/yaml/txt/html/xml). For non-persisted evals the in-memory results are not
-// header-redacted (redaction happens at the DB / JSONL boundary), so without this an export would
-// leak Authorization / Set-Cookie / api-key headers from response/grading/test metadata. This is
-// the summary-level equivalent of the per-row JSONL artifact boundary.
-function redactSummaryResultsForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
+// Project a summary before it is serialized to a file artifact (json/yaml/txt/html/xml). For
+// non-persisted evals the in-memory results are not redacted at the DB / JSONL boundary, and
+// legacy V2 summaries also carry a denormalized table with its own copies of result data.
+function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
   summary: T,
 ): T {
   if (Array.isArray(summary.results)) {
@@ -466,11 +488,8 @@ function redactSummaryResultsForArtifact<T extends EvaluateSummaryV2 | EvaluateS
       sanitizeResultForJsonlArtifact(result),
     ) as T['results'];
   }
-  // Legacy (V2) summaries also carry a denormalized `table` whose outputs embed
-  // response / metadata / gradingResult / testCase. Those bypass the per-result redaction
-  // above, so without this they leak the same credential headers through json/yaml/txt/xml
-  // exports (html renders only the already-safe table cells; csv/junit use their own
-  // projections, so the raw table is never emitted there).
+  // Legacy (V2) summaries also carry a denormalized `table` whose head, rows, and outputs embed
+  // copies of prompt, variable, response, metadata, grading, and test-case data.
   if ('table' in summary && summary.table) {
     (summary as EvaluateSummaryV2).table = sanitizeTableForArtifact(
       (summary as EvaluateSummaryV2).table,
@@ -484,7 +503,7 @@ export async function createOutputData(
   shareableUrl: string | null,
   options: OutputOptions = {},
 ): Promise<OutputFile> {
-  const summary = redactSummaryResultsForArtifact(await evalRecord.toEvaluateSummary());
+  const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
   let traces;
   try {
@@ -588,6 +607,63 @@ async function writeJsonOutputSafely(
   }
 }
 
+async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {
+  const table = sanitizeTableForArtifact(await evalRecord.getTable());
+  invariant(table, 'Table is required');
+  const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const metadata = createOutputMetadata(evalRecord);
+  const template = await fsPromises.readFile(
+    path.join(getDirectory(), 'tableOutput.html'),
+    'utf-8',
+  );
+  const htmlTable = [
+    [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ],
+    ...table.body.map((row, rowIndex) => [
+      ...row.vars.map((value, variableIndex) => ({
+        kind: 'variable',
+        name: table.head.vars[variableIndex],
+        text: value,
+      })),
+      ...row.outputs.map((output, outputIndex) =>
+        outputToHtmlReportTableCell(output, {
+          rowIndex,
+          outputIndex,
+          description: row.description || row.test?.description || '',
+        }),
+      ),
+    ]),
+  ];
+  const reportOutputs = table.body.flatMap((row) => row.outputs.filter(isEvaluateTableOutput));
+  const totalResults = reportOutputs.length;
+  const successes = reportOutputs.filter((output) => output.pass).length;
+  const errors = reportOutputs.filter(
+    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+  ).length;
+  const failures = totalResults - successes - errors;
+  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+  const htmlOutput = getNunjucksEngine().renderString(template, {
+    config: redactedConfig,
+    table: htmlTable,
+    results: summary,
+    metadata,
+    report: {
+      totalResults,
+      totalRows: table.body.length,
+      promptCount: table.head.prompts.length,
+      variableCount: table.head.vars.length,
+      successes,
+      failures,
+      errors,
+      passRateDisplay: `${passRate.toFixed(1)}%`,
+    },
+  });
+  await fsPromises.writeFile(outputPath, htmlOutput);
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -646,60 +722,7 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
-    const summary = redactSummaryResultsForArtifact(await evalRecord.toEvaluateSummary());
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-    const metadata = createOutputMetadata(evalRecord);
-    const template = await fsPromises.readFile(
-      path.join(getDirectory(), 'tableOutput.html'),
-      'utf-8',
-    );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value, variableIndex) => ({
-          kind: 'variable',
-          name: table.head.vars[variableIndex],
-          text: value,
-        })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
-      ]),
-    ];
-    const reportOutputs = table.body.flatMap((row) => row.outputs);
-    const totalResults = reportOutputs.length;
-    const successes = reportOutputs.filter((output) => output.pass).length;
-    const errors = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-    ).length;
-    const failures = totalResults - successes - errors;
-    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
-      table: htmlTable,
-      results: summary,
-      metadata,
-      report: {
-        totalResults,
-        totalRows: table.body.length,
-        promptCount: table.head.prompts.length,
-        variableCount: table.head.vars.length,
-        successes,
-        failures,
-        errors,
-        passRateDisplay: `${passRate.toFixed(1)}%`,
-      },
-    });
-    await fsPromises.writeFile(outputPath, htmlOutput);
+    await writeHtmlOutput(outputPath, evalRecord);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {
@@ -762,7 +785,7 @@ export async function writeOutput(
       throw error;
     }
   } else if (outputExtension === 'xml') {
-    const summary = redactSummaryResultsForArtifact(await evalRecord.toEvaluateSummary());
+    const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors

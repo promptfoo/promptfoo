@@ -63,13 +63,15 @@ function projectProviderResponse(
   return projectedResponse;
 }
 
-function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
-  return stripPromptText
-    ? {
-        ...prompt,
-        raw: '[prompt stripped]',
-      }
-    : prompt;
+function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
+  return (
+    stripPromptText
+      ? {
+          ...prompt,
+          raw: '[prompt stripped]',
+        }
+      : prompt
+  ) as T;
 }
 
 function projectTestCase(
@@ -612,15 +614,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
 }
 
 /**
- * Sanitize the denormalized visualization `table` carried by a legacy (V2) summary before it is
- * serialized into a file export. Each `EvaluateTableOutput` mirrors a result row's
- * credential-bearing fields (`response` / `metadata` / `gradingResult` / `testCase`), so without
- * this the table leaks the same Authorization / Set-Cookie / api-key headers that
- * `sanitizeResultForJsonlArtifact` strips from `summary.results`. We redact those credential
- * surfaces (and honor the `PROMPTFOO_STRIP_*` projections) while leaving the row-level display
- * fields (`prompt`, `text`, scores) untouched — note `EvaluateTableOutput.prompt` is a plain
- * string, not a `Prompt`, so it is deliberately not run through `projectPrompt`. Non-mutating:
- * returns a redacted copy, leaving in-memory rows real for hooks.
+ * Sanitize the denormalized visualization `table` carried by a legacy (V2) summary or rendered
+ * into an HTML artifact. The table mirrors result data across its head prompts, row display vars,
+ * and output cells, so every copy must honor the same credential redaction and
+ * `PROMPTFOO_STRIP_*` projections as `summary.results`. Non-mutating: returns a projected copy,
+ * leaving in-memory rows real for hooks.
  */
 export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
   if (!table || !Array.isArray(table.body)) {
@@ -628,6 +626,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
   }
 
   const {
+    shouldStripPromptText,
     shouldStripResponseOutput,
     shouldStripGradingResult,
     shouldStripMetadata,
@@ -642,7 +641,37 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
         })
       : testCase;
 
-  const sanitizeOutput = (output: EvaluateTableOutput): EvaluateTableOutput => {
+  const stringifyDisplayVar = (value: unknown): string =>
+    typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+
+  const sanitizeDisplayVars = (vars: string[], testCase: AtomicTestCase | undefined): string[] => {
+    if (shouldStripTestVars) {
+      return vars.map(() => '');
+    }
+    return vars.map((value, index) => {
+      const varName = table.head.vars[index];
+      if (varName === undefined) {
+        return sanitizeForDbWithSecrets(value);
+      }
+      const rawValue = testCase?.vars?.[varName];
+      if (rawValue !== undefined) {
+        const sanitizedRawValue = sanitizeForDbWithSecrets({ [varName]: rawValue })[varName];
+        if (!isDeepStrictEqual(rawValue, sanitizedRawValue)) {
+          return stringifyDisplayVar(sanitizedRawValue);
+        }
+      }
+      return sanitizeForDbWithSecrets({ [varName]: value })[varName];
+    });
+  };
+
+  const sanitizeOutput = (
+    output: EvaluateTableOutput | null | undefined,
+  ): EvaluateTableOutput | null | undefined => {
+    if (output == null) {
+      return output;
+    }
+
+    const artifactOutput = output as EvaluateTableOutput & Record<string, unknown>;
     const redacted = redactSensitiveResultFieldsForDb({
       response: sanitizeForDb(output.response),
       gradingResult: sanitizeForDb(output.gradingResult),
@@ -650,6 +679,13 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
     });
     return {
       ...output,
+      ...(artifactOutput.vars === undefined
+        ? {}
+        : {
+            vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactOutput.vars),
+          }),
+      prompt: shouldStripPromptText ? '[prompt stripped]' : output.prompt,
+      text: shouldStripResponseOutput ? '[output stripped]' : output.text,
       response: projectProviderResponse(redacted.response ?? undefined, {
         stripMetadata: shouldStripMetadata,
         stripOutput: shouldStripResponseOutput,
@@ -657,15 +693,24 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
       gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
       metadata: shouldStripMetadata ? {} : redacted.metadata,
       testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
-    };
+    } as EvaluateTableOutput;
   };
 
   return {
     ...table,
+    head: {
+      ...table.head,
+      prompts: table.head.prompts.map((prompt) =>
+        projectPrompt(sanitizeForDbWithSecrets(prompt), shouldStripPromptText),
+      ),
+    },
     body: table.body.map((row) => ({
       ...row,
+      vars: sanitizeDisplayVars(row.vars, row.test),
       test: sanitizeTestCase(row.test) as AtomicTestCase,
-      outputs: Array.isArray(row.outputs) ? row.outputs.map(sanitizeOutput) : row.outputs,
+      outputs: Array.isArray(row.outputs)
+        ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
+        : row.outputs,
     })),
   };
 }
