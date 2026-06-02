@@ -2342,6 +2342,94 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
+    it('should surface reasoning alone when no cached-token detail is present', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            completion_tokens_details: { reasoning_tokens: 7 },
+          },
+        },
+        'Test prompt',
+      );
+      // No prompt_tokens_details => cacheReadInputTokens must be absent (not 0).
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: { reasoning: 7 },
+      });
+    });
+
+    it('should surface cached input tokens alone when no reasoning detail is present', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            prompt_tokens_details: { cached_tokens: 5 },
+          },
+        },
+        'Test prompt',
+      );
+      // No completion_tokens_details => reasoning must be absent.
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 5 },
+      });
+    });
+
+    it('should include reasoning:0 but drop cached_tokens:0 (asymmetric guards: !== undefined vs > 0)', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            completion_tokens_details: { reasoning_tokens: 0 },
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+        },
+        'Test prompt',
+      );
+      // reasoning:0 is reported (guard is `!== undefined`); cached:0 is dropped (guard is `> 0`).
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: { reasoning: 0 },
+      });
+    });
+
+    it('should omit completionDetails entirely when only cached_tokens:0 is present', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+        },
+        'Test prompt',
+      );
+      // cached:0 dropped and no reasoning => no completionDetails key at all.
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when usage is not provided', async () => {
       const mockResponse = {
         choices: [

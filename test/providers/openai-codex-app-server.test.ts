@@ -974,6 +974,131 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(spawnEnv.CODEX_API_KEY).toBe('explicit-bedrock-key');
   });
 
+  it('strips an inherited OpenAI/Codex key from the CLI env when inherit_process_env is set with a custom model_provider', async () => {
+    // Highest-risk path: with inherit_process_env the whole process env is spread into the CLI
+    // env, so an ambient OPENAI_API_KEY/CODEX_API_KEY would reach the Bedrock-routed agent shell
+    // unless the strip loop removes it. Mirrors openai-codex-sdk.test.ts's inherit-path test.
+    const restore = mockProcessEnv({
+      OPENAI_API_KEY: 'sk-process-unrelated',
+      CODEX_API_KEY: 'codex-process-unrelated',
+    });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    try {
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          model: 'openai.gpt-5.5',
+          model_provider: 'amazon-bedrock',
+          inherit_process_env: true,
+          thread_cleanup: 'none',
+        },
+      });
+
+      const resultPromise = provider.callApi('Run on Bedrock with inherited env');
+
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+
+      // No login for the unrelated ambient key — straight to thread/start.
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_bedrock_inherit' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_bedrock_inherit', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_bedrock_inherit',
+          turnId: 'turn_bedrock_inherit',
+          itemId: 'msg_bedrock_inherit',
+          delta: 'Inherited env ok',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_bedrock_inherit',
+          turn: { id: 'turn_bedrock_inherit', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'Inherited env ok' });
+
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+      expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
+      expect(spawnEnv.CODEX_API_KEY).toBeUndefined();
+      expect(
+        server.messages().some((message: any) => message.method === 'account/login/start'),
+      ).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves an OPENAI_API_KEY supplied explicitly via cli_env under a custom model_provider', async () => {
+    // The strip loop must not delete a key the user placed in cli_env on purpose (the
+    // `!(key in cli_env)` exception). No config.apiKey -> no login, mirroring the no-leak flow.
+    const restore = mockProcessEnv({ OPENAI_API_KEY: undefined, CODEX_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    try {
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          model: 'openai.gpt-5.5',
+          model_provider: 'amazon-bedrock',
+          cli_env: { OPENAI_API_KEY: 'cli-env-key' },
+          thread_cleanup: 'none',
+        },
+      });
+
+      const resultPromise = provider.callApi('Run on Bedrock with cli_env key');
+
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_bedrock_clienv' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_bedrock_clienv', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_bedrock_clienv',
+          turnId: 'turn_bedrock_clienv',
+          itemId: 'msg_bedrock_clienv',
+          delta: 'cli_env key ok',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_bedrock_clienv',
+          turn: { id: 'turn_bedrock_clienv', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'cli_env key ok' });
+
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+      // The cli_env-supplied key survives the custom-provider strip loop.
+      expect(spawnEnv.OPENAI_API_KEY).toBe('cli-env-key');
+    } finally {
+      restore();
+    }
+  });
+
   it('maps legacy approval requests by conversation id and legacy decision names', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
