@@ -290,9 +290,9 @@ External providers that wrap their own agent loops can adopt the same convention
 ```yaml
 tracing:
   enabled: true # Enable/disable tracing
-  # Fail the evaluation instead of continuing without local HTTP ingestion if startup fails
+  # Abort the eval if the OTLP receiver can't start (default: false — log and continue without traces)
   failOnReceiverStartFailure: true
-  # Treat additional tool names as command trajectory steps
+  # Extra tool names treated as command steps, merged with the built-ins (shell, exec_command, local_shell)
   commandToolNames: ['bash']
   otlp:
     http:
@@ -329,6 +329,17 @@ but custom keys you add to `redactAttributes` are only enforced on the HTTP inge
 Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
 
 :::
+
+Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
+of days from the local store at the **start of each traced eval**. The default is **30 days**,
+applied only when a `storage` block is present — omit `storage` to keep traces indefinitely, or
+set `retentionDays` to `0` or less to disable pruning. Pruning permanently deletes rows.
+
+When several evaluations run in the same process (e.g. the Promptfoo server), they **share a
+single OTLP receiver**: it starts on first use and stops when the last evaluation finishes. The
+receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a later overlapping
+evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
+are tracked per trace so each evaluation's traces use its own policy.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one

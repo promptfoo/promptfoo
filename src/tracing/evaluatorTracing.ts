@@ -7,7 +7,8 @@ import telemetry from '../telemetry';
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
-// Track whether OTLP receiver has been started
+// Shared OTLP receiver lifecycle state: whether it is started, the in-flight start/stop
+// promises that serialize concurrent callers, and a refcount of the evaluations using it.
 let otlpReceiverStarted = false;
 let otlpReceiverStartPromise: Promise<void> | null = null;
 let otlpReceiverStopPromise: Promise<void> | null = null;
@@ -125,7 +126,11 @@ async function registerOtlpReceiverTracePolicyIfAvailable(
 }
 
 /**
- * Start the OTLP receiver if tracing is enabled and it hasn't been started yet
+ * Ensure the shared OTLP receiver is running for this evaluation when tracing is enabled.
+ * Starts it on first use; otherwise joins the already-running receiver via a refcount.
+ * Registers this evaluation's trace policy (redaction / command tool names), prunes expired
+ * traces when retention is configured, and honors `tracing.failOnReceiverStartFailure`.
+ * Returns whether this caller acquired the receiver (the caller must release it accordingly).
  */
 export async function startOtlpReceiverIfNeeded(
   testSuite: TestSuite,
@@ -252,9 +257,20 @@ async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
 /**
  * Stop the OTLP receiver if it was started
  */
-export async function stopOtlpReceiverIfNeeded(receiverAcquired: boolean = true): Promise<void> {
+export async function stopOtlpReceiverIfNeeded(
+  receiverAcquired: boolean = true,
+  evaluationId?: string,
+): Promise<void> {
   if (!receiverAcquired) {
     return;
+  }
+
+  // This evaluation is finished with the receiver — drop its registered trace policy so the
+  // shared receiver's policy map doesn't grow unbounded across evaluations. Safe to do now:
+  // the caller has already flushed/awaited span export before stopping.
+  if (evaluationId) {
+    const { deregisterOTLPReceiverTracePolicy } = await import('./otlpReceiver');
+    deregisterOTLPReceiverTracePolicy(evaluationId);
   }
 
   if (otlpReceiverUsers > 0) {

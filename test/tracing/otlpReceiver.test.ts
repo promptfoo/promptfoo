@@ -1054,6 +1054,61 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('drops a registered evaluation policy after deregisterTracePolicy', async () => {
+      // Once an evaluation finishes, its policy is removed so the shared receiver's policy
+      // map can't grow unbounded; a later trace for that eval id falls back to the receiver
+      // default (here: no redaction), proving the policy is gone.
+      const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({
+        evaluationId: 'gc-eval',
+        redactAttributes: ['authorization'],
+      });
+      sharedReceiver.deregisterTracePolicy('gc-eval');
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '1'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'gc-eval' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '11111111111111111111111111111111',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer hidden',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
     it('uses an empty registered evaluation policy instead of older startup defaults', async () => {
       const sharedReceiver = new OTLPReceiver({
         acceptFormats: ['json'],

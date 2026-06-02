@@ -158,7 +158,6 @@ type OTLPFormat = 'json' | 'protobuf';
 
 export interface OTLPReceiverTracePolicy {
   evaluationId: string;
-  testCaseId?: string;
   /** Tool names whose tool-call spans should be normalized as command steps. */
   commandToolNames?: string[];
   /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
@@ -231,10 +230,6 @@ function normalizeCommandToolNames(commandToolNames?: string[]): string[] | unde
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function traceInfoKey(evaluationId: string, testCaseId: string): string {
-  return `${evaluationId}\0${testCaseId}`;
-}
-
 function normalizeTracePolicy(policy: OTLPReceiverTracePolicy): RegisteredTracePolicy {
   return {
     commandToolNames: normalizeCommandToolNames(policy.commandToolNames),
@@ -279,7 +274,6 @@ export class OTLPReceiver {
   private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
   private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
-  private tracePoliciesByTestCase = new Map<string, RegisteredTracePolicy>();
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -305,17 +299,15 @@ export class OTLPReceiver {
     if (!policy?.evaluationId) {
       return;
     }
+    this.tracePoliciesByEvaluationId.set(policy.evaluationId, normalizeTracePolicy(policy));
+  }
 
-    const normalizedPolicy = normalizeTracePolicy(policy);
-    if (policy.testCaseId) {
-      this.tracePoliciesByTestCase.set(
-        traceInfoKey(policy.evaluationId, policy.testCaseId),
-        normalizedPolicy,
-      );
-      return;
+  // Drop a finished evaluation's policy so the map can't grow unbounded on a long-lived
+  // (shared) receiver. No-op if the receiver already stopped — the singleton is discarded.
+  deregisterTracePolicy(evaluationId?: string): void {
+    if (evaluationId) {
+      this.tracePoliciesByEvaluationId.delete(evaluationId);
     }
-
-    this.tracePoliciesByEvaluationId.set(policy.evaluationId, normalizedPolicy);
   }
 
   private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
@@ -613,20 +605,9 @@ export class OTLPReceiver {
   }
 
   private getRegisteredTracePolicy(info?: TraceInfo): RegisteredTracePolicy | undefined {
-    if (!info?.evaluationId) {
-      return undefined;
-    }
-
-    if (info.testCaseId) {
-      const testCasePolicy = this.tracePoliciesByTestCase.get(
-        traceInfoKey(info.evaluationId, info.testCaseId),
-      );
-      if (testCasePolicy) {
-        return testCasePolicy;
-      }
-    }
-
-    return this.tracePoliciesByEvaluationId.get(info.evaluationId);
+    return info?.evaluationId
+      ? this.tracePoliciesByEvaluationId.get(info.evaluationId)
+      : undefined;
   }
 
   private getFallbackTracePolicy(): RegisteredTracePolicy {
@@ -1158,6 +1139,10 @@ export async function startOTLPReceiver(
 
 export function registerOTLPReceiverTracePolicy(policy?: OTLPReceiverTracePolicy): void {
   otlpReceiver?.registerTracePolicy(policy);
+}
+
+export function deregisterOTLPReceiverTracePolicy(evaluationId?: string): void {
+  otlpReceiver?.deregisterTracePolicy(evaluationId);
 }
 
 export async function stopOTLPReceiver(): Promise<void> {
