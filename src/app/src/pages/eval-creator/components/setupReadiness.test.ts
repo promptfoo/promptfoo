@@ -744,6 +744,24 @@ describe('setupReadiness', () => {
       );
     });
 
+    it('matches absolute path provider filters to relative configured provider references', () => {
+      const readiness = getSetupReadiness({
+        providers: ['./provider-a.js', './provider-b.js'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            providers: ['file:///workspace/provider-a.js', 'file:///workspace/provider-b.js'],
+            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+          },
+        ],
+      });
+
+      expect(readiness.issues).not.toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+      expect(readiness.isReadyToRun).toBe(true);
+    });
+
     it('requires multiple outputs after applying default test provider and prompt filters', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],

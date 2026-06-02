@@ -349,13 +349,30 @@ const formatAssertionValue = (assert: Assertion): string => {
 
 const parseAssertionValue = (type: AssertionType, value: string): Assertion['value'] => {
   if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(type)) {
-    return value
+    const values = value
       .split(',')
       .map((entry) => entry.trim())
       .filter(Boolean);
+    if ((type === 'moderation' || type === 'not-moderation') && values.length === 0) {
+      return undefined;
+    }
+    return values;
   }
 
   return value;
+};
+
+const withParsedAssertionValue = (
+  assertion: Assertion,
+  type: AssertionType,
+  value: string,
+): Assertion => {
+  const parsedValue = parseAssertionValue(type, value);
+  if (parsedValue === undefined) {
+    const { value: _value, ...withoutValue } = assertion;
+    return { ...withoutValue, type };
+  }
+  return { ...assertion, type, value: parsedValue };
 };
 
 const formatAssertionThreshold = (assert: Assertion): string =>
@@ -1534,10 +1551,7 @@ const AssertionValueFields = ({
           if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assertion.type)) {
             onArrayDraftChange(event.target.value);
           }
-          onChange({
-            ...assertion,
-            value: parseAssertionValue(assertion.type, event.target.value),
-          });
+          onChange(withParsedAssertionValue(assertion, assertion.type, event.target.value));
         }}
         className="min-h-20 resize-y"
       />
@@ -1665,11 +1679,7 @@ function getAssertionTypeChange(
     const valueText = formatAssertionValue(assertion);
     return {
       arrayDraft: valueText,
-      assertion: {
-        ...assertion,
-        type: nextType,
-        value: parseAssertionValue(nextType, valueText),
-      },
+      assertion: withParsedAssertionValue(assertion, nextType, valueText),
     };
   }
 

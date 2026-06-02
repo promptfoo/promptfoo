@@ -791,6 +791,29 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'moderation', value: ['hate', 'harassment'] }]);
   });
 
+  it('removes optional moderation categories when the field is cleared', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'moderation', value: ['hate'] }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await user.clear(screen.getByRole('textbox', { name: 'Categories (optional)' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'moderation' }]);
+  });
+
+  it('does not add an empty category array when switching a blank assertion to moderation', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'equals', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(
+      await screen.findByRole('option', { name: /Safety moderation \(moderation\)/ }),
+    );
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'moderation' }]);
+  });
+
   it('does not invite unused values for provider tool-call checks', () => {
     initialValues = [{ type: 'is-valid-openai-tools-call' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);

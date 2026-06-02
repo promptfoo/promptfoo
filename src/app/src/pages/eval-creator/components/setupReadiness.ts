@@ -170,9 +170,55 @@ function promptMatchesReference(prompt: NormalizedPrompt, reference: string): bo
   );
 }
 
+interface PathProviderReference {
+  kind: 'file' | 'exec' | 'python' | 'golang';
+  path: string;
+  isAbsolute: boolean;
+}
+
+function getPathProviderReference(value: string): PathProviderReference | undefined {
+  const prefixedPath = (['file://', 'exec:', 'python:', 'golang:'] as const)
+    .map((prefix) => ({ prefix, path: value.slice(prefix.length) }))
+    .find(({ prefix }) => value.startsWith(prefix));
+  const bareFilePath =
+    !prefixedPath && /\.(?:js|mjs|ts)$/i.test(value) && /[\\/]/.test(value) ? value : undefined;
+  const providerPath = prefixedPath?.path ?? bareFilePath;
+  if (!providerPath) {
+    return undefined;
+  }
+
+  const normalizedPath = providerPath.replaceAll('\\', '/').replace(/^\.\//, '');
+  const kind = prefixedPath?.prefix.replace(/:\/\/|:$/, '') ?? 'file';
+  return {
+    kind: kind as PathProviderReference['kind'],
+    path: normalizedPath,
+    isAbsolute: normalizedPath.startsWith('/') || /^[A-Za-z]:\//.test(normalizedPath),
+  };
+}
+
+function pathProviderReferencesMatch(reference: string, providerId: string): boolean {
+  const referencePath = getPathProviderReference(reference);
+  const providerPath = getPathProviderReference(providerId);
+  if (!referencePath || !providerPath || referencePath.kind !== providerPath.kind) {
+    return false;
+  }
+  if (referencePath.path === providerPath.path) {
+    return true;
+  }
+  if (referencePath.isAbsolute === providerPath.isAbsolute) {
+    return false;
+  }
+
+  const absolutePath = referencePath.isAbsolute ? referencePath.path : providerPath.path;
+  const relativePath = referencePath.isAbsolute ? providerPath.path : referencePath.path;
+  return absolutePath.endsWith(`/${relativePath}`);
+}
+
 function providerMatchesReference(provider: ProviderOptions, reference: string): boolean {
   return (
-    (hasRunnableProviderId(provider) && referenceMatchesValue(reference, provider.id)) ||
+    (hasRunnableProviderId(provider) &&
+      (referenceMatchesValue(reference, provider.id) ||
+        pathProviderReferencesMatch(reference, provider.id))) ||
     (typeof provider.label === 'string' && referenceMatchesValue(reference, provider.label))
   );
 }
