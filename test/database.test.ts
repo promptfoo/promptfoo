@@ -11,7 +11,8 @@ import { mockProcessEnv } from './util/utils';
 const ORIGINAL_ENV = { ...process.env };
 
 async function removeDatabaseFile(filePath: string): Promise<void> {
-  const maxAttempts = process.platform === 'win32' ? 10 : 1;
+  // libsql can release its Windows file handle a few seconds after Client.close().
+  const maxAttempts = process.platform === 'win32' ? 50 : 1;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
