@@ -245,6 +245,21 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it('should treat model_provider case-insensitively (OpenAI is not a custom provider)', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // `OpenAI` normalizes to the default provider, so an unknown model still warns.
+      new OpenAICodexSDKProvider({
+        config: { model: 'unknown-model', model_provider: 'OpenAI' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for OpenAI Codex SDK: unknown-model',
+      );
+
+      warnSpy.mockRestore();
+    });
+
     it('should reject malformed provider config', () => {
       expect(
         () =>
@@ -2525,6 +2540,50 @@ describe('OpenAICodexSDKProvider', () => {
         const codexCall = MockCodex.mock.calls.at(-1)?.[0];
         expect(codexCall?.env?.OPENAI_API_KEY).toBeUndefined();
         expect(codexCall?.env?.CODEX_API_KEY).toBeUndefined();
+        // The SDK forwards a constructor `apiKey` into the spawned CLI as CODEX_API_KEY, so it
+        // must also be withheld — otherwise the env gating above is silently defeated.
+        expect(codexCall?.apiKey).toBeUndefined();
+      });
+
+      it('should not pass an inherited OpenAI key as the SDK constructor apiKey for a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
+          env: { OPENAI_API_KEY: 'sk-unrelated' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+        expect(codexCall?.apiKey).toBeUndefined();
+      });
+
+      it('should strip an inherited OpenAI key from the CLI env when inherit_process_env is set with a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const restore = mockProcessEnv({
+          OPENAI_API_KEY: 'sk-process-unrelated',
+          CODEX_API_KEY: 'codex-process-unrelated',
+        });
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              model: 'openai.gpt-5.5',
+              model_provider: 'amazon-bedrock',
+              inherit_process_env: true,
+            },
+          });
+
+          await provider.callApi('Test prompt');
+
+          const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+          expect(codexCall?.env?.OPENAI_API_KEY).toBeUndefined();
+          expect(codexCall?.env?.CODEX_API_KEY).toBeUndefined();
+          expect(codexCall?.apiKey).toBeUndefined();
+        } finally {
+          restore();
+        }
       });
 
       it('should still inject an explicit config.apiKey when routing to a custom provider', async () => {
@@ -2542,6 +2601,8 @@ describe('OpenAICodexSDKProvider', () => {
 
         const codexCall = MockCodex.mock.calls.at(-1)?.[0];
         expect(codexCall?.env?.OPENAI_API_KEY).toBe('explicit-key');
+        // Explicit key is the active backend credential, so it IS passed to the SDK too.
+        expect(codexCall?.apiKey).toBe('explicit-key');
       });
 
       it('should warn when CODEX_HOME from process.env is omitted from the default minimal CLI env', async () => {

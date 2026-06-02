@@ -763,20 +763,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject only the resolved Codex/OpenAI API key from provider env/config.
-    // Other promptfoo env overrides should be passed explicitly via cli_env so
-    // unrelated secrets are not exposed to shell commands.
-    //
-    // When routing through a non-OpenAI model provider (e.g. `amazon-bedrock`), an
-    // OPENAI_API_KEY / CODEX_API_KEY inherited from the ambient environment is unrelated to
-    // the actual backend (Bedrock authenticates via AWS credentials in cli_env). Don't leak
-    // it into the agent's shell unless it was set explicitly via config.apiKey.
-    const injectApiKey =
-      apiKey && (!this.usesCustomModelProvider(config) || Boolean(config.apiKey));
-    if (injectApiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    this.applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
@@ -859,7 +846,38 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const provider =
       config.model_provider ??
       (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
-    return typeof provider === 'string' && provider.length > 0 && provider !== 'openai';
+    // Compare case-insensitively so `OpenAI`/`OPENAI` aren't treated as a custom provider.
+    const normalized = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
+    return normalized.length > 0 && normalized !== 'openai';
+  }
+
+  /**
+   * Apply the resolved Codex/OpenAI API key to the Codex CLI environment.
+   *
+   * Inject it only when it belongs to the active backend — the default OpenAI provider, or a
+   * custom `model_provider` where the user set `config.apiKey` explicitly. When routing to a
+   * non-OpenAI provider (e.g. `amazon-bedrock`) without an explicit key, an ambient
+   * OPENAI_API_KEY / CODEX_API_KEY is unrelated to the backend (Bedrock authenticates via AWS
+   * credentials in cli_env); never inject one, and also strip any inherited via
+   * `inherit_process_env`, unless the user passed it explicitly through cli_env.
+   */
+  private applyApiKeyToCliEnv(
+    sortedEnv: Record<string, string>,
+    config: OpenAICodexSDKConfig,
+    apiKey: string | undefined,
+  ): void {
+    if (apiKey && (!this.usesCustomModelProvider(config) || Boolean(config.apiKey))) {
+      sortedEnv.OPENAI_API_KEY = apiKey;
+      sortedEnv.CODEX_API_KEY = apiKey;
+      return;
+    }
+    if (this.usesCustomModelProvider(config)) {
+      for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
+        if (!(key in (config.cli_env ?? {}))) {
+          delete sortedEnv[key];
+        }
+      }
+    }
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
@@ -961,9 +979,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): Record<string, any> {
     const cliConfig = this.getResolvedCliConfig(config);
 
+    // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
+    // CODEX_API_KEY. Gate it exactly like the env injection in `prepareEnvironment`: when
+    // routing through a non-OpenAI model_provider (e.g. amazon-bedrock), an ambient
+    // OPENAI_API_KEY / CODEX_API_KEY is unrelated to the backend (Bedrock authenticates via
+    // AWS credentials in cli_env), so don't leak it into the agent shell unless it was set
+    // explicitly via config.apiKey.
+    const injectApiKey =
+      apiKey && (!this.usesCustomModelProvider(config) || Boolean(config.apiKey));
+
     return {
       env,
-      ...(apiKey ? { apiKey } : {}),
+      ...(injectApiKey ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(cliConfig ? { config: cliConfig } : {}),

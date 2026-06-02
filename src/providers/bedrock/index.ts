@@ -400,8 +400,10 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
    */
   reasoning_effort?: 'low' | 'medium' | 'high';
   /**
-   * Controls how the `<reasoning>...</reasoning>` block that OpenAI reasoning models
-   * (gpt-oss, gpt-5.x) prepend to the response content via `InvokeModel` is surfaced.
+   * Controls how the `<reasoning>...</reasoning>` block that the open-weight gpt-oss models
+   * prepend to the response content via `InvokeModel` is surfaced. (Frontier gpt-5.x models
+   * do not use this handler — they go through the OpenAI Responses provider, which returns the
+   * final answer only.)
    *
    * Defaults to `false`: the reasoning block is stripped and `output` is the clean
    * final answer, matching OpenAI's first-party Chat Completions API (which hides
@@ -2121,30 +2123,32 @@ ${prompt}
       if ((config as BedrockOpenAIGenerationOptions)?.showThinking === true) {
         return `Thinking: ${reasoning.trim()}\n\n${answer}`;
       }
-      return answer;
+      // If the model returned only a reasoning block with no final answer, stripping would
+      // collapse `output` to an empty string. Fall back to the original content so the whole
+      // response is never silently dropped.
+      return answer.trim() === '' ? content : answer;
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         const usage = responseJson.usage;
-        // Frontier reasoning models report reasoning tokens the same way OpenAI does;
-        // surface them under completionDetails for parity with the OpenAI provider.
+        // gpt-oss reports usage the same way OpenAI's Chat Completions API does; surface
+        // reasoning and cached-input token counts (when present) under completionDetails for
+        // parity with the openai: provider.
         const reasoningTokens = coerceStrToNum(usage.completion_tokens_details?.reasoning_tokens);
         const cachedInputTokens = coerceStrToNum(usage.prompt_tokens_details?.cached_tokens);
-        const completionDetails =
-          reasoningTokens !== undefined || (cachedInputTokens ?? 0) > 0
-            ? {
-                ...(reasoningTokens === undefined ? {} : { reasoning: reasoningTokens }),
-                ...((cachedInputTokens ?? 0) > 0
-                  ? { cacheReadInputTokens: cachedInputTokens }
-                  : {}),
-              }
-            : undefined;
+        const completionDetails: { reasoning?: number; cacheReadInputTokens?: number } = {};
+        if (reasoningTokens !== undefined) {
+          completionDetails.reasoning = reasoningTokens;
+        }
+        if ((cachedInputTokens ?? 0) > 0) {
+          completionDetails.cacheReadInputTokens = cachedInputTokens;
+        }
         return {
           prompt: coerceStrToNum(usage.prompt_tokens),
           completion: coerceStrToNum(usage.completion_tokens),
           total: coerceStrToNum(usage.total_tokens),
           numRequests: 1,
-          ...(completionDetails ? { completionDetails } : {}),
+          ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
         };
       }
 

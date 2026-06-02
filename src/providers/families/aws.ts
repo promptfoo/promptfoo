@@ -16,14 +16,23 @@ export const awsProviderFactories: ProviderFactory[] = [
       // APIs. Route them before the per-type handlers so `bedrock:openai.gpt-5.5`,
       // `bedrock:converse:openai.gpt-5.5`, and `bedrock:completion:openai.gpt-5.5` all resolve
       // correctly. Open-weight gpt-oss models fall through to InvokeModel/Converse below.
+      //
+      // Only those three forms carry a frontier model id, so restrict the candidate to the
+      // bare id (`bedrock:openai.gpt-5.5`, i.e. exactly two segments) and the explicit
+      // `converse:`/`completion:` forms. Frontier ids contain no colon, so the bare form is
+      // always two segments. This prevents sub-typed forms whose id merely contains `openai.`
+      // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
+      // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
       const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } = await import(
         '../bedrock/openaiResponses'
       );
       const candidateOpenAiModel =
         modelType === 'converse' || modelType === 'completion'
           ? modelName
-          : splits.slice(1).join(':');
-      if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
+          : splits.length === 2
+            ? splits[1]
+            : undefined;
+      if (candidateOpenAiModel && isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
         return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
           ...providerOptions,
           id: providerOptions.id ?? providerPath,

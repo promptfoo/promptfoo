@@ -1434,10 +1434,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     }
 
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    this.applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     if (config.base_url) {
       sortedEnv.OPENAI_BASE_URL = config.base_url;
@@ -1493,6 +1490,55 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       ...(config.cli_config ?? {}),
     };
+  }
+
+  /**
+   * Whether this provider routes inference through a non-OpenAI Codex model provider
+   * (e.g. `amazon-bedrock`). When it does, an ambient OpenAI/Codex API key is unrelated to the
+   * backend, so it must not be injected into the agent env or used for `account/login`.
+   */
+  private usesCustomModelProvider(config: CodexAppServerConfig = this.config): boolean {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const provider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+    // Compare case-insensitively so `OpenAI`/`OPENAI` aren't treated as a custom provider.
+    const normalized = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
+    return normalized.length > 0 && normalized !== 'openai';
+  }
+
+  /**
+   * Whether the resolved API key should be presented to the Codex CLI (env + login). Mirrors
+   * the codex-sdk gating: inject only when the key belongs to the active backend, i.e. the
+   * default OpenAI provider, or a custom provider where the user set `config.apiKey` explicitly.
+   */
+  private shouldInjectApiKey(config: CodexAppServerConfig, apiKey: string | undefined): boolean {
+    return Boolean(apiKey) && (!this.usesCustomModelProvider(config) || Boolean(config.apiKey));
+  }
+
+  /**
+   * Apply the resolved API key to the Codex CLI environment. Inject it only when it belongs to
+   * the active backend (see {@link shouldInjectApiKey}); when routing to a non-OpenAI
+   * model_provider without an explicit key, strip any OpenAI/Codex key inherited via
+   * `inherit_process_env`, unless the user passed it explicitly through cli_env.
+   */
+  private applyApiKeyToCliEnv(
+    sortedEnv: Record<string, string>,
+    config: CodexAppServerConfig,
+    apiKey: string | undefined,
+  ): void {
+    if (this.shouldInjectApiKey(config, apiKey)) {
+      sortedEnv.OPENAI_API_KEY = apiKey as string;
+      sortedEnv.CODEX_API_KEY = apiKey as string;
+      return;
+    }
+    if (this.usesCustomModelProvider(config)) {
+      for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
+        if (!(key in (config.cli_env ?? {}))) {
+          delete sortedEnv[key];
+        }
+      }
+    }
   }
 
   private getRequestTimeoutMs(config: CodexAppServerConfig): number {
@@ -1555,7 +1601,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     try {
       await connection.initialize(config);
       const apiKey = this.getApiKey(config);
-      if (apiKey) {
+      // Don't log in with an ambient OpenAI/Codex key when routing to a custom model_provider
+      // (e.g. amazon-bedrock) — it's unrelated to the backend. Gate it like the env injection.
+      if (this.shouldInjectApiKey(config, apiKey)) {
         try {
           await connection.request(
             'account/login/start',

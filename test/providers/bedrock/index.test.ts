@@ -2218,6 +2218,58 @@ describe('BEDROCK_MODEL OPENAI', () => {
       expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe('Just the answer.');
     });
 
+    it('should fall back to the full content when only a reasoning block is present (no final answer)', async () => {
+      // Stripping a reasoning-only response would collapse output to '' — fall back instead.
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>just thinking</reasoning>' } }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe('<reasoning>just thinking</reasoning>');
+      // showThinking still surfaces the reasoning even when the answer is empty.
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
+        'Thinking: just thinking\n\n',
+      );
+    });
+
+    it('should not strip an unterminated <reasoning> tag (returns content verbatim, no data loss)', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>oops no closing tag, the answer is 42' } }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        '<reasoning>oops no closing tag, the answer is 42',
+      );
+    });
+
+    it('should only strip a leading <reasoning> block, leaving later ones as answer content', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content:
+                '<reasoning>first</reasoning>answer with <reasoning>literal</reasoning> data',
+            },
+          },
+        ],
+      };
+
+      // Non-greedy match strips only the first block; subsequent ones are part of the answer.
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        'answer with <reasoning>literal</reasoning> data',
+      );
+    });
+
+    it('should not strip a <reasoning> block that does not start the content', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'The answer <reasoning>is</reasoning> here.' } }],
+      };
+
+      // The regex is anchored to the start, so mid-content reasoning-as-data is preserved.
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        'The answer <reasoning>is</reasoning> here.',
+      );
+    });
+
     it('should throw an error for API errors', async () => {
       const mockErrorResponse = { error: 'API Error occurred' };
       expect(() => modelHandler.output({}, mockErrorResponse)).toThrow(
@@ -3501,6 +3553,38 @@ describe('AwsBedrockCompletionProvider', () => {
         raw: 'test prompt',
         label: 'test',
         // Prompt-level override should reach output(), not just params().
+        config: { showThinking: true } as any,
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context as any);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: true }), expect.anything());
+  });
+
+  it('should pass merged prompt-level config to model.output on the live (non-cached) path', async () => {
+    // Default beforeEach has caching disabled, so this exercises the live InvokeModel path.
+    // The live path both logs via body.transformToString() and decodes via TextDecoder, so the
+    // mock body must be a real byte view that also carries transformToString().
+    const liveBytes = new TextEncoder().encode(JSON.stringify({ completion: 'live' }));
+    (liveBytes as any).transformToString = () => JSON.stringify({ completion: 'live' });
+    mockInvokeModel.mockResolvedValueOnce({ body: liveBytes });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: { region: 'us-east-1', showThinking: false } as any,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
         config: { showThinking: true } as any,
       },
       vars: {},

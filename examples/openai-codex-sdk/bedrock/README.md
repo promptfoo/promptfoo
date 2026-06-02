@@ -43,6 +43,11 @@ npx promptfoo@latest init --example openai-codex-sdk/bedrock
 > environment. Scope the IAM permissions to Bedrock inference and prefer short-lived
 > credentials.
 
+> **Heads up:** export the AWS credentials before running. If `AWS_ACCESS_KEY_ID` /
+> `AWS_SECRET_ACCESS_KEY` are unset, the unresolved `{{env.*}}` template is forwarded to the
+> Codex CLI verbatim, and you'll get an opaque AWS auth error (e.g. `UnrecognizedClientException`)
+> rather than a clear "credentials not set" message.
+
 For direct (non-agentic) inference against the same models, use the
 [`bedrock:` provider](https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models)
 (`bedrock:openai.gpt-5.5`).

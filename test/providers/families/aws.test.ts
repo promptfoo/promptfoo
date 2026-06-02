@@ -45,4 +45,57 @@ describe('aws bedrock provider factory routing', () => {
       bedrockFactory.create('bedrock:openai.gpt-5.5', { config: { region: 'us-east-2' } }, ctx),
     ).rejects.toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
   });
+
+  it('routes the converse: form of a frontier id to the Responses provider on the mantle endpoint', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:converse:openai.gpt-5.5',
+      { config: { region: 'us-east-2', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
+    );
+  });
+
+  it('routes the completion: form of a frontier id to the Responses provider on the mantle endpoint', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:completion:openai.gpt-5.4',
+      { config: { region: 'us-west-2', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+  });
+
+  it('routes the completion: form of a gpt-oss id to the InvokeModel completion provider (not Responses)', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:completion:openai.gpt-oss-120b-1:0',
+      { config: { region: 'us-east-2' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
+    expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+  });
+
+  // The frontier check must not hijack sub-typed forms whose model segment merely contains
+  // "openai." — they must reach their own handlers (kb / embeddings / agents), not Responses.
+  it.each([
+    ['bedrock:kb:openai.gpt-5.5', 'AwsBedrockKnowledgeBaseProvider'],
+    ['bedrock:knowledge-base:openai.gpt-5.5', 'AwsBedrockKnowledgeBaseProvider'],
+    ['bedrock:embeddings:openai.embed-foo', 'AwsBedrockEmbeddingProvider'],
+    ['bedrock:embedding:openai.embed-foo', 'AwsBedrockEmbeddingProvider'],
+    ['bedrock:agents:my-openai.agent', 'AwsBedrockAgentsProvider'],
+  ])('does not hijack %s to the Responses provider', async (providerPath, expectedClass) => {
+    restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+    const provider = await bedrockFactory.create(
+      providerPath,
+      { config: { region: 'us-east-2', knowledgeBaseId: 'KB123', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+    expect(provider.constructor.name).toBe(expectedClass);
+  });
 });

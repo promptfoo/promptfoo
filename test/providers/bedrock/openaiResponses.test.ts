@@ -4,6 +4,7 @@ import {
   getBedrockMantleBaseUrl,
   isBedrockOpenAiResponsesModel,
 } from '../../../src/providers/bedrock/openaiResponses';
+import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -117,6 +118,27 @@ describe('bedrock openaiResponses helper', () => {
       // getBillingModelName is protected; the Bedrock id must resolve to the OpenAI
       // billing key so cost is computed (Bedrock mirrors OpenAI first-party rates).
       expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
+    });
+
+    it.each([
+      'openai.gpt-5.5',
+      'openai.gpt-5.4',
+      'us.openai.gpt-5.5',
+    ])('computes a finite, non-zero cost end-to-end for %s via the OpenAI billing tables', (modelId) => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {});
+      const billingModelName = (provider as any).getBillingModelName({});
+      // The stripped id must actually resolve in the OpenAI cost map, not just be a string.
+      const cost = calculateOpenAIUsageCost(
+        billingModelName,
+        {},
+        {
+          input_tokens: 1000,
+          output_tokens: 500,
+        },
+      );
+      expect(cost).toBeGreaterThan(0);
+      expect(Number.isFinite(cost)).toBe(true);
     });
 
     it('detects the prefixed frontier id as a GPT-5 / reasoning model', () => {
