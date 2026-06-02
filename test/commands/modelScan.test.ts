@@ -1366,49 +1366,8 @@ describe('Re-scan on version change behavior', () => {
 });
 
 describe('checkModelAuditInstalled', () => {
-  beforeEach(async () => {
-    await resetModelScanTestMocks();
-  });
-
   it('remains exported from the modelScan command module for compatibility', () => {
     expect(checkModelAuditInstalledFromModelScan).toBe(checkModelAuditInstalled);
-  });
-
-  it('should return installed: true and version when getModelAuditCurrentVersion returns version', async () => {
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    (getModelAuditCurrentVersion as Mock).mockResolvedValue('0.2.16');
-
-    const result = await checkModelAuditInstalled();
-    expect(result).toEqual({ installed: true, version: '0.2.16' });
-    // Should not need to spawn since getModelAuditCurrentVersion returned a version
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it('should return installed: false when modelaudit is not installed', async () => {
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    (getModelAuditCurrentVersion as Mock).mockResolvedValue(null);
-
-    const result = await checkModelAuditInstalled();
-    expect(result).toEqual({ installed: false, version: null });
-  });
-
-  it('should handle different version formats from getModelAuditCurrentVersion', async () => {
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    (getModelAuditCurrentVersion as Mock).mockResolvedValue('1.0.0');
-
-    const result = await checkModelAuditInstalled();
-    expect(result).toEqual({ installed: true, version: '1.0.0' });
-  });
-
-  it('should return installed: true with version even when fallback would return exit code 1', async () => {
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    // getModelAuditCurrentVersion returns version successfully
-    (getModelAuditCurrentVersion as Mock).mockResolvedValue('0.2.19');
-
-    const result = await checkModelAuditInstalled();
-    expect(result).toEqual({ installed: true, version: '0.2.19' });
-    // No fallback needed
-    expect(spawn).not.toHaveBeenCalled();
   });
 });
 

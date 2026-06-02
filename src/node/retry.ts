@@ -11,6 +11,8 @@ import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
 import { accumulateNamedMetric } from '../util/namedMetrics';
+import { writeMultipleOutputs } from '../util/output';
+import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateAssertionTokenUsage,
@@ -28,6 +30,35 @@ export interface RetryCommandOptions {
   maxConcurrency?: number;
   delay?: number;
   share?: boolean;
+}
+
+function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[] {
+  return (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+    (path): path is string => typeof path === 'string' && getOutputFileFormat(path) === 'jsonl',
+  );
+}
+
+async function restoreJsonlOutputsAfterPersistenceFailure(
+  jsonlOutputPaths: string[],
+  evalRecord: Eval,
+): Promise<void> {
+  if (jsonlOutputPaths.length === 0) {
+    return;
+  }
+
+  try {
+    // A failed retry must restore the pre-retry database view, not union in
+    // replacement rows that were streamed before persistence failed.
+    evalRecord.resultPersistenceFailed = false;
+    await writeMultipleOutputs(jsonlOutputPaths, evalRecord, null);
+  } catch (error) {
+    logger.warn('Retry results failed to persist, and restoring JSONL output failed.', {
+      error,
+      jsonlOutputPaths,
+    });
+  } finally {
+    evalRecord.resultPersistenceFailed = true;
+  }
 }
 
 /**
@@ -330,17 +361,37 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   try {
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
+    const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);
 
-    // SUCCESS: Now it's safe to delete the old ERROR results
-    // This is the key fix for data loss - deletion only happens after successful retry
+    if (retriedEval.resultPersistenceFailed) {
+      await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, retriedEval);
+      throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
+    }
+
+    let errorRowsDeleted = false;
     try {
       await deleteErrorResults(errorResultIds);
+      errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
       logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
         error: cleanupError,
       });
+    }
+
+    if (errorRowsDeleted && jsonlOutputPaths.length > 0) {
+      try {
+        await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
+      } catch (outputError) {
+        logger.warn(
+          'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
+          {
+            error: outputError,
+            outputPaths: jsonlOutputPaths,
+          },
+        );
+      }
     }
 
     logger.info(`✅ Retry completed for evaluation: ${chalk.cyan(evalId)}`);

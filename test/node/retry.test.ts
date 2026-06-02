@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
@@ -104,6 +104,15 @@ describe('retryCommand', () => {
     cliState.maxConcurrency = undefined;
     vi.mocked(shouldShareResults).mockReturnValue(false);
     vi.mocked(isSharingEnabled).mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    dbMocks.errorRows.splice(0);
+    dbMocks.affectedEvalRows.splice(0);
+    cliState.resume = false;
+    cliState.retryMode = false;
+    cliState.maxConcurrency = undefined;
   });
 
   it('rejects a retry for an evaluation that does not exist', async () => {
