@@ -1,8 +1,17 @@
 import { randomUUID } from 'crypto';
 
+import { Command } from 'commander';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  deleteErrorResults as commandDeleteErrorResults,
+  getErrorResultIds as commandGetErrorResultIds,
+  recalculatePromptMetrics as commandRecalculatePromptMetrics,
+  retryCommand as commandRetryCommand,
+  setupRetryCommand,
+} from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
 import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -11,9 +20,45 @@ import {
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
+  retryCommand,
 } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
+
+describe('setupRetryCommand', () => {
+  it('preserves the established command-module runtime exports', () => {
+    expect(commandDeleteErrorResults).toBe(deleteErrorResults);
+    expect(commandGetErrorResultIds).toBe(getErrorResultIds);
+    expect(commandRecalculatePromptMetrics).toBe(recalculatePromptMetrics);
+    expect(commandRetryCommand).toBe(retryCommand);
+  });
+
+  it('registers retry as a CLI command', () => {
+    const program = new Command();
+
+    setupRetryCommand(program);
+
+    const retry = program.commands.find((command) => command.name() === 'retry');
+    expect(retry).toBeDefined();
+    expect(retry?.description()).toBe('Retry all ERROR results from a given evaluation');
+    expect(retry?.options.map((option) => option.long)).toEqual([
+      '--config',
+      '--verbose',
+      '--max-concurrency',
+      '--delay',
+      '--share',
+      '--no-share',
+    ]);
+  });
+});
 
 /** Generate a unique eval ID to avoid UNIQUE constraint collisions when tests run in the same second */
 function uniqueEvalId(): string {
@@ -180,6 +225,7 @@ describe('retry command', () => {
 
       expect(remaining).toHaveLength(1);
       expect(remaining[0].id).toBe(`${evalRecord.id}-del-2`);
+      expect(updateSignalFile).toHaveBeenCalledWith(evalRecord.id);
     });
 
     it('should invalidate the cached total row count after deleting results', async () => {

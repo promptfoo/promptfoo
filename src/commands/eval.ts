@@ -117,6 +117,7 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
+    .option('--filter-sample-seed <number>', 'Numeric seed used to make --filter-sample repeatable')
     .option(
       '--filter-failing <path or id>',
       'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
@@ -242,3 +243,9 @@ export function evalCommand(
 
   return evalCmd;
 }
+
+export { EvalRunError, showRedteamProviderLabelMissingWarning } from '../node/doEval';
+
+export type { EvalCommandOptions };
+// Preserve established command-module imports while the implementation lives in the node layer.
+export { doEval, EvalCommandSchema };

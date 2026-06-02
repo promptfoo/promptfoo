@@ -21,8 +21,6 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from '../node/retry';
-import { notCloudEnabledShareInstructions } from '../node/shareInstructions';
 import { loadApiProvider } from '../providers/index';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -45,13 +43,20 @@ import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import {
+  printBorder,
+  setupEnv,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+} from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
+import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
@@ -522,6 +527,8 @@ export async function doEval(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -530,7 +537,7 @@ export async function doEval(
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
       cmdObj.filterPattern !== undefined ||
-      cmdObj.filterSample !== undefined;
+      filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
@@ -549,7 +556,8 @@ export async function doEval(
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
-        sample: cmdObj.filterSample,
+        sample: filterSample,
+        sampleSeed: filterSampleSeed,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
@@ -880,9 +888,11 @@ export async function doEval(
 
     const { outputPath } = config;
 
-    // We're removing JSONL from paths since we already wrote to that during the evaluation
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
+      (p): p is string => typeof p === 'string' && p.length > 0,
     );
 
     const isRedteam = Boolean(config.redteam);
@@ -981,6 +991,7 @@ export async function doEval(
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
     // Write outputs after share completes (so we can include shareableUrl)
+    warnOnDegradedJsonlRecovery(evalRecord, paths);
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));

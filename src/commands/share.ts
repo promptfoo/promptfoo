@@ -19,6 +19,9 @@ import {
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
+// Preserve the established command-module import while the implementation lives in the node layer.
+export { notCloudEnabledShareInstructions };
+
 export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,

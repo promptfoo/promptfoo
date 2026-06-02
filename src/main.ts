@@ -22,6 +22,7 @@ import { optimizeCommand } from './commands/optimize';
 import { initCommand as redteamInitCommand } from './commands/redteam/init';
 import { redteamReportCommand } from './commands/redteam/report';
 import { redteamSetupCommand } from './commands/redteam/setup';
+import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
@@ -37,7 +38,6 @@ import {
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
 import { EvalRunError } from './node/doEval';
-import { setupRetryCommand } from './node/retry';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';

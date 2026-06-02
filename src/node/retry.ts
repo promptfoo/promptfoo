@@ -1,5 +1,4 @@
 import chalk from 'chalk';
-import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
@@ -7,14 +6,10 @@ import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { clearCountCache } from '../models/evalPerformance';
+import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
-import {
-  ConfigResolutionError,
-  logConfigResolutionError,
-  resolveConfigs,
-} from '../util/config/load';
+import { resolveConfigs } from '../util/config/load';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { shouldShareResults } from '../util/sharing';
 import {
@@ -23,12 +18,11 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import type { Command } from 'commander';
 
 import type { TokenUsage } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
-interface RetryCommandOptions {
+export interface RetryCommandOptions {
   config?: string;
   verbose?: boolean;
   maxConcurrency?: number;
@@ -76,7 +70,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
 
   for (const { evalId } of affectedEvals) {
-    clearCountCache(evalId);
+    notifyEvaluationChanged(evalId);
   }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
@@ -391,43 +385,4 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
   }
-}
-
-/**
- * Set up the retry command
- */
-export function setupRetryCommand(program: Command) {
-  program
-    .command('retry <evalId>')
-    .description('Retry all ERROR results from a given evaluation')
-    .option(
-      '-c, --config <path>',
-      'Path to configuration file (optional, uses original eval config if not provided)',
-    )
-    .option('-v, --verbose', 'Verbose output')
-    .option('--max-concurrency <number>', 'Maximum number of concurrent evaluations', parseInt)
-    .option('--delay <number>', 'Delay between evaluations in milliseconds', parseInt)
-    .option('--share', 'Share results to cloud (auto-shares when cloud is configured)')
-    .option('--no-share', 'Do not share results to cloud')
-    .action(async (evalId: string, cmdObj: RetryCommandOptions) => {
-      try {
-        await retryCommand(evalId, cmdObj);
-      } catch (error) {
-        if (error instanceof ConfigResolutionError) {
-          logConfigResolutionError(error);
-        } else {
-          logger.error('Failed to retry evaluation', { error, evalId });
-          logger.info(
-            chalk.yellow(dedent`
-
-              Recovery options:
-                - Run the same retry command again to continue
-                - Check API credentials and network connectivity
-                - Use --verbose for detailed error information
-            `),
-          );
-        }
-        process.exitCode = 1;
-      }
-    });
 }
