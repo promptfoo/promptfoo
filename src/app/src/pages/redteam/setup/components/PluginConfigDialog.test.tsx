@@ -255,6 +255,88 @@ describe('PluginConfigDialog - OSS', () => {
       // Should show gradingGuidance field even for plugins with no specific config
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
+
+    it('normalizes Utilities PUC market config when saving', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="energy:puc-payment-plan-service-restoration-integrity"
+          config={{ market: 'tx-puct', marketActorType: 'rep' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByRole('checkbox', { name: 'TX PUCT · ERCOT footprint' })).toBeChecked();
+      expect(screen.getByRole('combobox', { name: 'Market Actor Type' })).toHaveTextContent('REP');
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith(
+        'energy:puc-payment-plan-service-restoration-integrity',
+        {
+          markets: ['tx-puct'],
+          marketSelections: [{ market: 'tx-puct', marketActorType: 'rep' }],
+        },
+      );
+    });
+
+    it('resets Utilities PUC market config when switching plugins', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <PluginConfigDialog
+          open={true}
+          plugin="energy:puc-fixed-rate-benchmark-cap"
+          config={{ market: 'ny-dps', marketActorType: 'esco' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByRole('checkbox', { name: 'NY DPS · NYISO footprint' })).toBeChecked();
+
+      rerender(
+        <PluginConfigDialog
+          open={true}
+          plugin="energy:puc-medical-baseline-integrity"
+          config={{ market: 'ca-cpuc', marketActorType: 'utility' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('checkbox', { name: 'CA CPUC · CAISO footprint' })).toBeChecked();
+      });
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('energy:puc-medical-baseline-integrity', {
+        markets: ['ca-cpuc'],
+        marketSelections: [{ market: 'ca-cpuc', marketActorType: 'utility' }],
+      });
+    });
+
+    it('preserves schema-supported CCA actor config when saving', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="energy:puc-fixed-rate-benchmark-cap"
+          config={{ market: 'ny-dps', marketActorType: 'cca' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByRole('combobox', { name: 'Market Actor Type' })).toHaveTextContent('CCA');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('energy:puc-fixed-rate-benchmark-cap', {
+        markets: ['ny-dps'],
+        marketSelections: [{ market: 'ny-dps', marketActorType: 'cca' }],
+      });
+    });
   });
 
   describe('Read-Only Plugins', () => {

@@ -1,13 +1,9 @@
-import type { Plugin } from '@promptfoo/redteam/constants';
+import {
+  ENERGY_PUC_PLUGINS as ENERGY_PUC_PLUGIN_IDS,
+  type Plugin,
+} from '@promptfoo/redteam/constants';
 
-export const ENERGY_PUC_PLUGINS = new Set<Plugin>([
-  'energy:puc-fixed-rate-benchmark-cap',
-  'energy:puc-medical-baseline-integrity',
-  'energy:puc-offer-eligibility-gate',
-  'energy:puc-payment-plan-service-restoration-integrity',
-  'energy:puc-product-scope-integrity',
-  'energy:puc-variable-rate-savings-protection',
-]);
+export const ENERGY_PUC_PLUGINS: ReadonlySet<Plugin> = new Set(ENERGY_PUC_PLUGIN_IDS);
 
 export const ENERGY_PUC_MARKETS = [
   { value: 'ar-psc', label: 'AR PSC', isoFootprintLabel: 'MISO footprint' },
@@ -54,6 +50,7 @@ export const ENERGY_PUC_MARKET_ACTOR_TYPES = [
   { value: 'esco', label: 'ESCO' },
   { value: 'rep', label: 'REP' },
   { value: 'supplier', label: 'Supplier' },
+  { value: 'cca', label: 'CCA' },
 ] as const;
 
 export type EnergyPucMarketActorType = (typeof ENERGY_PUC_MARKET_ACTOR_TYPES)[number]['value'];

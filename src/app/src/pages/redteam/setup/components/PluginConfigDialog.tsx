@@ -56,13 +56,13 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Update localConfig when config prop changes
+  // Reset local edits when opening the dialog or switching plugins.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+    if (open && plugin) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -270,10 +270,12 @@ export default function PluginConfigDialog({
           plugin,
           localConfig as Record<string, unknown>,
         );
-        const selectedMarketActors = new Map(
-          selectedMarketSelections
-            .filter((selection) => selection.marketActorType)
-            .map((selection) => [selection.market, selection.marketActorType as string]),
+        const selectedMarketActors = new Map<string, EnergyPucMarketActorType>(
+          selectedMarketSelections.flatMap((selection) =>
+            selection.marketActorType
+              ? [[selection.market, selection.marketActorType] as const]
+              : [],
+          ),
         );
         const selectedMarkets = new Set(
           selectedMarketSelections.map((selection) => selection.market),
@@ -295,6 +297,10 @@ export default function PluginConfigDialog({
                 {supportedMarkets.map((market) => {
                   const actorTypes = getAllowedEnergyPucActorTypes(plugin, market.value);
                   const actorType = selectedMarketActors.get(market.value);
+                  const actorTypeOptions =
+                    actorType && !actorTypes.includes(actorType)
+                      ? [actorType, ...actorTypes]
+                      : actorTypes;
                   const isSelected = selectedMarkets.has(market.value);
 
                   return (
@@ -334,7 +340,7 @@ export default function PluginConfigDialog({
                               <SelectValue placeholder="Select actor type" />
                             </SelectTrigger>
                             <SelectContent>
-                              {actorTypes.map((marketActorType) => (
+                              {actorTypeOptions.map((marketActorType) => (
                                 <SelectItem key={marketActorType} value={marketActorType}>
                                   {getEnergyPucActorTypeLabel(marketActorType)}
                                 </SelectItem>

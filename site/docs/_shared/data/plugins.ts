@@ -831,6 +831,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'energy',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -846,6 +847,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'energy',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -861,6 +863,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'energy',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -876,6 +879,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'energy',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -891,6 +895,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'energy',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -906,6 +911,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'energy',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',

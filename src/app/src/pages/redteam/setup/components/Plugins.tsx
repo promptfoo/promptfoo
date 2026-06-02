@@ -67,6 +67,23 @@ const materializeEnergyPucEntries = (
   }));
 };
 
+const isPluginConfigValid = (plugin: Plugin, config?: LocalPluginConfig[string]): boolean => {
+  if (!config || Object.keys(config).length === 0) {
+    return false;
+  }
+
+  if (isEnergyPucPlugin(plugin)) {
+    return isValidEnergyPucConfig(plugin, config);
+  }
+
+  return Object.values(config).every((value) => {
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    return typeof value !== 'string' || value.trim() !== '';
+  });
+};
+
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
   intents: 'Custom Intents',
@@ -307,23 +324,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isConfigValid = useCallback(() => {
     for (const plugin of selectedPlugins) {
-      if (requiresPluginConfig(plugin)) {
-        const config = pluginConfig[plugin];
-        if (!config || Object.keys(config).length === 0) {
-          return false;
-        }
-        if (isEnergyPucPlugin(plugin)) {
-          return isValidEnergyPucConfig(plugin, config);
-        }
-        for (const key in config) {
-          const value = config[key as keyof PluginConfig];
-          if (Array.isArray(value) && value.length === 0) {
-            return false;
-          }
-          if (typeof value === 'string' && value.trim() === '') {
-            return false;
-          }
-        }
+      if (requiresPluginConfig(plugin) && !isPluginConfigValid(plugin, pluginConfig[plugin])) {
+        return false;
       }
     }
     return true;
@@ -363,25 +365,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       if (!requiresPluginConfig(plugin)) {
         return true;
       }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      if (isEnergyPucPlugin(plugin)) {
-        return isValidEnergyPucConfig(plugin, config);
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
+      return isPluginConfigValid(plugin, pluginConfig[plugin]);
     },
     [pluginConfig],
   );

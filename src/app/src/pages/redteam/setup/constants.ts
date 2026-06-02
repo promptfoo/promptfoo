@@ -8,6 +8,8 @@
  * Both modules now import from this constants file instead of each other.
  */
 
+import { ENERGY_PUC_PLUGINS } from '@promptfoo/redteam/constants';
+
 export const SIDEBAR_WIDTH = 240;
 export const NAVBAR_HEIGHT = 64;
 
@@ -18,12 +20,7 @@ export const NAVBAR_HEIGHT = 64;
 export const PLUGINS_REQUIRING_CONFIG = [
   'indirect-prompt-injection',
   'prompt-extraction',
-  'energy:puc-fixed-rate-benchmark-cap',
-  'energy:puc-medical-baseline-integrity',
-  'energy:puc-offer-eligibility-gate',
-  'energy:puc-payment-plan-service-restoration-integrity',
-  'energy:puc-product-scope-integrity',
-  'energy:puc-variable-rate-savings-protection',
+  ...ENERGY_PUC_PLUGINS,
 ] as const;
 export type PluginRequiringConfig = (typeof PLUGINS_REQUIRING_CONFIG)[number];
 export const PLUGINS_REQUIRING_CONFIG_SET: ReadonlySet<string> = new Set(PLUGINS_REQUIRING_CONFIG);

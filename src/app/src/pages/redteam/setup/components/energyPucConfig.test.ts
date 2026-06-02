@@ -15,6 +15,7 @@ describe('energyPucConfig', () => {
     expect(isEnergyPucPlugin('energy:puc-product-scope-integrity')).toBe(true);
     expect(isEnergyPucPlugin('energy:market-risk')).toBe(false);
     expect(getEnergyPucActorTypeLabel('esco')).toBe('ESCO');
+    expect(getEnergyPucActorTypeLabel('cca')).toBe('CCA');
     expect(getEnergyPucActorTypeLabel('unlisted' as 'esco')).toBe('unlisted');
   });
 
@@ -99,6 +100,9 @@ describe('energyPucConfig', () => {
     expect(getEnergyPucMarketSelections({ market: 'ca-cpuc', marketActorType: 'utility' })).toEqual(
       [{ market: 'ca-cpuc', marketActorType: 'utility' }],
     );
+    expect(getEnergyPucMarketSelections({ market: 'ny-dps', marketActorType: 'cca' })).toEqual([
+      { market: 'ny-dps', marketActorType: 'cca' },
+    ]);
     expect(getEnergyPucMarkets()).toEqual([]);
   });
 
