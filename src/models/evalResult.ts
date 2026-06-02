@@ -12,6 +12,8 @@ import {
   type ApiProvider,
   type AtomicTestCase,
   type EvaluateResult,
+  type EvaluateTable,
+  type EvaluateTableOutput,
   type GradingResult,
   isResultFailureReason,
   type Prompt,
@@ -607,6 +609,65 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata ? {} : redacted.metadata,
   } as T;
+}
+
+/**
+ * Sanitize the denormalized visualization `table` carried by a legacy (V2) summary before it is
+ * serialized into a file export. Each `EvaluateTableOutput` mirrors a result row's
+ * credential-bearing fields (`response` / `metadata` / `gradingResult` / `testCase`), so without
+ * this the table leaks the same Authorization / Set-Cookie / api-key headers that
+ * `sanitizeResultForJsonlArtifact` strips from `summary.results`. We redact those credential
+ * surfaces (and honor the `PROMPTFOO_STRIP_*` projections) while leaving the row-level display
+ * fields (`prompt`, `text`, scores) untouched — note `EvaluateTableOutput.prompt` is a plain
+ * string, not a `Prompt`, so it is deliberately not run through `projectPrompt`. Non-mutating:
+ * returns a redacted copy, leaving in-memory rows real for hooks.
+ */
+export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
+  if (!table || !Array.isArray(table.body)) {
+    return table;
+  }
+
+  const {
+    shouldStripResponseOutput,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+    shouldStripTestVars,
+  } = getStripFlags();
+
+  const sanitizeTestCase = (testCase: AtomicTestCase | undefined) =>
+    testCase
+      ? projectTestCase(sanitizeForDbWithSecrets(testCase), {
+          stripMetadata: shouldStripMetadata,
+          stripVars: shouldStripTestVars,
+        })
+      : testCase;
+
+  const sanitizeOutput = (output: EvaluateTableOutput): EvaluateTableOutput => {
+    const redacted = redactSensitiveResultFieldsForDb({
+      response: sanitizeForDb(output.response),
+      gradingResult: sanitizeForDb(output.gradingResult),
+      metadata: sanitizeForDb(output.metadata),
+    });
+    return {
+      ...output,
+      response: projectProviderResponse(redacted.response ?? undefined, {
+        stripMetadata: shouldStripMetadata,
+        stripOutput: shouldStripResponseOutput,
+      }),
+      gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+      metadata: shouldStripMetadata ? {} : redacted.metadata,
+      testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
+    };
+  };
+
+  return {
+    ...table,
+    body: table.body.map((row) => ({
+      ...row,
+      test: sanitizeTestCase(row.test) as AtomicTestCase,
+      outputs: Array.isArray(row.outputs) ? row.outputs.map(sanitizeOutput) : row.outputs,
+    })),
+  };
 }
 
 export default class EvalResult {

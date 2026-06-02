@@ -17,6 +17,7 @@ import {
   asEvaluateResult,
   getResultIndexKey,
   sanitizeResultForJsonlArtifact,
+  sanitizeTableForArtifact,
 } from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
@@ -464,6 +465,16 @@ function redactSummaryResultsForArtifact<T extends EvaluateSummaryV2 | EvaluateS
     summary.results = (summary.results as object[]).map((result) =>
       sanitizeResultForJsonlArtifact(result),
     ) as T['results'];
+  }
+  // Legacy (V2) summaries also carry a denormalized `table` whose outputs embed
+  // response / metadata / gradingResult / testCase. Those bypass the per-result redaction
+  // above, so without this they leak the same credential headers through json/yaml/txt/xml
+  // exports (html renders only the already-safe table cells; csv/junit use their own
+  // projections, so the raw table is never emitted there).
+  if ('table' in summary && summary.table) {
+    (summary as EvaluateSummaryV2).table = sanitizeTableForArtifact(
+      (summary as EvaluateSummaryV2).table,
+    );
   }
   return summary;
 }

@@ -347,6 +347,103 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
+  ])(
+    'redacts credential headers from a legacy V2 summary table on $extension export',
+    async ({ extension, parse }) => {
+      // Legacy (version < 4) evals export a denormalized `table` alongside `results`. Its
+      // outputs carry raw response / metadata / testCase that the per-result redaction never
+      // touches, so the file-export boundary must redact the table too.
+      const eval_ = new Eval({});
+      const v2Summary = {
+        version: 2,
+        timestamp: '2026-01-01T00:00:00.000Z',
+        results: [],
+        stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+        table: {
+          head: {
+            prompts: [{ raw: 'Tell me about {{topic}}', label: 'p', provider: 'provider' }],
+            vars: ['topic'],
+          },
+          body: [
+            {
+              description: '',
+              testIdx: 0,
+              vars: ['alpha'],
+              test: { vars: { apiKey: 'sk-test-secret', safe: 'keep-me' } },
+              outputs: [
+                {
+                  id: 'o1',
+                  pass: true,
+                  failureReason: 0,
+                  score: 1,
+                  cost: 0,
+                  latencyMs: 1,
+                  namedScores: {},
+                  text: 'answer',
+                  prompt: 'Tell me about alpha',
+                  provider: 'provider',
+                  testCase: { vars: { apiKey: 'sk-test-secret', safe: 'keep-me' } },
+                  response: {
+                    output: 'answer',
+                    metadata: {
+                      headers: {
+                        'x-request-id': 'legacy_should_not_persist',
+                        'x-safe-debug': 'keep-legacy',
+                      },
+                      http: {
+                        status: 200,
+                        statusText: 'OK',
+                        headers: { 'set-cookie': 'session=secret' },
+                        requestHeaders: {
+                          authorization: 'Bearer sk-should-not-persist',
+                          'api-key': 'azure-api-key-should-not-persist',
+                          'x-safe-debug': 'keep-me',
+                        },
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = parse(written);
+      const output = parsed.results.table.body[0].outputs[0];
+      expect(output.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+      expect(output.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+      expect(output.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+      expect(output.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+      expect(output.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+      expect(output.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+      expect(output.testCase.vars.apiKey).toBe('[REDACTED]');
+      expect(output.testCase.vars.safe).toBe('keep-me');
+      // The row-level test case is redacted, and the plain-string `prompt` survives intact.
+      expect(parsed.results.table.body[0].test.vars.apiKey).toBe('[REDACTED]');
+      expect(output.prompt).toBe('Tell me about alpha');
+      expect(written).not.toContain('session=secret');
+      expect(written).not.toContain('sk-should-not-persist');
+      expect(written).not.toContain('azure-api-key-should-not-persist');
+      expect(written).not.toContain('sk-test-secret');
+    },
+  );
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
   ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
     extension,
     parse,
