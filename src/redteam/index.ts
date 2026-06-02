@@ -1431,7 +1431,7 @@ export async function synthesize({
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
-          resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
+          resultsPerLanguage[lang || 'default'] = { requested: numTests, generated: 0 };
         }
       }
 

@@ -65,6 +65,20 @@ describe('redteamRunCommand', () => {
     process.exitCode = originalExitCode;
   });
 
+  it('should pass the --yes flag through to the run workflow', async () => {
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+
+    await runCommand!.parseAsync(['node', 'test', '--yes']);
+
+    expect(doRedteamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        yes: true,
+        eventSource: 'cli',
+      }),
+    );
+  });
+
   it('should use target option to set cloud target when UUID is provided', async () => {
     // Mock the getConfigFromCloud function
     const mockConfig = {
@@ -342,6 +356,69 @@ describe('redteamRunCommand', () => {
 
       // Verify that the description was overridden using short flag
       expect(mockConfig.description).toBe(customDescription);
+    });
+  });
+
+  describe('--tag flag for run-specific eval tags', () => {
+    it('should document the repeatable --tag option in help text', () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      const helpText = runCommand!.helpInformation();
+
+      expect(helpText).toContain('--tag <key=value>');
+      expect(helpText).toContain('Set an eval tag in key=value format.');
+    });
+
+    it('should pass repeated tags to the evaluation stage with Commander normalization', async () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--tag',
+        'build=first',
+        '--tag',
+        'build=second',
+        '--tag',
+        'token=a=b',
+        '--tag',
+        'empty=',
+      ]);
+
+      const options = vi.mocked(doRedteamRun).mock.calls[0][0];
+      expect(options).toMatchObject({
+        tags: {
+          build: 'second',
+          token: 'a=b',
+          empty: '',
+        },
+        eventSource: 'cli',
+      });
+      expect(options).not.toHaveProperty('tag');
+    });
+
+    it('should not add a tags property when no --tag is provided', async () => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      const options = vi.mocked(doRedteamRun).mock.calls[0][0];
+      // Avoid clobbering config-level tags with an undefined/empty runtime value.
+      expect(options).not.toHaveProperty('tags');
+      expect(options).not.toHaveProperty('tag');
+    });
+
+    it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+      runCommand!.exitOverride();
+
+      expect(() => runCommand!.parseOptions(['--tag', tagValue])).toThrow(
+        '--tag must be specified in key=value format.',
+      );
     });
   });
 

@@ -53,6 +53,7 @@ import {
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
+import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
@@ -256,6 +257,13 @@ async function withGenerationConcurrency<T>(
 
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
+  const result = await doGenerateRedteamWithResult(options);
+  return result.config;
+}
+
+export async function doGenerateRedteamWithResult(
+  options: Partial<RedteamCliGenerateOptions>,
 ): Promise<RedteamGenerationResult> {
   setupEnv(options.envFile);
   const cacheOverride = options.cache === false ? false : undefined;
@@ -270,7 +278,7 @@ async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<RedteamGenerationResult> {
   // Check monthly probe limit for non-cloud users
-  const probeLimitResult = checkRedteamProbeLimit();
+  const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
     logger.error(dedent`
       ${chalk.red.bold('Monthly probe limit reached')}
@@ -620,9 +628,22 @@ async function doGenerateRedteamInternal(
   let purposeDetails = '';
   let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
   try {
+    const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
+    if (a2aAgentCardInfo) {
+      purposeDetails += a2aAgentCardInfo;
+      logger.info('Added A2A Agent Card information to red team purpose');
+    }
+  } catch (error) {
+    logger.warn(
+      `Failed to extract A2A Agent Card information: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
-      purposeDetails = mcpToolsInfo;
+      purposeDetails += mcpToolsInfo;
       logger.info('Added MCP tools information to red team purpose');
       augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
@@ -686,13 +707,13 @@ async function doGenerateRedteamInternal(
       }
       firstContextPurpose ??= contextResult.purpose;
 
-      for (const [pluginId, result] of Object.entries(contextResult.pluginResults)) {
+      for (const [pluginId, result] of Object.entries(contextResult.pluginResults ?? {})) {
         pluginResults[pluginId] = pluginResults[pluginId] ?? { requested: 0, generated: 0 };
         pluginResults[pluginId].requested += result.requested;
         pluginResults[pluginId].generated += result.generated;
       }
 
-      for (const [strategyId, result] of Object.entries(contextResult.strategyResults)) {
+      for (const [strategyId, result] of Object.entries(contextResult.strategyResults ?? {})) {
         strategyResults[strategyId] = strategyResults[strategyId] ?? { requested: 0, generated: 0 };
         strategyResults[strategyId].requested += result.requested;
         strategyResults[strategyId].generated += result.generated;

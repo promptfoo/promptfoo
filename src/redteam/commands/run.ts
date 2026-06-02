@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
+import { collectKeyValueOption, normalizeTagOption } from '../../commands/options';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import { EmailValidationError } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -15,6 +16,8 @@ import { poisonCommand } from './poison';
 import type { Command } from 'commander';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
+
+type RedteamRunCliOptions = Omit<RedteamRunOptions, 'tags'> & { tag?: Record<string, string> };
 
 export function redteamRunCommand(program: Command) {
   program
@@ -45,7 +48,7 @@ export function redteamRunCommand(program: Command) {
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
-    .option('-y, --yes', 'Automatically answer yes to all prompts', false)
+    .option('-y, --yes', 'Continue after partial test generation without prompting', false)
     .option(
       '--strict',
       'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
@@ -61,7 +64,15 @@ export function redteamRunCommand(program: Command) {
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option('-d, --description <text>', 'Custom description/name for this scan run')
-    .action(async (opts: RedteamRunOptions) => {
+    .option(
+      '--tag <key=value>',
+      'Set an eval tag in key=value format. Can be specified multiple times; CLI tags override config tags.',
+      (value: string, previous: Record<string, string> | undefined) =>
+        collectKeyValueOption('--tag', value, previous),
+    )
+    .action(async (rawOpts: RedteamRunCliOptions) => {
+      const opts: RedteamRunOptions = normalizeTagOption(rawOpts);
+
       setupEnv(opts.envPath);
       telemetry.record('redteam run', {});
 

@@ -6,6 +6,7 @@ import * as readline from 'readline';
 import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
+import { isNonInteractive } from '../envars';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -14,7 +15,7 @@ import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
-import { doGenerateRedteam } from './commands/generate';
+import { doGenerateRedteamWithResult } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
@@ -27,6 +28,7 @@ async function checkGenerationErrorsAndConfirm(
   pluginResults: GenerationMetricResults = {},
   strategyResults: GenerationMetricResults = {},
   forceYes = false,
+  isCliInvocation = false,
 ): Promise<boolean> {
   const metricEntries = [...Object.entries(pluginResults), ...Object.entries(strategyResults)];
   const hasErrors = metricEntries.some(
@@ -84,6 +86,11 @@ async function checkGenerationErrorsAndConfirm(
 
   if (forceYes) {
     logger.info(chalk.cyan('Continuing with scan (--yes flag provided)...'));
+    return true;
+  }
+
+  if (!isCliInvocation || isNonInteractive()) {
+    logger.info(chalk.cyan('Continuing with scan without interactive confirmation...'));
     return true;
   }
 
@@ -172,12 +179,16 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     // Generate new test cases
     logger.info('Generating test cases...');
-    const { maxConcurrency, ...passThroughOptions } = options;
+    // Strip run-specific tags from the generation options so they do not leak into the
+    // reusable generated redteam.yaml (which feeds `doGenerateRedteamWithResult`). The tags still reach
+    // the eval below via `evalOptions`, which is destructured from the untouched `options`
+    // object (see the `doEval` call), where they are persisted onto the eval result.
+    const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
     let generateResult;
     const generationStartTime = Date.now();
     try {
-      generateResult = await doGenerateRedteam({
+      generateResult = await doGenerateRedteamWithResult({
         ...passThroughOptions,
         ...(options.liveRedteamConfig?.commandLineOptions || {}),
         ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
@@ -213,6 +224,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       generateResult.pluginResults,
       generateResult.strategyResults,
       options.yes,
+      isCliInvocation,
     );
     if (!shouldContinue) {
       logger.info('Scan cancelled by user.');

@@ -181,6 +181,7 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
 | `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
 | `base_url`               | string   | Custom API base URL                                                                                  | None                 |
+| `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
 | `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
 | `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
 | `model`                  | string   | Model to use                                                                                         | SDK default          |
@@ -202,6 +203,8 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
 | `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
+
+During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
 
 ### Sandbox Modes
 
@@ -396,11 +399,19 @@ providers:
 With streaming enabled, the provider creates spans for:
 
 - **Provider-level calls** - Overall request timing and token usage
+- **SDK turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes.
 - **Agent responses** - Individual message completions
 - **Reasoning steps** - Model reasoning captured in span events
 - **Command executions** - Shell commands with exit codes and output
 - **File changes** - File modifications with paths and change types
 - **MCP tool calls** - External tool invocations
+
+Every item span (commands, file changes, MCP tools, etc.) is additionally tagged with `gen_ai.turn.index` so callers can correlate it back to the SDK turn that emitted it.
+
+The Codex SDK exposes a turn for each `thread.runStreamed()` call, including its
+intermediate tool items. It does not expose each internal model generation, so these
+markers can verify and correlate SDK turns but cannot prove whether tool calls were
+batched into one LLM round-trip.
 
 ### Deep Tracing
 
@@ -534,6 +545,22 @@ When collaboration mode is enabled, the agent can use tools like `spawn_agent`, 
 Collaboration mode is a beta feature. `config.collaboration_mode` is merged into `cli_config.collaboration_mode`, and the top-level field wins if both are set. Some user-configured settings like `model` and `model_reasoning_effort` may still be overridden by Codex collaboration presets.
 
 :::
+
+### Goals and Subagents
+
+Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`; Promptfoo forwards the `cli_config` object to the Codex SDK as config overrides.
+
+```yaml
+providers:
+  - id: openai:codex-sdk:gpt-5.5
+    config:
+      cli_config:
+        features:
+          goals: true
+          multi_agent: true
+```
+
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
 
 ## Model Reasoning Effort
 

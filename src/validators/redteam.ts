@@ -118,6 +118,10 @@ export const RedteamPluginObjectSchema = z.object({
   severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
+const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
+  numTests: z.int().positive().optional().describe('Number of tests to generate for this plugin'),
+});
+
 /**
  * Schema for individual redteam plugins or their shorthand.
  */
@@ -142,7 +146,7 @@ export const RedteamPluginSchema = z.union([
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
-  RedteamPluginObjectSchema,
+  RedteamConfigPluginObjectSchema,
 ]);
 
 export const strategyIdSchema = z.union([
@@ -255,52 +259,6 @@ export const RedteamGenerateOptionsSchema = z.object({
 });
 
 /**
- * Schema for `promptfoo redteam run` command options
- */
-// NOTE: Remember to edit types/redteam.ts:RedteamRunOptions if you edit this schema
-export const RedteamRunOptionsSchema = z.object({
-  id: z.string().optional().describe('Evaluation ID'),
-  config: z.string().optional().describe('Path to the configuration file'),
-  target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
-  output: z.string().optional().describe('Output file path'),
-  cache: z.boolean().optional().describe('Whether to use caching'),
-  envPath: z.string().optional().describe('Path to the environment file'),
-  maxConcurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum number of concurrent API calls'),
-  delay: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe('Delay in milliseconds between API calls'),
-  remote: z.boolean().optional().describe('Whether to force remote inference'),
-  force: z.boolean().optional().describe('Whether to force generation'),
-  filterPrompts: z.string().optional().describe('Filter prompts'),
-  filterProviders: z.string().optional().describe('Filter providers'),
-  filterTargets: z.string().optional().describe('Filter targets'),
-  verbose: z.boolean().optional().describe('Whether to enable verbose logging'),
-  progressBar: z.boolean().optional().describe('Whether to show a progress bar'),
-  yes: z
-    .boolean()
-    .optional()
-    .describe('Automatically answer yes to all prompts (for CI/CD automation)'),
-  strict: z
-    .boolean()
-    .optional()
-    .describe('Fail the scan if any plugins fail to generate test cases'),
-  description: z.string().optional().describe('Description of the red team run'),
-  liveRedteamConfig: z.any().optional().describe('Live configuration object from web UI'),
-  logCallback: z.function().optional().describe('Callback function for logging'),
-  progressCallback: z.function().optional().describe('Callback function for progress updates'),
-  abortSignal: z.any().optional().describe('AbortSignal for cancellation'),
-  loadedFromCloud: z.boolean().optional().describe('Whether config was loaded from cloud'),
-});
-
-/**
  * Schema for `redteam` section of promptfooconfig.yaml
  */
 export const RedteamConfigSchema = z
@@ -352,7 +310,7 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .prefault(['default']),
+      .default(['default']),
     maxConcurrency: z
       .int()
       .positive()
@@ -499,7 +457,10 @@ export const RedteamConfigSchema = z
       const pluginObj: RedteamPluginObject =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
-          : { ...plugin, numTests: plugin.numTests ?? data.numTests };
+          : {
+              ...plugin,
+              numTests: plugin.numTests ?? data.numTests ?? DEFAULT_NUM_TESTS_PER_PLUGIN,
+            };
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
@@ -635,10 +596,6 @@ function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
-
-// Note: RedteamRunOptions includes function types (logCallback, progressCallback) and
-// AbortSignal which cannot be directly validated with Zod, so type equality check is omitted.
-// The schema still provides runtime validation for the serializable fields.
 
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

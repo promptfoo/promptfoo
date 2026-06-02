@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
-import { doGenerateRedteam } from '../../../redteam/commands/generate';
+import { doGenerateRedteamWithResult } from '../../../redteam/commands/generate';
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
@@ -228,7 +228,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
         // Generate test cases with timeout protection
         const startTime = Date.now();
         const generateResult = await withTimeout(
-          doGenerateRedteam(optionsParse.data),
+          doGenerateRedteamWithResult(optionsParse.data),
           DEFAULT_TOOL_TIMEOUT_MS,
           'Redteam test generation timed out. This may indicate provider connectivity issues, missing API credentials, or too many tests requested.',
         );
@@ -277,7 +277,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             strategyResults,
             testCasesByPlugin: Array.isArray(result.tests)
               ? result.tests.reduce((acc: Record<string, number>, test: any) => {
-                  const plugin = test.metadata?.plugin || 'unknown';
+                  const plugin = test.metadata?.pluginId || test.metadata?.plugin || 'unknown';
                   acc[plugin] = (acc[plugin] || 0) + 1;
                   return acc;
                 }, {})
@@ -286,8 +286,8 @@ export function registerRedteamGenerateTool(server: McpServer) {
               ? result.tests.slice(0, 5).map((test: any, index: number) => ({
                   index,
                   description: test.description || 'No description',
-                  plugin: test.metadata?.plugin || 'unknown',
-                  strategy: test.metadata?.strategy || 'unknown',
+                  plugin: test.metadata?.pluginId || test.metadata?.plugin || 'unknown',
+                  strategy: test.metadata?.strategyId || test.metadata?.strategy || 'unknown',
                   vars: test.vars ? Object.keys(test.vars).slice(0, 3) : [],
                   attack: test.vars?.attack
                     ? typeof test.vars.attack === 'string'

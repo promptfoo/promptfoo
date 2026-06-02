@@ -3,7 +3,6 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { isMcpToolNameFilter } from '../../providers/mcp/util';
-import { loadTools } from '../../providers/openai/agents-loader';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -453,7 +452,7 @@ export abstract class RedteamGraderBase {
     const tools =
       providerTools && !isMcpToolNameFilter(providerTools)
         ? providerId?.startsWith('openai:agents:')
-          ? await loadTools(providerTools)
+          ? await (await import('../../providers/openai/agents-loader')).loadTools(providerTools)
           : await maybeLoadToolsFromExternalFile(providerTools)
         : undefined;
 

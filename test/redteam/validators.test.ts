@@ -32,7 +32,6 @@ import {
   RedteamGenerateOptionsSchema,
   RedteamPluginObjectSchema,
   RedteamPluginSchema,
-  RedteamRunOptionsSchema,
   RedteamStrategySchema,
 } from '../../src/validators/redteam';
 
@@ -161,34 +160,6 @@ describe('redteamGenerateOptionsSchema', () => {
   });
 });
 
-describe('redteamRunOptionsSchema', () => {
-  it('should accept CI-friendly run options', () => {
-    const result = RedteamRunOptionsSchema.safeParse({
-      cache: false,
-      config: 'promptfooconfig.yaml',
-      output: 'redteam.yaml',
-      force: true,
-      yes: true,
-      strict: true,
-      filterPrompts: 'payment',
-      filterTargets: 'openai',
-      maxConcurrency: 4,
-      delay: 250,
-    });
-
-    expect(result.success).toBe(true);
-  });
-
-  it('should reject invalid concurrency and delay values', () => {
-    expect(
-      RedteamRunOptionsSchema.safeParse({
-        maxConcurrency: 0,
-        delay: -1,
-      }).success,
-    ).toBe(false);
-  });
-});
-
 describe('redteamPluginSchema', () => {
   it('should accept a valid plugin name as a string', () => {
     expect(RedteamPluginSchema.safeParse('hijacking').success).toBe(true);
@@ -273,7 +244,18 @@ describe('redteamConfigSchema', () => {
     { id: 'empty-purpose', purpose: '' },
     { id: 'blank-purpose', purpose: '   ' },
   ])('should accept contexts with optional or blank purposes: $id', (context) => {
-    expect(RedteamContextSchema.safeParse(context).success).toBe(true);
+    const result = RedteamContextSchema.safeParse(context);
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      return;
+    }
+
+    if (context.purpose === undefined) {
+      expect(result.data.purpose).toBeUndefined();
+    } else {
+      expect(result.data.purpose).toBeTypeOf('string');
+      expect(result.data.purpose?.trim()).toBe('');
+    }
   });
 
   it('should accept a valid configuration with all fields', () => {

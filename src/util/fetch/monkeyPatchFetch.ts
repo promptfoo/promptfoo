@@ -4,6 +4,7 @@ import { gzip } from 'zlib';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
+import { sanitizeUrl } from '../sanitizer';
 
 import type { FetchOptions } from './types';
 
@@ -16,6 +17,15 @@ function isConnectionError(error: Error) {
     // @ts-expect-error undici error cause
     error.cause?.stack?.includes('internalConnectMultiple')
   );
+}
+
+function getSafeUrlForConnectionLog(url: string | URL | Request): string {
+  return sanitizeUrl(url instanceof Request ? url.url : url.toString());
+}
+
+function getSafeProxyForConnectionLog(): string {
+  const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+  return proxyUrl ? `or Proxy: ${sanitizeUrl(proxyUrl)}` : '';
 }
 
 /**
@@ -91,7 +101,7 @@ export async function monkeyPatchFetch(
       });
       if (isConnectionError(e as Error)) {
         logger.debug(
-          `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
+          `Connection error, please check your network connectivity to the host: ${getSafeUrlForConnectionLog(url)} ${getSafeProxyForConnectionLog()}`,
         );
         throw e;
       }
