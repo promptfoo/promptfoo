@@ -68,6 +68,7 @@ function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T
     stripPromptText
       ? {
           ...prompt,
+          label: '[prompt stripped]',
           raw: '[prompt stripped]',
         }
       : prompt
@@ -625,6 +626,16 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
     return table;
   }
 
+  const artifactTable = table as unknown as Omit<EvaluateTable, 'head'> & {
+    head?: Partial<EvaluateTable['head']>;
+  };
+  const tableHead =
+    typeof artifactTable.head === 'object' && artifactTable.head !== null
+      ? artifactTable.head
+      : undefined;
+  const headPrompts = Array.isArray(tableHead?.prompts) ? tableHead.prompts : undefined;
+  const headVars = Array.isArray(tableHead?.vars) ? tableHead.vars : [];
+
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
@@ -649,7 +660,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
       return vars.map(() => '');
     }
     return vars.map((value, index) => {
-      const varName = table.head.vars[index];
+      const varName = headVars[index];
       if (varName === undefined) {
         return sanitizeForDbWithSecrets(value);
       }
@@ -672,13 +683,19 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
     }
 
     const artifactOutput = output as EvaluateTableOutput & Record<string, unknown>;
+    const projectedOutput = { ...artifactOutput };
+    if (shouldStripResponseOutput) {
+      delete projectedOutput.audio;
+      delete projectedOutput.images;
+      delete projectedOutput.video;
+    }
     const redacted = redactSensitiveResultFieldsForDb({
       response: sanitizeForDb(output.response),
       gradingResult: sanitizeForDb(output.gradingResult),
       metadata: sanitizeForDb(output.metadata),
     });
     return {
-      ...output,
+      ...projectedOutput,
       ...(artifactOutput.vars === undefined
         ? {}
         : {
@@ -697,22 +714,30 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
   };
 
   return {
-    ...table,
-    head: {
-      ...table.head,
-      prompts: table.head.prompts.map((prompt) =>
-        projectPrompt(sanitizeForDbWithSecrets(prompt), shouldStripPromptText),
-      ),
-    },
+    ...artifactTable,
+    ...(tableHead
+      ? {
+          head: {
+            ...tableHead,
+            ...(headPrompts
+              ? {
+                  prompts: headPrompts.map((prompt) =>
+                    projectPrompt(sanitizeForDbWithSecrets(prompt), shouldStripPromptText),
+                  ),
+                }
+              : {}),
+          },
+        }
+      : {}),
     body: table.body.map((row) => ({
       ...row,
-      vars: sanitizeDisplayVars(row.vars, row.test),
+      vars: Array.isArray(row.vars) ? sanitizeDisplayVars(row.vars, row.test) : row.vars,
       test: sanitizeTestCase(row.test) as AtomicTestCase,
       outputs: Array.isArray(row.outputs)
         ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
         : row.outputs,
     })),
-  };
+  } as EvaluateTable;
 }
 
 export default class EvalResult {

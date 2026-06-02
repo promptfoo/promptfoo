@@ -59,7 +59,7 @@ function createLegacyV2Summary() {
         prompts: [
           {
             raw: 'head-prompt-secret {{safe}}',
-            label: 'p',
+            label: 'head-prompt-label-secret',
             provider: 'provider',
             config: {
               apiKey: 'head-prompt-api-key-secret',
@@ -128,6 +128,9 @@ function createLegacyV2Summary() {
                   },
                 },
               },
+              audio: { data: 'audio-output-secret' },
+              video: { url: 'video-output-secret' },
+              images: [{ data: 'image-output-secret' }],
             },
           ],
         },
@@ -449,6 +452,7 @@ describe('writeOutput', () => {
     const table = parsed.results.table;
     const output = table.body[0].outputs[0];
     expect(table.head.prompts[0].raw).toBe('head-prompt-secret {{safe}}');
+    expect(table.head.prompts[0].label).toBe('head-prompt-label-secret');
     expect(table.head.prompts[0].config.apiKey).toBe('[REDACTED]');
     expect(table.head.prompts[0].config.temperature).toBe(0.1);
     expect(table.body[0].vars).toEqual([
@@ -471,6 +475,9 @@ describe('writeOutput', () => {
     expect(table.body[0].test.vars.apiKey).toBe('[REDACTED]');
     expect(output.prompt).toBe('rendered-prompt-secret');
     expect(output.text).toBe('response-text-secret');
+    expect(output.audio.data).toBe('audio-output-secret');
+    expect(output.video.url).toBe('video-output-secret');
+    expect(output.images[0].data).toBe('image-output-secret');
     expect(written).not.toContain('session=secret');
     expect(written).not.toContain('sk-should-not-persist');
     expect(written).not.toContain('azure-api-key-should-not-persist');
@@ -502,6 +509,7 @@ describe('writeOutput', () => {
       const table = JSON.parse(written).results.table;
       const output = table.body[0].outputs[0];
       expect(table.head.prompts[0].raw).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].label).toBe('[prompt stripped]');
       expect(table.body[0].vars).toEqual(['', '', '']);
       expect(table.body[0].test.vars).toBeUndefined();
       expect(output.vars).toEqual({});
@@ -509,10 +517,17 @@ describe('writeOutput', () => {
       expect(output.prompt).toBe('[prompt stripped]');
       expect(output.text).toBe('[output stripped]');
       expect(output.response.output).toBe('[output stripped]');
+      expect(output.audio).toBeUndefined();
+      expect(output.video).toBeUndefined();
+      expect(output.images).toBeUndefined();
       expect(written).not.toContain('head-prompt-secret');
+      expect(written).not.toContain('head-prompt-label-secret');
       expect(written).not.toContain('rendered-prompt-secret');
       expect(written).not.toContain('response-text-secret');
       expect(written).not.toContain('response-output-secret');
+      expect(written).not.toContain('audio-output-secret');
+      expect(written).not.toContain('video-output-secret');
+      expect(written).not.toContain('image-output-secret');
       expect(written).not.toContain('keep-row');
       expect(written).not.toContain('keep-output');
     } finally {
@@ -540,6 +555,27 @@ describe('writeOutput', () => {
     expect(outputs[0]).toBeNull();
     expect(outputs[1]).toBeNull();
     expect(outputs[2].response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+  });
+
+  it.each([
+    { name: 'missing head', head: undefined },
+    { name: 'missing prompts', head: { vars: [] } },
+    { name: 'malformed prompts', head: { prompts: 'invalid', vars: [] } },
+  ])('tolerates a legacy V2 table with $name', async ({ head }) => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    (v2Summary.table as any).head = head;
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const table = JSON.parse(written).results.table;
+    expect(table.body[0].outputs[0].response.metadata.http.headers['set-cookie']).toBe(
+      '[REDACTED]',
+    );
   });
 
   it.each([
