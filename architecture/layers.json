@@ -158,6 +158,7 @@
         "src/envOverrides.ts",
         "src/envars.ts",
         "src/esm.ts",
+        "src/evaluator",
         "src/evaluator.ts",
         "src/evaluatorHelpers.ts",
         "src/external",
@@ -187,7 +188,14 @@
         "src/updates",
         "src/version.ts"
       ],
-      "allowedDependencies": ["core", "legacy-contracts", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "node",
+        "providers",
+        "redteam"
+      ]
     }
   ]
 }
