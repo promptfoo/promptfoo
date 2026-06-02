@@ -1105,6 +1105,8 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1113,6 +1115,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1125,7 +1128,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
@@ -1244,6 +1251,16 @@ export const TestSuiteConfigSchema = z.object({
     .object({
       enabled: z.boolean().prefault(false),
 
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().optional(),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
+
       // OTLP receiver configuration
       otlp: z
         .object({
@@ -1251,8 +1268,11 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
