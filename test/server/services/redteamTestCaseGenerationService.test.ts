@@ -261,6 +261,17 @@ describe('redteamTestCaseGenerationService', () => {
       expect(
         getPluginConfigurationError({
           id: 'decisioning:automated-decision-response-integrity',
+          config: {
+            profiles: ['california-ccpa-admt'],
+            decisionResponsePolicyContent: { text: 'not uploaded text' },
+          },
+        }),
+      ).toBe(
+        'Automated Decision Response Integrity plugin requires `config.decisionResponsePolicyContent` to be uploaded text when provided.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
           config: { profiles: ['california-ccpa-admt'] },
         }),
       ).toBeNull();

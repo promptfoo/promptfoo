@@ -1385,6 +1385,51 @@ describe('synthesize', () => {
       expect(result.testCases[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicy');
     });
 
+    it('should preserve sanitized automated decision response config through synthesis', async () => {
+      const sensitivePolicy = 'Sensitive decision response SOP contents.';
+      vi.mocked(mockProvider.callApi).mockResolvedValue({
+        output: 'Prompt: Was automated technology used in my application decision?',
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [
+          {
+            id: 'decisioning:automated-decision-response-integrity',
+            numTests: 1,
+            config: {
+              profiles: ['california-ccpa-admt'],
+              decisionResponsePolicyContent: sensitivePolicy,
+              decisionResponsePolicyFileName: 'decision-response-sop.md',
+              privacyPolicyContent: 'Adjacent privacy policy contents.',
+              rightsRequestPolicyContent: 'Adjacent privacy workflow contents.',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Decision response assistant',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.decisionResponsePolicy).toBe(sensitivePolicy);
+      expect(result.testCases[0].metadata?.pluginConfig).toMatchObject({
+        profiles: ['california-ccpa-admt'],
+      });
+      expect(result.testCases[0].metadata?.pluginConfig).not.toHaveProperty(
+        'decisionResponsePolicyContent',
+      );
+      expect(result.testCases[0].metadata?.pluginConfig).not.toHaveProperty(
+        'decisionResponsePolicyFileName',
+      );
+      expect(result.testCases[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicyContent');
+      expect(result.testCases[0].metadata?.pluginConfig).not.toHaveProperty(
+        'rightsRequestPolicyContent',
+      );
+    });
+
     it('should handle strategies that return undefined test cases', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([
         { vars: { query: 'test1' }, metadata: { pluginId: 'test-plugin' } },
@@ -2194,6 +2239,27 @@ describe('calculateTotalTests', () => {
         id: 'privacy:rights-request-workflow-integrity',
         numTests: 2,
         config: { geographies: ['california-ccpa', 'eu-gdpr'] },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 4,
+      totalPluginTests: 4,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should multiply automated decision response tests by normalized profile count', () => {
+    const plugins = [
+      {
+        id: 'decisioning:automated-decision-response-integrity',
+        numTests: 2,
+        config: {
+          profiles: 'california-ccpa-admt, eu-ai-act-high-risk-explanation, california-ccpa-admt',
+        },
       },
     ];
 

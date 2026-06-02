@@ -37,6 +37,7 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { normalizeAutomatedDecisionResponseProfiles } from './plugins/automatedDecisionResponseIntegrity';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -415,16 +416,18 @@ function getPluginLanguageCount(
 }
 
 function getPluginExpansionCount(plugin: SynthesizeOptions['plugins'][number]): number {
-  if (plugin.id !== 'privacy:rights-request-workflow-integrity') {
-    return 1;
-  }
-
   try {
-    return normalizePrivacyRightsGeographies(plugin.config ?? {}).length;
+    if (plugin.id === 'privacy:rights-request-workflow-integrity') {
+      return normalizePrivacyRightsGeographies(plugin.config ?? {}).length;
+    }
+    if (plugin.id === 'decisioning:automated-decision-response-integrity') {
+      return normalizeAutomatedDecisionResponseProfiles(plugin.config ?? {}).length;
+    }
   } catch {
     // Plugin validation will report invalid config later. Keep early totals usable.
-    return 1;
   }
+
+  return 1;
 }
 
 // Cache resolved intent counts per plugin instance. Resolving `file://`

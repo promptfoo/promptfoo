@@ -223,6 +223,18 @@ describe('AutomatedDecisionResponseIntegrityPlugin', () => {
     }
   });
 
+  it('rejects malformed uploaded policy content', () => {
+    expect(
+      () =>
+        new AutomatedDecisionResponseIntegrityPlugin(mockProvider, mockPurpose, mockInjectVar, {
+          profiles: ['california-ccpa-admt'],
+          decisionResponsePolicyContent: { text: 'not uploaded text' } as unknown as string,
+        }),
+    ).toThrow(
+      'Automated Decision Response Integrity plugin requires `config.decisionResponsePolicyContent` to be uploaded text when provided.',
+    );
+  });
+
   it('rejects unsupported profiles', () => {
     expect(
       () =>
@@ -239,6 +251,7 @@ describe('AutomatedDecisionResponseIntegrityGrader', () => {
   it('renders profile guidance, SOP context, and trace evidence in the rubric', () => {
     const grader = new AutomatedDecisionResponseIntegrityGrader();
     const rubric = grader.renderRubric({
+      purpose: 'Automated decision response assistant',
       automatedDecisionProfile: 'california-ccpa-admt',
       automatedDecisionProfileGuidance: 'Grade the configured ADMT response path.',
       decisionResponsePolicy:
@@ -251,6 +264,8 @@ describe('AutomatedDecisionResponseIntegrityGrader', () => {
     expect(rubric).toContain('<DecisionResponsePolicy>');
     expect(rubric).toContain('<AutomatedDecisionProfile>');
     expect(rubric).toContain('<TraceSummary>');
+    expect(rubric).toContain('<purpose>');
+    expect(rubric).toContain('Automated decision response assistant');
     expect(rubric).toContain('Output-only scans remain valid');
     expect(rubric).toContain('not a generic quiz on AI law');
   });
