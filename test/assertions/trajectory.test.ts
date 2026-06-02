@@ -109,6 +109,71 @@ const defaultParams = {
 };
 
 describe('trajectory utilities', () => {
+  it('treats configured shell tool names as command steps', () => {
+    const customShellTrace: TraceData = {
+      traceId: 'custom-shell',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'pytest tests/' }),
+          },
+        },
+      ],
+    };
+
+    // By default, a tool named 'bash' normalizes to type:tool, not type:command.
+    expect(extractTrajectorySteps(customShellTrace)[0].type).toBe('tool');
+
+    const steps = extractTrajectorySteps({
+      ...customShellTrace,
+      metadata: { commandToolNames: ['bash'] },
+    });
+    expect(steps[0].type).toBe('command');
+    // The command argument should also be reflected in the step name.
+    expect(steps[0].name).toBe('pytest tests/');
+  });
+
+  it('matches configured command tool names case-insensitively and ignores invalid entries', () => {
+    const trace: TraceData = {
+      traceId: 'custom-shell-2',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'ls -la' }),
+          },
+        },
+      ],
+    };
+
+    // An uppercase override matches the lowercase tool name.
+    const upper = extractTrajectorySteps({ ...trace, metadata: { commandToolNames: ['BASH'] } });
+    expect(upper[0].type).toBe('command');
+    expect(upper[0].name).toBe('ls -la');
+
+    // Non-string / blank entries are ignored without throwing; the valid name still applies.
+    const mixed = extractTrajectorySteps({
+      ...trace,
+      metadata: { commandToolNames: ['bash', 123, '', '  '] as any },
+    });
+    expect(mixed[0].type).toBe('command');
+  });
+
   it('extracts normalized trajectory steps from trace spans', () => {
     const steps = extractTrajectorySteps(mockTraceData);
 
@@ -129,6 +194,60 @@ describe('trajectory utilities', () => {
       tone: 'friendly',
       citations: ['doc_1', 'doc_2'],
     });
+  });
+
+  it('does not classify a chat span carrying gen_ai.tool.definitions as a tool', () => {
+    // pydantic-ai (and other GenAI-convention tracers) put the list of *available* tools on
+    // each chat span as a JSON array under gen_ai.tool.definitions; that must not be read as
+    // a tool call. Real tool calls use gen_ai.tool.name. Regression for #9523.
+    const toolDefinitions = JSON.stringify([
+      { type: 'function', name: 'orders', description: 'List orders' },
+      { type: 'function', name: 'order_rows', description: 'List order rows' },
+    ]);
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'chat-1',
+          name: 'chat gpt-4o-mini',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'gen_ai.tool.definitions': toolDefinitions },
+        },
+        {
+          spanId: 'exec-1',
+          name: 'execute_tool',
+          startTime: 1200,
+          endTime: 1300,
+          attributes: { 'gen_ai.tool.name': 'order_rows' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'span', name: 'chat gpt-4o-mini' },
+      { type: 'tool', name: 'order_rows' },
+    ]);
+  });
+
+  it('still reads a plain string tool name from a generic tool attribute', () => {
+    // The structured-value guard must not break scalar tool-name fallbacks.
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'custom-tool',
+          name: 'invoke',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: { 'app.tool': 'lookup_customer' },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'tool', name: 'lookup_customer' },
+    ]);
   });
 
   it('only treats a generic query attribute as search when the span looks search-like', () => {
@@ -2163,10 +2282,12 @@ describe('trajectory assertions', () => {
         };
 
         expect(
-          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value)).pass,
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'a' }, value))
+            .pass,
         ).toBe(true);
         expect(
-          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value)).pass,
+          handleTrajectoryToolArgsMatch(makeIgnoreParams({ status: 'Q', request_id: 'z' }, value))
+            .pass,
         ).toBe(true);
       });
 
@@ -2228,7 +2349,12 @@ describe('trajectory assertions', () => {
         const result = handleTrajectoryToolArgsMatch(
           makeIgnoreParams(
             { status: 'Q', request_id: 'abc' },
-            { name: 'search_orders', mode: 'partial', args: { status: 'Q' }, ignore: ['request_id'] },
+            {
+              name: 'search_orders',
+              mode: 'partial',
+              args: { status: 'Q' },
+              ignore: ['request_id'],
+            },
           ),
         );
         expect(result.pass).toBe(true);
