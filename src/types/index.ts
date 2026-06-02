@@ -1128,7 +1128,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
