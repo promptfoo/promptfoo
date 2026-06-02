@@ -245,6 +245,66 @@ export async function generateOptimizedPromptCandidates(params: {
   return candidates;
 }
 
+/**
+ * Generates candidates for an optimization round, returning `null` to signal the
+ * caller should stop optimizing while keeping the best prompt found so far.
+ *
+ * A first-round failure rethrows so genuine misconfiguration (bad provider,
+ * unparseable output, no candidates at all) surfaces instead of being hidden
+ * behind a silent "no improvement" exit. A later-round failure is expected as
+ * the prompt converges (the suggestions provider returns only duplicates or the
+ * unchanged prompt) or on a transient provider error, so it is logged and the
+ * already-adopted improvements from earlier rounds are preserved.
+ */
+async function generateRoundCandidatesOrStop(
+  round: number,
+  params: Parameters<typeof generateOptimizedPromptCandidates>[0],
+): Promise<PromptOptimizationCandidate[] | null> {
+  try {
+    return await generateOptimizedPromptCandidates(params);
+  } catch (error) {
+    if (round === 1) {
+      throw error;
+    }
+    logger.warn(
+      chalk.yellow(
+        `Stopping optimization after round ${round - 1}: round ${round} could not generate new prompt candidates (${error instanceof Error ? error.message : String(error)}). Keeping the best prompt found so far.`,
+      ),
+    );
+    return null;
+  }
+}
+
+function logOptimizationOutcome(params: {
+  improved: boolean;
+  baselinePrompt: CompletedPrompt;
+  bestPrompt: CompletedPrompt;
+  baselineValidationPrompt?: CompletedPrompt;
+  bestValidationPrompt?: CompletedPrompt;
+}): void {
+  const { improved, baselinePrompt, bestPrompt, baselineValidationPrompt, bestValidationPrompt } =
+    params;
+  if (baselineValidationPrompt && bestValidationPrompt) {
+    logger.info(
+      improved
+        ? chalk.green(
+            `Optimization improved validation score from ${formatScore(baselineValidationPrompt)} to ${formatScore(bestValidationPrompt)}.`,
+          )
+        : chalk.yellow(
+            `No candidate exceeded the baseline validation score of ${formatScore(baselineValidationPrompt)}.`,
+          ),
+    );
+    return;
+  }
+  logger.info(
+    improved
+      ? chalk.green(
+          `Optimization improved score from ${formatScore(baselinePrompt)} to ${formatScore(bestPrompt)}.`,
+        )
+      : chalk.yellow(`No candidate exceeded the baseline score of ${formatScore(baselinePrompt)}.`),
+  );
+}
+
 function selectBestPrompt(prompts: CompletedPrompt[]): CompletedPrompt {
   const [firstPrompt, ...rest] = prompts;
   if (!firstPrompt) {
@@ -491,6 +551,25 @@ function buildCandidateDefaultTest(
   };
 }
 
+function buildCandidateScenarios(
+  scenarios: TestSuite['scenarios'],
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): TestSuite['scenarios'] {
+  return scenarios?.map((scenario) => ({
+    ...scenario,
+    config: scenario.config.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+    tests: scenario.tests.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
+  }));
+}
+
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -528,7 +607,12 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
+    scenarios: buildCandidateScenarios(
+      testSuite.scenarios,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
   };
 }
 
@@ -591,6 +675,28 @@ function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {
   };
 }
 
+/**
+ * Detects whether `defaultTest` carries enough configuration to be a runnable test
+ * on its own. `promptfoo eval` synthesizes a single implicit `[{}]` test case when no
+ * `tests` or `scenarios` are configured and merges `defaultTest` into it (see
+ * `getInitialTests` in `src/evaluator.ts`), so a `defaultTest` with assertions
+ * or variables produces one runnable row. An assertion scoring function only
+ * combines assertion results, so a default-only implicit test that configures
+ * one without assertions is rejected rather than silently ignoring the scorer.
+ * An empty `defaultTest` (`{}`) carries nothing to evaluate and is not counted.
+ */
+function hasRunnableDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+  const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
+  const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
+  if (defaultTest.assertScoringFunction && !hasAssertions) {
+    return false;
+  }
+  return hasAssertions || hasVars;
+}
+
 function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   const explicitTests = testSuite.tests?.length || 0;
   const scenarioTests = (testSuite.scenarios || []).reduce((count, scenario) => {
@@ -598,6 +704,17 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
     const scenarioTestCount = scenario.tests?.length ?? 1;
     return count + scenarioConfigCount * scenarioTestCount;
   }, 0);
+  // `eval` synthesizes one implicit `[{}]` test (merging `defaultTest`) only
+  // when there are no `tests` and `scenarios` is absent — an empty `scenarios`
+  // array still suppresses it (see `getInitialTests` in `src/evaluator.ts`).
+  // Mirror that exactly so the preflight does not accept testless configs.
+  if (
+    explicitTests === 0 &&
+    !testSuite.scenarios &&
+    hasRunnableDefaultTest(testSuite.defaultTest)
+  ) {
+    return 1;
+  }
   return explicitTests + scenarioTests;
 }
 
@@ -609,6 +726,14 @@ function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvalua
     showProgressBar: false,
     silent: true,
   };
+}
+
+function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
+  if (evalRecord?.results.length === 0) {
+    throw new Error(
+      `No eval test cases ran for ${scope} — check filters and other test scoping options.`,
+    );
+  }
 }
 
 export async function optimizePromptTestSuite(
@@ -625,22 +750,32 @@ export async function optimizePromptTestSuite(
   }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(testSuite, options);
+  if (selectedTestSuite.prompts[0].function) {
+    throw new Error('Prompt optimization currently supports literal string prompts only.');
+  }
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(selectedTestSuite, options.validationSplit);
+
+  // Internal optimizer evals are intermediate runs and must not write to the user's
+  // configured output. Strip outputPath so the Evaluator does not append baseline or
+  // candidate result rows to a .jsonl file the user expects only `eval` to populate.
+  const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
   logger.info('Running baseline evaluation for prompt optimization...');
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
-    new Eval(config, { persisted: false }),
+    new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
-        new Eval(config, { persisted: false }),
+        new Eval(optimizationConfig, { persisted: false }),
         createEvaluationOptions(config),
       )
     : undefined;
+  assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,
@@ -681,12 +816,19 @@ export async function optimizePromptTestSuite(
   );
 
   for (let round = 1; round <= DEFAULT_ROUNDS; round += 1) {
-    const candidates = await generateOptimizedPromptCandidates({
+    const candidates = await generateRoundCandidatesOrStop(round, {
       prompt: currentPromptSource.raw,
       failures: currentFailures,
       successes: currentSuccesses,
       history,
     });
+    // Later rounds frequently fail to produce *new* candidates as the prompt
+    // converges, or on a transient provider error. Don't discard the
+    // improvements already adopted in earlier rounds: stop and return the best
+    // prompt found so far (a first-round failure rethrows inside the helper).
+    if (candidates === null) {
+      break;
+    }
     allCandidates = [...allCandidates, ...candidates];
 
     logger.info(
@@ -700,7 +842,7 @@ export async function optimizePromptTestSuite(
     );
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
-      new Eval(config, { persisted: false }),
+      new Eval(optimizationConfig, { persisted: false }),
       createEvaluationOptions(config),
     );
     const candidateValidationEval = validationTestSuite
@@ -713,7 +855,7 @@ export async function optimizePromptTestSuite(
               candidates,
             ),
           ),
-          new Eval(config, { persisted: false }),
+          new Eval(optimizationConfig, { persisted: false }),
           createEvaluationOptions(config),
         )
       : undefined;
@@ -782,33 +924,13 @@ export async function optimizePromptTestSuite(
           scoreOf(bestPrompt) > scoreOf(baselinePrompt))
       : scoreOf(bestPrompt) > scoreOf(baselinePrompt);
 
-  if (improved) {
-    if (baselineValidationPrompt && bestValidationPrompt) {
-      logger.info(
-        chalk.green(
-          `Optimization improved validation score from ${formatScore(baselineValidationPrompt)} to ${formatScore(bestValidationPrompt)}.`,
-        ),
-      );
-    } else {
-      logger.info(
-        chalk.green(
-          `Optimization improved score from ${formatScore(baselinePrompt)} to ${formatScore(bestPrompt)}.`,
-        ),
-      );
-    }
-  } else {
-    if (baselineValidationPrompt && bestValidationPrompt) {
-      logger.info(
-        chalk.yellow(
-          `No candidate exceeded the baseline validation score of ${formatScore(baselineValidationPrompt)}.`,
-        ),
-      );
-    } else {
-      logger.info(
-        chalk.yellow(`No candidate exceeded the baseline score of ${formatScore(baselinePrompt)}.`),
-      );
-    }
-  }
+  logOptimizationOutcome({
+    improved,
+    baselinePrompt,
+    bestPrompt,
+    baselineValidationPrompt,
+    bestValidationPrompt,
+  });
 
   return {
     baselineEval,

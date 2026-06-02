@@ -9,7 +9,7 @@ vi.mock('../../src/blobs/extractor', () => ({
 vi.mock('../../src/blobs/index', () => ({
   storeBlob: vi.fn(),
 }));
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 vi.mock(import('../../src/envars'), async (importOriginal) => {
@@ -301,7 +301,7 @@ describe('ModelsLabImageProvider', () => {
   it('downloads image to blob storage when enabled', async () => {
     const { isBlobStorageEnabled } = await import('../../src/blobs/extractor');
     const { storeBlob } = await import('../../src/blobs/index');
-    const { fetchWithProxy } = await import('../../src/util/fetch');
+    const { fetchWithProxy } = await import('../../src/util/fetch/index');
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(storeBlob).mockResolvedValue({
       ref: {

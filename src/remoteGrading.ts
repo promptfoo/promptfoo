@@ -2,7 +2,7 @@ import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
-import { getRemoteGenerationUrl } from './redteam/remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
 
 import type { GradingResult } from './types/index';
 
@@ -22,9 +22,7 @@ export async function doRemoteGrading(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         body,
       },
       getRequestTimeoutMs(),
