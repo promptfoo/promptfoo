@@ -950,6 +950,7 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 - [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) - Evaluate local Codex skills with `skill-used` and traced skill evidence
 - [Thread persistence](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/thread-persistence) - Reuse one prompt-template thread across multiple tests
 - [Sandbox enforcement](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/sandbox) - Verify `read-only` mode blocks writes in a sample workspace
+- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex against OpenAI frontier models (gpt-5.5 / gpt-5.4) on Amazon Bedrock
 - [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ### Verified end-to-end example runs
