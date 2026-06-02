@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  BedrockOpenAiResponsesProvider,
   createBedrockOpenAiResponsesProvider,
   getBedrockMantleBaseUrl,
   isBedrockOpenAiResponsesModel,
@@ -48,6 +49,22 @@ describe('bedrock openaiResponses helper', () => {
       expect(getBedrockMantleBaseUrl('us-west-2')).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
+    });
+
+    it('accepts non-standard but well-formed AWS region shapes', () => {
+      expect(getBedrockMantleBaseUrl('us-gov-west-1')).toBe(
+        'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1',
+      );
+      expect(getBedrockMantleBaseUrl('ap-southeast-4')).toBe(
+        'https://bedrock-mantle.ap-southeast-4.api.aws/openai/v1',
+      );
+    });
+
+    it('rejects a malformed region instead of building a bogus host (defense-in-depth)', () => {
+      // A value like `evil.com/x` would otherwise yield host `bedrock-mantle.evil.com`.
+      expect(() => getBedrockMantleBaseUrl('evil.com/x')).toThrow(/Invalid AWS region/);
+      expect(() => getBedrockMantleBaseUrl('us_east_2')).toThrow(/Invalid AWS region/);
+      expect(() => getBedrockMantleBaseUrl('')).toThrow(/Invalid AWS region/);
     });
   });
 
@@ -193,6 +210,24 @@ describe('bedrock openaiResponses helper', () => {
       });
       // Base getApiUrl() would prefer OPENAI_API_HOST; the subclass must override that.
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
+    });
+
+    it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
+      // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
+      // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
+      // must delegate to the base provider (never the mantle endpoint).
+      restoreEnv = mockProcessEnv({
+        OPENAI_API_HOST: undefined,
+        OPENAI_BASE_URL: undefined,
+        OPENAI_API_BASE_URL: undefined,
+      });
+      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'k' },
+      });
+      expect(direct.getApiUrl()).not.toContain('bedrock-mantle');
+      expect(direct.getApiUrl()).toBe(
+        new OpenAiResponsesProvider('gpt-5.5', { config: { apiKey: 'k' } }).getApiUrl(),
+      );
     });
 
     it('strips a region prefix for capability detection on profile ids', () => {

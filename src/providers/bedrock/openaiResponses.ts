@@ -41,9 +41,26 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
  * those return 400 on `/openai/v1`. Do not "simplify" this to `/v1`.
  */
 export function getBedrockMantleBaseUrl(region: string): string {
+  // Guard against a malformed region silently producing a bogus host: a value like
+  // `evil.com/x` would yield host `bedrock-mantle.evil.com`, redirecting the Bedrock bearer
+  // token. region is operator-controlled (config/env), never request-derived, so this is
+  // defense-in-depth plus a clearer failure than the opaque TLS/DNS error a bad region causes.
+  if (!/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(region)) {
+    throw new Error(
+      `Invalid AWS region "${region}" for the Bedrock mantle endpoint. Expected a region like ` +
+        `"us-east-2". Set a valid region via config.region, AWS_BEDROCK_REGION, or AWS_REGION ` +
+        `(or supply config.apiBaseUrl to target a custom endpoint).`,
+    );
+  }
   return `https://bedrock-mantle.${region}.api.aws/openai/v1`;
 }
 
+// Region precedence for the frontier provider. This intentionally extends
+// AwsBedrockGenericProvider.getRegion() (src/providers/bedrock/base.ts): the same
+// config.region → AWS_BEDROCK_REGION head, plus AWS_REGION/AWS_DEFAULT_REGION fallbacks and a
+// us-east-2 default (the frontier GA region) instead of base.ts's us-east-1. The frontier
+// provider wraps OpenAiResponsesProvider rather than extending AwsBedrockGenericProvider, so it
+// can't reuse getRegion() directly — keep this chain in sync if the canonical one changes.
 function resolveRegion(config: Record<string, any>, env?: EnvOverrides): string {
   return (
     config.region ||
