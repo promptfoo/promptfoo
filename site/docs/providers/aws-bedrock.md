@@ -510,11 +510,12 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:openai.gpt-5.5
+  - id: bedrock:openai.gpt-5.5 # frontier: Responses API, needs a Bedrock API key
     config:
       region: 'us-east-2'
-      max_completion_tokens: 256
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       reasoning_effort: 'medium'
+      max_output_tokens: 256
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -978,105 +979,99 @@ requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-OpenAI models on Bedrock use OpenAI-style request parameters. Available model IDs
-include:
+Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
+APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
 
-**Frontier models** (reasoning models, region-gated):
+#### Frontier models (GPT-5.x)
 
 - **`openai.gpt-5.5`**: Flagship frontier model (US East / Ohio `us-east-2`)
 - **`openai.gpt-5.4`**: Frontier model (US East / Ohio `us-east-2` and US West / Oregon `us-west-2`)
 
-**Open-weight (GPT OSS) models:**
+The frontier models are served only through Bedrock's **OpenAI-compatible Responses API**
+on the regional "mantle" endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) —
+not the native `InvokeModel` API. promptfoo routes `bedrock:openai.gpt-5.5` to its OpenAI
+Responses provider pointed at that endpoint, so the output is **identical to the
+[`openai:responses:gpt-5.5`](/docs/providers/openai/) provider** (the clean final answer;
+chain-of-thought is hidden).
+
+Authentication uses an **Amazon Bedrock API key**, not the AWS SDK credential chain. Set
+`AWS_BEARER_TOKEN_BEDROCK` (or `config.apiKey`):
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-5.5
+    config:
+      region: us-east-2 # gpt-5.5: us-east-2; gpt-5.4: us-east-2 or us-west-2
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
+      reasoning_effort: low # minimal | low | medium | high
+      max_output_tokens: 2048
+```
+
+This is also equivalent to configuring the OpenAI Responses provider directly:
+
+```yaml
+providers:
+  - id: openai:responses:openai.gpt-5.5
+    config:
+      apiBaseUrl: https://bedrock-mantle.us-east-2.api.aws/openai/v1
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+```
+
+#### Open-weight models (GPT OSS)
 
 - **`openai.gpt-oss-120b-1:0`**: 120 billion parameter general-purpose model
 - **`openai.gpt-oss-20b-1:0`**: 20 billion parameter general-purpose model
 - **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
 - **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
 
+The open-weight models are served through Bedrock's native `InvokeModel` API and use the
+standard AWS SDK credential chain, with OpenAI-style request parameters:
+
 ```yaml
-config:
-  region: 'us-east-2' # Frontier models are region-gated (see list above)
-  max_completion_tokens: 1024 # Maximum tokens for response (OpenAI-style parameter)
-  temperature: 0.7 # Controls randomness (0.0 to 1.0)
-  top_p: 0.9 # Nucleus sampling parameter
-  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
-  presence_penalty: 0.1 # Reduces repetition of any tokens
-  stop: ['END', 'STOP'] # Stop sequences
-  reasoning_effort: 'medium' # Native reasoning depth (values vary by model)
-  showThinking: true # Keep (true) or strip (false) the <reasoning> block
+providers:
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: us-west-2
+      max_completion_tokens: 1024 # OpenAI-style parameter (not max_tokens)
+      temperature: 0.7
+      top_p: 0.9
+      frequency_penalty: 0.1
+      presence_penalty: 0.1
+      stop: ['END', 'STOP']
+      reasoning_effort: medium # low | medium | high
+      showThinking: false # see below
 ```
 
 #### Reasoning Effort
 
-OpenAI reasoning models accept the native `reasoning_effort` request parameter, which
-promptfoo forwards as-is so Bedrock validates it for the specific model:
+Both families accept the native `reasoning_effort` request parameter, which promptfoo
+forwards as-is so the API validates it for the specific model:
 
 - **GPT OSS** (`openai.gpt-oss-*`): `low`, `medium`, `high`
-- **Frontier** (`openai.gpt-5.5`, `openai.gpt-5.4`): also support `minimal` and `none`
+- **Frontier** (`openai.gpt-5.x`): also support `minimal` and `none`
 
 Higher effort produces more thorough reasoning at the cost of latency and output tokens.
 
-#### Reasoning Output and `showThinking`
+#### Reasoning Output and `showThinking` (GPT OSS only)
 
-When invoked through Bedrock's `InvokeModel` API, OpenAI reasoning models prepend their
-chain-of-thought wrapped in `<reasoning>...</reasoning>` before the final answer. By
-default promptfoo preserves the full output (`showThinking: true`). Set
-`showThinking: false` to strip the reasoning block and assert against the final answer
-only:
+When invoked through `InvokeModel`, the open-weight models prepend their chain-of-thought
+wrapped in `<reasoning>...</reasoning>` before the final answer. This differs from OpenAI's
+first-party API, which hides chain-of-thought.
 
-```yaml
-providers:
-  - id: bedrock:openai.gpt-5.5
-    config:
-      region: 'us-east-2'
-      reasoning_effort: 'high'
-      showThinking: false # output is just the final answer
-```
-
-#### Usage Example
-
-```yaml
-providers:
-  - id: bedrock:openai.gpt-5.5
-    config:
-      region: 'us-east-2'
-      max_completion_tokens: 2048
-      reasoning_effort: 'high'
-  - id: bedrock:openai.gpt-oss-120b-1:0
-    config:
-      region: 'us-west-2'
-      max_completion_tokens: 2048
-      temperature: 0.3
-      top_p: 0.95
-      reasoning_effort: 'high'
-  - id: bedrock:openai.gpt-oss-20b-1:0
-    config:
-      region: 'us-west-2'
-      max_completion_tokens: 1024
-      temperature: 0.5
-      reasoning_effort: 'medium'
-      stop: ['END', 'FINAL']
-```
-
-:::note
-
-OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
-
-:::
+To keep results consistent with the [`openai:` providers](/docs/providers/openai/),
+promptfoo **strips the reasoning block by default**, so `output` is the clean final
+answer. Set `showThinking: true` to surface it, formatted as
+`Thinking: <reasoning>\n\n<answer>` (the same format the OpenAI chat provider uses). The
+frontier models return clean output already, so this option does not apply to them.
 
 :::note Codex on Bedrock
 
 OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
-frontier model IDs (`openai.gpt-5.5`, `openai.gpt-5.4`) when configured with the
-`amazon-bedrock` provider. There are two distinct ways to use OpenAI-on-Bedrock in
-promptfoo:
-
-- **`bedrock:openai.gpt-5.5`** (this page) — direct single-turn inference via Bedrock's
-  `InvokeModel` API, authenticated with the standard AWS SDK credential chain.
-- **`openai:codex-sdk` with `model_provider: amazon-bedrock`** — runs the full Codex
-  coding agent against the same models through Bedrock's OpenAI-compatible endpoint. See
-  [Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
-  in the Codex SDK docs.
+frontier model IDs (`openai.gpt-5.5`, `openai.gpt-5.4`). To run the full coding agent
+against Bedrock, use `openai:codex-sdk` with `model_provider: amazon-bedrock` — see
+[Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
+in the Codex SDK docs. For direct (non-agentic) inference, use `bedrock:openai.gpt-5.5`
+as shown above.
 
 :::
 

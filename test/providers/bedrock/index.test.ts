@@ -2177,25 +2177,25 @@ describe('BEDROCK_MODEL OPENAI', () => {
       );
     });
 
-    it('should keep the <reasoning> block by default', async () => {
+    it('should strip the <reasoning> block by default to match the OpenAI provider', async () => {
       const mockResponse = {
         choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
       };
 
-      expect(modelHandler.output({}, mockResponse)).toBe(
-        '<reasoning>Think think</reasoning>The answer is 42.',
+      expect(modelHandler.output({}, mockResponse)).toBe('The answer is 42.');
+    });
+
+    it('should surface reasoning as Thinking: when showThinking is true', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
+        'Thinking: Think think\n\nThe answer is 42.',
       );
     });
 
-    it('should strip the <reasoning> block when showThinking is false', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
-
-      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('The answer is 42.');
-    });
-
-    it('should strip a multi-line <reasoning> block and leading whitespace', async () => {
+    it('should strip a multi-line <reasoning> block and leading whitespace by default', async () => {
       const mockResponse = {
         choices: [
           {
@@ -2206,15 +2206,16 @@ describe('BEDROCK_MODEL OPENAI', () => {
         ],
       };
 
-      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Final answer');
+      expect(modelHandler.output({}, mockResponse)).toBe('Final answer');
     });
 
-    it('should leave content untouched when showThinking is false but no reasoning is present', async () => {
+    it('should leave content untouched when no reasoning block is present', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Just the answer.' } }],
       };
 
-      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Just the answer.');
+      expect(modelHandler.output({}, mockResponse)).toBe('Just the answer.');
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe('Just the answer.');
     });
 
     it('should throw an error for API errors', async () => {
@@ -2265,6 +2266,27 @@ describe('BEDROCK_MODEL OPENAI', () => {
         completion: 60,
         total: 90,
         numRequests: 1,
+      });
+    });
+
+    it('should surface reasoning and cached token details for parity with the OpenAI provider', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 19,
+          completion_tokens: 22,
+          total_tokens: 41,
+          completion_tokens_details: { reasoning_tokens: 12 },
+          prompt_tokens_details: { cached_tokens: 8 },
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 19,
+        completion: 22,
+        total: 41,
+        numRequests: 1,
+        completionDetails: { reasoning: 12, cacheReadInputTokens: 8 },
       });
     });
 
@@ -3109,25 +3131,17 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-20b']).toBe(BEDROCK_MODEL.OPENAI);
   });
 
-  it('should map OpenAI frontier models correctly', async () => {
-    expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBe(BEDROCK_MODEL.OPENAI);
-    expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBe(BEDROCK_MODEL.OPENAI);
+  it('should not register frontier gpt-5.x models for the InvokeModel path', async () => {
+    // Frontier models are served via the OpenAI-compatible Responses API, not InvokeModel,
+    // so they must not appear in the InvokeModel model map.
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBeUndefined();
   });
 
   describe('getHandlerForModel OpenAI routing', () => {
-    it('should resolve registered OpenAI model ids to the OpenAI handler', () => {
-      expect(getHandlerForModel('openai.gpt-5.5')).toBe(BEDROCK_MODEL.OPENAI);
+    it('should resolve gpt-oss OpenAI model ids to the InvokeModel OpenAI handler', () => {
       expect(getHandlerForModel('openai.gpt-oss-120b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
-    });
-
-    it('should fall back to the OpenAI handler for unregistered openai.* model ids', () => {
-      // Future frontier releases that are not yet in the static map should still route
-      // through the OpenAI handler instead of throwing.
-      expect(getHandlerForModel('openai.gpt-5.6')).toBe(BEDROCK_MODEL.OPENAI);
-    });
-
-    it('should route region-prefixed OpenAI inference profiles to the OpenAI handler', () => {
-      expect(getHandlerForModel('us.openai.gpt-5.5')).toBe(BEDROCK_MODEL.OPENAI);
+      expect(getHandlerForModel('openai.gpt-oss-20b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
     });
 
     it('should still throw for genuinely unknown models', () => {

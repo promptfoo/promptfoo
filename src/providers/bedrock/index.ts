@@ -400,10 +400,14 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
    */
   reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
   /**
-   * When `false`, strip the `<reasoning>...</reasoning>` block that OpenAI reasoning
-   * models (gpt-oss, gpt-5.x) prepend to the response content via `InvokeModel`,
-   * leaving only the final answer. Defaults to `true`, which preserves the model's
-   * full output including its chain-of-thought.
+   * Controls how the `<reasoning>...</reasoning>` block that OpenAI reasoning models
+   * (gpt-oss, gpt-5.x) prepend to the response content via `InvokeModel` is surfaced.
+   *
+   * Defaults to `false`: the reasoning block is stripped and `output` is the clean
+   * final answer, matching OpenAI's first-party Chat Completions API (which hides
+   * chain-of-thought) and the `openai:` providers. Set to `true` to surface the
+   * reasoning, formatted as `Thinking: <reasoning>\n\n<answer>` for consistency with
+   * the OpenAI chat provider.
    */
   showThinking?: boolean;
 }
@@ -2100,24 +2104,47 @@ ${prompt}
         throw new Error(`OpenAI API error: ${responseJson.error}`);
       }
       const content = responseJson.choices?.[0]?.message?.content;
-      // Reasoning models prepend their chain-of-thought wrapped in
-      // <reasoning>...</reasoning> before the final answer when invoked via
-      // InvokeModel. Strip that prefix when the caller opts out of seeing it.
-      if (
-        typeof content === 'string' &&
-        (config as BedrockOpenAIGenerationOptions)?.showThinking === false
-      ) {
-        return content.replace(/^\s*<reasoning>[\s\S]*?<\/reasoning>\s*/, '');
+      if (typeof content !== 'string') {
+        return content;
       }
-      return content;
+      // Unlike OpenAI's first-party Chat Completions API (which hides chain-of-thought
+      // and returns only the final answer), Bedrock's InvokeModel prepends the model
+      // reasoning wrapped in <reasoning>...</reasoning>. Split it out so that, by
+      // default, `output` is the clean final answer — matching the OpenAI provider.
+      const reasoningMatch = content.match(/^\s*<reasoning>([\s\S]*?)<\/reasoning>\s*([\s\S]*)$/);
+      if (!reasoningMatch) {
+        return content;
+      }
+      const [, reasoning, answer] = reasoningMatch;
+      // Opt in to surfacing reasoning. Format it the same way the OpenAI chat provider
+      // does (`Thinking: ...`) so outputs stay consistent across providers.
+      if ((config as BedrockOpenAIGenerationOptions)?.showThinking === true) {
+        return `Thinking: ${reasoning.trim()}\n\n${answer}`;
+      }
+      return answer;
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
+        const usage = responseJson.usage;
+        // Frontier reasoning models report reasoning tokens the same way OpenAI does;
+        // surface them under completionDetails for parity with the OpenAI provider.
+        const reasoningTokens = coerceStrToNum(usage.completion_tokens_details?.reasoning_tokens);
+        const cachedInputTokens = coerceStrToNum(usage.prompt_tokens_details?.cached_tokens);
+        const completionDetails =
+          reasoningTokens !== undefined || (cachedInputTokens ?? 0) > 0
+            ? {
+                ...(reasoningTokens === undefined ? {} : { reasoning: reasoningTokens }),
+                ...((cachedInputTokens ?? 0) > 0
+                  ? { cacheReadInputTokens: cachedInputTokens }
+                  : {}),
+              }
+            : undefined;
         return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
+          prompt: coerceStrToNum(usage.prompt_tokens),
+          completion: coerceStrToNum(usage.completion_tokens),
+          total: coerceStrToNum(usage.total_tokens),
           numRequests: 1,
+          ...(completionDetails ? { completionDetails } : {}),
         };
       }
 
@@ -2396,17 +2423,14 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'us.mistral.pixtral-large-2502-v1:0': BEDROCK_MODEL.MISTRAL_CHAT,
 
-  // OpenAI Models via Bedrock
+  // OpenAI open-weight (gpt-oss) models via Bedrock InvokeModel. The frontier models
+  // (openai.gpt-5.x) are NOT InvokeModel models — they are served through Bedrock's
+  // OpenAI-compatible Responses API and are routed to the OpenAI Responses provider in
+  // src/providers/families/aws.ts (see src/providers/bedrock/openaiResponses.ts).
   'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-120b': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-20b': BEDROCK_MODEL.OPENAI,
-  // OpenAI frontier models via Bedrock (GA June 2026). These reasoning models also
-  // back the Codex coding agent when it is configured with the amazon-bedrock
-  // provider. Availability is region-gated: gpt-5.5 in us-east-2; gpt-5.4 in
-  // us-east-2 and us-west-2 (see https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html).
-  'openai.gpt-5.5': BEDROCK_MODEL.OPENAI,
-  'openai.gpt-5.4': BEDROCK_MODEL.OPENAI,
 
   // Qwen Models via Bedrock
   'qwen.qwen3-coder-next': BEDROCK_MODEL.QWEN,

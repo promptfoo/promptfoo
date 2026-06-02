@@ -70,6 +70,18 @@ export const awsProviderFactories: ProviderFactory[] = [
       }
       // Reconstruct the full model name preserving the original format
       const fullModelName = splits.slice(1).join(':');
+      // OpenAI frontier models (gpt-5.x) are served only through Bedrock's
+      // OpenAI-compatible Responses API on the regional mantle endpoint, not the native
+      // InvokeModel API. Route them to the OpenAI Responses provider. Open-weight gpt-oss
+      // models stay on InvokeModel via AwsBedrockCompletionProvider below.
+      const { isBedrockOpenAiResponsesModel } = await import('../bedrock/openaiResponses');
+      if (isBedrockOpenAiResponsesModel(fullModelName)) {
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(fullModelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },
   },

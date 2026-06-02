@@ -251,9 +251,15 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenA
 
 ### Key Features
 
-- **Native Reasoning Effort**: `reasoning_effort` is sent as a native request field; frontier models also support `minimal` and `none` in addition to `low`/`medium`/`high`
-- **`showThinking`**: Set `showThinking: false` to strip the `<reasoning>...</reasoning>` block and assert against the final answer only
-- **Region-gated**: Request model access in a supported region before running
+- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (the mantle endpoint), not `InvokeModel`. promptfoo routes `bedrock:openai.gpt-5.x` there automatically, so output matches the `openai:responses` provider.
+- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+
+  ```bash
+  export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
+  ```
+
+- **Native Reasoning Effort**: `reasoning_effort` supports `minimal`, `low`, `medium`, and `high`.
+- **Region-gated**: Request model access in a supported region before running.
 
 These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.
 
