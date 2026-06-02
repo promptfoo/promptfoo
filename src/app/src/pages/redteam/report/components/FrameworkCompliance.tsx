@@ -15,6 +15,7 @@ import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
   expandPluginCollections,
+  type PluginCategories,
   type TestResultStats,
 } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
@@ -25,6 +26,37 @@ interface FrameworkComplianceProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
   config?: Partial<UnifiedConfig>;
+}
+
+interface FrameworkSummary {
+  pluginCategories: PluginCategories;
+  isTested: boolean;
+  isCompliant: boolean;
+  severity: Severity;
+}
+
+function getFrameworkSeverity(nonCompliantPlugins: string[]): Severity {
+  if (nonCompliantPlugins.length === 0) {
+    return Severity.Low;
+  }
+
+  let highestSeverity: Severity = Severity.Low;
+  for (const plugin of nonCompliantPlugins) {
+    const pluginSeverity =
+      riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+
+    if (pluginSeverity === Severity.Critical) {
+      return Severity.Critical;
+    }
+
+    if (pluginSeverity === Severity.High) {
+      highestSeverity = Severity.High;
+    } else if (pluginSeverity === Severity.Medium && highestSeverity === Severity.Low) {
+      highestSeverity = Severity.Medium;
+    }
+  }
+
+  return highestSeverity;
 }
 
 const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplianceProps) => {
@@ -45,80 +77,42 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     );
   }, [config?.redteam?.frameworks]);
 
-  const getFrameworkPluginCategories = React.useCallback(
-    (framework: string) => {
+  const frameworkSummaries = React.useMemo(() => {
+    const summaries = new Map<FrameworkComplianceId, FrameworkSummary>();
+
+    frameworksToShow.forEach((framework) => {
       const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
-      if (!mappings) {
-        return { compliant: [], nonCompliant: [], untested: [] };
-      }
-
       const allPlugins = new Set<string>();
-      Object.values(mappings).forEach(({ plugins }) => {
-        const expanded = expandPluginCollections(plugins, categoryStats);
-        expanded.forEach((plugin) => allPlugins.add(plugin));
+      if (mappings) {
+        Object.values(mappings).forEach(({ plugins }) => {
+          const expanded = expandPluginCollections(plugins, categoryStats);
+          expanded.forEach((plugin) => allPlugins.add(plugin));
+        });
+      }
+
+      const pluginCategories = categorizePlugins(
+        allPlugins,
+        categoryStats,
+        pluginPassRateThreshold,
+      );
+      const isTested = pluginCategories.compliant.length + pluginCategories.nonCompliant.length > 0;
+      summaries.set(framework, {
+        pluginCategories,
+        isTested,
+        isCompliant: isTested && pluginCategories.nonCompliant.length === 0,
+        severity: getFrameworkSeverity(pluginCategories.nonCompliant),
       });
-
-      return categorizePlugins(allPlugins, categoryStats, pluginPassRateThreshold);
-    },
-    [categoryStats, pluginPassRateThreshold],
-  );
-
-  const getNonCompliantPlugins = React.useCallback(
-    (framework: string) => getFrameworkPluginCategories(framework).nonCompliant,
-    [getFrameworkPluginCategories],
-  );
-
-  const getFrameworkSeverity = React.useCallback(
-    (framework: string): Severity => {
-      const nonCompliantPlugins = getNonCompliantPlugins(framework);
-
-      if (nonCompliantPlugins.length === 0) {
-        return Severity.Low;
-      }
-
-      // Find the highest severity among non-compliant plugins
-      let highestSeverity: Severity = Severity.Low;
-
-      for (const plugin of nonCompliantPlugins) {
-        const pluginSeverity =
-          riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
-
-        if (pluginSeverity === Severity.Critical) {
-          return Severity.Critical;
-        }
-
-        if (pluginSeverity === Severity.High) {
-          highestSeverity = Severity.High;
-        } else if (pluginSeverity === Severity.Medium && highestSeverity === Severity.Low) {
-          highestSeverity = Severity.Medium;
-        }
-      }
-
-      return highestSeverity;
-    },
-    [getNonCompliantPlugins],
-  );
-
-  const frameworkTested = React.useMemo(() => {
-    const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
-    frameworksToShow.forEach((framework) => {
-      const { compliant, nonCompliant } = getFrameworkPluginCategories(framework);
-      result[framework] = compliant.length + nonCompliant.length > 0;
     });
-    return result;
-  }, [frameworksToShow, getFrameworkPluginCategories]);
 
-  const frameworkCompliance = React.useMemo(() => {
-    const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
-    frameworksToShow.forEach((framework) => {
-      const nonCompliantPlugins = getNonCompliantPlugins(framework);
-      result[framework] = Boolean(frameworkTested[framework]) && nonCompliantPlugins.length === 0;
-    });
-    return result;
-  }, [frameworksToShow, frameworkTested, getNonCompliantPlugins]);
+    return summaries;
+  }, [categoryStats, frameworksToShow, pluginPassRateThreshold]);
 
-  const testedFrameworkCount = Object.values(frameworkTested).filter(Boolean).length;
-  const compliantFrameworkCount = Object.values(frameworkCompliance).filter(Boolean).length;
+  const testedFrameworkCount = Array.from(frameworkSummaries.values()).filter(
+    ({ isTested }) => isTested,
+  ).length;
+  const compliantFrameworkCount = Array.from(frameworkSummaries.values()).filter(
+    ({ isCompliant }) => isCompliant,
+  ).length;
 
   const pluginComplianceStats = React.useMemo(() => {
     // Collect all unique plugins across all frameworks to show
@@ -214,22 +208,22 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
             {frameworksToShow.map((framework, idx) => {
-              const nonCompliantPlugins = getNonCompliantPlugins(framework);
-              const isTested = frameworkTested[framework] ?? false;
-              const isCompliant = frameworkCompliance[framework] ?? false;
-              const frameworkSeverity = getFrameworkSeverity(framework);
+              const summary = frameworkSummaries.get(framework);
+              if (!summary) {
+                return null;
+              }
 
               return (
                 <FrameworkCard
                   key={framework}
                   evalId={evalId}
                   framework={framework}
-                  isTested={isTested}
-                  isCompliant={isCompliant}
-                  frameworkSeverity={frameworkSeverity}
+                  isTested={summary.isTested}
+                  isCompliant={summary.isCompliant}
+                  frameworkSeverity={summary.severity}
                   categoryStats={categoryStats}
                   pluginPassRateThreshold={pluginPassRateThreshold}
-                  nonCompliantPlugins={nonCompliantPlugins}
+                  pluginCategories={summary.pluginCategories}
                   showUntestedPlugins={showUntestedPlugins}
                   idx={idx}
                 />

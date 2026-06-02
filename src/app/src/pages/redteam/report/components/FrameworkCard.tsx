@@ -22,6 +22,7 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
+  type PluginCategories,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
 
@@ -169,7 +170,7 @@ interface FrameworkCardProps {
   frameworkSeverity: Severity;
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
-  nonCompliantPlugins: string[];
+  pluginCategories: PluginCategories;
   showUntestedPlugins: boolean;
   idx: number;
 }
@@ -182,7 +183,7 @@ const FrameworkCard = ({
   frameworkSeverity,
   categoryStats,
   pluginPassRateThreshold,
-  nonCompliantPlugins,
+  pluginCategories,
   showUntestedPlugins,
   idx,
 }: FrameworkCardProps) => {
@@ -218,31 +219,20 @@ const FrameworkCard = ({
   );
 
   const sortedPlugins = useMemo(
-    () => sortPluginsByASR(nonCompliantPlugins),
-    [nonCompliantPlugins, sortPluginsByASR],
+    () => sortPluginsByASR(pluginCategories.nonCompliant),
+    [pluginCategories.nonCompliant, sortPluginsByASR],
   );
-
-  const frameworkPluginCategories = useMemo(() => {
-    const plugins = new Set<string>();
-    Object.values(ALIASED_PLUGIN_MAPPINGS[framework] || {}).forEach(
-      ({ plugins: categoryPlugins }) => {
-        const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
-        expandedPlugins.forEach((plugin) => plugins.add(plugin));
-      },
-    );
-    return categorizePlugins(plugins, categoryStats, pluginPassRateThreshold);
-  }, [categoryStats, framework, pluginPassRateThreshold]);
 
   const sortedCompliantPlugins = useMemo(
-    () => sortPluginsByASR(frameworkPluginCategories.compliant),
-    [frameworkPluginCategories.compliant, sortPluginsByASR],
+    () => sortPluginsByASR(pluginCategories.compliant),
+    [pluginCategories.compliant, sortPluginsByASR],
   );
   const sortedUntestedPlugins = useMemo(
-    () => sortPluginsBySeverity(frameworkPluginCategories.untested),
-    [frameworkPluginCategories.untested],
+    () => sortPluginsBySeverity(pluginCategories.untested),
+    [pluginCategories.untested],
   );
   const testedPluginCount =
-    frameworkPluginCategories.compliant.length + frameworkPluginCategories.nonCompliant.length;
+    pluginCategories.compliant.length + pluginCategories.nonCompliant.length;
 
   return (
     <Card
@@ -400,7 +390,7 @@ const FrameworkCard = ({
                 <Badge
                   variant={
                     isTested
-                      ? nonCompliantPlugins.length === 0
+                      ? pluginCategories.nonCompliant.length === 0
                         ? 'success'
                         : 'destructive'
                       : 'secondary'
@@ -408,13 +398,13 @@ const FrameworkCard = ({
                   className="h-5 whitespace-nowrap text-[0.7rem]"
                 >
                   {isTested
-                    ? `${nonCompliantPlugins.length} / ${testedPluginCount} failed`
+                    ? `${pluginCategories.nonCompliant.length} / ${testedPluginCount} failed`
                     : 'Not Tested'}
                 </Badge>
               </div>
               <div>
                 {/* Failed plugins first */}
-                {nonCompliantPlugins.length > 0 && (
+                {pluginCategories.nonCompliant.length > 0 && (
                   <div className="bg-red-50/50 px-2 py-1 dark:bg-red-950/20">
                     <span className="text-xs font-bold text-destructive">Failed:</span>
                   </div>

@@ -14,7 +14,7 @@ export type TestResultStats = {
 // Types for utility functions
 export type CategoryStats = Record<string, TestResultStats>;
 
-type PluginCategories = {
+export type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];
   untested: string[];

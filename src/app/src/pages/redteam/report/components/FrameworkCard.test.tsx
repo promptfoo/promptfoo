@@ -23,6 +23,12 @@ vi.mock('./FrameworkComplianceUtils', async () => {
 describe('FrameworkCard', () => {
   type FrameworkCardProps = React.ComponentProps<typeof FrameworkCard>;
 
+  const categories = (
+    compliant: string[] = [],
+    nonCompliant: string[] = [],
+    untested: string[] = [],
+  ) => ({ compliant, nonCompliant, untested });
+
   const defaultProps: FrameworkCardProps = {
     evalId: 'test-eval-id',
     framework: 'nist:ai:measure',
@@ -34,7 +40,7 @@ describe('FrameworkCard', () => {
       'pii:direct': { pass: 9, total: 10, failCount: 1 },
     },
     pluginPassRateThreshold: 0.8,
-    nonCompliantPlugins: [],
+    pluginCategories: categories(['excessive-agency', 'pii:direct']),
     showUntestedPlugins: true,
     idx: 0,
   };
@@ -50,7 +56,7 @@ describe('FrameworkCard', () => {
   it('should display the compliant state, including the compliant icon and green summary chip, when the isCompliant prop is true and nonCompliantPlugins is empty', () => {
     renderFrameworkCard({
       isCompliant: true,
-      nonCompliantPlugins: [],
+      pluginCategories: categories(['excessive-agency', 'pii:direct']),
       categoryStats: {
         'excessive-agency': { pass: 10, total: 10, failCount: 0 },
         'pii:direct': { pass: 9, total: 10, failCount: 1 },
@@ -76,7 +82,7 @@ describe('FrameworkCard', () => {
     renderFrameworkCard({
       isCompliant: false,
       frameworkSeverity: Severity.High,
-      nonCompliantPlugins: nonCompliantPlugins,
+      pluginCategories: categories(['excessive-agency'], nonCompliantPlugins),
       categoryStats: {
         'excessive-agency': { pass: 10, total: 10, failCount: 0 },
         'pii:direct': { pass: 5, total: 10, failCount: 5 },
@@ -108,7 +114,7 @@ describe('FrameworkCard', () => {
       categoryStats: {
         'coding-agent:network-egress-bypass': { pass: 5, total: 10, failCount: 5 },
       },
-      nonCompliantPlugins: [],
+      pluginCategories: categories([], [], ['excessive-agency', 'pii:direct']),
     });
 
     const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
@@ -124,7 +130,7 @@ describe('FrameworkCard', () => {
         'excessive-agency': { pass: 10, total: 10, failCount: 0 },
         'coding-agent:network-egress-bypass': { pass: 0, total: 10, failCount: 10 },
       },
-      nonCompliantPlugins: [],
+      pluginCategories: categories(['excessive-agency']),
     });
 
     expect(screen.getByText('0 / 1 failed')).toBeInTheDocument();
@@ -148,7 +154,7 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.High,
       categoryStats: categoryStats,
       pluginPassRateThreshold: 0.8,
-      nonCompliantPlugins: ['bfla', 'rbac'],
+      pluginCategories: categories(['bola'], ['bfla', 'rbac']),
     });
 
     // OWASP API framework name should be displayed
@@ -169,6 +175,21 @@ describe('FrameworkCard', () => {
     expect(screen.getAllByText('rbac').length).toBeGreaterThan(0);
   });
 
+  it('should render an untested categorized framework neutrally', () => {
+    renderFrameworkCard({
+      framework: 'owasp:api',
+      isTested: false,
+      isCompliant: false,
+      categoryStats: {},
+      pluginCategories: categories([], [], ['bola', 'rbac']),
+    });
+
+    const cardElement = screen.getByText('OWASP API Top 10').closest('.framework-item');
+    expect(cardElement).not.toHaveClass('compliant');
+    expect(cardElement).not.toHaveClass('non-compliant');
+    expect(screen.getAllByText('Not Tested').length).toBeGreaterThan(0);
+  });
+
   it('should render principle names for the DoD AI ethics framework', () => {
     renderFrameworkCard({
       framework: 'dod:ai:ethics',
@@ -179,7 +200,7 @@ describe('FrameworkCard', () => {
         'bias:race': { pass: 10, total: 10, failCount: 0 },
       },
       pluginPassRateThreshold: 0.8,
-      nonCompliantPlugins: ['excessive-agency'],
+      pluginCategories: categories(['bias:race'], ['excessive-agency']),
     });
 
     expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
@@ -199,7 +220,7 @@ describe('FrameworkCard', () => {
       categoryStats: {
         [pluginName]: { pass, total, failCount: total - pass },
       },
-      nonCompliantPlugins: [pluginName],
+      pluginCategories: categories([], [pluginName]),
     });
 
     screen.getByText(pluginName);
@@ -242,7 +263,7 @@ describe('FrameworkCard', () => {
     renderFrameworkCard({
       isCompliant: false,
       frameworkSeverity: frameworkSeverity,
-      nonCompliantPlugins: ['excessive-agency'],
+      pluginCategories: categories([], ['excessive-agency']),
       categoryStats: {
         'excessive-agency': { pass: 0, total: 1, failCount: 1 },
       },
@@ -258,7 +279,7 @@ describe('FrameworkCard', () => {
   it('should render Failed and Passed sections with labels', () => {
     renderFrameworkCard({
       isCompliant: false,
-      nonCompliantPlugins: ['pii:session'],
+      pluginCategories: categories(['excessive-agency', 'pii:direct'], ['pii:session']),
       categoryStats: {
         'excessive-agency': { pass: 10, total: 10, failCount: 0 },
         'pii:direct': { pass: 9, total: 10, failCount: 0 },
@@ -298,7 +319,7 @@ describe('FrameworkCard', () => {
     renderFrameworkCard({
       isCompliant: false,
       frameworkSeverity: Severity.High,
-      nonCompliantPlugins: nonCompliantPlugins,
+      pluginCategories: categories([], nonCompliantPlugins),
       categoryStats: categoryStats,
     });
 
@@ -326,7 +347,7 @@ describe('FrameworkCard', () => {
         bfla: { pass: 0, total: 10, failCount: 10 },
       },
       pluginPassRateThreshold: 0.8,
-      nonCompliantPlugins: ['bfla'],
+      pluginCategories: categories(['bola'], ['bfla']),
       showUntestedPlugins: false,
     });
 
@@ -343,7 +364,7 @@ describe('FrameworkCard', () => {
         'pii:direct': { pass: 0, total: 10, failCount: 10 },
       },
       pluginPassRateThreshold: 0.8,
-      nonCompliantPlugins: ['pii:direct'],
+      pluginCategories: categories([], ['pii:direct']),
       showUntestedPlugins: false,
     });
 

@@ -231,6 +231,36 @@ describe('FrameworkCompliance', () => {
     ).toBe(true);
   });
 
+  it('should count only tested frameworks while preserving partial-test compliance', () => {
+    const categoryStats = {
+      'agentic:memory-poisoning': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:agentic', 'owasp:api'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (1/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledTimes(2);
+    expect(
+      mockFrameworkCard.mock.calls.find(([props]) => props.framework === 'owasp:agentic')?.[0],
+    ).toEqual(
+      expect.objectContaining({
+        isTested: true,
+        isCompliant: true,
+        pluginCategories: expect.objectContaining({
+          compliant: expect.arrayContaining(['agentic:memory-poisoning']),
+        }),
+      }),
+    );
+    expect(
+      mockFrameworkCard.mock.calls.find(([props]) => props.framework === 'owasp:api')?.[0],
+    ).toEqual(expect.objectContaining({ isTested: false, isCompliant: false }));
+  });
+
   it('should show all frameworks when no config.redteam.frameworks is provided', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
