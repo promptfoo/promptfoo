@@ -310,6 +310,10 @@ tracing:
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
 key, so short patterns over-match: `token` also matches `gen_ai.usage.total_tokens`, and
 `key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
+Patterns are matched against each attribute key **at every nesting level individually**: a
+nested key like `authorization` inside a `headers` object is matched by the pattern
+`authorization`, but a full dotted path such as `request.headers.authorization` will **not**
+match the nested leaf key — use the key's own name.
 Redaction covers span **attributes** (recursively, including nested objects and arrays),
 and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
 attribute**. A secret that appears solely in a span name, status/error message, or log
