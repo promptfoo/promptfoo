@@ -11,6 +11,7 @@ import {
   GetUserResponseSchema,
   getInputDescription,
   getInputType,
+  hasFunctionToolCallValidator,
   InputDefinitionObjectSchema,
   InputsSchema,
   isTransformFunction,
@@ -64,6 +65,13 @@ describe('contracts leaf surface', () => {
       // The grouped server-side validation map is reachable through the barrel too.
       expect(UserSchemas.Login.Request).toBe(LoginRequestSchema);
       expect(UserSchemas.Get.Response).toBe(GetUserResponseSchema);
+    });
+
+    it('re-exports provider capability helpers through the barrel', () => {
+      expect(hasFunctionToolCallValidator({ validateFunctionToolCall: () => {} })).toBe(true);
+      expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
+        false,
+      );
     });
   });
 

@@ -125,7 +125,14 @@
     {
       "name": "core",
       "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ]
     },
     {
       "name": "legacy-contracts",
