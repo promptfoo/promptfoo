@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI frontier models (GPT-5.5 / GPT-5.4) via AWS Bedrock'
+
+prompts:
+  - |
+    Answer the following question concisely and accurately.
+
+    Question: {{question}}
+
+providers:
+  # GPT-5.5 is available in us-east-2 (Ohio).
+  - id: bedrock:openai.gpt-5.5
+    label: GPT-5.5 (high reasoning)
+    config:
+      region: us-east-2
+      max_completion_tokens: 2048
+      reasoning_effort: high
+      # Strip the <reasoning>...</reasoning> block so assertions run against the
+      # final answer only. Set to true to keep the model's chain-of-thought.
+      showThinking: false
+  # GPT-5.4 is available in us-east-2 (Ohio) and us-west-2 (Oregon).
+  - id: bedrock:openai.gpt-5.4
+    label: GPT-5.4 (minimal reasoning)
+    config:
+      region: us-east-2
+      max_completion_tokens: 1024
+      reasoning_effort: minimal
+      showThinking: false
+
+tests:
+  - vars:
+      question: What is the capital of France? Reply with only the city name.
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      question: 'If a train travels 120 miles in 2 hours, what is its average speed in mph? Reply with just the number and unit.'
+    assert:
+      - type: contains
+        value: '60'
+      - type: icontains-any
+        value: ['mph', 'miles per hour']
+  - vars:
+      question: 'Explain the concept of machine learning in two sentences.'
+    assert:
+      - type: llm-rubric
+        value: 'Response clearly and accurately explains machine learning in roughly two sentences.'

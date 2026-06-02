@@ -217,6 +217,10 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   // OpenAI GPT-OSS
   'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
   'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
+  // OpenAI frontier models - Bedrock matches OpenAI first-party rates per the GA
+  // announcement; verify at aws.amazon.com/bedrock/pricing
+  'openai.gpt-5.5': { input: 5.0, output: 30.0 },
+  'openai.gpt-5.4': { input: 2.5, output: 15.0 },
 };
 
 /**

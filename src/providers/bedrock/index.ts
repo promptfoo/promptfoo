@@ -391,7 +391,21 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   stop?: string[];
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  /**
+   * Reasoning depth for OpenAI reasoning models on Bedrock, passed through as the
+   * native `reasoning_effort` request field. Valid values depend on the model:
+   * gpt-oss accepts `low`/`medium`/`high`, while the frontier GPT-5.x models also
+   * support `minimal` and `none`. The value is forwarded as-is so the Bedrock API
+   * validates it per-model.
+   */
+  reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+  /**
+   * When `false`, strip the `<reasoning>...</reasoning>` block that OpenAI reasoning
+   * models (gpt-oss, gpt-5.x) prepend to the response content via `InvokeModel`,
+   * leaving only the final answer. Defaults to `true`, which preserves the model's
+   * full output including its chain-of-thought.
+   */
+  showThinking?: boolean;
 }
 
 interface BedrockQwenGenerationOptions extends BedrockOptions {
@@ -2040,21 +2054,6 @@ ${prompt}
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-      // Handle reasoning_effort by adding it to system message
-      if (config?.reasoning_effort) {
-        const reasoningInstruction = `Reasoning: ${config.reasoning_effort}`;
-
-        // Find existing system message or create one
-        const systemMessageIndex = messages.findIndex((msg) => msg.role === 'system');
-        if (systemMessageIndex >= 0) {
-          // Append to existing system message
-          messages[systemMessageIndex].content += `\n\n${reasoningInstruction}`;
-        } else {
-          // Add new system message at the beginning
-          messages.unshift({ role: 'system', content: reasoningInstruction });
-        }
-      }
-
       const params: any = {
         messages,
       };
@@ -2074,6 +2073,10 @@ ${prompt}
         0.1,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+      // OpenAI reasoning models (gpt-oss, gpt-5.x) accept `reasoning_effort` as a
+      // native request field on Bedrock. Forward it as-is and let the API validate
+      // the value for the specific model.
+      addConfigParam(params, 'reasoning_effort', config?.reasoning_effort);
       if ((stop && stop.length > 0) || config?.stop) {
         addConfigParam(params, 'stop', stop || config?.stop, getEnvString('AWS_BEDROCK_STOP'));
       }
@@ -2092,11 +2095,21 @@ ${prompt}
 
       return params;
     },
-    output: (_config: BedrockOptions, responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any) => {
       if (responseJson.error) {
         throw new Error(`OpenAI API error: ${responseJson.error}`);
       }
-      return responseJson.choices?.[0]?.message?.content;
+      const content = responseJson.choices?.[0]?.message?.content;
+      // Reasoning models prepend their chain-of-thought wrapped in
+      // <reasoning>...</reasoning> before the final answer when invoked via
+      // InvokeModel. Strip that prefix when the caller opts out of seeing it.
+      if (
+        typeof content === 'string' &&
+        (config as BedrockOpenAIGenerationOptions)?.showThinking === false
+      ) {
+        return content.replace(/^\s*<reasoning>[\s\S]*?<\/reasoning>\s*/, '');
+      }
+      return content;
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
@@ -2388,6 +2401,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-120b': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-20b': BEDROCK_MODEL.OPENAI,
+  // OpenAI frontier models via Bedrock (GA June 2026). These reasoning models also
+  // back the Codex coding agent when it is configured with the amazon-bedrock
+  // provider. Availability is region-gated: gpt-5.5 in us-east-2; gpt-5.4 in
+  // us-east-2 and us-west-2 (see https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html).
+  'openai.gpt-5.5': BEDROCK_MODEL.OPENAI,
+  'openai.gpt-5.4': BEDROCK_MODEL.OPENAI,
 
   // Qwen Models via Bedrock
   'qwen.qwen3-coder-next': BEDROCK_MODEL.QWEN,
@@ -2414,7 +2433,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOptions): IBedrockModel {
+export function getHandlerForModel(
+  modelName: string,
+  config?: BedrockInvokeModelOptions,
+): IBedrockModel {
   // Check if it's an inference profile ARN
   if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
     // For inference profiles, use the model type from config to determine handler
@@ -2521,6 +2543,11 @@ function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOption
   }
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
+  }
+  // Route any OpenAI model id (including future frontier releases and cross-region
+  // inference profiles such as `us.openai.gpt-5.5`) through the OpenAI handler.
+  if (modelName.includes('openai.')) {
+    return BEDROCK_MODEL.OPENAI;
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }

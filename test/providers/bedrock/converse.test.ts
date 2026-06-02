@@ -2104,6 +2104,43 @@ Third line`;
       expect(result.cost).toBeCloseTo(0.01485, 4);
     });
 
+    it('should calculate cost for OpenAI frontier models', async () => {
+      // Model ID needs to contain 'openai.gpt-5.5' for pricing lookup
+      const provider = new AwsBedrockConverseProvider('openai.gpt-5.5', {
+        config: { region: 'us-east-2' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // GPT-5.5: $5/MTok input, $30/MTok output
+      // (10000/1M * 5) + (5000/1M * 30) = 0.05 + 0.15 = 0.2
+      expect(result.cost).toBeCloseTo(0.2, 4);
+    });
+
+    it('should not mistake gpt-5.5 pricing for gpt-5.4', async () => {
+      const provider = new AwsBedrockConverseProvider('openai.gpt-5.4', {
+        config: { region: 'us-east-2' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // GPT-5.4: $2.5/MTok input, $15/MTok output
+      // (10000/1M * 2.5) + (5000/1M * 15) = 0.025 + 0.075 = 0.1
+      expect(result.cost).toBeCloseTo(0.1, 4);
+    });
+
     it('should return undefined cost for unknown models', async () => {
       const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
         config: { region: 'us-east-1' },
@@ -3295,6 +3332,9 @@ describe('Model coverage parity', () => {
     // OpenAI GPT-OSS models
     { id: 'openai.gpt-oss-120b-1:0', family: 'openai' },
     { id: 'openai.gpt-oss-20b-1:0', family: 'openai' },
+    // OpenAI frontier models
+    { id: 'openai.gpt-5.5', family: 'openai' },
+    { id: 'openai.gpt-5.4', family: 'openai' },
   ];
 
   // Use describe.each for proper test isolation - each test gets its own beforeEach

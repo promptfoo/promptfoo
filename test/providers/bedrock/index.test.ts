@@ -20,6 +20,7 @@ import {
   formatPromptLlama3Instruct,
   formatPromptLlama4,
   formatPromptLlama32Vision,
+  getHandlerForModel,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
@@ -2093,7 +2094,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should handle reasoning_effort by adding it to system message', async () => {
+    it('should pass reasoning_effort as a native parameter without modifying messages', async () => {
       const config = {
         temperature: 0.7,
         reasoning_effort: 'high' as const,
@@ -2103,16 +2104,14 @@ describe('BEDROCK_MODEL OPENAI', () => {
       const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
-        messages: [
-          { role: 'system', content: 'Reasoning: high' },
-          { role: 'user', content: 'Test prompt' },
-        ],
+        messages: [{ role: 'user', content: 'Test prompt' }],
         temperature: 0.7,
         top_p: 1.0,
+        reasoning_effort: 'high',
       });
     });
 
-    it('should append reasoning_effort to existing system message', async () => {
+    it('should keep an existing system message intact when reasoning_effort is set', async () => {
       const config = {
         temperature: 0.7,
         reasoning_effort: 'medium' as const,
@@ -2126,15 +2125,27 @@ describe('BEDROCK_MODEL OPENAI', () => {
 
       expect(params).toEqual({
         messages: [
-          { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
+          { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'What is machine learning?' },
         ],
         temperature: 0.7,
         top_p: 1.0,
+        reasoning_effort: 'medium',
       });
     });
 
-    it('should not modify messages when reasoning_effort is not specified', async () => {
+    it('should forward frontier-only reasoning_effort values verbatim', async () => {
+      const config = {
+        reasoning_effort: 'minimal' as const,
+      };
+      const prompt = 'Test prompt';
+
+      const params = await modelHandler.params(config, prompt);
+
+      expect(params.reasoning_effort).toBe('minimal');
+    });
+
+    it('should not include reasoning_effort when it is not specified', async () => {
       const config = { temperature: 0.5 };
       const prompt = 'Test prompt';
 
@@ -2145,6 +2156,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
         temperature: 0.5,
         top_p: 1.0,
       });
+      expect(params).not.toHaveProperty('reasoning_effort');
     });
   });
 
@@ -2163,6 +2175,46 @@ describe('BEDROCK_MODEL OPENAI', () => {
       expect(modelHandler.output({}, mockResponse)).toBe(
         'This is a test response from OpenAI model.',
       );
+    });
+
+    it('should keep the <reasoning> block by default', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        '<reasoning>Think think</reasoning>The answer is 42.',
+      );
+    });
+
+    it('should strip the <reasoning> block when showThinking is false', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('The answer is 42.');
+    });
+
+    it('should strip a multi-line <reasoning> block and leading whitespace', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '<reasoning>line one\nline two</reasoning>\n\nFinal answer',
+            },
+          },
+        ],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Final answer');
+    });
+
+    it('should leave content untouched when showThinking is false but no reasoning is present', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Just the answer.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Just the answer.');
     });
 
     it('should throw an error for API errors', async () => {
@@ -3055,6 +3107,34 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-120b']).toBe(BEDROCK_MODEL.OPENAI);
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-20b']).toBe(BEDROCK_MODEL.OPENAI);
+  });
+
+  it('should map OpenAI frontier models correctly', async () => {
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBe(BEDROCK_MODEL.OPENAI);
+  });
+
+  describe('getHandlerForModel OpenAI routing', () => {
+    it('should resolve registered OpenAI model ids to the OpenAI handler', () => {
+      expect(getHandlerForModel('openai.gpt-5.5')).toBe(BEDROCK_MODEL.OPENAI);
+      expect(getHandlerForModel('openai.gpt-oss-120b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
+    });
+
+    it('should fall back to the OpenAI handler for unregistered openai.* model ids', () => {
+      // Future frontier releases that are not yet in the static map should still route
+      // through the OpenAI handler instead of throwing.
+      expect(getHandlerForModel('openai.gpt-5.6')).toBe(BEDROCK_MODEL.OPENAI);
+    });
+
+    it('should route region-prefixed OpenAI inference profiles to the OpenAI handler', () => {
+      expect(getHandlerForModel('us.openai.gpt-5.5')).toBe(BEDROCK_MODEL.OPENAI);
+    });
+
+    it('should still throw for genuinely unknown models', () => {
+      expect(() => getHandlerForModel('totally.unknown-model')).toThrow(
+        'Unknown Amazon Bedrock model',
+      );
+    });
   });
 
   it('should map APAC regional models correctly', async () => {

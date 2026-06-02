@@ -510,6 +510,11 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:openai.gpt-5.5
+    config:
+      region: 'us-east-2'
+      max_completion_tokens: 256
+      reasoning_effort: 'medium'
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -976,6 +981,13 @@ requests and return the final assistant message directly.
 OpenAI models on Bedrock use OpenAI-style request parameters. Available model IDs
 include:
 
+**Frontier models** (reasoning models, region-gated):
+
+- **`openai.gpt-5.5`**: Flagship frontier model (US East / Ohio `us-east-2`)
+- **`openai.gpt-5.4`**: Frontier model (US East / Ohio `us-east-2` and US West / Oregon `us-west-2`)
+
+**Open-weight (GPT OSS) models:**
+
 - **`openai.gpt-oss-120b-1:0`**: 120 billion parameter general-purpose model
 - **`openai.gpt-oss-20b-1:0`**: 20 billion parameter general-purpose model
 - **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
@@ -983,29 +995,53 @@ include:
 
 ```yaml
 config:
+  region: 'us-east-2' # Frontier models are region-gated (see list above)
   max_completion_tokens: 1024 # Maximum tokens for response (OpenAI-style parameter)
   temperature: 0.7 # Controls randomness (0.0 to 1.0)
   top_p: 0.9 # Nucleus sampling parameter
   frequency_penalty: 0.1 # Reduces repetition of frequent tokens
   presence_penalty: 0.1 # Reduces repetition of any tokens
   stop: ['END', 'STOP'] # Stop sequences
-  reasoning_effort: 'medium' # Controls reasoning depth: 'low', 'medium', 'high'
+  reasoning_effort: 'medium' # Native reasoning depth (values vary by model)
+  showThinking: true # Keep (true) or strip (false) the <reasoning> block
 ```
 
 #### Reasoning Effort
 
-General-purpose GPT OSS models support adjustable reasoning effort through the `reasoning_effort` parameter:
+OpenAI reasoning models accept the native `reasoning_effort` request parameter, which
+promptfoo forwards as-is so Bedrock validates it for the specific model:
 
-- **`low`**: Faster responses with basic reasoning
-- **`medium`**: Balanced performance and reasoning depth
-- **`high`**: Thorough reasoning, slower but more accurate responses
+- **GPT OSS** (`openai.gpt-oss-*`): `low`, `medium`, `high`
+- **Frontier** (`openai.gpt-5.5`, `openai.gpt-5.4`): also support `minimal` and `none`
 
-The reasoning effort is implemented via system prompt instructions, allowing the model to adjust its cognitive processing depth.
+Higher effort produces more thorough reasoning at the cost of latency and output tokens.
+
+#### Reasoning Output and `showThinking`
+
+When invoked through Bedrock's `InvokeModel` API, OpenAI reasoning models prepend their
+chain-of-thought wrapped in `<reasoning>...</reasoning>` before the final answer. By
+default promptfoo preserves the full output (`showThinking: true`). Set
+`showThinking: false` to strip the reasoning block and assert against the final answer
+only:
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-5.5
+    config:
+      region: 'us-east-2'
+      reasoning_effort: 'high'
+      showThinking: false # output is just the final answer
+```
 
 #### Usage Example
 
 ```yaml
 providers:
+  - id: bedrock:openai.gpt-5.5
+    config:
+      region: 'us-east-2'
+      max_completion_tokens: 2048
+      reasoning_effort: 'high'
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -1025,6 +1061,15 @@ providers:
 :::note
 
 OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
+
+:::
+
+:::note Codex on Bedrock
+
+OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
+frontier model IDs (`openai.gpt-5.5`, `openai.gpt-5.4`) when configured with the
+`amazon-bedrock` provider. Evaluating those model IDs in promptfoo exercises the same
+models that back Codex on Bedrock.
 
 :::
 
