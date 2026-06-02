@@ -1,9 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { pathToFileURL } from 'node:url';
+import * as os from 'os';
 import * as path from 'path';
 
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { sleep } from '../util/time';
@@ -33,12 +34,38 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
+function assertSafeTestDatabasePath(dbPath: string): void {
+  const isTestProcess =
+    getEnvString('NODE_ENV') === 'test' ||
+    getEnvBool('VITEST', false) ||
+    Boolean(getEnvString('JEST_WORKER_ID'));
+  if (!isTestProcess) {
+    return;
+  }
+
+  const defaultUserDbPath = path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db');
+  if (dbPath === defaultUserDbPath) {
+    throw new Error(
+      'Refusing to open the default Promptfoo database while running tests. ' +
+        'Set IS_TESTING=true for an in-memory database or set PROMPTFOO_CONFIG_DIR to a test-only directory.',
+    );
+  }
+}
+
+function getSafeDatabaseDirectoryPath(): string {
+  const configDirectoryPath = getConfigDirectoryPath();
+  const dbPath = path.resolve(configDirectoryPath, 'promptfoo.db');
+  assertSafeTestDatabasePath(dbPath);
+  getConfigDirectoryPath(true /* createIfNotExists */);
+  return configDirectoryPath;
+}
+
 export function getDbPath() {
-  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
+  return path.resolve(getSafeDatabaseDirectoryPath(), 'promptfoo.db');
 }
 
 export function getDbSignalPath() {
-  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
+  return path.resolve(getSafeDatabaseDirectoryPath(), 'evalLastWritten');
 }
 
 async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {

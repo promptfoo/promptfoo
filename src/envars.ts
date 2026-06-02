@@ -174,6 +174,7 @@ type EnvVars = {
   NODE_TLS_REJECT_UNAUTHORIZED?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
+  VITEST?: boolean;
   WEBHOOK_TIMEOUT?: number;
 
   //=========================================================================

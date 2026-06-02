@@ -92,6 +92,28 @@ describe('database WAL mode', () => {
     expect(fs.existsSync(database.getDbPath())).toBe(true);
   });
 
+  it('recreates a file-backed database after its database file is deleted', async () => {
+    const database = await import('../src/database');
+    const db = await database.getDb();
+    const dbPath = database.getDbPath();
+
+    expect(path.dirname(dbPath)).toBe(tempDir);
+    await db.run('CREATE TABLE deleted_database_probe (id INTEGER PRIMARY KEY)');
+    await db.run('INSERT INTO deleted_database_probe (id) VALUES (1)');
+    await database.closeDb();
+
+    fs.rmSync(dbPath, { force: true });
+    fs.rmSync(`${dbPath}-shm`, { force: true });
+    fs.rmSync(`${dbPath}-wal`, { force: true });
+    expect(fs.existsSync(dbPath)).toBe(false);
+
+    const recreatedDb = await database.getDb();
+    await recreatedDb.run('CREATE TABLE recreated_database_probe (id INTEGER PRIMARY KEY)');
+
+    expect(fs.existsSync(dbPath)).toBe(true);
+    await expect(recreatedDb.all('SELECT id FROM deleted_database_probe')).rejects.toThrow();
+  });
+
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: 'true' });
 

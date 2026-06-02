@@ -11,7 +11,7 @@ import {
   getDbSignalPath,
   isDbOpen,
 } from '../../src/database/index';
-import { getEnvBool } from '../../src/envars';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
@@ -26,6 +26,7 @@ describe('database', () => {
     vi.clearAllMocks();
     vi.mocked(getConfigDirectoryPath).mockReset();
     vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvString).mockReset();
     await closeDb();
     tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-db-index-'));
     vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
@@ -48,6 +49,16 @@ describe('database', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
 
       expect(getDbPath()).toBe(path.resolve(configPath, 'promptfoo.db'));
+    });
+
+    it('should refuse to use the default user database while running tests', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      vi.mocked(getEnvBool).mockReturnValue(false);
+      vi.mocked(getEnvString).mockReturnValue('test');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
     });
   });
 
