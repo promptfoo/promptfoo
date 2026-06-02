@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isNunjucksOutputExpression,
   notTrajectoryToolUsedBoundsError,
   tokensUsedConfigError,
   traceErrorSpansConfigError,
@@ -98,6 +99,12 @@ describe('traceAssertionConfig shared validators', () => {
       expect(tokensUsedConfigError({ min: -1 })).toBe(
         'tokens-used min must be a finite non-negative number',
       );
+      expect(tokensUsedConfigError({ max: '100' })).toBe(
+        'tokens-used max must be a finite non-negative number',
+      );
+      expect(tokensUsedConfigError({ max: '{{ token_budget }}' })).toBe(
+        'tokens-used max must be a finite non-negative number',
+      );
       expect(tokensUsedConfigError({ min: 5, max: 2 })).toBe(
         'tokens-used min must be less than or equal to max',
       );
@@ -112,6 +119,18 @@ describe('traceAssertionConfig shared validators', () => {
         'tokens-used pattern must be a non-empty string',
       );
       expect(tokensUsedConfigError({ max: 10, source: 'trace', pattern: 'llm.*' })).toBeUndefined();
+    });
+  });
+
+  describe('isNunjucksOutputExpression', () => {
+    it('accepts one full output expression and rejects partial or block templates', () => {
+      expect(isNunjucksOutputExpression('{{ token_budget }}')).toBe(true);
+      expect(isNunjucksOutputExpression('  {{ token_budget | int }}  ')).toBe(true);
+      expect(isNunjucksOutputExpression('100')).toBe(false);
+      expect(isNunjucksOutputExpression('100{{ "" }}')).toBe(false);
+      expect(isNunjucksOutputExpression('{{ token_budget }} tokens')).toBe(false);
+      expect(isNunjucksOutputExpression('{{ a }}{{ b }}')).toBe(false);
+      expect(isNunjucksOutputExpression('{% set budget = 100 %}{{ budget }}')).toBe(false);
     });
   });
 

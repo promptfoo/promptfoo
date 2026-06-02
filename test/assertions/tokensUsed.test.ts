@@ -547,6 +547,89 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('source=trace');
   });
 
+  it('coerces rendered token budget output expressions', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: {
+        type: 'tokens-used',
+        value: { min: '{{ minTokens }}', max: '{{ maxTokens }}' } as unknown as {
+          min: number;
+          max: number;
+        },
+      },
+      renderedValue: {
+        min: '{{ minTokens }}',
+        max: '{{ maxTokens }}',
+      } as unknown as {
+        min: number;
+        max: number;
+      },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        vars: { minTokens: 300, maxTokens: 400 },
+        trace: traceWithTokens,
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 350');
+    expect(result.reason).toContain('expected 300-400');
+  });
+
+  it.each([
+    ['a partial numeric template', '100{{ empty }}', { empty: '' }],
+    ['a blank rendered template', '{{ bound }}', { bound: '' }],
+    ['a non-numeric rendered template', '{{ bound }}', { bound: 'many' }],
+    ['a negative rendered template', '{{ bound }}', { bound: -1 }],
+    ['a non-finite rendered template', '{{ bound }}', { bound: Number.POSITIVE_INFINITY }],
+  ])('rejects %s', (_description, max, vars) => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: {
+        type: 'tokens-used',
+        value: { max } as unknown as { max: number },
+      },
+      renderedValue: { max } as unknown as { max: number },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        vars,
+      },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      'tokens-used max must be a finite non-negative number',
+    );
+  });
+
+  it('rejects an inverted range after rendering token budget templates', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: {
+        type: 'tokens-used',
+        value: { min: '{{ minTokens }}', max: '{{ maxTokens }}' } as unknown as {
+          min: number;
+          max: number;
+        },
+      },
+      renderedValue: {
+        min: '{{ minTokens }}',
+        max: '{{ maxTokens }}',
+      } as unknown as {
+        min: number;
+        max: number;
+      },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        vars: { minTokens: 400, maxTokens: 300 },
+      },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      'tokens-used min must be less than or equal to max',
+    );
+  });
+
   it('keeps source:auto on trace when a filtered trace contributes zero tokens', () => {
     const params: AssertionParams = {
       ...baseParams,

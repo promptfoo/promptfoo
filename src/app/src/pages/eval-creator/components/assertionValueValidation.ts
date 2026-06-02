@@ -1,4 +1,5 @@
 import {
+  isNunjucksOutputExpression,
   notTrajectoryToolUsedBoundsError,
   tokensUsedConfigError,
   traceErrorSpansConfigError,
@@ -497,7 +498,14 @@ function getTokensUsedValueError(value: unknown): string | undefined {
   if (!isRecord(value)) {
     return 'Enter JSON with a minimum or maximum token budget.';
   }
-  return tokensUsedConfigError(value);
+
+  // Runtime rendering converts templated bounds to numbers before applying the shared validator.
+  // Use range-safe placeholders here so row-specific budgets remain saveable in the Eval Creator.
+  return tokensUsedConfigError({
+    ...value,
+    min: isNunjucksOutputExpression(value.min) ? 0 : value.min,
+    max: isNunjucksOutputExpression(value.max) ? Number.MAX_VALUE : value.max,
+  });
 }
 
 function getTrajectoryToolSetValueError(value: unknown): string | undefined {

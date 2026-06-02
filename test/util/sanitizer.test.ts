@@ -482,6 +482,32 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('does not use nested test vars as array item identity when restoring duplicate SAS URIs', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ description: 'edited', vars: { id: 'b' }, file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                vars: { id: 'a' },
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                vars: { id: 'b' },
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [{ description: 'edited', vars: { id: 'b' }, file: redactedUri }],
+      });
+    });
+
     it('restores moved and edited duplicate Azure Blob SAS URIs using unique stable identity', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 

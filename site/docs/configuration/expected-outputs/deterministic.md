@@ -1112,6 +1112,11 @@ Configuration options:
 - `pattern`: Non-empty span-name filter when reading from traces. Defaults to `*`
 - `source`: `auto` (default), `trace`, or `response`
 
+Row variables render inside the structured value. Numeric `min` and `max` template results
+are coerced after rendering, so a budget such as `max: '{{ token_budget }}'` can vary by test.
+The resolved value must still be a finite non-negative number. Quoted literal numbers such as
+`max: '1200'` are invalid; use a YAML number or a full `{{ ... }}` output expression.
+
 If `tokens-used` needs provider response usage and the provider does not return token
 usage metadata, the assertion throws instead of assuming zero tokens.
 
