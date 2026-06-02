@@ -205,6 +205,32 @@ describe('FrameworkCompliance', () => {
     expect(renderedFrameworks.includes('nist:ai:measure')).toBe(false);
   });
 
+  it('should not count configured frameworks as compliant when none of their mapped plugins were tested', () => {
+    const categoryStats = {
+      'coding-agent:network-egress-bypass': {
+        pass: 5,
+        total: 10,
+        passWithFilter: 5,
+        failCount: 5,
+      },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['mitre:atlas', 'nist:ai:measure', 'owasp:agentic'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (0/0 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard.mock.calls).toHaveLength(3);
+    expect(
+      mockFrameworkCard.mock.calls.every(
+        ([props]) => props.isTested === false && props.isCompliant === false,
+      ),
+    ).toBe(true);
+  });
+
   it('should show all frameworks when no config.redteam.frameworks is provided', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },

@@ -45,29 +45,27 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     );
   }, [config?.redteam?.frameworks]);
 
-  const getNonCompliantPlugins = React.useCallback(
+  const getFrameworkPluginCategories = React.useCallback(
     (framework: string) => {
       const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
       if (!mappings) {
-        return [];
+        return { compliant: [], nonCompliant: [], untested: [] };
       }
 
-      // First, collect all plugins from all subcategories
       const allPlugins = new Set<string>();
       Object.values(mappings).forEach(({ plugins }) => {
         const expanded = expandPluginCollections(plugins, categoryStats);
         expanded.forEach((plugin) => allPlugins.add(plugin));
       });
 
-      // Then filter for non-compliant ones
-      const { nonCompliant } = categorizePlugins(
-        allPlugins,
-        categoryStats,
-        pluginPassRateThreshold,
-      );
-      return nonCompliant;
+      return categorizePlugins(allPlugins, categoryStats, pluginPassRateThreshold);
     },
     [categoryStats, pluginPassRateThreshold],
+  );
+
+  const getNonCompliantPlugins = React.useCallback(
+    (framework: string) => getFrameworkPluginCategories(framework).nonCompliant,
+    [getFrameworkPluginCategories],
   );
 
   const getFrameworkSeverity = React.useCallback(
@@ -101,14 +99,26 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     [getNonCompliantPlugins],
   );
 
+  const frameworkTested = React.useMemo(() => {
+    const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
+    frameworksToShow.forEach((framework) => {
+      const { compliant, nonCompliant } = getFrameworkPluginCategories(framework);
+      result[framework] = compliant.length + nonCompliant.length > 0;
+    });
+    return result;
+  }, [frameworksToShow, getFrameworkPluginCategories]);
+
   const frameworkCompliance = React.useMemo(() => {
     const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
     frameworksToShow.forEach((framework) => {
       const nonCompliantPlugins = getNonCompliantPlugins(framework);
-      result[framework] = nonCompliantPlugins.length === 0;
+      result[framework] = Boolean(frameworkTested[framework]) && nonCompliantPlugins.length === 0;
     });
     return result;
-  }, [frameworksToShow, getNonCompliantPlugins]);
+  }, [frameworksToShow, frameworkTested, getNonCompliantPlugins]);
+
+  const testedFrameworkCount = Object.values(frameworkTested).filter(Boolean).length;
+  const compliantFrameworkCount = Object.values(frameworkCompliance).filter(Boolean).length;
 
   const pluginComplianceStats = React.useMemo(() => {
     // Collect all unique plugins across all frameworks to show
@@ -177,8 +187,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
         className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <h2 className="text-xl font-semibold">
-          Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
-          {frameworksToShow.length})
+          Framework Compliance ({compliantFrameworkCount}/{testedFrameworkCount} tested)
         </h2>
         <CSVExporter
           categoryStats={categoryStats}
@@ -206,6 +215,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
             {frameworksToShow.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
+              const isTested = frameworkTested[framework] ?? false;
               const isCompliant = frameworkCompliance[framework] ?? false;
               const frameworkSeverity = getFrameworkSeverity(framework);
 
@@ -214,6 +224,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
                   key={framework}
                   evalId={evalId}
                   framework={framework}
+                  isTested={isTested}
                   isCompliant={isCompliant}
                   frameworkSeverity={frameworkSeverity}
                   categoryStats={categoryStats}

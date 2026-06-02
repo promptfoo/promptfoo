@@ -26,6 +26,7 @@ describe('FrameworkCard', () => {
   const defaultProps: FrameworkCardProps = {
     evalId: 'test-eval-id',
     framework: 'nist:ai:measure',
+    isTested: true,
     isCompliant: true,
     frameworkSeverity: Severity.Low,
     categoryStats: {
@@ -98,6 +99,37 @@ describe('FrameworkCard', () => {
     // No compliant icon when non-compliant
     const compliantIcon = document.querySelector('.icon-compliant');
     expect(compliantIcon).not.toBeInTheDocument();
+  });
+
+  it('should render an untested framework neutrally and exclude unrelated report plugins', () => {
+    renderFrameworkCard({
+      isTested: false,
+      isCompliant: false,
+      categoryStats: {
+        'coding-agent:network-egress-bypass': { pass: 5, total: 10, failCount: 5 },
+      },
+      nonCompliantPlugins: [],
+    });
+
+    const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
+    expect(cardElement).not.toHaveClass('compliant');
+    expect(cardElement).not.toHaveClass('non-compliant');
+    expect(screen.getAllByText('Not Tested').length).toBeGreaterThan(0);
+    expect(screen.queryByText('coding-agent:network-egress-bypass')).not.toBeInTheDocument();
+  });
+
+  it('should exclude unrelated report plugins from a tested framework summary', () => {
+    renderFrameworkCard({
+      categoryStats: {
+        'excessive-agency': { pass: 10, total: 10, failCount: 0 },
+        'coding-agent:network-egress-bypass': { pass: 0, total: 10, failCount: 10 },
+      },
+      nonCompliantPlugins: [],
+    });
+
+    expect(screen.getByText('0 / 1 failed')).toBeInTheDocument();
+    expect(screen.getByText('excessive-agency')).toBeInTheDocument();
+    expect(screen.queryByText('coding-agent:network-egress-bypass')).not.toBeInTheDocument();
   });
 
   it('should render categorized plugin lists with correct category names, chips, and plugin status for an OWASP framework with plugins in multiple categories', () => {
