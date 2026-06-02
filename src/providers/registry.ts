@@ -5,6 +5,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { isMissingPackageImportError } from '../util/packageImportErrors';
+import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -126,6 +127,16 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
 }
 
 export const providerMap: ProviderFactory[] = [
+  {
+    test: (providerPath: string) => providerPath === 'a2a' || providerPath.startsWith('a2a:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new A2AProvider(providerPath, providerOptions);
+    },
+  },
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
