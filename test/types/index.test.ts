@@ -887,6 +887,23 @@ describe('TestSuiteConfigSchema', () => {
     });
   });
 
+  describe('tracing property', () => {
+    it('defaults the OTLP HTTP receiver to loopback', () => {
+      const result = TestSuiteConfigSchema.parse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {},
+          },
+        },
+      });
+
+      expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
+    });
+  });
+
   describe('extensions field', () => {
     const minimalConfig = {
       providers: ['provider1'],

@@ -98,6 +98,17 @@ def build_probe_env(codex_home: Path) -> dict[str, str]:
     return env
 
 
+def get_skill_names(detail: dict[str, Any]) -> set[str]:
+    skills = detail.get("skills", [])
+    if not isinstance(skills, list):
+        return set()
+    return {
+        skill["name"]
+        for skill in skills
+        if isinstance(skill, dict) and isinstance(skill.get("name"), str)
+    }
+
+
 def main() -> None:
     args = parse_args()
     codex_home = args.codex_home.expanduser().resolve()
@@ -175,7 +186,7 @@ def main() -> None:
             "plugin/read",
             {"marketplacePath": marketplace_path, "pluginName": PLUGIN_NAME},
         ).get("plugin", {})
-        skill_names = sorted(skill.get("name") for skill in detail.get("skills", []))
+        skill_names = get_skill_names(detail)
         if PLUGIN_SKILL_NAME not in skill_names:
             raise RuntimeError(
                 f"computer-use plugin does not expose its skill: {detail!r}"

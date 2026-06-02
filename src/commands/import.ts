@@ -9,13 +9,14 @@ import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
-import EvalResult from '../models/evalResult';
+import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import type { Command } from 'commander';
 
 import type {
+  EvaluateResult,
   EvaluateSummaryV2,
   EvaluateSummaryV3,
   ExportedBlobAsset,
@@ -303,9 +304,10 @@ async function importTraces(
   traces: TraceData[],
   evalId: string,
   generateNewTraceIds: boolean,
-): Promise<void> {
+): Promise<Map<string, string>> {
   const traceStore = getTraceStore();
   const usedTraceIds = new Set<string>();
+  const importedTraceIds = new Map<string, string>();
   for (const trace of traces) {
     // Trace IDs are globally unique in the local trace store. Duplicate eval
     // imports and conflicting imports need fresh IDs so spans never attach to
@@ -325,7 +327,39 @@ async function importTraces(
     if (trace.spans.length > 0) {
       await traceStore.addSpans(traceId, trace.spans);
     }
+    importedTraceIds.set(trace.traceId, traceId);
   }
+  return importedTraceIds;
+}
+
+function remapImportedResultTraceLinkage(
+  results: EvaluateResult[],
+  importedTraceIds: Map<string, string>,
+  evalId: string,
+): EvaluateResult[] {
+  return results.map((result) => {
+    const importedTraceId = result.traceId && importedTraceIds.get(result.traceId);
+    if (importedTraceId) {
+      // Strip any linkage already embedded in metadata (e.g. from a hand-crafted or legacy
+      // file); the correct remapped linkage is re-applied by persistTraceMetadata on write.
+      return {
+        ...result,
+        traceId: importedTraceId,
+        evaluationId: evalId,
+        metadata: stripTraceLinkageFromMetadata(result.metadata),
+      };
+    }
+
+    if (!result.traceId && !result.evaluationId) {
+      return result;
+    }
+
+    const { traceId: _traceId, evaluationId: _evaluationId, ...unlinkedResult } = result;
+    return {
+      ...unlinkedResult,
+      metadata: stripTraceLinkageFromMetadata(result.metadata),
+    };
+  });
 }
 
 interface ImportedEvalContext {
@@ -333,6 +367,30 @@ interface ImportedEvalContext {
   importId: string | undefined;
   importCreatedAt: Date;
   importAuthor: string | undefined;
+}
+
+function prepareImportArtifacts(
+  evalData: any,
+  importV3: boolean,
+): {
+  traces: TraceData[];
+  blobAssets: PreparedBlobAsset[];
+} {
+  const traces = importV3 ? prepareTraces(evalData.traces) : [];
+  const blobAssets =
+    importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
+      ? prepareBlobAssets(
+          evalData.blobAssets,
+          // Bound the scan: imported files are untrusted, and deeply
+          // nested JSON would otherwise overflow the stack here.
+          collectBlobHashes(
+            { results: evalData.results, traces },
+            { maxDepth: 64, maxStringLength: 100_000 },
+          ),
+        )
+      : [];
+
+  return { traces, blobAssets };
 }
 
 async function createImportedV3Eval(
@@ -351,8 +409,13 @@ async function createImportedV3Eval(
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),
   });
-  await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
-  await importTraces(traces, evalRecord.id, context.newId);
+  const importedTraceIds = await importTraces(traces, evalRecord.id, context.newId);
+  const importedResults = remapImportedResultTraceLinkage(
+    evalData.results.results,
+    importedTraceIds,
+    evalRecord.id,
+  );
+  await EvalResult.createManyFromEvaluateResult(importedResults, evalRecord.id);
   await recordImportedBlobReferences(blobAssets, evalRecord.id);
   return evalRecord.id;
 }
@@ -400,6 +463,37 @@ export function importCommand(program: Command) {
         const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
 
+        let formatChecked = false;
+        let importV3 = false;
+        let importLegacy = false;
+        let artifactsPrepared = false;
+        let traces: TraceData[] = [];
+        let blobAssets: PreparedBlobAsset[] = [];
+        const validateImportFormat = () => {
+          if (!formatChecked) {
+            importV3 = isImportableV3Results(evalData.results);
+            importLegacy = isImportableLegacyResults(evalData.results);
+            if (!importV3 && !importLegacy) {
+              throw new Error('Unsupported eval export results format');
+            }
+            formatChecked = true;
+          }
+        };
+        const prepareArtifacts = () => {
+          if (!artifactsPrepared) {
+            validateImportFormat();
+            ({ traces, blobAssets } = prepareImportArtifacts(evalData, importV3));
+            artifactsPrepared = true;
+          }
+        };
+
+        // Validate replacement artifacts before consulting the database. A
+        // transient lock on the eval row should not mask a corrupt import file,
+        // and this preflight has no filesystem or database side effects.
+        if (cmdObj.force) {
+          prepareArtifacts();
+        }
+
         if (importId && !cmdObj.newId) {
           const existing = await Eval.findById(importId);
           if (existing) {
@@ -415,25 +509,7 @@ export function importCommand(program: Command) {
           }
         }
 
-        const importV3 = isImportableV3Results(evalData.results);
-        const importLegacy = isImportableLegacyResults(evalData.results);
-        if (!importV3 && !importLegacy) {
-          throw new Error('Unsupported eval export results format');
-        }
-
-        const traces = importV3 ? prepareTraces(evalData.traces) : [];
-        const blobAssets =
-          importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
-            ? prepareBlobAssets(
-                evalData.blobAssets,
-                // Bound the scan: imported files are untrusted, and deeply
-                // nested JSON would otherwise overflow the stack here.
-                collectBlobHashes(
-                  { results: evalData.results, traces },
-                  { maxDepth: 64, maxStringLength: 100_000 },
-                ),
-              )
-            : [];
+        prepareArtifacts();
 
         // Restore embedded media before the destructive replace so a corrupt
         // artifact cannot delete the existing eval. blobAssets is empty for v2.

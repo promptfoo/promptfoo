@@ -5,10 +5,26 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from probe_plugin_list import build_probe_env
+from probe_plugin_list import build_probe_env, get_skill_names
 
 
 class ProbePluginListTest(unittest.TestCase):
+    def test_get_skill_names_ignores_malformed_names(self) -> None:
+        detail = {
+            "skills": [
+                {"name": "computer-use:computer-use"},
+                {},
+                {"name": None},
+                {"name": 42},
+                {"name": "other:skill"},
+            ]
+        }
+
+        self.assertEqual(
+            get_skill_names(detail),
+            {"computer-use:computer-use", "other:skill"},
+        )
+
     def test_build_probe_env_excludes_shell_secrets(self) -> None:
         with patch.dict(
             os.environ,

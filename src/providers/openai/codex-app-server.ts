@@ -24,6 +24,7 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -1438,10 +1439,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     }
 
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     if (config.base_url) {
       sortedEnv.OPENAI_BASE_URL = config.base_url;
@@ -1559,7 +1557,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     try {
       await connection.initialize(config);
       const apiKey = this.getApiKey(config);
-      if (apiKey) {
+      // Don't log in with an ambient OpenAI/Codex key when routing to a custom model_provider
+      // (e.g. amazon-bedrock) — it's unrelated to the backend. Gate it like the env injection.
+      if (shouldInjectApiKey(config, apiKey)) {
         try {
           await connection.request(
             'account/login/start',
