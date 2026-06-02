@@ -22,7 +22,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createEvaluateResult,
+  createEvaluateSummaryV2,
+  createEvaluateTable,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -1229,6 +1233,27 @@ describe('evaluator', () => {
 
     it('should remove oversized fields from redteam report result projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
+      eval1.config = {
+        description: 'Compact report',
+        providers: [
+          {
+            id: 'test-provider',
+            label: 'Test provider',
+            config: {
+              tools: [{ type: 'function', function: { name: 'search' } }],
+              apiKey: 'should not be projected',
+            },
+          },
+        ],
+        tests: [{ vars: { prompt: 'duplicate corpus entry' } }],
+        redteam: {
+          injectVar: 'prompt',
+          frameworks: ['owasp:llm'],
+          plugins: [{ id: 'coding-agent:network-egress-bypass' }],
+          purpose: 'should not be projected',
+          strategies: ['jailbreak:meta'],
+        },
+      };
       await eval1.addResult(
         createEvaluateResult({
           metadata: {
@@ -1245,6 +1270,7 @@ describe('evaluator', () => {
           },
           testCase: {
             vars: { prompt: 'attack' },
+            assert: [{ type: 'contains', value: 'large duplicate assertion body' }],
             metadata: {
               pluginId: 'coding-agent:network-egress-bypass',
               strategyId: 'jailbreak:meta',
@@ -1267,6 +1293,7 @@ describe('evaluator', () => {
                 },
                 metadata: {
                   renderedGradingPrompt: 'large grading prompt',
+                  renderedAssertionValue: 'display assertion body',
                 },
               },
             ],
@@ -1290,11 +1317,53 @@ describe('evaluator', () => {
         pluginId: 'coding-agent:network-egress-bypass',
         strategyId: 'jailbreak:meta',
       });
-      expect(result.gradingResult?.componentResults?.[0]).not.toHaveProperty('metadata');
+      expect(result.testCase).not.toHaveProperty('assert');
+      expect(result.gradingResult?.componentResults?.[0].metadata).toEqual({
+        renderedAssertionValue: 'display assertion body',
+      });
       expect(result.gradingResult?.componentResults?.[0].assertion).toEqual({
         type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
         metric: 'CodingAgentNetworkEgressBypass',
+        value: 'large assertion body',
       });
+      expect(projected.config).toEqual({
+        description: 'Compact report',
+        providers: [
+          {
+            id: 'test-provider',
+            label: 'Test provider',
+            config: { tools: [{ type: 'function', function: { name: 'search' } }] },
+          },
+        ],
+        redteam: {
+          injectVar: 'prompt',
+          frameworks: ['owasp:llm'],
+          plugins: [{ id: 'coding-agent:network-egress-bypass' }],
+        },
+      });
+    });
+
+    it('should omit legacy table bodies from redteam report result projections', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        table: createEvaluateTable({
+          body: [
+            {
+              testIdx: 0,
+              vars: ['duplicate corpus entry'],
+              test: { assert: [{ type: 'contains', value: 'large assertion body' }] },
+              outputs: [],
+            },
+          ],
+        }),
+      });
+
+      const projected = await eval1.toResultsFile({
+        includeTraces: false,
+        resultProjection: 'redteamReport',
+      });
+
+      expect('table' in projected.results && projected.results.table.body).toEqual([]);
     });
   });
 

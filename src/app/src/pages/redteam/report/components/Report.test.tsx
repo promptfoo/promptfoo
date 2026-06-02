@@ -658,6 +658,24 @@ describe('App component target selection', () => {
     expect(screen.getByTestId('overview-passes')).toHaveTextContent('1');
     expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
   });
+
+  it('should derive depth from compact result rows when request metrics are unavailable', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', true),
+      createComponentMockResult(0, 'plugin2', false),
+    ]);
+    evalData.prompts?.forEach((prompt) => {
+      prompt.metrics = undefined;
+    });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByText(/2 probes/)).toBeInTheDocument();
+  });
 });
 
 describe('App component report loading', () => {

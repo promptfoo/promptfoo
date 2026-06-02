@@ -39,7 +39,6 @@ import {
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -742,10 +741,9 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       ? evalData.prompts
       : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
-  const tableData =
-    (evalData.version >= 4
-      ? convertResultsToTable(evalData).body
-      : (evalData.results as EvaluateSummaryV2).table.body) || [];
+  const selectedPromptResultCount = evalData.results.results.filter(
+    (result) => prompts.length <= 1 || result.promptIdx === selectedPromptIndex,
+  ).length;
 
   let tools: Tool[] = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
@@ -840,7 +838,8 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                         <Badge variant="secondary">
                           <strong>Depth:</strong>{' '}
                           {(
-                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
+                            selectedPrompt?.metrics?.tokenUsage?.numRequests ||
+                            selectedPromptResultCount
                           ).toLocaleString()}{' '}
                           probes
                         </Badge>

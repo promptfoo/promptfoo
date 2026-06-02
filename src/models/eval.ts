@@ -29,11 +29,13 @@ import {
   type EvaluateSummaryV3,
   type EvaluateTable,
   type EvaluateTableRow,
+  type GradingResult,
   type Prompt,
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
+import { isProviderOptions } from '../types/providers';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -77,24 +79,46 @@ export type ResultsFileOptions = {
   resultProjection?: 'full' | 'redteamReport';
 };
 
-function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
-  const metadata = result.metadata
-    ? (({ storedGraderResult: _storedGraderResult, ...rest }) => rest)(result.metadata)
-    : result.metadata;
+function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
+  const metadata = gradingResult.metadata
+    ? (({ renderedGradingPrompt: _renderedGradingPrompt, ...displayMetadata }) => displayMetadata)(
+        gradingResult.metadata,
+      )
+    : gradingResult.metadata;
 
+  return {
+    ...gradingResult,
+    metadata,
+    componentResults: gradingResult.componentResults?.map(projectGradingResultForRedteamReport),
+  };
+}
+
+function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
+  const metadata = result.metadata;
+  const projectedMetadata = metadata
+    ? {
+        ...(metadata.pluginId !== undefined && { pluginId: metadata.pluginId }),
+        ...(metadata.harmCategory !== undefined && { harmCategory: metadata.harmCategory }),
+        ...(metadata.redteamHistory !== undefined && { redteamHistory: metadata.redteamHistory }),
+        ...(metadata.redteamTreeHistory !== undefined && {
+          redteamTreeHistory: metadata.redteamTreeHistory,
+        }),
+      }
+    : undefined;
+
+  const redteamFinalPrompt =
+    result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
   const response = result.response
     ? {
-        ...result.response,
-        metadata: result.response.metadata?.redteamFinalPrompt
-          ? { redteamFinalPrompt: result.response.metadata.redteamFinalPrompt }
-          : undefined,
+        output: result.response.output,
+        ...(result.response.prompt !== undefined && { prompt: result.response.prompt }),
+        ...(redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
       }
     : result.response;
 
   const testCaseMetadata = result.testCase?.metadata;
   const testCase = result.testCase
     ? {
-        ...result.testCase,
         metadata: testCaseMetadata
           ? {
               ...(testCaseMetadata.pluginId !== undefined && {
@@ -109,28 +133,70 @@ function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
     : result.testCase;
 
   const gradingResult = result.gradingResult
-    ? {
-        ...result.gradingResult,
-        componentResults: result.gradingResult.componentResults?.map((componentResult) => {
-          const { metadata: _metadata, ...componentWithoutMetadata } = componentResult;
-          const assertion = componentResult.assertion
-            ? (({ value: _value, ...rest }) => rest)(componentResult.assertion)
-            : undefined;
-          return {
-            ...componentWithoutMetadata,
-            ...(assertion && { assertion }),
-          };
-        }),
-      }
+    ? projectGradingResultForRedteamReport(result.gradingResult)
     : result.gradingResult;
 
   return {
-    ...result,
-    metadata,
-    response,
+    promptIdx: result.promptIdx,
+    testIdx: result.testIdx,
     testCase,
+    promptId: result.promptId,
+    provider: result.provider,
+    prompt: result.prompt,
+    vars: result.vars,
+    response,
+    error: result.error,
+    failureReason: result.failureReason,
+    success: result.success,
+    score: result.score,
+    latencyMs: result.latencyMs,
     gradingResult,
+    namedScores: result.namedScores,
+    metadata: projectedMetadata,
   };
+}
+
+function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+  const firstProvider = Array.isArray(config.providers) ? config.providers[0] : undefined;
+  const provider = isProviderOptions(firstProvider)
+    ? {
+        id: firstProvider.id,
+        ...(firstProvider.label !== undefined && { label: firstProvider.label }),
+        ...(firstProvider.config?.tools !== undefined && {
+          config: { tools: firstProvider.config.tools },
+        }),
+      }
+    : undefined;
+
+  return {
+    ...(config.description !== undefined && { description: config.description }),
+    ...(config.redteam && {
+      redteam: {
+        ...(config.redteam.injectVar !== undefined && { injectVar: config.redteam.injectVar }),
+        ...(config.redteam.frameworks !== undefined && { frameworks: config.redteam.frameworks }),
+        ...(config.redteam.plugins !== undefined && { plugins: config.redteam.plugins }),
+      },
+    }),
+    ...(provider && { providers: [provider] }),
+  };
+}
+
+function projectSummaryForRedteamReport(
+  evaluateSummary: EvaluateSummaryV3 | EvaluateSummaryV2,
+): EvaluateSummaryV3 | EvaluateSummaryV2 {
+  const results = evaluateSummary.results.map(projectResultForRedteamReport);
+  if ('table' in evaluateSummary) {
+    return {
+      ...evaluateSummary,
+      results,
+      table: {
+        ...evaluateSummary.table,
+        body: [],
+      },
+    };
+  }
+
+  return { ...evaluateSummary, results };
 }
 
 /** Result from queries selecting test_idx column */
@@ -1561,17 +1627,17 @@ export default class Eval {
     const evaluateSummary = await this.toEvaluateSummary();
     const results =
       resultProjection === 'redteamReport'
-        ? {
-            ...evaluateSummary,
-            results: evaluateSummary.results.map(projectResultForRedteamReport),
-          }
+        ? projectSummaryForRedteamReport(evaluateSummary)
         : evaluateSummary;
 
     const resultFile: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results,
-      config: this.config,
+      config:
+        resultProjection === 'redteamReport'
+          ? projectConfigForRedteamReport(this.config)
+          : this.config,
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
