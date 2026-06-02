@@ -4,6 +4,7 @@ import { hasSpecificDocumentation } from './providerDocumentationMap';
 describe('hasSpecificDocumentation', () => {
   it.each([
     { providerType: 'openai', description: 'a common foundation model provider' },
+    { providerType: 'a2a', description: 'an Agent2Agent provider' },
     { providerType: 'go', description: 'a newly added code-based provider' },
     { providerType: 'http', description: 'an API endpoint provider' },
     { providerType: 'custom', description: 'a provider with a general documentation page' },

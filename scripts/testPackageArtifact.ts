@@ -178,6 +178,56 @@ function assertInstalledWebApp(installedPackageDir: string): void {
   );
 }
 
+/**
+ * Asserts every file path declared in the installed package's `exports` and `typesVersions`
+ * resolves to a real file. The consumer `tsc` checks can't catch a wrong declared `types` path on
+ * their own — TypeScript falls through to the `default` condition and auto-discovers the sibling
+ * `.d.ts` — so validate the declared paths directly here.
+ */
+function assertExportsResolve(
+  installedPackageDir: string,
+  manifest: {
+    exports?: unknown;
+    typesVersions?: Record<string, Record<string, string[]>>;
+  },
+): void {
+  const referencedPaths = new Set<string>();
+  const collect = (value: unknown): void => {
+    if (typeof value === 'string') {
+      if (value.startsWith('.')) {
+        referencedPaths.add(value);
+      }
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const nested of Object.values(value)) {
+        collect(nested);
+      }
+    }
+  };
+  collect(manifest.exports);
+  for (const subpaths of Object.values(manifest.typesVersions ?? {})) {
+    for (const candidatePaths of Object.values(subpaths)) {
+      for (const candidatePath of candidatePaths) {
+        referencedPaths.add(candidatePath);
+      }
+    }
+  }
+
+  assert(
+    referencedPaths.size > 0,
+    'Expected the installed package manifest to declare export paths',
+  );
+  const missing = [...referencedPaths].filter(
+    (relativePath) => !fs.existsSync(path.join(installedPackageDir, relativePath)),
+  );
+  assert.deepEqual(
+    missing,
+    [],
+    `Installed package exports reference missing files: ${missing.join(', ')}`,
+  );
+}
+
 function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
   const binPath = path.join(
     consumerDir,
@@ -209,12 +259,15 @@ function writeConsumerScripts(consumerDir: string): void {
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { InputsSchema, PromptSchema } from 'promptfoo/contracts';",
+      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
       '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
       "    throw new Error('Missing expected ESM schema export');",
       '  }',
+      '}',
+      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+      "  throw new Error('Missing expected ESM provider capability export');",
       '}',
       '',
     ].join('\n'),
@@ -223,12 +276,15 @@ function writeConsumerScripts(consumerDir: string): void {
     path.join(consumerDir, 'require-package.cjs'),
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { InputsSchema, PromptSchema } = require('promptfoo/contracts');",
+      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
       '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
       "    throw new Error('Missing expected CJS schema export');",
       '  }',
+      '}',
+      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+      "  throw new Error('Missing expected CJS provider capability export');",
       '}',
       '',
     ].join('\n'),
@@ -236,17 +292,20 @@ function writeConsumerScripts(consumerDir: string): void {
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
-      "import { PromptSchema, isTransformFunction } from 'promptfoo/contracts';",
-      "import type { BlobRef, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
+      "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
+      "const user: GetUserResponse = { email: 'user@example.com' };",
+      'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
       '',
+      'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
       'void response;',
-      'if (!isTransformFunction(transform)) {',
+      'if (!isTransformFunction(transform) || !hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected TypeScript contracts export');",
       '}',
       '',
@@ -283,10 +342,16 @@ function writeConsumerScripts(consumerDir: string): void {
       "import contracts = require('promptfoo/contracts');",
       '',
       "const prompt: contracts.Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
+      "const user: contracts.GetUserResponse = { email: 'user@example.com' };",
+      'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
       'void response;',
+      'if (!contracts.hasFunctionToolCallValidator(validator)) {',
+      "  throw new Error('Missing expected CommonJS TypeScript contracts export');",
+      '}',
       '',
     ].join('\n'),
   );
@@ -364,8 +429,13 @@ function main(): void {
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
     const installedPackageJson = JSON.parse(
       fs.readFileSync(path.join(installedPackageDir, 'package.json'), 'utf8'),
-    ) as { version: string };
+    ) as {
+      version: string;
+      exports?: unknown;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    };
     assert.equal(installedPackageJson.version, packResult.version);
+    assertExportsResolve(installedPackageDir, installedPackageJson);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);

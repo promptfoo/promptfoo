@@ -142,7 +142,8 @@
     {
       "name": "contracts",
       "roots": ["src/contracts", "src/contracts.ts"],
-      "allowedDependencies": []
+      "allowedDependencies": [],
+      "allowedExternal": ["zod"]
     },
     {
       "name": "legacy-runtime",
