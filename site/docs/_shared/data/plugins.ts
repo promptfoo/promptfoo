@@ -2027,6 +2027,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests for path traversal vulnerabilities to access files outside the authorized scope',
+    label: 'technical',
+    link: '/docs/red-team/plugins/path-traversal/',
+    name: 'Path Traversal',
+    pluginId: 'path-traversal',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to execute shell commands through the model',
     label: 'technical',
     link: '/docs/red-team/plugins/shell-injection/',

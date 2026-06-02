@@ -86,6 +86,7 @@ import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInte
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
 import { PolicyViolationGrader } from './plugins/policy/index';
+import { PathTraversalGrader } from './plugins/pathTraversal';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
@@ -275,6 +276,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:pii:social': new PiiGrader(),
   'promptfoo:redteam:pliny': new PlinyGrader(),
   'promptfoo:redteam:policy': new PolicyViolationGrader(),
+  'promptfoo:redteam:path-traversal': new PathTraversalGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
