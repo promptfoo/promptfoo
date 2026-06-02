@@ -17,55 +17,55 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema13"
+          "$ref": "#/definitions/__schema15"
         },
         "tests": {
-          "$ref": "#/definitions/__schema14"
+          "$ref": "#/definitions/__schema16"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema29"
-        },
-        "defaultTest": {
-          "$ref": "#/definitions/__schema30"
-        },
-        "outputPath": {
           "$ref": "#/definitions/__schema31"
         },
-        "sharing": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema32"
         },
-        "nunjucksFilters": {
+        "outputPath": {
           "$ref": "#/definitions/__schema33"
         },
-        "env": {
+        "sharing": {
           "$ref": "#/definitions/__schema34"
         },
-        "derivedMetrics": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema35"
         },
-        "extensions": {
+        "env": {
           "$ref": "#/definitions/__schema36"
         },
-        "metadata": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema37"
         },
-        "redteam": {
+        "extensions": {
           "$ref": "#/definitions/__schema38"
         },
-        "writeLatestResults": {
+        "metadata": {
           "$ref": "#/definitions/__schema39"
         },
-        "tracing": {
+        "redteam": {
           "$ref": "#/definitions/__schema40"
         },
-        "evaluateOptions": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema41"
         },
-        "commandLineOptions": {
+        "tracing": {
+          "$ref": "#/definitions/__schema42"
+        },
+        "evaluateOptions": {
           "$ref": "#/definitions/__schema43"
         },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema45"
+        },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema46"
         }
       },
       "required": ["prompts"],
@@ -597,10 +597,10 @@
                 "$ref": "#/definitions/__schema9"
               },
               "description": {
-                "$ref": "#/definitions/__schema11"
+                "$ref": "#/definitions/__schema13"
               },
               "type": {
-                "$ref": "#/definitions/__schema12"
+                "$ref": "#/definitions/__schema14"
               }
             },
             "required": ["description"],
@@ -625,6 +625,67 @@
           "items": {
             "$ref": "#/definitions/__schema10"
           }
+        },
+        "xlsx": {
+          "type": "object",
+          "properties": {
+            "cells": {
+              "type": "object",
+              "properties": {
+                "cell": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema11"
+                    }
+                  ]
+                },
+                "comment": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema11"
+                    }
+                  ]
+                },
+                "formula": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema11"
+                    }
+                  ]
+                },
+                "hyperlink": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema11"
+                    }
+                  ]
+                },
+                "hidden-sheet": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema11"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "hiddenSheetName": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema12"
+                }
+              ]
+            },
+            "sheetName": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema12"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -635,13 +696,22 @@
     },
     "__schema11": {
       "type": "string",
-      "minLength": 1
+      "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
     },
     "__schema12": {
       "type": "string",
-      "enum": ["text", "pdf", "docx", "image"]
+      "minLength": 1,
+      "maxLength": 31
     },
     "__schema13": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema14": {
+      "type": "string",
+      "enum": ["text", "pdf", "docx", "xlsx", "image"]
+    },
+    "__schema15": {
       "anyOf": [
         {
           "type": "string"
@@ -707,7 +777,7 @@
         }
       ]
     },
-    "__schema14": {
+    "__schema16": {
       "anyOf": [
         {
           "type": "string"
@@ -720,63 +790,63 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema15"
+                "$ref": "#/definitions/__schema17"
               },
               {
-                "$ref": "#/definitions/__schema28"
+                "$ref": "#/definitions/__schema30"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema28"
+          "$ref": "#/definitions/__schema30"
         }
       ]
     },
-    "__schema15": {
+    "__schema17": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema16"
-        },
-        "vars": {
-          "$ref": "#/definitions/__schema17"
-        },
-        "provider": {
           "$ref": "#/definitions/__schema18"
         },
-        "providers": {
+        "vars": {
           "$ref": "#/definitions/__schema19"
         },
-        "prompts": {
+        "provider": {
           "$ref": "#/definitions/__schema20"
         },
-        "providerOutput": {
+        "providers": {
           "$ref": "#/definitions/__schema21"
         },
-        "assert": {
+        "prompts": {
           "$ref": "#/definitions/__schema22"
         },
-        "assertScoringFunction": {
+        "providerOutput": {
+          "$ref": "#/definitions/__schema23"
+        },
+        "assert": {
           "$ref": "#/definitions/__schema24"
         },
-        "options": {
-          "$ref": "#/definitions/__schema25"
-        },
-        "threshold": {
+        "assertScoringFunction": {
           "$ref": "#/definitions/__schema26"
         },
-        "metadata": {
+        "options": {
           "$ref": "#/definitions/__schema27"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema28"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema29"
         }
       },
       "additionalProperties": false
     },
-    "__schema16": {
+    "__schema18": {
       "type": "string"
     },
-    "__schema17": {},
-    "__schema18": {
+    "__schema19": {},
+    "__schema20": {
       "anyOf": [
         {
           "type": "string"
@@ -812,19 +882,19 @@
         }
       ]
     },
-    "__schema19": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "__schema20": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "__schema21": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema22": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema23": {
       "anyOf": [
         {
           "type": "string"
@@ -838,7 +908,7 @@
         }
       ]
     },
-    "__schema22": {
+    "__schema24": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -854,7 +924,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema23"
+                      "$ref": "#/definitions/__schema25"
                     }
                   ]
                 }
@@ -880,12 +950,12 @@
             "additionalProperties": false
           },
           {
-            "$ref": "#/definitions/__schema23"
+            "$ref": "#/definitions/__schema25"
           }
         ]
       }
     },
-    "__schema23": {
+    "__schema25": {
       "type": "object",
       "properties": {
         "type": {
@@ -1068,7 +1138,7 @@
       "required": ["type"],
       "additionalProperties": false
     },
-    "__schema24": {
+    "__schema26": {
       "anyOf": [
         {
           "type": "string",
@@ -1077,7 +1147,7 @@
         {}
       ]
     },
-    "__schema25": {
+    "__schema27": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1185,10 +1255,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema26": {
+    "__schema28": {
       "type": "number"
     },
-    "__schema27": {
+    "__schema29": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1196,7 +1266,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema28": {
+    "__schema30": {
       "type": "object",
       "properties": {
         "path": {
@@ -1249,7 +1319,7 @@
       "required": ["path"],
       "additionalProperties": false
     },
-    "__schema29": {
+    "__schema31": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1270,77 +1340,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema16"
+                          "$ref": "#/definitions/__schema18"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema17"
+                          "$ref": "#/definitions/__schema19"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema18"
+                          "$ref": "#/definitions/__schema20"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema19"
+                          "$ref": "#/definitions/__schema21"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema20"
+                          "$ref": "#/definitions/__schema22"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema21"
+                          "$ref": "#/definitions/__schema23"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema22"
+                          "$ref": "#/definitions/__schema24"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema24"
+                          "$ref": "#/definitions/__schema26"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema25"
+                          "$ref": "#/definitions/__schema27"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema26"
+                          "$ref": "#/definitions/__schema28"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema27"
+                          "$ref": "#/definitions/__schema29"
                         }
                       ]
                     }
@@ -1351,7 +1421,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema15"
+                  "$ref": "#/definitions/__schema17"
                 }
               }
             },
@@ -1361,7 +1431,7 @@
         ]
       }
     },
-    "__schema30": {
+    "__schema32": {
       "anyOf": [
         {
           "type": "string"
@@ -1370,41 +1440,41 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema17"
-            },
-            "provider": {
-              "$ref": "#/definitions/__schema18"
-            },
-            "providers": {
               "$ref": "#/definitions/__schema19"
             },
-            "prompts": {
+            "provider": {
               "$ref": "#/definitions/__schema20"
             },
-            "providerOutput": {
+            "providers": {
               "$ref": "#/definitions/__schema21"
             },
-            "assert": {
+            "prompts": {
               "$ref": "#/definitions/__schema22"
             },
-            "assertScoringFunction": {
+            "providerOutput": {
+              "$ref": "#/definitions/__schema23"
+            },
+            "assert": {
               "$ref": "#/definitions/__schema24"
             },
-            "options": {
-              "$ref": "#/definitions/__schema25"
-            },
-            "threshold": {
+            "assertScoringFunction": {
               "$ref": "#/definitions/__schema26"
             },
-            "metadata": {
+            "options": {
               "$ref": "#/definitions/__schema27"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema28"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema29"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "__schema31": {
+    "__schema33": {
       "anyOf": [
         {
           "type": "string"
@@ -1417,7 +1487,7 @@
         }
       ]
     },
-    "__schema32": {
+    "__schema34": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1436,7 +1506,7 @@
         }
       ]
     },
-    "__schema33": {
+    "__schema35": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1445,7 +1515,7 @@
         "type": "string"
       }
     },
-    "__schema34": {
+    "__schema36": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1471,7 +1541,7 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema37": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1492,7 +1562,7 @@
         "additionalProperties": false
       }
     },
-    "__schema36": {
+    "__schema38": {
       "anyOf": [
         {
           "type": "array",
@@ -1505,14 +1575,14 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema39": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema38": {
+    "__schema40": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -1580,6 +1650,48 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "xlsx": {
+                                "type": "object",
+                                "properties": {
+                                  "cells": {
+                                    "type": "object",
+                                    "properties": {
+                                      "cell": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "comment": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "formula": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "hyperlink": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "hidden-sheet": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "hiddenSheetName": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 31
+                                  },
+                                  "sheetName": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 31
+                                  }
+                                },
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -1590,7 +1702,7 @@
                           },
                           "type": {
                             "type": "string",
-                            "enum": ["text", "pdf", "docx", "image"]
+                            "enum": ["text", "pdf", "docx", "xlsx", "image"]
                           }
                         },
                         "required": ["description"],
@@ -2067,6 +2179,48 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "xlsx": {
+                                "type": "object",
+                                "properties": {
+                                  "cells": {
+                                    "type": "object",
+                                    "properties": {
+                                      "cell": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "comment": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "formula": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "hyperlink": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      },
+                                      "hidden-sheet": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "hiddenSheetName": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 31
+                                  },
+                                  "sheetName": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 31
+                                  }
+                                },
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -2077,7 +2231,7 @@
                           },
                           "type": {
                             "type": "string",
-                            "enum": ["text", "pdf", "docx", "image"]
+                            "enum": ["text", "pdf", "docx", "xlsx", "image"]
                           }
                         },
                         "required": ["description"],
@@ -3053,10 +3207,10 @@
         }
       }
     },
-    "__schema39": {
+    "__schema41": {
       "type": "boolean"
     },
-    "__schema40": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3159,7 +3313,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema41": {
+    "__schema43": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3202,15 +3356,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema44"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema44": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema45": {
       "type": "object",
       "properties": {
         "description": {
@@ -3338,7 +3492,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema44"
             }
           ]
         },
@@ -3412,7 +3566,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema46": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
