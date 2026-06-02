@@ -18,7 +18,7 @@ vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
 vi.mock('../../src/redteam/remoteGeneration');
 vi.mock('../../src/remoteGrading');
-vi.mock('../../src/util/fetch');
+vi.mock('../../src/util/fetch/index');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
   return {
     ...(await importOriginal()),

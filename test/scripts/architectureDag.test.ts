@@ -13,6 +13,7 @@ import {
   findBackEdges,
   findForbiddenDependencyEdges,
   type LayerConfig,
+  readEdgeBaseline,
   readLayerConfig,
 } from '../../scripts/architectureUtils';
 
@@ -153,6 +154,48 @@ describe('edge baseline', () => {
   });
 });
 
+describe('readEdgeBaseline', () => {
+  let repoRoot: string;
+  const config = configWith([
+    { name: 'a', roots: ['src/a'], allowedDependencies: [] },
+    { name: 'b', roots: ['src/b'], allowedDependencies: [] },
+  ]);
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'archdag-baseline-'));
+    fs.mkdirSync(path.join(repoRoot, 'architecture'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function writeBaseline(baseline: unknown): void {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/edge-baseline.json'),
+      JSON.stringify(baseline),
+    );
+  }
+
+  it('accepts positive integer counts for known layer edges', () => {
+    writeBaseline({ [edgeKey('a', 'b')]: 2 });
+    expect(readEdgeBaseline(repoRoot, config)).toEqual({ [edgeKey('a', 'b')]: 2 });
+  });
+
+  it('rejects baseline edges that reference unknown layers', () => {
+    writeBaseline({ [edgeKey('a', 'ghost')]: 2 });
+    expect(() => readEdgeBaseline(repoRoot, config)).toThrow('contains invalid edge');
+  });
+
+  it('rejects non-positive or non-integer import counts', () => {
+    writeBaseline({ [edgeKey('a', 'b')]: 0 });
+    expect(() => readEdgeBaseline(repoRoot, config)).toThrow('contains invalid import count');
+
+    writeBaseline({ [edgeKey('a', 'b')]: 1.5 });
+    expect(() => readEdgeBaseline(repoRoot, config)).toThrow('contains invalid import count');
+  });
+});
+
 describe('findForbiddenDependencyEdges', () => {
   it('flags edges that violate an explicit forbiddenDependencies lock', () => {
     const config = configWith([
@@ -215,6 +258,13 @@ describe('readLayerConfig DAG policy validation', () => {
   it('rejects a tierOrder referencing an unknown layer', () => {
     writeConfig({ tierOrder: ['core', 'ghost'] });
     expect(() => readLayerConfig(repoRoot)).toThrow('tierOrder contains unknown layer "ghost"');
+  });
+
+  it('rejects a tierOrder that omits a configured layer', () => {
+    writeConfig({ tierOrder: ['core'] });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'tierOrder must list every layer. Missing: facade',
+    );
   });
 
   it('rejects a non-positive maxStronglyConnectedComponentSize', () => {
