@@ -43,7 +43,13 @@ def resolve_launcher(plugin_dir: Path) -> Path:
         raise ValueError("computer-use MCP config must contain a command")
 
     launcher = (plugin_dir / command).resolve()
-    if not launcher.is_relative_to(plugin_dir) or not launcher.is_file():
+    try:
+        launcher.relative_to(plugin_dir)
+    except ValueError:
+        raise ValueError(
+            "computer-use MCP launcher must be a file inside the plugin directory"
+        ) from None
+    if not launcher.is_file():
         raise ValueError(
             "computer-use MCP launcher must be a file inside the plugin directory"
         )

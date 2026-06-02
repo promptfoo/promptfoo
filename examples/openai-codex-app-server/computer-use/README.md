@@ -33,6 +33,10 @@ plugin bundle or copy personal Codex authentication into this example.
 
 ## Run
 
+This config uses plugin-aware Codex app-server fields that are not available in
+Promptfoo `0.121.14` or earlier. Until a newer release is published, run it from
+a Promptfoo source checkout rather than an older `npx promptfoo@latest`.
+
 Initialize the example into a standalone directory:
 
 ```bash

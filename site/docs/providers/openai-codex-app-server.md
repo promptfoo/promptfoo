@@ -93,6 +93,8 @@ The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk
 
 The [`computer-use` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-app-server/computer-use) stages an isolated Codex home and runs a real macOS Computer Use plugin against a native UI-only chatbot. Use it as a bounded dogfood fixture when the target has no chat API endpoint.
 
+The example requires plugin-aware Codex app-server fields that are not available in Promptfoo `0.121.14` or earlier. Until a newer release is published, run it from a Promptfoo source checkout rather than an older `npx promptfoo@latest`.
+
 The example references an explicit installed plugin directory, installs the plugin into an owner-only disposable Codex home, verifies the MCP inventory without forwarding unrelated shell credentials, compiles a disposable AppKit target, and starts it from a unique generated `.app` path before running the eval from an empty generated workspace. The target opens no listening socket. The eval accepts only the exact MCP elicitation for that disposable target, declines unmatched elicitations, and asserts that the exported trajectory never enumerates apps or leaves the generated app path and includes a post-submit UI read-back. Run it only in a disposable desktop session with no unrelated sensitive apps open. The example also includes a bounded `policy` plugin path for generating and running a real red team against the UI-only target. It does not copy personal Codex auth or proprietary plugin payloads into the repository. It intentionally covers macOS only: Codex Desktop has additional host bootstrap behavior, and Windows Computer Use uses a separate native-pipe path.
 
 ## Basic Usage

@@ -326,7 +326,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.14]
+        python-version: [3.8, 3.14]
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -349,6 +349,7 @@ jobs:
       - name: Run Tests
         run: |
           python -m unittest discover -s src/python -p '*_test.py'
+          python -m unittest discover -s examples/openai-codex-app-server/computer-use/scripts -p 'test_*.py'
 
   docs:
     name: Build Docs

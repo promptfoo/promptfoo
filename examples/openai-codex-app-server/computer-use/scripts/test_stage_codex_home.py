@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import tomllib
 from stage_codex_home import (
     MARKER_NAME,
     prepare_codex_home,
@@ -90,9 +89,9 @@ class StageCodexHomeTest(unittest.TestCase):
             codex_home, "fixture.marketplace", self.marketplace_root.resolve()
         )
 
-        parsed = tomllib.loads(config.read_text())
-        self.assertIn("fixture.marketplace", parsed["marketplaces"])
-        self.assertNotIn("fixture", parsed["marketplaces"])
+        config_text = config.read_text()
+        self.assertIn('[marketplaces."fixture.marketplace"]', config_text)
+        self.assertNotIn("[marketplaces.fixture.marketplace]", config_text)
 
     def test_rejects_incomplete_plugin(self) -> None:
         (self.plugin_dir / "launcher").unlink()
