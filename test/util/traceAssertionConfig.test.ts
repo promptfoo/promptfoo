@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-
 import {
+  notTrajectoryToolUsedBoundsError,
   traceErrorSpansConfigError,
   traceSpanCountBoundsError,
   traceSpanDurationConfigError,
@@ -98,7 +98,25 @@ describe('traceAssertionConfig shared validators', () => {
       expect(trajectoryCountBoundsError({ min: 5, max: 2 }, 'trajectory:step-count')).toBe(
         'trajectory:step-count assertion max must be greater than or equal to min',
       );
-      expect(trajectoryCountBoundsError({ min: 1, max: 2 }, 'trajectory:tool-used')).toBeUndefined();
+      expect(
+        trajectoryCountBoundsError({ min: 1, max: 2 }, 'trajectory:tool-used'),
+      ).toBeUndefined();
+    });
+  });
+
+  describe('notTrajectoryToolUsedBoundsError', () => {
+    it('accepts forbidden-use object forms', () => {
+      expect(notTrajectoryToolUsedBoundsError({})).toBeUndefined();
+      expect(notTrajectoryToolUsedBoundsError({ max: 0 })).toBeUndefined();
+    });
+
+    it('rejects ambiguous inverse count ranges', () => {
+      expect(notTrajectoryToolUsedBoundsError({ min: 1 })).toBe(
+        'not-trajectory:tool-used object assertions only support name/pattern with no count bounds, or max: 0',
+      );
+      expect(notTrajectoryToolUsedBoundsError({ max: 1 })).toBe(
+        'not-trajectory:tool-used object assertions only support name/pattern with no count bounds, or max: 0',
+      );
     });
   });
 

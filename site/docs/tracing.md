@@ -235,6 +235,8 @@ tests:
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
+Use `not-trajectory:tool-used` to forbid a tool. Its object form accepts a name or pattern with no count bounds, or with `max: 0`; other inverse count ranges are rejected because their double-negative meaning is easy to misread.
+
 Trace span assertions match a subset of spans by pattern. Empty matches pass by default for budget-style checks such as duration or error thresholds; set `requirePresence: true` when the matching work must be present. For inverse `not-trace-*` assertions, an empty default match means the positive budget was satisfied and therefore fails the inverse assertion instead of proving forbidden traced work occurred. When `requirePresence` is true, missing matching work fails both positive and inverse assertions.
 
 ### Turn marker spans {#per-llm-turn-spans}

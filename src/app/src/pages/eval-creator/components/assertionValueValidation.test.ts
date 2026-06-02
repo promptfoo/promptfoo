@@ -333,13 +333,18 @@ describe('shared trace/trajectory hardening parity', () => {
     // A valid percentile config with the default method still passes.
     expect(
       getRunnableAssertionValueError(
-        make({ type: 'trace-span-duration', value: { pattern: '*', max: 10, percentile: 95 } as any }),
+        make({
+          type: 'trace-span-duration',
+          value: { pattern: '*', max: 10, percentile: 95 } as any,
+        }),
       ),
     ).toBeUndefined();
   });
 
   it('validates trace-error-spans number and object forms', () => {
-    expect(getRunnableAssertionValueError(make({ type: 'trace-error-spans', value: 0 }))).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trace-error-spans', value: 0 })),
+    ).toBeUndefined();
     expect(getRunnableAssertionValueError(make({ type: 'trace-error-spans', value: -1 }))).toMatch(
       /max_count must be a finite non-negative integer/,
     );
@@ -380,6 +385,16 @@ describe('shared trace/trajectory hardening parity', () => {
         make({ type: 'trajectory:tool-used', value: { name: 'search', min: 1, max: 2 } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-trajectory:tool-used', value: { name: 'search', max: 0 } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-trajectory:tool-used', value: { name: 'search', min: 1 } as any }),
+      ),
+    ).toMatch(/only support name\/pattern with no count bounds, or max: 0/);
   });
 
   it('rejects non-boolean trajectory:tool-args-match redactArgsInFailures', () => {
@@ -428,7 +443,10 @@ describe('shared trace/trajectory hardening parity', () => {
     ).toMatch(/timeoutMs must be a finite positive number/);
     expect(
       getRunnableAssertionValueError(
-        make({ type: 'trajectory:goal-success', value: { goal: 'finish', timeoutMs: 5000 } as any }),
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'finish', timeoutMs: 5000 } as any,
+        }),
       ),
     ).toBeUndefined();
     expect(

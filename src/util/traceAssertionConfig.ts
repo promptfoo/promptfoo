@@ -97,7 +97,11 @@ export function traceSpanDurationConfigError(value: {
     return 'trace-span-duration assertion requirePresence must be a boolean';
   }
   if (percentile !== undefined) {
-    if (!Number.isFinite(percentile) || (percentile as number) < 0 || (percentile as number) > 100) {
+    if (
+      !Number.isFinite(percentile) ||
+      (percentile as number) < 0 ||
+      (percentile as number) > 100
+    ) {
       return 'trace-span-duration assertion percentile must be between 0 and 100';
     }
     if (method !== 'nearest' && method !== 'linear') {
@@ -119,12 +123,7 @@ export function traceErrorSpansConfigError(value: unknown): string | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
-  const {
-    pattern,
-    requirePresence,
-    max_count: maxCount,
-    max_percentage: maxPercentage,
-  } = value;
+  const { pattern, requirePresence, max_count: maxCount, max_percentage: maxPercentage } = value;
   if (pattern !== undefined && (typeof pattern !== 'string' || !pattern)) {
     return 'trace-error-spans assertion pattern must be a non-empty string';
   }
@@ -179,6 +178,22 @@ export function trajectoryCountBoundsError(
     max as number | undefined,
     `${assertionType} assertion`,
   );
+}
+
+/**
+ * not-trajectory:tool-used object values are forbidden-use checks, matching not-skill-used.
+ * Count ranges other than max: 0 are ambiguous after applying the `not-` prefix.
+ */
+export function notTrajectoryToolUsedBoundsError(value: {
+  min?: unknown;
+  max?: unknown;
+}): string | undefined {
+  const hasExplicitMin = value.min !== undefined;
+  const hasExplicitMax = value.max !== undefined;
+  if (hasExplicitMin || (hasExplicitMax && value.max !== 0)) {
+    return 'not-trajectory:tool-used object assertions only support name/pattern with no count bounds, or max: 0';
+  }
+  return undefined;
 }
 
 /** trajectory:goal-success: an optional `timeoutMs` must be a finite positive number. */

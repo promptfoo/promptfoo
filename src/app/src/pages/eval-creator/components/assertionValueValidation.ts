@@ -1,4 +1,5 @@
 import {
+  notTrajectoryToolUsedBoundsError,
   traceErrorSpansConfigError,
   traceSpanCountBoundsError,
   traceSpanDurationConfigError,
@@ -7,7 +8,6 @@ import {
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
 } from '@promptfoo/util/traceAssertionConfig';
-
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -509,6 +509,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
       const boundsError = trajectoryCountBoundsError(assertion.value, 'trajectory:tool-used');
       if (boundsError) {
         return boundsError;
+      }
+      if (assertion.type === 'not-trajectory:tool-used') {
+        return notTrajectoryToolUsedBoundsError(assertion.value);
       }
     }
   }
