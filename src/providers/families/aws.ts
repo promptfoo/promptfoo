@@ -11,6 +11,41 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // OpenAI frontier models (gpt-5.x) are served only through Bedrock's OpenAI-compatible
+      // Responses API on the regional mantle endpoint — never the native InvokeModel/Converse
+      // APIs. Route them before the per-type handlers so `bedrock:openai.gpt-5.5`,
+      // `bedrock:converse:openai.gpt-5.5`, and `bedrock:completion:openai.gpt-5.5` all resolve
+      // correctly. Open-weight gpt-oss models fall through to InvokeModel/Converse below.
+      //
+      // Only those three forms carry a frontier model id, so restrict the candidate to the
+      // bare id (`bedrock:openai.gpt-5.5`, i.e. exactly two segments) and the explicit
+      // `converse:`/`completion:` forms. Frontier ids contain no colon, so the bare form is
+      // always two segments. This prevents sub-typed forms whose id merely contains `openai.`
+      // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
+      // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
+      const candidateOpenAiModel =
+        modelType === 'converse' || modelType === 'completion'
+          ? modelName
+          : splits.length === 2
+            ? splits[1]
+            : undefined;
+      // Gate the (heavy) openaiResponses import — which pulls in the OpenAI Responses stack —
+      // behind a cheap `openai.` prefix check, like every other handler import below, so the
+      // common non-OpenAI bedrock: models don't load it at construction. The prefix is a
+      // necessary condition; isBedrockOpenAiResponsesModel remains the source of truth for the
+      // frontier-vs-gpt-oss decision (a gpt-oss id passes the prefix gate but is rejected there
+      // and falls through to InvokeModel below).
+      if (candidateOpenAiModel?.startsWith('openai.')) {
+        const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } =
+          await import('../bedrock/openaiResponses');
+        if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
+          return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
+            ...providerOptions,
+            id: providerOptions.id ?? providerPath,
+          });
+        }
+      }
+
       // Handle Converse API
       if (modelType === 'converse') {
         return new AwsBedrockConverseProvider(modelName, providerOptions);
@@ -68,7 +103,8 @@ export const awsProviderFactories: ProviderFactory[] = [
         const { AwsBedrockKnowledgeBaseProvider } = await import('../bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
-      // Reconstruct the full model name preserving the original format
+      // Reconstruct the full model name preserving the original format. Frontier OpenAI
+      // models were already routed to the Responses provider near the top of this factory.
       const fullModelName = splits.slice(1).join(':');
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },

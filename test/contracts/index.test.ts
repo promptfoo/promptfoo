@@ -84,6 +84,18 @@ describe('contracts leaf surface', () => {
       }
     });
 
+    it('preserves AWS_BEARER_TOKEN_BEDROCK (used by the Bedrock OpenAI Responses path)', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        AWS_BEARER_TOKEN_BEDROCK: 'bedrock-api-key',
+        AWS_BEDROCK_REGION: 'us-east-2',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-api-key');
+        expect(parsed.data.AWS_BEDROCK_REGION).toBe('us-east-2');
+      }
+    });
+
     it('strips unknown keys at parse time (strict z.object)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
         OPENAI_API_KEY: 'sk-known',
