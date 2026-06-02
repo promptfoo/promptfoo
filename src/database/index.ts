@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
-import { getEnvBool, getEnvString } from '../envars';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { sleep } from '../util/time';
@@ -36,9 +36,9 @@ let sqliteInstanceIsTesting = false;
 
 function assertSafeTestDatabasePath(dbPath: string): void {
   const isTestProcess =
-    getEnvString('NODE_ENV') === 'test' ||
-    getEnvBool('VITEST', false) ||
-    Boolean(getEnvString('JEST_WORKER_ID'));
+    process.env.NODE_ENV === 'test' ||
+    process.env.VITEST !== undefined ||
+    process.env.JEST_WORKER_ID !== undefined;
   if (!isTestProcess) {
     return;
   }

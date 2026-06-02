@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import {
   closeDb,
   DrizzleLogWriter,
@@ -11,11 +12,14 @@ import {
   getDbSignalPath,
   isDbOpen,
 } from '../../src/database/index';
-import { getEnvBool, getEnvString } from '../../src/envars';
+import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
-vi.mock('../../src/envars');
+vi.mock('../../src/envars', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/envars')>();
+  return { ...actual, getEnvBool: vi.fn(actual.getEnvBool) };
+});
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
 
@@ -26,8 +30,8 @@ describe('database', () => {
     vi.clearAllMocks();
     vi.mocked(getConfigDirectoryPath).mockReset();
     vi.mocked(getEnvBool).mockReset();
-    vi.mocked(getEnvString).mockReset();
     await closeDb();
+    cliState.config = undefined;
     tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-db-index-'));
     vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
     vi.mocked(getEnvBool).mockImplementation((key) => {
@@ -40,6 +44,8 @@ describe('database', () => {
 
   afterEach(async () => {
     await closeDb();
+    cliState.config = undefined;
+    vi.unstubAllEnvs();
     fs.rmSync(tempConfigDir, { force: true, recursive: true });
   });
 
@@ -51,14 +57,23 @@ describe('database', () => {
       expect(getDbPath()).toBe(path.resolve(configPath, 'promptfoo.db'));
     });
 
-    it('should refuse to use the default user database while running tests', () => {
+    it('should refuse to use the default user database when the process is running tests', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
-      vi.mocked(getEnvBool).mockReturnValue(false);
-      vi.mocked(getEnvString).mockReturnValue('test');
+      vi.stubEnv('NODE_ENV', 'test');
 
       expect(() => getDbPath()).toThrow(
         'Refusing to open the default Promptfoo database while running tests',
       );
+    });
+
+    it('should not use Promptfoo env overrides to identify a test process', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      cliState.config = { env: { NODE_ENV: 'test' } };
+      vi.stubEnv('NODE_ENV', '');
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', undefined);
+
+      expect(() => getDbPath()).not.toThrow();
     });
   });
 
