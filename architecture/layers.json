@@ -32,6 +32,7 @@
         "src/redteam/commands/discover.ts",
         "src/redteam/constants.ts",
         "src/redteam/constants/metadata.ts",
+        "src/redteam/constants/privacy.ts",
         "src/redteam/constants/strategies.ts",
         "src/redteam/metrics.ts",
         "src/redteam/plugins/policy/utils.ts",

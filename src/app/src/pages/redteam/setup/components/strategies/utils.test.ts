@@ -100,6 +100,22 @@ describe('getEstimatedProbes', () => {
     } as Config;
     expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
   });
+
+  it('should account for privacy rights workflow geography expansion', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: [
+        {
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { geographies: ['california-ccpa', 'eu-gdpr'] },
+        },
+      ],
+      strategies: [],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(10);
+  });
 });
 
 describe('isStrategyConfigured', () => {

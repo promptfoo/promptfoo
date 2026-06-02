@@ -441,7 +441,12 @@ export const ADDITIONAL_PLUGINS = [
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
-export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
+export const CONFIG_REQUIRED_PLUGINS = [
+  'intent',
+  'policy',
+  'privacy-policy-consistency',
+  'privacy:rights-request-workflow-integrity',
+] as const;
 type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)

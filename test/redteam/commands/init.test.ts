@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 
+import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
@@ -11,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import {
+  configurePrivacyRightsRequestWorkflowIntegrityPlugin,
   redteamInit,
   initCommand as redteamInitCommand,
   renderRedteamConfig,
@@ -21,6 +23,7 @@ import { ProbeLimitExceededError } from '../../../src/redteam/types';
 import type { RedteamFileConfig } from '../../../src/redteam/types';
 
 vi.mock('fs/promises');
+vi.mock('@inquirer/checkbox');
 vi.mock('@inquirer/confirm');
 vi.mock('@inquirer/editor');
 vi.mock('@inquirer/input');
@@ -240,5 +243,29 @@ describe('redteamInit', () => {
 
     expect(process.exitCode).toBe(130);
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('configurePrivacyRightsRequestWorkflowIntegrityPlugin', () => {
+  it('collects privacy geographies for CLI init config', async () => {
+    vi.mocked(checkbox).mockResolvedValue(['california-ccpa', 'eu-gdpr']);
+
+    const plugin = await configurePrivacyRightsRequestWorkflowIntegrityPlugin();
+
+    expect(checkbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('privacy:rights-request-workflow-integrity'),
+        choices: [
+          { name: 'California CCPA', value: 'california-ccpa' },
+          { name: 'EU GDPR', value: 'eu-gdpr' },
+        ],
+      }),
+    );
+    expect(plugin).toEqual({
+      id: 'privacy:rights-request-workflow-integrity',
+      config: {
+        geographies: ['california-ccpa', 'eu-gdpr'],
+      },
+    });
   });
 });

@@ -301,6 +301,32 @@ describe('API schema red-team coverage', () => {
       ).toBe(false);
     });
 
+    it('accepts privacy geography config in the string and array forms supported at runtime', () => {
+      const baseRequest = {
+        strategy: { id: VALID_STRATEGY_ID },
+        config: { applicationDefinition: { purpose: 'privacy assistant' } },
+      };
+
+      expect(
+        RedteamSchemas.GenerateTest.Request.safeParse({
+          ...baseRequest,
+          plugin: {
+            id: 'privacy:rights-request-workflow-integrity',
+            config: { geographies: 'california-ccpa, eu-gdpr' },
+          },
+        }).success,
+      ).toBe(true);
+      expect(
+        RedteamSchemas.GenerateTest.Request.safeParse({
+          ...baseRequest,
+          plugin: {
+            id: 'privacy:rights-request-workflow-integrity',
+            config: { geographies: ['california-ccpa', 'eu-gdpr'] },
+          },
+        }).success,
+      ).toBe(true);
+    });
+
     it('bounds batch generation, turn state, and conversation history', () => {
       expect(
         RedteamSchemas.GenerateTest.Request.parse({

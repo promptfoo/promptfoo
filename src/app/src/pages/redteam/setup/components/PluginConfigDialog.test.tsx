@@ -241,6 +241,21 @@ describe('PluginConfigDialog - OSS', () => {
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
 
+    it('shows gradingGuidance alongside privacy-policy-consistency config', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy-policy-consistency"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('Privacy Policy')).toBeInTheDocument();
+      expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
     it('shows gradingGuidance for plugins without specific config', () => {
       render(
         <PluginConfigDialog
@@ -254,6 +269,105 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should show gradingGuidance field even for plugins with no specific config
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
+    it('saves geography selection for privacy rights workflow integrity', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('EU GDPR'));
+      await user.type(
+        screen.getByPlaceholderText('file://privacy-rights-workflow.md'),
+        'file://rights-workflow.md',
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'privacy:rights-request-workflow-integrity',
+          expect.objectContaining({
+            geographies: ['eu-gdpr'],
+            rightsRequestPolicy: 'file://rights-workflow.md',
+          }),
+        );
+      });
+    });
+
+    it('replaces unsupported and legacy privacy rights config when selecting a geography', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{ geographies: ['unsupported'], frameworks: ['gdpr'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('EU GDPR'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('privacy:rights-request-workflow-integrity', {
+          geographies: ['eu-gdpr'],
+        });
+      });
+    });
+
+    it('preserves legacy framework geography selections when adding a modern geography', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{ frameworks: ['gdpr'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('EU GDPR')).toBeChecked();
+
+      await user.click(screen.getByLabelText('California CCPA'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('privacy:rights-request-workflow-integrity', {
+          geographies: ['eu-gdpr', 'california-ccpa'],
+        });
+      });
+    });
+
+    it('shows string geography config and removes empty optional workflow evidence on save', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{ geographies: 'california-ccpa', rightsRequestPolicy: '' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('California CCPA')).toBeChecked();
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('privacy:rights-request-workflow-integrity', {
+          geographies: 'california-ccpa',
+        });
+      });
     });
   });
 

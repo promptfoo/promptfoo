@@ -257,6 +257,75 @@ describe('Plugins', () => {
     expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
   });
 
+  it('enables next button for legacy privacy rights framework config', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'privacy:rights-request-workflow-integrity',
+            config: {
+              frameworks: ['ccpa'],
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('disables next button for unsupported privacy rights geography config', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'privacy:rights-request-workflow-integrity',
+            config: {
+              geographies: ['unsupported'],
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('disables next button for a non-file privacy policy URI', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'privacy-policy-consistency',
+            config: {
+              privacyPolicy: 'https://example.com/privacy-policy',
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
   // Custom policy validation tests
   it('enables next button when only custom policies are configured', async () => {
     mockUseRedTeamConfig.mockReturnValue({

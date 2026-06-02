@@ -7,6 +7,7 @@ import {
   ALL_PLUGINS,
   BASE_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -89,6 +90,7 @@ describe('Plugins', () => {
         'politics',
         'policy',
         'prompt-extraction',
+        'privacy-policy-consistency',
         'rbac',
         'shell-injection',
         'sql-injection',
@@ -153,6 +155,43 @@ describe('Plugins', () => {
       const policyPlugin = Plugins.find((p) => p.key === 'policy');
       expect(() => policyPlugin?.validate?.({})).toThrow(
         'Invariant failed: One of the policy plugins is invalid. The `config` property of a policy plugin must be `{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }` or `{ "policy": "<policy_text>" }`. Received: {}',
+      );
+    });
+
+    it('should validate privacy policy consistency plugin config', async () => {
+      const privacyPolicyConsistencyPlugin = Plugins.find(
+        (p) => p.key === 'privacy-policy-consistency',
+      );
+      expect(() => privacyPolicyConsistencyPlugin?.validate?.({})).toThrow(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
+      );
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'Resolved privacy policy contents.',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'https://example.com/privacy-policy',
+        }),
+      ).toThrow(
+        'Privacy Policy Consistency plugin requires file-backed URI references to use the file:// scheme.',
+      );
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'file:///definitely/does/not/exist/privacy-policy.md',
+        }),
+      ).toThrow(
+        'Privacy Policy Consistency plugin could not load `config.privacyPolicy` from the provided file:// reference.',
+      );
+    });
+
+    it('should validate privacy rights workflow geography config', async () => {
+      const privacyRightsPlugin = Plugins.find(
+        (p) => p.key === 'privacy:rights-request-workflow-integrity',
+      );
+      expect(() => privacyRightsPlugin?.validate?.({})).toThrow(
+        'Privacy Rights Request Workflow Integrity plugin requires `config.geographies` with at least one supported privacy geography.',
       );
     });
 
@@ -767,6 +806,7 @@ describe('Plugins', () => {
         ...Object.keys(HARM_PLUGINS),
         ...PII_PLUGINS,
         ...ADDITIONAL_PLUGINS,
+        ...CONFIG_REQUIRED_PLUGINS,
       ];
 
       // Verify all expected plugin keys are present in the registry

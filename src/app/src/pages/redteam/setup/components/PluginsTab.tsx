@@ -47,7 +47,7 @@ import {
 } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useSearchParams } from 'react-router-dom';
-import { requiresPluginConfig } from '../constants';
+import { isPluginConfigComplete, requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -58,7 +58,6 @@ import { TestCaseGenerateButton } from './TestCaseDialog';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import VerticalSuiteCard from './VerticalSuiteCard';
 import { DOMAIN_SPECIFIC_PLUGINS, VERTICAL_SUITES } from './verticalSuites';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
@@ -233,21 +232,7 @@ export default function PluginsTab({
       if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
         return true;
       }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
+      return isPluginConfigComplete(plugin, pluginConfig[plugin]);
     },
     [pluginConfig],
   );
