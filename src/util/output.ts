@@ -200,9 +200,20 @@ async function rewriteJsonlWithExternalBackup(
   const replacementPath = path.join(tempDirectory, 'replacement.jsonl');
   let overwriteAttempted = false;
   let preserveTempDirectory = false;
+  let hasBackup = false;
 
   try {
-    await fsPromises.copyFile(outputPath, backupPath);
+    try {
+      await fsPromises.copyFile(outputPath, backupPath);
+      hasBackup = true;
+    } catch (error) {
+      // First-time write (no existing artifact): there is nothing to back up. Proceed so the
+      // replacement copy below surfaces the real permission error (EACCES/EPERM) from the
+      // unwritable destination directory, rather than masking it with this secondary ENOENT.
+      if (!isFileNotFoundError(error)) {
+        throw error;
+      }
+    }
     if (preparedReplacementPath) {
       await fsPromises.copyFile(preparedReplacementPath, replacementPath);
     } else {
@@ -219,7 +230,7 @@ async function rewriteJsonlWithExternalBackup(
       await fsPromises.chmod(outputPath, outputMode);
     }
   } catch (error) {
-    if (overwriteAttempted) {
+    if (overwriteAttempted && hasBackup) {
       try {
         await fsPromises.copyFile(backupPath, outputPath);
       } catch (restoreError) {
@@ -659,6 +670,12 @@ export async function writeOutput(
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
+    if (jsonlOutputPath !== outputPath) {
+      // For a symlink, the mkdir above only ensured the link's own directory. Ensure the
+      // resolved target's directory exists too, so the sibling temp-file rewrite can land
+      // next to it (a symlink may point at a target in a not-yet-created directory).
+      await fsPromises.mkdir(path.dirname(jsonlOutputPath), { recursive: true });
+    }
     const outputMode = await getExistingFileMode(jsonlOutputPath);
     const recoveredResults = evalRecord.resultPersistenceFailed
       ? await collectJsonlResultsAfterPersistenceFailure(jsonlOutputPath, evalRecord)

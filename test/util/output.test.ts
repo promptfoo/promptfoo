@@ -1228,6 +1228,48 @@ describe('writeOutput', () => {
     expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
   });
 
+  it('creates the resolved target directory when rewriting a dangling JSONL symlink', async () => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const outputPath = path.join('artifacts', 'output.jsonl');
+    const symlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+
+    await writeOutput(outputPath, new Eval({}), null);
+
+    // The link's resolved target may live in a directory that does not exist yet; it must be
+    // created so the sibling temp-file rewrite can land next to it (otherwise the temp-file
+    // write fails with ENOENT instead of preserving the symlink).
+    expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(resolvedTarget), {
+      recursive: true,
+    });
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
+  });
+
+  it('surfaces the permission error when a first-time JSONL write hits a read-only directory', async () => {
+    const accessError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    // The output file does not exist yet and its directory is not writable: the temp-file
+    // create fails with EACCES, routing into the external-backup fallback.
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(accessError) // temp file in the read-only output directory
+      .mockResolvedValueOnce(undefined); // replacement file in the OS temp directory
+    // There is no existing artifact to back up (ENOENT); the replacement copy back into the
+    // read-only directory then fails with the real EACCES, which must be what surfaces.
+    vi.mocked(fsPromises.copyFile)
+      .mockRejectedValueOnce(fileNotFoundError) // copyFile(outputPath, backup) → ENOENT (absent)
+      .mockRejectedValueOnce(accessError); // copyFile(replacement, outputPath) → EACCES
+
+    await expect(writeOutput('output.jsonl', new Eval({}), null)).rejects.toThrow('EACCES');
+
+    // No backup was ever created, so the restore copy must be skipped (exactly two copies).
+    expect(fsPromises.copyFile).toHaveBeenCalledTimes(2);
+  });
+
   it('restores the JSONL backup when an external rewrite fails', async () => {
     const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
     const copyError = new Error('copy failed');
