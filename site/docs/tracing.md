@@ -302,7 +302,7 @@ tracing:
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
       # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
   storage:
-    type: sqlite # Required; sqlite is currently the only supported store
+    type: sqlite # sqlite is the only supported store
     # Remove trace and span records older than this many days
     retentionDays: 30
 ```
