@@ -9,8 +9,14 @@ export interface EvaluatorResultWriter {
   close(): Promise<void>;
 }
 
+export interface EvaluatorResultWriterOptions {
+  append: boolean;
+}
+
 export interface EvaluatorRuntime {
-  createResultWriters(outputPath: string | string[] | undefined): EvaluatorResultWriter[];
+  createResultWriters(
+    outputPath: string | string[] | undefined,
+    options: EvaluatorResultWriterOptions,
+  ): EvaluatorResultWriter[];
   persistResult(evalRecord: EvalResultPersistence, result: EvaluateResult): Promise<void>;
-  updateResumeSignal(evalId: string): void;
 }

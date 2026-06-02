@@ -17,6 +17,13 @@ export interface LayerDefinition {
    * `allowedDependencies`.
    */
   forbiddenDependencies?: string[];
+  /**
+   * Bare module specifiers (npm packages or Node builtins) a LEAF layer is allowed to import.
+   * Only consulted for layers listed in {@link LayerConfig.leafLayers}: a leaf layer may import
+   * relative siblings plus these externals, and nothing else. `node:` prefixes are ignored when
+   * matching, so `"fs"` and `"node:fs"` are equivalent.
+   */
+  allowedExternal?: string[];
 }
 
 export interface LayerConfig {
@@ -28,8 +35,8 @@ export interface LayerConfig {
   /**
    * Target topological order, listed most-depended-upon first (the intended
    * DAG bottom-to-top). A cross-layer edge from an earlier entry to a later one
-   * is a cycle-causing "back edge". Optional and may be incomplete while the
-   * architecture is still being de-cycled.
+   * is a cycle-causing "back edge". When defined, every configured layer must
+   * appear exactly once so the back-edge report cannot silently omit a layer.
    */
   tierOrder?: string[];
   /**
@@ -83,6 +90,15 @@ function validateLayerDefinition(
       `Architecture layer "${layer.name}" contains an invalid allowedImportPaths entry.`,
     );
   }
+  if (
+    layer.allowedExternal &&
+    (!Array.isArray(layer.allowedExternal) ||
+      layer.allowedExternal.some((entry) => typeof entry !== 'string' || entry.length === 0))
+  ) {
+    throw new Error(
+      `Architecture layer "${layer.name}" contains an invalid allowedExternal entry.`,
+    );
+  }
 
   return layer.roots.map((root) => {
     if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
@@ -127,31 +143,39 @@ function validateRootsDoNotOverlap(
   }
 }
 
-function validateDagPolicy(config: LayerConfig, layerNames: Set<string>): void {
-  if (config.tierOrder !== undefined) {
-    if (!Array.isArray(config.tierOrder)) {
-      throw new Error('Architecture tierOrder must be an array of layer names.');
-    }
-    const seen = new Set<string>();
-    for (const layerName of config.tierOrder) {
-      if (typeof layerName !== 'string' || !layerNames.has(layerName)) {
-        throw new Error(`Architecture tierOrder contains unknown layer "${String(layerName)}".`);
-      }
-      if (seen.has(layerName)) {
-        throw new Error(`Architecture tierOrder lists layer "${layerName}" more than once.`);
-      }
-      seen.add(layerName);
-    }
+function validateTierOrder(tierOrder: LayerConfig['tierOrder'], layerNames: Set<string>): void {
+  if (tierOrder === undefined) {
+    return;
   }
-
-  if (config.maxStronglyConnectedComponentSize !== undefined) {
-    const max = config.maxStronglyConnectedComponentSize;
-    if (typeof max !== 'number' || !Number.isInteger(max) || max < 1) {
-      throw new Error('Architecture maxStronglyConnectedComponentSize must be a positive integer.');
-    }
+  if (!Array.isArray(tierOrder)) {
+    throw new Error('Architecture tierOrder must be an array of layer names.');
   }
+  const seen = new Set<string>();
+  for (const layerName of tierOrder) {
+    if (typeof layerName !== 'string' || !layerNames.has(layerName)) {
+      throw new Error(`Architecture tierOrder contains unknown layer "${String(layerName)}".`);
+    }
+    if (seen.has(layerName)) {
+      throw new Error(`Architecture tierOrder lists layer "${layerName}" more than once.`);
+    }
+    seen.add(layerName);
+  }
+  if (seen.size !== layerNames.size) {
+    const missingLayers = [...layerNames].filter((layerName) => !seen.has(layerName)).sort();
+    throw new Error(
+      `Architecture tierOrder must list every layer. Missing: ${missingLayers.join(', ')}.`,
+    );
+  }
+}
 
-  for (const layer of config.layers) {
+function validateMaxStronglyConnectedComponentSize(max: number | undefined): void {
+  if (max !== undefined && (typeof max !== 'number' || !Number.isInteger(max) || max < 1)) {
+    throw new Error('Architecture maxStronglyConnectedComponentSize must be a positive integer.');
+  }
+}
+
+function validateForbiddenDependencies(layers: LayerDefinition[], layerNames: Set<string>): void {
+  for (const layer of layers) {
     if (layer.forbiddenDependencies !== undefined && !Array.isArray(layer.forbiddenDependencies)) {
       throw new Error(
         `Architecture layer "${layer.name}" forbiddenDependencies must be an array of layer names.`,
@@ -170,6 +194,12 @@ function validateDagPolicy(config: LayerConfig, layerNames: Set<string>): void {
       }
     }
   }
+}
+
+function validateDagPolicy(config: LayerConfig, layerNames: Set<string>): void {
+  validateTierOrder(config.tierOrder, layerNames);
+  validateMaxStronglyConnectedComponentSize(config.maxStronglyConnectedComponentSize);
+  validateForbiddenDependencies(config.layers, layerNames);
 }
 
 export function readLayerConfig(repoRoot: string): LayerConfig {
@@ -362,25 +392,33 @@ export function resolveInternalModule(
   return undefined;
 }
 
-export function getPackageName(specifier: string): string | undefined {
+/**
+ * The bare module name a specifier resolves to: its package root (`@scope/pkg`) or builtin name,
+ * with any `node:` prefix stripped. Returns undefined for relative/absolute/`#` subpath specifiers,
+ * which are not external dependencies. Unlike {@link getPackageName} this also names Node builtins,
+ * so a leaf-layer external check cannot let `node:fs` slip through.
+ */
+export function getExternalModuleName(specifier: string): string | undefined {
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('#')) {
     return undefined;
   }
 
   const withoutNodePrefix = specifier.replace(/^node:/, '');
   const segments = withoutNodePrefix.split('/');
-  const packageName = withoutNodePrefix.startsWith('@')
+  const moduleName = withoutNodePrefix.startsWith('@')
     ? segments.slice(0, 2).join('/')
     : segments[0];
 
-  if (!packageName || BUILTIN_MODULES.has(packageName)) {
-    return undefined;
-  }
-
-  return packageName;
+  return moduleName || undefined;
 }
 
-export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'path';
+/** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
+export function getPackageName(specifier: string): string | undefined {
+  const moduleName = getExternalModuleName(specifier);
+  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+}
+
+export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
 
 export interface BoundaryViolation {
   kind: BoundaryViolationKind;
@@ -418,10 +456,34 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
 
     const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
     const importerLayer = getLayerForFile(importer, config);
+    const importerIsLeaf = leafLayers.has(importerLayer);
+    const allowedExternal = importerIsLeaf
+      ? new Set(
+          (layersByName.get(importerLayer)?.allowedExternal ?? []).map((entry) =>
+            entry.replace(/^node:/, ''),
+          ),
+        )
+      : null;
 
     for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
       const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
       if (!resolvedImport) {
+        // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
+        // A leaf layer may import only its allowlisted external packages and Node builtins; flag
+        // any other bare specifier.
+        if (importerIsLeaf) {
+          const externalName = getExternalModuleName(specifier);
+          if (externalName && !allowedExternal!.has(externalName)) {
+            violations.push({
+              kind: 'leaf-external',
+              importer,
+              importerLayer,
+              specifier,
+              imported: specifier,
+              importedLayer: 'external',
+            });
+          }
+        }
         continue;
       }
 
@@ -704,11 +766,30 @@ export function compareEdgesToBaseline(
   return { regressions, improvements };
 }
 
-/** Reads the committed cross-layer edge baseline, or an empty baseline if absent. */
-export function readEdgeBaseline(repoRoot: string): EdgeBaseline {
+/** Reads and validates the committed cross-layer edge baseline, or an empty baseline if absent. */
+export function readEdgeBaseline(repoRoot: string, config: LayerConfig): EdgeBaseline {
   const baselinePath = path.join(repoRoot, 'architecture/edge-baseline.json');
   if (!fs.existsSync(baselinePath)) {
     return {};
   }
-  return JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as EdgeBaseline;
+  const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as unknown;
+  if (!baseline || typeof baseline !== 'object' || Array.isArray(baseline)) {
+    throw new Error(`${baselinePath} must contain an object mapping layer edges to import counts.`);
+  }
+
+  const layerNames = new Set(config.layers.map((layer) => layer.name));
+  for (const [key, count] of Object.entries(baseline)) {
+    const parts = key.split(EDGE_SEPARATOR);
+    if (
+      parts.length !== 2 ||
+      parts.some((layerName) => layerName.length === 0 || !layerNames.has(layerName))
+    ) {
+      throw new Error(`${baselinePath} contains invalid edge "${key}".`);
+    }
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
+      throw new Error(`${baselinePath} contains invalid import count for edge "${key}".`);
+    }
+  }
+
+  return baseline as EdgeBaseline;
 }

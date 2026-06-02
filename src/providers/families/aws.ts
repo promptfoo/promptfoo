@@ -27,17 +27,21 @@ export const awsProviderFactories: ProviderFactory[] = [
       // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
       if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
         const { LumaRayVideoProvider } = await import('../bedrock/luma-ray');
-        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
-        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        // For bedrock:video:luma.ray-v2:0 the id is already in modelName; for
+        // bedrock:luma.ray-v2:0 reconstruct it from splits[1:] (modelType holds the
+        // id, which is non-empty here since this branch required it to contain 'luma.ray').
         const videoModelName = modelName.includes('luma.ray')
           ? modelName
-          : splits.slice(1).join(':') || 'luma.ray-v2:0';
+          : splits.slice(1).join(':');
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 
-      // Handle Nova Reel video model
-      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
-      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      // Handle Nova Reel video model. Canonical forms: `bedrock:video:amazon.nova-reel-v1:1`
+      // (explicit model) or `bedrock:video` (defaults the model). The model segment is used
+      // verbatim as the Bedrock modelId, so the `video:` prefix is required to carry the full
+      // id — `bedrock:amazon.nova-reel-v1:1` would collapse the model name to its version tail.
+      // Match when modelType names a nova-reel model, or modelType is 'video' with a
+      // nova-reel or empty model segment.
       if (
         modelType.includes('amazon.nova-reel') ||
         (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
@@ -98,23 +102,16 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new SageMakerCompletionProvider(modelType, providerOptions);
       }
 
-      // Handle special case for JumpStart models
-      if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
-        return new SageMakerCompletionProvider(endpointName, {
-          ...providerOptions,
-          config: {
-            ...providerOptions.config,
-            modelType: 'jumpstart',
-          },
-        });
-      }
-
-      // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
+      // Handle 'sagemaker:<model-type>:<endpoint>'. JumpStart models are selected
+      // either by the explicit `jumpstart` model type or by an endpoint name
+      // containing 'jumpstart'; every other model type passes through unchanged.
+      const resolvedModelType =
+        endpointName.includes('jumpstart') || modelType === 'jumpstart' ? 'jumpstart' : modelType;
       return new SageMakerCompletionProvider(endpointName, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          modelType,
+          modelType: resolvedModelType,
         },
       });
     },

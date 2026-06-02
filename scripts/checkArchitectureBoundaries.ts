@@ -19,6 +19,7 @@ const violations = findViolations(repoRoot, config);
 
 const facadeViolations = violations.filter((v) => v.kind === 'facade');
 const leafViolations = violations.filter((v) => v.kind === 'leaf');
+const leafExternalViolations = violations.filter((v) => v.kind === 'leaf-external');
 const layerViolations = violations.filter((v) => v.kind === 'layer');
 const pathViolations = violations.filter((v) => v.kind === 'path');
 const unclassifiedFiles = findUnclassifiedFiles(repoRoot, config);
@@ -43,6 +44,18 @@ if (leafViolations.length > 0) {
     );
   }
   console.error('\nLeaf layers must not import other product layers.');
+}
+
+if (leafExternalViolations.length > 0) {
+  console.error('Leaf-layer external dependency violations found:');
+  for (const violation of leafExternalViolations) {
+    console.error(
+      `- ${violation.importer} (${violation.importerLayer}) imports external "${violation.specifier}"`,
+    );
+  }
+  console.error(
+    '\nLeaf layers may import only their allowlisted external packages (allowedExternal).',
+  );
 }
 
 if (layerViolations.length > 0) {
@@ -105,7 +118,7 @@ if (config.maxStronglyConnectedComponentSize !== undefined) {
 
 // 2. Per-edge baseline ratchet: no cross-layer edge may grow, and no new
 //    cross-layer edge may appear, relative to architecture/edge-baseline.json.
-const baseline = readEdgeBaseline(repoRoot);
+const baseline = readEdgeBaseline(repoRoot, config);
 const { regressions, improvements } = compareEdgesToBaseline(edges, baseline);
 if (regressions.length > 0) {
   console.error('Cross-layer dependency baseline regressions found:');
