@@ -18,6 +18,7 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
+import { resolveProviderFileProviderId } from '../../util/providerFileCache';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
@@ -407,8 +408,13 @@ export function discoverCommand(
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
         // Let the internal error handling bubble up:
-        const providerOptions = await getProviderFromCloud(args.target);
-        target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+        const { provider: providerOptions, providerFile } = await getProviderFromCloud(args.target);
+        const resolvedId = await resolveProviderFileProviderId(
+          args.target,
+          providerOptions.id,
+          providerFile,
+        );
+        target = await loadApiProvider(resolvedId, { options: providerOptions });
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {

@@ -5,6 +5,7 @@ import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { resolveProviderFileProviderId } from '../../src/util/providerFileCache';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
@@ -18,6 +19,7 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
 vi.mock('../../src/providers/index');
 vi.mock('../../src/validators/testProvider');
 vi.mock('../../src/util/cloud');
+vi.mock('../../src/util/providerFileCache');
 vi.mock('../../src/telemetry', () => ({
   default: {
     record: vi.fn(),
@@ -62,6 +64,9 @@ describe('Validate Command Provider Tests', () => {
       id: 'openai:gpt-4',
       response: { output: 'OpenAI response' },
     });
+    vi.mocked(resolveProviderFileProviderId).mockImplementation(
+      async (_providerId, originalProviderId) => originalProviderId,
+    );
   });
 
   afterEach(() => {
@@ -173,7 +178,10 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: null,
+      } as any);
       vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
@@ -188,6 +196,114 @@ describe('Validate Command Provider Tests', () => {
       // Verify provider info is logged during testing
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
+    });
+
+    it('should download and use cached provider file when cloud provider has providerFile', async () => {
+      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const mockProviderOptions = {
+        id: 'file://original-path.py',
+        config: {},
+      };
+      const mockProviderFile = {
+        id: 'file-123',
+        filename: 'custom_provider.py',
+        checksumSha256: 'a'.repeat(64),
+        language: 'python',
+        contentType: 'text/x-python',
+        sizeBytes: 1024,
+        description: null,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: mockProviderFile,
+      } as any);
+      vi.mocked(resolveProviderFileProviderId).mockResolvedValue(
+        `file:///home/user/.promptfoo/provider-files/${'a'.repeat(64)}.py`,
+      );
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
+
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(resolveProviderFileProviderId).toHaveBeenCalledWith(
+        cloudUUID,
+        'file://original-path.py',
+        mockProviderFile,
+      );
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        `file:///home/user/.promptfoo/provider-files/${'a'.repeat(64)}.py`,
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
+    });
+
+    it('should use original provider id when providerFile download returns null', async () => {
+      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const mockProviderOptions = {
+        id: 'file://original-path.py',
+        config: {},
+      };
+      const mockProviderFile = {
+        id: 'file-123',
+        filename: 'custom_provider.py',
+        checksumSha256: 'b'.repeat(64),
+        language: 'python',
+        contentType: 'text/x-python',
+        sizeBytes: 1024,
+        description: null,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: mockProviderFile,
+      } as any);
+      vi.mocked(resolveProviderFileProviderId).mockResolvedValue('file://original-path.py');
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
+
+      expect(resolveProviderFileProviderId).toHaveBeenCalledWith(
+        cloudUUID,
+        'file://original-path.py',
+        mockProviderFile,
+      );
+      // Falls back to original id when download returns null
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'file://original-path.py',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
+    });
+
+    it('should not resolve a provider file when providerFile is null', async () => {
+      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const mockProviderOptions = {
+        id: 'openai:gpt-4',
+        config: {},
+      };
+
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: null,
+      } as any);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
+
+      expect(resolveProviderFileProviderId).toHaveBeenCalledWith(cloudUUID, 'openai:gpt-4', null);
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
     });
   });
 
@@ -353,7 +469,10 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: null,
+      } as any);
       vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
