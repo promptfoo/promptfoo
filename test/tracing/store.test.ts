@@ -130,7 +130,11 @@ describe('TraceStore', () => {
     });
 
     it('returns an empty object (not undefined) when the row exists but metadata is null', async () => {
-      mockDb.select().from().where().limit.mockResolvedValueOnce([{ metadata: null }]);
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([{ metadata: null }]);
 
       await expect(traceStore.getTraceMetadata('trace-2')).resolves.toEqual({});
     });

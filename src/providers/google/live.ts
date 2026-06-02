@@ -19,6 +19,7 @@ import {
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   stripExecutableToolFileReferences,
+  validateFunctionCall,
 } from './util';
 
 import type {
@@ -113,6 +114,10 @@ export class GoogleLiveProvider implements ApiProvider {
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
     this.config = options.config || {};
+  }
+
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.tools, vars);
   }
 
   id(): string {
