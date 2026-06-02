@@ -329,6 +329,7 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  tags?: Record<string, string>;
   strict?: boolean;
 
   // Used by webui

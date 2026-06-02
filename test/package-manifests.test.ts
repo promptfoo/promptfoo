@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
+import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -19,6 +20,7 @@ function readPackageJson<T>(relativePath: string): T {
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.34.5';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
+const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   const results: string[] = [];
@@ -72,7 +74,91 @@ function getDependencyRange(
   );
 }
 
+function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: string): string[] {
+  return extractModuleSpecifiers(sourceText, filePath).filter((specifier) => {
+    if (!specifier.startsWith('.')) {
+      return false;
+    }
+
+    const extension = path.posix.extname(specifier);
+    return !extension || TYPESCRIPT_SOURCE_EXTENSIONS.has(extension);
+  });
+}
+
 describe('package manifests', () => {
+  it('publishes the lightweight contracts subpath', () => {
+    const packageJson = readPackageJson<{
+      exports?: Record<string, unknown>;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    }>('package.json');
+
+    expect(packageJson.exports?.['./contracts']).toEqual({
+      import: {
+        types: './dist/src/contracts.d.ts',
+        default: './dist/src/contracts.js',
+      },
+      require: {
+        types: './dist/src/contracts.d.cts',
+        default: './dist/src/contracts.cjs',
+      },
+    });
+    expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
+  });
+
+  it('keeps the contracts subpath extension-safe for emitted ESM', () => {
+    const contractsDir = path.join(process.cwd(), 'src', 'contracts');
+    const files = [
+      path.join(process.cwd(), 'src', 'contracts.ts'),
+      ...collectSourceFiles(contractsDir, new Set()),
+    ];
+    const offenders = files.flatMap((file) => {
+      const contents = fs.readFileSync(file, 'utf8');
+      return findExtensionUnsafeRelativeSpecifiers(contents, file).map(
+        (specifier) => `${path.relative(process.cwd(), file)}: ${specifier}`,
+      );
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('detects extension-unsafe relative specifiers across module syntax', () => {
+    // The contracts files are dominated by type-only imports/exports, so the detector that the
+    // extension-safety guard relies on MUST catch those forms, not just runtime imports.
+    expect(
+      findExtensionUnsafeRelativeSpecifiers(
+        `
+          import './side-effect';
+          export { value } from './exported';
+          import('./dynamic');
+          import type { A } from './type-import';
+          export type { B } from './type-export';
+          import { type C, D } from './inline-type';
+          import type Default from './default-type';
+          export { schema } from './schema.json';
+        `,
+        'fixture.ts',
+      ),
+    ).toEqual([
+      './side-effect',
+      './exported',
+      './dynamic',
+      './type-import',
+      './type-export',
+      './inline-type',
+      './default-type',
+    ]);
+  });
+
+  it('pins root TypeScript compilation to noEmit', () => {
+    const tsconfig = readPackageJson<{
+      compilerOptions?: {
+        noEmit?: boolean;
+      };
+    }>('tsconfig.json');
+
+    expect(tsconfig.compilerOptions?.noEmit).toBe(true);
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;

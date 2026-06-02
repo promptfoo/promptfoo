@@ -1962,7 +1962,17 @@ describe('synthesize', () => {
       const result = await synthesize({
         language: 'en',
         numTests: 1,
-        plugins: [{ id: 'energy', numTests: 1 }],
+        plugins: [
+          {
+            id: 'energy',
+            numTests: 1,
+            config: {
+              graderGuidance: 'Prefer verified utility sources.',
+              language: 'fr',
+            },
+            severity: 'high',
+          },
+        ],
         prompts: ['Test prompt'],
         strategies: [],
         targetIds: ['test-provider'],
@@ -1973,6 +1983,26 @@ describe('synthesize', () => {
       expect(testCasePluginIds).toHaveLength(ENERGY_PLUGINS.length);
       ENERGY_PLUGINS.forEach((id) => {
         expect(testCasePluginIds).toContain(id);
+      });
+      expect(mockPluginAction).toHaveBeenCalledTimes(ENERGY_PLUGINS.length);
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            graderGuidance: 'Prefer verified utility sources.',
+            language: 'fr',
+          }),
+        }),
+      );
+      result.testCases.forEach((testCase) => {
+        expect(testCase.metadata).toEqual(
+          expect.objectContaining({
+            pluginConfig: expect.objectContaining({
+              graderGuidance: 'Prefer verified utility sources.',
+              language: 'fr',
+            }),
+            severity: 'high',
+          }),
+        );
       });
     });
   });

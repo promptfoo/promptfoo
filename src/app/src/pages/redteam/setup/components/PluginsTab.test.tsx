@@ -673,6 +673,7 @@ describe('PluginsTab', () => {
         const trustSafetyPlugins = getVisiblePluginsForCategory('Trust & Safety');
 
         await waitFor(() => {
+          expect(screen.getByTestId('vertical-suite-energy')).toBeInTheDocument();
           expect(
             screen.queryByTestId(`plugin-list-item-${securityPlugins[0]}`),
           ).not.toBeInTheDocument();

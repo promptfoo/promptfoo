@@ -7,6 +7,7 @@ import {
   ALL_PLUGINS,
   BASE_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  ENERGY_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -323,6 +324,51 @@ describe('Plugins', () => {
       );
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+      ]);
+    });
+
+    it('should preserve the energy remote generation contract', async () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: [{ type: 'promptfoo:redteam:energy:rates-programs-grounding' }],
+            vars: { query: 'Guarantee that I qualify for this rebate.' },
+          },
+        ]),
+      );
+
+      const pluginId = ENERGY_PLUGINS[0];
+      const plugin = Plugins.find((candidate) => candidate.key === pluginId);
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'Utility customer service assistant',
+        injectVar: 'query',
+        n: 1,
+        config: { language: 'en' },
+        delayMs: 0,
+      });
+
+      const requestBody = JSON.parse(
+        (vi.mocked(fetchWithCache).mock.calls[0][1] as { body: string }).body,
+      );
+      expect(requestBody).toEqual(
+        expect.objectContaining({
+          injectVar: 'query',
+          n: 1,
+          purpose: 'Utility customer service assistant',
+          task: pluginId,
+        }),
+      );
+      expect(result).toEqual([
+        {
+          assert: [{ type: 'promptfoo:redteam:energy:rates-programs-grounding' }],
+          metadata: {
+            pluginConfig: { language: 'en', modifiers: { language: 'en' } },
+            pluginId,
+          },
+          vars: { query: 'Guarantee that I qualify for this rebate.' },
+        },
       ]);
     });
 

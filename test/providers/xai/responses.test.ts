@@ -248,8 +248,47 @@ describe('XAIResponsesProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    expect(result.cost).toBeCloseTo(0.0000325, 10);
+    // output_tokens (5) already includes the 3 reasoning tokens, so they are
+    // not billed twice: 10 input @ $1.25/M + 5 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.000025, 10);
     expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
+  });
+
+  it('keeps fallback xAI pricing when input tokens are zero', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_zero_input',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 0,
+          output_tokens: 5,
+          total_tokens: 8,
+          output_tokens_details: {
+            reasoning_tokens: 3,
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 0 input @ $1.25/M + 5 output @ $2.50/M (output_tokens already includes
+    // the 3 reasoning tokens, so reasoning is not added on top).
+    expect(result.cost).toBeCloseTo(0.0000125, 10);
   });
 
   it('parses streamed Responses API events', async () => {

@@ -680,15 +680,33 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBe(2.5);
     });
 
-    it('bills reasoning tokens at the output rate', () => {
+    it('does not double-count reasoning tokens already included in completion tokens', () => {
       // grok-3-mini-beta: input $0.30/M, output $0.50/M.
       const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
       // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004
       expect(baseline).toBeCloseTo(0.0004, 10);
 
+      // completion_tokens already INCLUDES reasoning_tokens (the OpenAI
+      // convention xAI follows), so passing reasoning separately must not add
+      // to the bill — the cost is identical to the baseline.
       const withReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
-      // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
-      expect(withReasoning).toBeCloseTo(0.0005, 10);
+      expect(withReasoning).toBeCloseTo(0.0004, 10);
+    });
+
+    it('bills a reasoning-only response (no other completion tokens)', () => {
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. A turn that reports
+      // zero completion tokens but non-zero reasoning still has a real cost: we
+      // fall back to billing the reasoning tokens at the output rate.
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 500, 0, 200);
+      // 500 input @ 0.30/M + 200 reasoning @ 0.50/M = 0.00015 + 0.0001
+      expect(cost).toBeCloseTo(0.00025, 10);
+    });
+
+    it('bills only completion tokens (reasoning included) when input tokens are zero', () => {
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 0, 200, 50);
+      // 0 input @ 0.30/M + 200 completion @ 0.50/M (the 50 reasoning tokens are
+      // already part of the 200 completion tokens, not added on top).
+      expect(cost).toBeCloseTo(0.0001, 10);
     });
   });
 
@@ -873,6 +891,38 @@ describe('xAI Chat Provider', () => {
       expect(result.output).toBe('Test response');
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
+    });
+
+    it('does not double-count reasoning tokens already included in completion tokens', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'reasoned answer' } }],
+          usage: {
+            prompt_tokens: 500,
+            // completion_tokens already includes the 200 reasoning tokens
+            // (prompt 500 + completion 500 = total 1000 confirms reasoning is a
+            // subset of completion, not a separate addend).
+            completion_tokens: 500,
+            total_tokens: 1000,
+            completion_tokens_details: { reasoning_tokens: 200 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-3-mini-beta', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. Reasoning tokens are
+      // already part of the 500 completion tokens, so bill 500 output tokens:
+      // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004.
+      expect(result.tokenUsage?.completionDetails?.reasoning).toBe(200);
+      expect(result.cost).toBeCloseTo(0.0004, 10);
     });
   });
 });

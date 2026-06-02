@@ -18,6 +18,7 @@ import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
+import { optimizeCommand } from './commands/optimize';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
@@ -45,7 +46,7 @@ import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
-import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
+import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -59,7 +60,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations({ suppressNativeAddonLogging: true });
+  await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
@@ -105,6 +106,7 @@ async function main() {
   listCommand(program);
   logsCommand(program);
   modelScanCommand(program);
+  optimizeCommand(program, defaultConfig, defaultConfigPath);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   void showCommand(program);
@@ -156,7 +158,7 @@ try {
 
 if (isMain) {
   let mainError: unknown;
-  let nativeAddonVersionMismatchMessage: string | undefined;
+  let libsqlBindingErrorMessage: string | undefined;
   try {
     await main();
   } catch (error) {
@@ -164,9 +166,9 @@ if (isMain) {
     if (error instanceof ConfigResolutionError) {
       logConfigResolutionError(error);
     }
-    nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
-    if (nativeAddonVersionMismatchMessage) {
-      logger.debug('better-sqlite3 ABI mismatch (original error follows)', {
+    libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
+    if (libsqlBindingErrorMessage) {
+      logger.debug('libsql platform binding missing (original error follows)', {
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       });
     }
@@ -195,8 +197,8 @@ if (isMain) {
       mainError instanceof EvalRunError
     ) {
       // User-facing message has already been rendered.
-    } else if (nativeAddonVersionMismatchMessage) {
-      console.error(nativeAddonVersionMismatchMessage);
+    } else if (libsqlBindingErrorMessage) {
+      console.error(libsqlBindingErrorMessage);
       // exit code preserved by process.exitCode = 1 above
     } else {
       throw mainError;
