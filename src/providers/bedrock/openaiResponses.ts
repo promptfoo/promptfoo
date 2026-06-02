@@ -58,7 +58,12 @@ function resolveRegion(config: Record<string, any>, env?: EnvOverrides): string 
 }
 
 function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string | undefined {
-  return config.apiKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+  // Ignore an unresolved `{{ env.* }}` template (the referenced var wasn't set). Otherwise the
+  // literal would be sent as the bearer token and the eval would fail with a confusing 401
+  // instead of the actionable missing-key error below; fall through to the env var instead.
+  const explicitKey =
+    typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
+  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
 }
 
 /**

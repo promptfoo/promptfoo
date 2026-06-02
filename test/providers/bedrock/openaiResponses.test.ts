@@ -58,6 +58,25 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('treats an unresolved {{env.*}} apiKey template as missing (helpful error)', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      // Simulates the env var being unset: the template literal must NOT be sent as a bearer
+      // token (which would 401); the user should get the actionable missing-key error.
+      expect(() =>
+        createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+          config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+        }),
+      ).toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+    });
+
+    it('falls back to the env var when apiKey is an unresolved template but the env is set', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'real-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+      });
+      expect((provider.config as any).apiKey).toBe('real-key');
+    });
+
     it('targets the mantle endpoint for the configured region with config.apiKey', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {

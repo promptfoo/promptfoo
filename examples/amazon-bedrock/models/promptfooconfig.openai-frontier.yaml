@@ -2,7 +2,8 @@
 description: 'OpenAI frontier models (GPT-5.5 / GPT-5.4) via AWS Bedrock'
 
 # Frontier models are served through Bedrock's OpenAI-compatible Responses API and
-# authenticate with an Amazon Bedrock API key. Export it before running:
+# authenticate with an Amazon Bedrock API key. Export it before running (promptfoo reads it
+# automatically — no apiKey field needed):
 #   export AWS_BEARER_TOKEN_BEDROCK="..."
 
 prompts:
@@ -18,7 +19,6 @@ providers:
     label: GPT-5.5 (high reasoning)
     config:
       region: us-east-2
-      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       reasoning_effort: high
       max_output_tokens: 2048
   # GPT-5.4 is available in us-east-2 (Ohio) and us-west-2 (Oregon).
@@ -26,7 +26,6 @@ providers:
     label: GPT-5.4 (low reasoning)
     config:
       region: us-east-2
-      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       # Valid: none | low | medium | high | xhigh (minimal is NOT supported)
       reasoning_effort: low
       max_output_tokens: 1024
