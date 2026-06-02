@@ -1223,6 +1223,40 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('map-secret');
     });
 
+    it('redacts provider-map identifiers in raw test filters', () => {
+      const urlProvider =
+        'https://filter-user:filter-password@api.example.com/v1?token=filter-secret&region=us';
+      const scrubbedUrlProvider =
+        'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us';
+      const sasProvider =
+        'az://account/container/provider.yaml?sp=r&sig=filter-sas-secret&se=2026-06-01';
+      const scrubbedSasProvider =
+        'az://account/container/provider.yaml?sp=r&sig=[REDACTED]&se=2026-06-01';
+      const providerMaps = [
+        { [urlProvider]: { config: { region: 'url-region' } } },
+        { [sasProvider]: { config: { region: 'sas-region' } } },
+      ];
+      const scrubbedProviderMaps = [
+        { [scrubbedUrlProvider]: { config: { region: 'url-region' } } },
+        { [scrubbedSasProvider]: { config: { region: 'sas-region' } } },
+      ];
+
+      useStore.getState().setConfig({
+        defaultTest: { providers: providerMaps },
+        tests: [{ providers: providerMaps }],
+        scenarios: [{ tests: [{ providers: providerMaps }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.providers).toEqual(scrubbedProviderMaps);
+      expect(persisted.tests[0].providers).toEqual(scrubbedProviderMaps);
+      expect(persisted.scenarios[0].tests[0].providers).toEqual(scrubbedProviderMaps);
+      expect(JSON.stringify(persisted)).not.toContain('filter-user');
+      expect(JSON.stringify(persisted)).not.toContain('filter-password');
+      expect(JSON.stringify(persisted)).not.toContain('filter-secret');
+      expect(JSON.stringify(persisted)).not.toContain('filter-sas-secret');
+    });
+
     it('redacts credentials in object-shaped providers within test filters', () => {
       const provider = {
         id: 'http',

@@ -803,11 +803,7 @@ const omitTestCaseProviderCredentials = (
       : {}),
     ...(Array.isArray(testCase.providers)
       ? {
-          providers: testCase.providers.map((provider) =>
-            typeof provider === 'string'
-              ? scrubProviderIdentifier(provider, templatePaths)
-              : omitProviderCredentials(provider, undefined, templatePaths),
-          ),
+          providers: omitConfiguredProvidersCredentials(testCase.providers, templatePaths),
         }
       : {}),
     ...(hasOwn(testCase, 'options')
