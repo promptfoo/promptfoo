@@ -528,7 +528,15 @@ function mergeStreamEvent(
     return { ...current, message: event.message };
   }
   if (event.task) {
-    return { ...current, task: event.task };
+    return {
+      ...current,
+      task: {
+        ...current.task,
+        ...event.task,
+        artifacts: event.task.artifacts ?? current.task?.artifacts,
+        history: event.task.history ?? current.task?.history,
+      },
+    };
   }
   if (event.artifactUpdate?.artifact) {
     return {

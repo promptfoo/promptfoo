@@ -1134,6 +1134,39 @@ describe('A2AProvider', () => {
     expect(result.raw).toHaveLength(4);
   });
 
+  it('preserves streamed artifacts when a terminal task frame omits artifacts', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      sseResponse([
+        {
+          task: {
+            id: 'task-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        },
+        {
+          artifactUpdate: {
+            taskId: 'task-1',
+            artifact: { artifactId: 'artifact-1', parts: [{ text: 'streamed artifact result' }] },
+          },
+        },
+        {
+          task: {
+            id: 'task-1',
+            status: { state: 'TASK_STATE_COMPLETED' },
+          },
+        },
+      ]),
+    );
+
+    const result = await provider({ mode: 'stream' }).callApi('hi');
+
+    expect(result.output).toBe('streamed artifact result');
+    expect(result.metadata?.a2a).toMatchObject({
+      taskId: 'task-1',
+      taskState: 'TASK_STATE_COMPLETED',
+    });
+  });
+
   it('replaces existing streaming artifacts when append is false', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       sseResponse([
