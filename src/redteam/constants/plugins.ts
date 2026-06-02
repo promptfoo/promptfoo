@@ -446,6 +446,7 @@ export const CONFIG_REQUIRED_PLUGINS = [
   'policy',
   'privacy-policy-consistency',
   'privacy:rights-request-workflow-integrity',
+  'decisioning:automated-decision-response-integrity',
 ] as const;
 type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 

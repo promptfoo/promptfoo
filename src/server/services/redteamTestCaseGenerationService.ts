@@ -7,6 +7,7 @@ import {
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
+import { validateAutomatedDecisionResponseIntegrityConfig } from '../../redteam/plugins/automatedDecisionResponseIntegrity';
 import { validatePrivacyPolicyConsistencyConfig } from '../../redteam/plugins/privacyPolicyConsistency';
 import { validatePrivacyRightsRequestWorkflowIntegrityConfig } from '../../redteam/plugins/privacyRightsRequestWorkflowIntegrity';
 import {
@@ -46,6 +47,7 @@ function getPluginValidatorError(
     const message = error instanceof Error ? error.message : String(error);
     const normalizedMessage = message.replace(/^Invariant failed:\s*/, '');
     if (
+      normalizedMessage.startsWith('Automated Decision Response Integrity plugin') ||
       normalizedMessage.startsWith('Privacy Policy Consistency plugin') ||
       normalizedMessage.startsWith('Privacy Rights Request Workflow Integrity plugin')
     ) {
@@ -81,6 +83,12 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
         validatePrivacyRightsRequestWorkflowIntegrityConfig,
         config,
         'Privacy Rights Request Workflow Integrity plugin configuration is invalid.',
+      );
+    case 'decisioning:automated-decision-response-integrity':
+      return getPluginValidatorError(
+        validateAutomatedDecisionResponseIntegrityConfig,
+        config,
+        'Automated Decision Response Integrity plugin configuration is invalid.',
       );
     case 'bfla': {
       const targetIdentifiers = config.targetIdentifiers as unknown;

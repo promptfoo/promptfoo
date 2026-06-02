@@ -2,6 +2,7 @@ import { AegisGrader } from './plugins/aegis';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
+import { AutomatedDecisionResponseIntegrityGrader } from './plugins/automatedDecisionResponseIntegrity';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BiasGrader } from './plugins/bias';
@@ -152,6 +153,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:data-exfil': new DataExfilGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
+  'promptfoo:redteam:decisioning:automated-decision-response-integrity':
+    new AutomatedDecisionResponseIntegrityGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
   'promptfoo:redteam:ecommerce:order-fraud': new EcommerceOrderFraudGrader(),

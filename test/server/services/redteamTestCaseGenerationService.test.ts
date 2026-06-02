@@ -236,5 +236,56 @@ describe('redteamTestCaseGenerationService', () => {
       );
       expect(missingWorkflowError).not.toContain('/definitely/does/not/exist');
     });
+
+    it('requires profiles for automated decision response test generation', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: {},
+        }),
+      ).toBe(
+        'Automated Decision Response Integrity plugin requires `config.profiles` with at least one supported decision-response profile.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: { profiles: ['unsupported'] },
+        }),
+      ).toBe(
+        'Automated Decision Response Integrity plugin supports only these `config.profiles` values: california-ccpa-admt, eu-ai-act-high-risk-explanation, colorado-ai-act-consequential-decision.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: {
+            profiles: ['california-ccpa-admt'],
+            decisionResponsePolicyContent: { text: 'not uploaded text' },
+          },
+        }),
+      ).toBe(
+        'Automated Decision Response Integrity plugin requires `config.decisionResponsePolicyContent` to be uploaded text when provided.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: { profiles: ['california-ccpa-admt'] },
+        }),
+      ).toBeNull();
+      const missingPolicyError = getPluginConfigurationError({
+        id: 'decisioning:automated-decision-response-integrity',
+        config: {
+          profiles: ['california-ccpa-admt'],
+          decisionResponsePolicy: 'file:///definitely/does/not/exist/decision-response-sop.md',
+        },
+      });
+      expect(missingPolicyError).toBe(
+        'Automated Decision Response Integrity plugin could not load `config.decisionResponsePolicy` from the provided file:// reference.',
+      );
+      expect(missingPolicyError).not.toContain('/definitely/does/not/exist');
+    });
   });
 });

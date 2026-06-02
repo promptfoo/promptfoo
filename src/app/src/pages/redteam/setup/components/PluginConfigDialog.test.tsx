@@ -301,6 +301,87 @@ describe('PluginConfigDialog - OSS', () => {
       });
     });
 
+    it('saves profile selection for automated decision response integrity', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="decisioning:automated-decision-response-integrity"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('EU AI Act High-Risk Explanation'));
+      await user.type(
+        screen.getByPlaceholderText('file://decision-response-sop.md'),
+        'file://decision-response-sop.md',
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'decisioning:automated-decision-response-integrity',
+          expect.objectContaining({
+            profiles: ['eu-ai-act-high-risk-explanation'],
+            decisionResponsePolicy: 'file://decision-response-sop.md',
+          }),
+        );
+      });
+    });
+
+    it('replaces unsupported decision response profiles when selecting a supported profile', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="decisioning:automated-decision-response-integrity"
+          config={{ profiles: ['unsupported'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('California CCPA ADMT'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'decisioning:automated-decision-response-integrity',
+          {
+            profiles: ['california-ccpa-admt'],
+          },
+        );
+      });
+    });
+
+    it('shows string decision response profile config and removes empty optional evidence on save', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="decisioning:automated-decision-response-integrity"
+          config={{ profiles: 'eu-ai-act-high-risk-explanation', decisionResponsePolicy: '' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('EU AI Act High-Risk Explanation')).toBeChecked();
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'decisioning:automated-decision-response-integrity',
+          {
+            profiles: 'eu-ai-act-high-risk-explanation',
+          },
+        );
+      });
+    });
+
     it('replaces unsupported and legacy privacy rights config when selecting a geography', async () => {
       const user = userEvent.setup();
       render(

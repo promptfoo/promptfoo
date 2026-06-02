@@ -1,5 +1,8 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { getConfiguredPrivacyRightsGeographies } from '../../constants';
+import {
+  getConfiguredAutomatedDecisionResponseProfiles,
+  getConfiguredPrivacyRightsGeographies,
+} from '../../constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -110,6 +113,17 @@ export function getEstimatedProbes(config: Config) {
     ) {
       const geographyCount = getConfiguredPrivacyRightsGeographies(plugin.config ?? {}).length;
       return total + numTests * Math.max(geographyCount, 1);
+    }
+
+    if (
+      typeof plugin === 'object' &&
+      plugin !== null &&
+      plugin.id === 'decisioning:automated-decision-response-integrity'
+    ) {
+      const profileCount = getConfiguredAutomatedDecisionResponseProfiles(
+        plugin.config ?? {},
+      ).length;
+      return total + numTests * Math.max(profileCount, 1);
     }
 
     return total + numTests;

@@ -23,6 +23,7 @@
         "src/providers/http.ts",
         "src/redteam/commands/discover.ts",
         "src/redteam/constants.ts",
+        "src/redteam/constants/decisioning.ts",
         "src/redteam/constants/metadata.ts",
         "src/redteam/constants/privacy.ts",
         "src/redteam/constants/strategies.ts",

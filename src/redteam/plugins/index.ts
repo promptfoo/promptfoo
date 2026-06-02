@@ -37,6 +37,10 @@ import {
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import {
+  AutomatedDecisionResponseIntegrityPlugin,
+  validateAutomatedDecisionResponseIntegrityConfig,
+} from './automatedDecisionResponseIntegrity';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -514,6 +518,11 @@ const pluginFactories: PluginFactory[] = [
     ),
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
+  createPluginFactory(
+    AutomatedDecisionResponseIntegrityPlugin,
+    'decisioning:automated-decision-response-integrity',
+    validateAutomatedDecisionResponseIntegrityConfig,
+  ),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory<{ privacyPolicy?: string; privacyPolicyContent?: string }>(
     PrivacyPolicyConsistencyPlugin,

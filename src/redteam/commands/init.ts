@@ -31,6 +31,10 @@ import {
   subCategoryDescriptions,
 } from '../constants';
 import {
+  AUTOMATED_DECISION_RESPONSE_PROFILE_MAP,
+  AUTOMATED_DECISION_RESPONSE_PROFILES,
+} from '../constants/decisioning';
+import {
   PRIVACY_RIGHTS_GEOGRAPHIES,
   PRIVACY_RIGHTS_GEOGRAPHY_PROFILES,
 } from '../constants/privacy';
@@ -224,6 +228,23 @@ export async function configurePrivacyRightsRequestWorkflowIntegrityPlugin(): Pr
   return {
     id: 'privacy:rights-request-workflow-integrity',
     config: { geographies },
+  } as RedteamPluginObject;
+}
+
+export async function configureAutomatedDecisionResponseIntegrityPlugin(): Promise<RedteamPluginObject> {
+  const profiles = await checkbox({
+    message:
+      'You selected the `decisioning:automated-decision-response-integrity` plugin. Select the decision-response profiles this app should support:',
+    choices: AUTOMATED_DECISION_RESPONSE_PROFILES.map((profile) => ({
+      name: AUTOMATED_DECISION_RESPONSE_PROFILE_MAP[profile].displayName,
+      value: profile,
+    })),
+    validate: (answer) => answer.length > 0 || 'Select at least one decision-response profile.',
+  });
+
+  return {
+    id: 'decisioning:automated-decision-response-integrity',
+    config: { profiles },
   } as RedteamPluginObject;
 }
 
@@ -508,6 +529,17 @@ export async function redteamInit(directory: string | undefined) {
       value: privacyRightsPlugin.config?.geographies ?? [],
     });
     plugins.push(privacyRightsPlugin);
+  }
+
+  if (plugins.includes('decisioning:automated-decision-response-integrity')) {
+    plugins = plugins.filter((p) => p !== 'decisioning:automated-decision-response-integrity');
+
+    recordOnboardingStep('collect automated decision response profiles');
+    const decisioningPlugin = await configureAutomatedDecisionResponseIntegrityPlugin();
+    recordOnboardingStep('choose automated decision response profiles', {
+      value: decisioningPlugin.config?.profiles ?? [],
+    });
+    plugins.push(decisioningPlugin);
   }
 
   if (plugins.includes('indirect-prompt-injection')) {

@@ -96,6 +96,7 @@ const redTeamSidebar = [
               'red-team/plugins/race-bias',
             ],
           },
+          'red-team/plugins/automated-decision-response-integrity',
           'red-team/plugins/beavertails',
           'red-team/plugins/contracts',
           'red-team/plugins/coppa',

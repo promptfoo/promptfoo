@@ -327,6 +327,32 @@ describe('API schema red-team coverage', () => {
       ).toBe(true);
     });
 
+    it('accepts automated decision profiles in the string and array forms supported at runtime', () => {
+      const baseRequest = {
+        strategy: { id: VALID_STRATEGY_ID },
+        config: { applicationDefinition: { purpose: 'decision response assistant' } },
+      };
+
+      expect(
+        RedteamSchemas.GenerateTest.Request.safeParse({
+          ...baseRequest,
+          plugin: {
+            id: 'decisioning:automated-decision-response-integrity',
+            config: { profiles: 'california-ccpa-admt, eu-ai-act-high-risk-explanation' },
+          },
+        }).success,
+      ).toBe(true);
+      expect(
+        RedteamSchemas.GenerateTest.Request.safeParse({
+          ...baseRequest,
+          plugin: {
+            id: 'decisioning:automated-decision-response-integrity',
+            config: { profiles: ['california-ccpa-admt', 'eu-ai-act-high-risk-explanation'] },
+          },
+        }).success,
+      ).toBe(true);
+    });
+
     it('bounds batch generation, turn state, and conversation history', () => {
       expect(
         RedteamSchemas.GenerateTest.Request.parse({

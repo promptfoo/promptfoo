@@ -9,6 +9,12 @@
  */
 
 import {
+  AUTOMATED_DECISION_RESPONSE_PROFILE_MAP,
+  AUTOMATED_DECISION_RESPONSE_PROFILES,
+  type AutomatedDecisionResponseProfileId,
+  isAutomatedDecisionResponseProfile,
+} from '@promptfoo/redteam/constants/decisioning';
+import {
   isPrivacyRightsGeography,
   LEGACY_PRIVACY_FRAMEWORK_TO_GEOGRAPHY,
   PRIVACY_RIGHTS_GEOGRAPHIES,
@@ -26,6 +32,7 @@ export const NAVBAR_HEIGHT = 64;
  */
 export const PLUGINS_REQUIRING_CONFIG = [
   'indirect-prompt-injection',
+  'decisioning:automated-decision-response-integrity',
   'privacy-policy-consistency',
   'privacy:rights-request-workflow-integrity',
   'prompt-extraction',
@@ -37,6 +44,13 @@ export const PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS = PRIVACY_RIGHTS_GEOGRAPHIES.map((
   id,
   label: PRIVACY_RIGHTS_GEOGRAPHY_PROFILES[id].displayName,
 }));
+
+export const AUTOMATED_DECISION_RESPONSE_PROFILE_OPTIONS = AUTOMATED_DECISION_RESPONSE_PROFILES.map(
+  (id) => ({
+    id,
+    label: AUTOMATED_DECISION_RESPONSE_PROFILE_MAP[id].displayName,
+  }),
+);
 
 const FILE_REF_PREFIX = 'file://';
 const URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -103,6 +117,17 @@ export function getConfiguredPrivacyRightsGeographies(
   ];
 }
 
+export function getConfiguredAutomatedDecisionResponseProfiles(
+  config: Pick<PluginConfig, 'profiles'>,
+): AutomatedDecisionResponseProfileId[] {
+  const profiles = normalizeStringList(config.profiles);
+  if (!profiles.valid) {
+    return [];
+  }
+
+  return [...new Set(profiles.values.filter(isAutomatedDecisionResponseProfile))];
+}
+
 function hasValidPrivacyRightsWorkflowConfig(config: PluginConfig): boolean {
   const geographies = normalizeStringList(config.geographies);
   if (!geographies.valid) {
@@ -120,6 +145,15 @@ function hasValidPrivacyRightsWorkflowConfig(config: PluginConfig): boolean {
     frameworks.values.every((framework) =>
       Object.prototype.hasOwnProperty.call(LEGACY_PRIVACY_FRAMEWORK_TO_GEOGRAPHY, framework),
     )
+  );
+}
+
+function hasValidAutomatedDecisionResponseProfiles(config: PluginConfig): boolean {
+  const profiles = normalizeStringList(config.profiles);
+  return (
+    profiles.valid &&
+    profiles.values.length > 0 &&
+    profiles.values.every(isAutomatedDecisionResponseProfile)
   );
 }
 
@@ -161,6 +195,17 @@ function hasValidPrivacyRightsWorkflowEvidence(config: PluginConfig): boolean {
   return isValidFileBackedTextReference(config.rightsRequestPolicy, false);
 }
 
+function hasValidAutomatedDecisionResponseEvidence(config: PluginConfig): boolean {
+  if (
+    typeof config.decisionResponsePolicyContent === 'string' &&
+    config.decisionResponsePolicyContent.trim() !== ''
+  ) {
+    return true;
+  }
+
+  return isValidFileBackedTextReference(config.decisionResponsePolicy, false);
+}
+
 function hasConfiguredValue(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.length > 0;
@@ -180,6 +225,13 @@ export function isPluginConfigComplete(plugin: string, config: PluginConfig | un
   if (plugin === 'privacy:rights-request-workflow-integrity') {
     return (
       hasValidPrivacyRightsWorkflowConfig(config) && hasValidPrivacyRightsWorkflowEvidence(config)
+    );
+  }
+
+  if (plugin === 'decisioning:automated-decision-response-integrity') {
+    return (
+      hasValidAutomatedDecisionResponseProfiles(config) &&
+      hasValidAutomatedDecisionResponseEvidence(config)
     );
   }
 

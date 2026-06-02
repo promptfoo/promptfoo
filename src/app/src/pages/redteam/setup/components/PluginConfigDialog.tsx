@@ -14,6 +14,8 @@ import { Textarea } from '@app/components/ui/textarea';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import {
+  AUTOMATED_DECISION_RESPONSE_PROFILE_OPTIONS,
+  getConfiguredAutomatedDecisionResponseProfiles,
   getConfiguredPrivacyRightsGeographies,
   PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS,
 } from '../constants';
@@ -106,6 +108,19 @@ export default function PluginConfigDialog({
       return {
         ...configWithoutLegacyFrameworks,
         geographies,
+      };
+    });
+  };
+
+  const toggleAutomatedDecisionResponseProfile = (profile: string, checked: boolean) => {
+    setLocalConfig((prev) => {
+      const current = getConfiguredAutomatedDecisionResponseProfiles(prev);
+      const profiles = checked
+        ? [...new Set([...current, profile])]
+        : current.filter((entry) => entry !== profile);
+      return {
+        ...prev,
+        profiles,
       };
     });
   };
@@ -289,6 +304,56 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'decisioning:automated-decision-response-integrity':
+        specificConfig = (
+          <>
+            <p className="mb-4 mt-4 text-sm text-muted-foreground">
+              Test whether an AI app or agent preserves person-specific automated-decision response
+              paths for the decision-response profiles where you deploy it. Output-only scans catch
+              visible false denials and invented decision facts; SOP, trace, and state evidence make
+              response-path grading stronger.
+            </p>
+            <div className="mb-4">
+              <p className="mb-1 text-sm font-medium">Decision-Response Profiles</p>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Select at least one profile. Promptfoo generates a separate batch for each selected
+                profile.
+              </p>
+              <div className="space-y-2">
+                {AUTOMATED_DECISION_RESPONSE_PROFILE_OPTIONS.map(({ id, label }) => (
+                  <label key={id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label={label}
+                      checked={getConfiguredAutomatedDecisionResponseProfiles(localConfig).includes(
+                        id,
+                      )}
+                      onChange={(e) => toggleAutomatedDecisionResponseProfile(id, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Label className="mt-4" htmlFor="decisionResponsePolicy">
+              Decision-Response SOP
+            </Label>
+            <Input
+              id="decisionResponsePolicy"
+              placeholder="file://decision-response-sop.md"
+              value={(localConfig.decisionResponsePolicy as string) || ''}
+              onChange={(e) =>
+                setLocalConfig({ ...localConfig, decisionResponsePolicy: e.target.value })
+              }
+              className="mt-2"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Optional response evidence can ground routing, status, explanation, correction,
+              appeal, and human-response grading.
+            </p>
+          </>
+        );
+        break;
       case 'bfla':
       case 'bola':
       case 'ssrf':
@@ -419,6 +484,12 @@ export default function PluginConfigDialog({
         configToSave.rightsRequestPolicy.trim() === ''
       ) {
         delete configToSave.rightsRequestPolicy;
+      }
+      if (
+        typeof configToSave.decisionResponsePolicy === 'string' &&
+        configToSave.decisionResponsePolicy.trim() === ''
+      ) {
+        delete configToSave.decisionResponsePolicy;
       }
 
       if (JSON.stringify(config) !== JSON.stringify(configToSave)) {
