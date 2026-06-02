@@ -401,6 +401,11 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   ) {
     return 'Enter numeric trace span count limits.';
   }
+  // Mirror the runtime requirement (at least one bound) so a pattern-only config is caught
+  // at save time instead of throwing during evaluation.
+  if (value.min === undefined && value.max === undefined) {
+    return 'Enter at least a min or max span count.';
+  }
   return undefined;
 }
 

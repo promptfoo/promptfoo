@@ -260,6 +260,12 @@ describe('structured value assertions', () => {
         make({ type: 'trace-span-count', value: { pattern: 'fetch*', min: 1 } as any }),
       ),
     ).toBeUndefined();
+    // Pattern-only is rejected at save time to mirror the runtime "min or max required" rule.
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: 'fetch*' } as any }),
+      ),
+    ).toMatch(/min or max/);
     expect(
       getRunnableAssertionValueError(
         make({ type: 'trace-span-duration', value: { pattern: 'fetch*' } as any }),
