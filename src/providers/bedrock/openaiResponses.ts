@@ -3,6 +3,7 @@ import { OpenAiResponsesProvider } from '../openai/responses';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 /**
  * OpenAI's frontier models on Amazon Bedrock (gpt-5.5, gpt-5.4, ...) are NOT served
@@ -63,6 +64,18 @@ function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string 
  * API key (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle endpoint
  * unless the caller supplies an explicit `apiBaseUrl`.
  */
+/**
+ * OpenAI Responses provider for Bedrock frontier models. Behaves exactly like the OpenAI
+ * Platform provider (shared request/response/usage handling) but strips the `openai.`
+ * prefix from the model id when resolving billing rates, so cost is computed from the
+ * OpenAI billing tables (Bedrock mirrors OpenAI first-party rates).
+ */
+export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    return super.getBillingModelName(config).replace(/^openai\./, '');
+  }
+}
+
 export function createBedrockOpenAiResponsesProvider(
   modelName: string,
   providerOptions: ProviderOptions & { id?: string } = {},
@@ -82,7 +95,7 @@ export function createBedrockOpenAiResponsesProvider(
 
   const apiBaseUrl = config.apiBaseUrl || getBedrockMantleBaseUrl(region);
 
-  return new OpenAiResponsesProvider(modelName, {
+  return new BedrockOpenAiResponsesProvider(modelName, {
     ...providerOptions,
     config: { ...config, apiBaseUrl, apiKey },
   });

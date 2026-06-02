@@ -84,5 +84,13 @@ describe('bedrock openaiResponses helper', () => {
       });
       expect((provider.config as any).apiBaseUrl).toBe('https://example.test/openai/v1');
     });
+
+    it('strips the openai. prefix for billing so OpenAI cost rates apply', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {});
+      // getBillingModelName is protected; the Bedrock id must resolve to the OpenAI
+      // billing key so cost is computed (Bedrock mirrors OpenAI first-party rates).
+      expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
+    });
   });
 });
