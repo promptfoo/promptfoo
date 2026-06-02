@@ -5,6 +5,7 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
+  trajectoryToolSequenceModeError,
 } from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 import {
@@ -253,12 +254,12 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const sequenceValue = value as Partial<TrajectorySequenceValue>;
-    const mode = sequenceValue.mode === undefined ? 'in_order' : sequenceValue.mode;
-    if (mode !== 'in_order' && mode !== 'exact') {
-      throw new Error('trajectory:tool-sequence assertion mode must be "in_order" or "exact"');
+    const modeError = trajectoryToolSequenceModeError(sequenceValue);
+    if (modeError) {
+      throw new Error(modeError);
     }
     return {
-      mode,
+      mode: sequenceValue.mode === undefined ? 'in_order' : sequenceValue.mode,
       steps: sequenceValue.steps || [],
     };
   }

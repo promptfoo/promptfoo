@@ -5,6 +5,7 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
+  trajectoryToolSequenceModeError,
 } from '@promptfoo/util/traceAssertionConfig';
 
 import type { Assertion, AssertionType } from '@promptfoo/types';
@@ -446,6 +447,14 @@ function getTraceErrorSpansValueError(value: unknown): string | undefined {
 }
 
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
+  // The object form carries an optional mode; mirror the runtime "in_order"/"exact" check
+  // (validated before steps, as the runtime resolves mode before the empty-steps guard).
+  if (isRecord(value)) {
+    const modeError = trajectoryToolSequenceModeError(value);
+    if (modeError) {
+      return modeError;
+    }
+  }
   const steps = getTrajectoryToolSequenceSteps(value);
   if (!steps || steps.length === 0) {
     return 'Enter a non-empty JSON tool sequence.';

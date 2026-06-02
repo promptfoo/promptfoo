@@ -401,6 +401,25 @@ describe('shared trace/trajectory hardening parity', () => {
     ).toBeUndefined();
   });
 
+  it('rejects an unsupported trajectory:tool-sequence mode', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-sequence',
+          value: { mode: 'adjacent', steps: ['search'] } as any,
+        }),
+      ),
+    ).toMatch(/mode must be/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-sequence',
+          value: { mode: 'exact', steps: ['search'] } as any,
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
   it('rejects non-positive trajectory:goal-success timeoutMs', () => {
     expect(
       getRunnableAssertionValueError(

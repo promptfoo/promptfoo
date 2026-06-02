@@ -7,6 +7,7 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
+  trajectoryToolSequenceModeError,
 } from '../../src/util/traceAssertionConfig';
 
 describe('traceAssertionConfig shared validators', () => {
@@ -121,6 +122,17 @@ describe('traceAssertionConfig shared validators', () => {
       );
       expect(trajectoryRedactArgsError({})).toBeUndefined();
       expect(trajectoryRedactArgsError({ redactArgsInFailures: true })).toBeUndefined();
+    });
+  });
+
+  describe('trajectoryToolSequenceModeError', () => {
+    it('only allows in_order or exact when a mode is present', () => {
+      expect(trajectoryToolSequenceModeError({})).toBeUndefined();
+      expect(trajectoryToolSequenceModeError({ mode: 'in_order' })).toBeUndefined();
+      expect(trajectoryToolSequenceModeError({ mode: 'exact' })).toBeUndefined();
+      expect(trajectoryToolSequenceModeError({ mode: 'adjacent' })).toBe(
+        'trajectory:tool-sequence assertion mode must be "in_order" or "exact"',
+      );
     });
   });
 });

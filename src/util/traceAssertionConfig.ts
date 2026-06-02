@@ -196,6 +196,18 @@ export function trajectoryGoalSuccessTimeoutError(value: {
 }
 
 /**
+ * trajectory:tool-sequence: an optional `mode` must be "in_order" or "exact". Only the
+ * object form carries a mode (the array form defaults to "in_order").
+ */
+export function trajectoryToolSequenceModeError(value: { mode?: unknown }): string | undefined {
+  const { mode } = value;
+  if (mode !== undefined && mode !== 'in_order' && mode !== 'exact') {
+    return 'trajectory:tool-sequence assertion mode must be "in_order" or "exact"';
+  }
+  return undefined;
+}
+
+/**
  * trajectory:tool-args-match: an optional `redactArgsInFailures` must be a boolean.
  * A stringy value like "true" must fail loud rather than fail open and leak traced args.
  */
