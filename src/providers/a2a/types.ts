@@ -1,53 +1,9 @@
 import { z } from 'zod';
+import { OptionalProviderAuthSchema } from '../mcp/auth';
 
 const RecordSchema = z.record(z.string(), z.unknown());
-const OAuthScopesSchema = z.union([z.array(z.string()), z.string()]);
 
-export const A2AAuthSchema = z.union([
-  z
-    .object({
-      type: z.union([z.literal(''), z.literal('none'), z.literal('no_auth')]),
-    })
-    .transform(() => undefined),
-  z.object({
-    token: z.string(),
-    type: z.literal('bearer'),
-  }),
-  z.object({
-    password: z.string(),
-    type: z.literal('basic'),
-    username: z.string(),
-  }),
-  z
-    .object({
-      api_key: z.string().optional(),
-      keyName: z.string().optional(),
-      placement: z.enum(['header', 'query']).optional(),
-      type: z.literal('api_key'),
-      value: z.string().optional(),
-    })
-    .refine((auth) => auth.value || auth.api_key, {
-      message: 'A2A api_key auth requires value or api_key',
-    }),
-  z.object({
-    clientId: z.string(),
-    clientSecret: z.string(),
-    grantType: z.literal('client_credentials').prefault('client_credentials'),
-    scopes: OAuthScopesSchema.optional(),
-    tokenUrl: z.string().optional(),
-    type: z.literal('oauth'),
-  }),
-  z.object({
-    clientId: z.string().optional(),
-    clientSecret: z.string().optional(),
-    grantType: z.literal('password'),
-    password: z.string(),
-    scopes: OAuthScopesSchema.optional(),
-    tokenUrl: z.string().optional(),
-    type: z.literal('oauth'),
-    username: z.string(),
-  }),
-]);
+export const A2AAuthSchema = OptionalProviderAuthSchema;
 
 export const A2APartSchema = z.looseObject({
   text: z.union([z.string(), z.looseObject({ text: z.string().optional() })]).optional(),

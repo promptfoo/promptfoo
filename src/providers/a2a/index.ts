@@ -5,6 +5,7 @@ import { fetchWithTimeout } from '../../util/fetch/index';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { normalizeRenderedAuth } from '../mcp/auth';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -193,37 +194,6 @@ function renderTemplate(
     );
   }
   return value;
-}
-
-function splitOAuthScopes(value: string): string[] {
-  return value
-    .split(/[,\s]+/)
-    .map((scope) => scope.trim())
-    .filter(Boolean);
-}
-
-function normalizeRenderedOAuthScopes(scopes: unknown): string[] | undefined {
-  if (typeof scopes === 'string') {
-    return splitOAuthScopes(scopes);
-  }
-  if (Array.isArray(scopes)) {
-    return scopes.flatMap((scope) => (typeof scope === 'string' ? splitOAuthScopes(scope) : []));
-  }
-  return undefined;
-}
-
-function normalizeRenderedAuth(auth: unknown): unknown {
-  if (!auth || typeof auth !== 'object') {
-    return auth;
-  }
-  const authObject = auth as Record<string, unknown>;
-  if (authObject.type !== 'oauth' || authObject.scopes === undefined) {
-    return auth;
-  }
-  return {
-    ...authObject,
-    scopes: normalizeRenderedOAuthScopes(authObject.scopes),
-  };
 }
 
 function generateMessageId(prompt: string, context?: CallApiContextParams): string {

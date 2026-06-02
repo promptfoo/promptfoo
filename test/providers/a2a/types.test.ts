@@ -70,7 +70,7 @@ describe('A2A type schemas', () => {
 
   it('rejects api key auth without a value', () => {
     expect(() => A2AAuthSchema.parse({ type: 'api_key' })).toThrow(
-      /A2A api_key auth requires value or api_key/,
+      /api_key auth requires value or api_key/,
     );
   });
 
