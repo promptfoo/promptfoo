@@ -24,6 +24,11 @@ import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
+  applyApiKeyToCliEnv,
+  shouldInjectApiKey,
+  usesCustomModelProvider,
+} from './codexApiKeyGating';
+import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
   getCodexSkillMetadataFields,
@@ -645,7 +650,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     if (
       this.config.model &&
-      !this.usesCustomModelProvider() &&
+      !usesCustomModelProvider(this.config) &&
       !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
     ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
@@ -763,7 +768,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    this.applyApiKeyToCliEnv(sortedEnv, config, apiKey);
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
@@ -834,60 +839,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
-  }
-
-  /**
-   * Whether this provider routes inference through a non-OpenAI Codex model provider
-   * (e.g. `amazon-bedrock`). When it does, the model id belongs to that provider's
-   * namespace, so promptfoo's OpenAI model allowlist no longer applies.
-   */
-  private usesCustomModelProvider(config: OpenAICodexSDKConfig = this.config): boolean {
-    const cliConfigProvider = config.cli_config?.model_provider;
-    const provider =
-      config.model_provider ??
-      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
-    // Compare case-insensitively so `OpenAI`/`OPENAI` aren't treated as a custom provider.
-    const normalized = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
-    return normalized.length > 0 && normalized !== 'openai';
-  }
-
-  /**
-   * Apply the resolved Codex/OpenAI API key to the Codex CLI environment.
-   *
-   * Inject it only when it belongs to the active backend — the default OpenAI provider, or a
-   * custom `model_provider` where the user set `config.apiKey` explicitly. When routing to a
-   * non-OpenAI provider (e.g. `amazon-bedrock`) without an explicit key, an ambient
-   * OPENAI_API_KEY / CODEX_API_KEY is unrelated to the backend (Bedrock authenticates via AWS
-   * credentials in cli_env); never inject one, and also strip any inherited via
-   * `inherit_process_env`, unless the user passed it explicitly through cli_env.
-   */
-  /**
-   * Whether the resolved API key should be presented to the Codex CLI/SDK. Single source of
-   * truth so the CLI-env injection ({@link applyApiKeyToCliEnv}) and the SDK constructor
-   * `apiKey` ({@link buildCodexOptions}) can never diverge — the SDK forwards a constructor
-   * `apiKey` into the spawned CLI as CODEX_API_KEY, so both must agree.
-   */
-  private shouldInjectApiKey(config: OpenAICodexSDKConfig, apiKey: string | undefined): boolean {
-    return Boolean(apiKey) && (!this.usesCustomModelProvider(config) || Boolean(config.apiKey));
-  }
-
-  private applyApiKeyToCliEnv(
-    sortedEnv: Record<string, string>,
-    config: OpenAICodexSDKConfig,
-    apiKey: string | undefined,
-  ): void {
-    if (apiKey && this.shouldInjectApiKey(config, apiKey)) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-      return;
-    }
-    if (this.usesCustomModelProvider(config)) {
-      for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
-        if (!(key in (config.cli_env ?? {}))) {
-          delete sortedEnv[key];
-        }
-      }
-    }
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
@@ -995,7 +946,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // non-OpenAI model_provider (Bedrock authenticates via AWS credentials in cli_env).
     return {
       env,
-      ...(this.shouldInjectApiKey(config, apiKey) ? { apiKey } : {}),
+      ...(shouldInjectApiKey(config, apiKey) ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(cliConfig ? { config: cliConfig } : {}),
