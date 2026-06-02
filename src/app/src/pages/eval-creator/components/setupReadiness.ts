@@ -273,22 +273,104 @@ function countOutputsForTest(
     );
 }
 
+function countStaticVarCombinations(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+): number | undefined {
+  if (hasExternalVarsReference(testCase.vars) || hasExternalVarsReference(defaultTest.vars)) {
+    return undefined;
+  }
+
+  const defaultOptions = isRecord(defaultTest.options) ? defaultTest.options : {};
+  const testOptions = isRecord(testCase.options) ? testCase.options : {};
+  const disableVarExpansion = testOptions.disableVarExpansion ?? defaultOptions.disableVarExpansion;
+  if (disableVarExpansion === true) {
+    return 1;
+  }
+  if (testOptions.transformVars || defaultOptions.transformVars) {
+    return undefined;
+  }
+
+  const vars = {
+    ...getVars(defaultTest),
+    ...getVars(testCase),
+  };
+  let combinationCount = 1;
+
+  for (const value of Object.values(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      return undefined;
+    }
+
+    // The evaluator expands string arrays, while non-string arrays remain one value.
+    if (Array.isArray(value) && typeof value[0] === 'string') {
+      combinationCount *= value.length;
+    }
+  }
+
+  return combinationCount;
+}
+
+function countRepeats(repeat: unknown): number | undefined {
+  if (repeat === undefined || repeat === 0) {
+    return 1;
+  }
+  if (typeof repeat !== 'number' || !Number.isFinite(repeat)) {
+    return undefined;
+  }
+  return Math.max(0, Math.ceil(repeat));
+}
+
+function hasRuntimeDependentSuiteShape(config: Partial<UnifiedConfig>): boolean {
+  const hasScenarios = Array.isArray(config.scenarios)
+    ? config.scenarios.length > 0
+    : config.scenarios !== undefined;
+  const hasExtensions = Array.isArray(config.extensions)
+    ? config.extensions.length > 0
+    : config.extensions !== undefined;
+
+  return (
+    (config.defaultTest !== undefined && !isRecord(config.defaultTest)) ||
+    hasScenarios ||
+    hasExtensions ||
+    config.evaluateOptions?.filterRange !== undefined
+  );
+}
+
 function countPlannedBaseRequests(
   tests: UnifiedConfig['tests'] | undefined,
   defaultTest: Record<string, unknown>,
   providers: ProviderOptions[],
   prompts: NormalizedPrompt[],
+  repeat: unknown,
 ): number | undefined {
   if (!Array.isArray(tests) || !tests.every(isRecord)) {
     return undefined;
   }
 
-  return tests.reduce(
-    (count, testCase) =>
-      count +
-      (isRecord(testCase) ? countOutputsForTest(testCase, defaultTest, providers, prompts) : 0),
-    0,
-  );
+  const repeatCount = countRepeats(repeat);
+  if (repeatCount === undefined) {
+    return undefined;
+  }
+
+  let requestCount = 0;
+  for (const testCase of tests) {
+    const outputCount = countOutputsForTest(testCase, defaultTest, providers, prompts);
+    if (outputCount === 0 || testCase.providerOutput) {
+      continue;
+    }
+    if (hasDynamicOutputForTest(testCase, defaultTest, providers, prompts)) {
+      return undefined;
+    }
+
+    const combinationCount = countStaticVarCombinations(testCase, defaultTest);
+    if (combinationCount === undefined) {
+      return undefined;
+    }
+    requestCount += outputCount * combinationCount * repeatCount;
+  }
+
+  return requestCount;
 }
 
 function mayLoadMultiplePromptsAtRuntime(rawPrompt: string): boolean {
@@ -840,11 +922,14 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     testCasesMissingAssertionVariables,
     testCasesWithInvalidAssertions,
     defaultTestHasInvalidAssertions,
-    plannedBaseRequestCount: countPlannedBaseRequests(
-      config.tests,
-      defaultTest,
-      providers,
-      promptCandidates,
-    ),
+    plannedBaseRequestCount: hasRuntimeDependentSuiteShape(config)
+      ? undefined
+      : countPlannedBaseRequests(
+          config.tests,
+          defaultTest,
+          providers,
+          promptCandidates,
+          config.evaluateOptions?.repeat,
+        ),
   };
 }

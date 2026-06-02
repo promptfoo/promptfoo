@@ -981,14 +981,107 @@ describe('setupReadiness', () => {
       expect(readiness.plannedBaseRequestCount).toBeUndefined();
     });
 
-    it('multiplies providers, prompts, and test cases for the base request count', () => {
+    it('multiplies providers, prompts, test cases, static var combinations, and repeats', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
         prompts: ['Write a reply', 'Write a summary'],
-        tests: [{ vars: {} }, { vars: {} }, { vars: {} }],
+        defaultTest: { vars: { audience: ['developers', 'operators'] } },
+        tests: [
+          { vars: { topic: ['reliability', 'security'] } },
+          { vars: { topic: ['performance', 'accessibility'] } },
+          { vars: { topic: ['testing', 'deployment'] } },
+        ],
+        evaluateOptions: { repeat: 2 },
       });
 
-      expect(readiness.plannedBaseRequestCount).toBe(12);
+      expect(readiness.plannedBaseRequestCount).toBe(96);
+    });
+
+    it('does not expand array vars when the effective test options disable expansion', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        defaultTest: {
+          options: { disableVarExpansion: true },
+          vars: { audience: ['developers', 'operators'] },
+        },
+        tests: [{ vars: { topic: ['reliability', 'security'] } }],
+        evaluateOptions: { repeat: 3 },
+      });
+
+      expect(readiness.plannedBaseRequestCount).toBe(3);
+    });
+
+    it('does not claim an exact base request count for runtime-dependent inputs', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ vars: { topic: 'file://topics/*.txt' } }],
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ options: { transformVars: 'return { topic: [\"a\", \"b\"] };' } }],
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          prompts: ['file://prompts.csv'],
+          tests: [{}],
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          providers: ['file://providers.yaml'],
+          tests: [{}],
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{}],
+          scenarios: [{ config: [{}], tests: [{}] }],
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{}],
+          extensions: ['file://extension.js'],
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{}],
+          evaluateOptions: { filterRange: '0:1' },
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{}],
+          defaultTest: 'file://default-test.yaml',
+        }).plannedBaseRequestCount,
+      ).toBeUndefined();
+    });
+
+    it('counts provider-output test cases as zero base requests', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [{ providerOutput: 'Previously generated reply' }],
+      });
+
+      expect(readiness.plannedBaseRequestCount).toBe(0);
     });
   });
 

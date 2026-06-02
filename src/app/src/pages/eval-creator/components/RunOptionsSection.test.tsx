@@ -36,6 +36,7 @@ describe('RunOptionsSection', () => {
 
     expect(screen.getByText('Review and run')).toBeInTheDocument();
     expect(screen.getByText(/starts with 6 base requests/)).toBeInTheDocument();
+    expect(screen.getByText(/variable expansion and repeat can multiply them/)).toBeInTheDocument();
     expect(screen.getByText(/additional model calls and increase cost/)).toBeInTheDocument();
     const readyStatus = screen.getByRole('status');
     expect(readyStatus).toHaveTextContent(/Required setup is complete/);

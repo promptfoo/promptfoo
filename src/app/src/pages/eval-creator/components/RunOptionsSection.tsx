@@ -237,8 +237,8 @@ export function RunOptionsSection({
             <h3 className="text-lg font-semibold">Review and run</h3>
             <p className="text-sm text-muted-foreground">
               By default, each test case sends every prompt to every provider. YAML routing can
-              narrow those base requests; some assertion types can make additional model calls and
-              increase cost.
+              narrow those base requests, while variable expansion and repeat can multiply them;
+              some assertion types can make additional model calls and increase cost.
             </p>
           </div>
 
