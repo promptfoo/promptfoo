@@ -87,7 +87,7 @@ providers:
         AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
 ```
 
-The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model ids, request model access in a supported Region (`us-east-2` for GPT-5.5), and remember that credentials in `cli_env` are exposed to the agent's shell environment.
+The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model ids, request model access in a supported Region (`us-east-2` for GPT-5.5), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
 
 ## Basic Usage
 

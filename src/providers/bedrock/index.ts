@@ -2568,10 +2568,19 @@ export function getHandlerForModel(
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
   }
-  // Route any OpenAI model id (including future frontier releases and cross-region
-  // inference profiles such as `us.openai.gpt-5.5`) through the OpenAI handler.
-  if (modelName.includes('openai.')) {
+  // Open-weight gpt-oss models are the only OpenAI models served via InvokeModel. The
+  // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the
+  // OpenAI Responses provider in src/providers/families/aws.ts before reaching this handler.
+  if (modelName.includes('openai.gpt-oss')) {
     return BEDROCK_MODEL.OPENAI;
+  }
+  if (modelName.includes('openai.')) {
+    throw new Error(
+      `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
+        `models (gpt-5.x) use the OpenAI-compatible Responses API — use "bedrock:${modelName}" ` +
+        `(promptfoo routes it automatically) and set AWS_BEARER_TOKEN_BEDROCK. See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+    );
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
@@ -2587,20 +2596,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
+    // Merge prompt-level config over provider config once so the same effective config
+    // drives handler selection, request params, AND output parsing (e.g. showThinking).
+    const mergedConfig = { ...this.config, ...context?.prompt.config };
+
+    let model = getHandlerForModel(this.modelName, mergedConfig);
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = await model.params(
-      { ...this.config, ...context?.prompt.config },
-      prompt,
-      stop,
-      this.modelName,
-      context?.vars,
-    );
+    const params = await model.params(mergedConfig, prompt, stop, this.modelName, context?.vars);
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2618,7 +2625,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(this.config, JSON.parse(cachedResponse as string)),
+          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
           cached: true,
         };
@@ -2730,7 +2737,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       }
 
       return {
-        output: model.output(this.config, output),
+        output: model.output(mergedConfig, output),
         tokenUsage,
         ...(output['amazon-bedrock-guardrailAction']
           ? {

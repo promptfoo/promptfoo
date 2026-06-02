@@ -121,7 +121,7 @@ Notes:
 
 - **Model ids are Bedrock ids**: use `openai.gpt-5.5` / `openai.gpt-5.4`, not the bare `gpt-5.5`. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`), which is separate from the classic `bedrock-runtime` `InvokeModel` API used by the [`bedrock:` provider](/docs/providers/aws-bedrock/).
 - **Region matters**: GPT-5.5 is available in `us-east-2`; GPT-5.4 in `us-east-2` and `us-west-2`. Request model access first.
-- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. The `bedrock:` provider, by contrast, uses the AWS SDK credential chain directly and does not need this.
+- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. The `bedrock:` provider, by contrast, uses the AWS SDK credential chain directly and does not need this.
 
 :::warning
 

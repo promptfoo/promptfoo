@@ -36,7 +36,8 @@ npx promptfoo@latest init --example openai-codex-sdk/bedrock
 - AWS credentials and `AWS_REGION` are forwarded to the Codex CLI via `cli_env` because
   promptfoo runs the CLI with a minimal environment by default. You may instead set
   `AWS_BEARER_TOKEN_BEDROCK` (a Bedrock API key), `AWS_PROFILE`, or
-  `inherit_process_env: true`.
+  `inherit_process_env: true`. If you use temporary credentials (SSO / STS / assumed
+  roles / MFA), also forward `AWS_SESSION_TOKEN` (uncomment it in the config).
 
 > **Security note:** values placed in `cli_env` are exposed to the Codex agent's shell
 > environment. Scope the IAM permissions to Bedrock inference and prefer short-lived

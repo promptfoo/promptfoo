@@ -3144,6 +3144,13 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       expect(getHandlerForModel('openai.gpt-oss-20b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
     });
 
+    it('should throw a clear error for frontier gpt-5.x ids on the InvokeModel path', () => {
+      // Frontier models are routed to the Responses provider before reaching this handler;
+      // a direct/forced InvokeModel resolution should explain that rather than silently try.
+      expect(() => getHandlerForModel('openai.gpt-5.5')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.4')).toThrow(/Responses API/);
+    });
+
     it('should still throw for genuinely unknown models', () => {
       expect(() => getHandlerForModel('totally.unknown-model')).toThrow(
         'Unknown Amazon Bedrock model',
@@ -3474,6 +3481,36 @@ describe('AwsBedrockCompletionProvider', () => {
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       {}, // vars from context
     );
+  });
+
+  it('should pass merged prompt-level config to model.output (e.g. showThinking)', async () => {
+    // Exercise the cached path, which reaches model.output with the effective config.
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached' }));
+    vi.mocked(isCacheEnabled).mockImplementation(() => true);
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: { region: 'us-east-1', showThinking: false } as any,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        // Prompt-level override should reach output(), not just params().
+        config: { showThinking: true } as any,
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context as any);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: true }), expect.anything());
   });
 
   it('should set cached flag when returning cached response', async () => {

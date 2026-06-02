@@ -11,6 +11,24 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // OpenAI frontier models (gpt-5.x) are served only through Bedrock's OpenAI-compatible
+      // Responses API on the regional mantle endpoint — never the native InvokeModel/Converse
+      // APIs. Route them before the per-type handlers so `bedrock:openai.gpt-5.5`,
+      // `bedrock:converse:openai.gpt-5.5`, and `bedrock:completion:openai.gpt-5.5` all resolve
+      // correctly. Open-weight gpt-oss models fall through to InvokeModel/Converse below.
+      const { isBedrockOpenAiResponsesModel } = await import('../bedrock/openaiResponses');
+      const candidateOpenAiModel =
+        modelType === 'converse' || modelType === 'completion'
+          ? modelName
+          : splits.slice(1).join(':');
+      if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
+
       // Handle Converse API
       if (modelType === 'converse') {
         return new AwsBedrockConverseProvider(modelName, providerOptions);
@@ -68,20 +86,9 @@ export const awsProviderFactories: ProviderFactory[] = [
         const { AwsBedrockKnowledgeBaseProvider } = await import('../bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
-      // Reconstruct the full model name preserving the original format
+      // Reconstruct the full model name preserving the original format. Frontier OpenAI
+      // models were already routed to the Responses provider near the top of this factory.
       const fullModelName = splits.slice(1).join(':');
-      // OpenAI frontier models (gpt-5.x) are served only through Bedrock's
-      // OpenAI-compatible Responses API on the regional mantle endpoint, not the native
-      // InvokeModel API. Route them to the OpenAI Responses provider. Open-weight gpt-oss
-      // models stay on InvokeModel via AwsBedrockCompletionProvider below.
-      const { isBedrockOpenAiResponsesModel } = await import('../bedrock/openaiResponses');
-      if (isBedrockOpenAiResponsesModel(fullModelName)) {
-        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
-        return createBedrockOpenAiResponsesProvider(fullModelName, {
-          ...providerOptions,
-          id: providerOptions.id ?? providerPath,
-        });
-      }
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },
   },

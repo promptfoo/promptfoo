@@ -29,7 +29,15 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
   return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
 }
 
-/** Build the regional Bedrock mantle base URL for the OpenAI-compatible Responses API. */
+/**
+ * Build the regional Bedrock mantle base URL for the OpenAI frontier models.
+ *
+ * NOTE: the path is `/openai/v1`, not `/v1`. Verified live against gpt-5.5/gpt-5.4: the
+ * frontier models are served under the `/openai/v1/responses` path and return HTTP 400
+ * ("does not support the '/v1/responses' API") on the bare `/v1` path. The bare `/v1` path
+ * documented in the AWS Mantle guide serves the open-weight `gpt-oss` models instead — and
+ * those return 400 on `/openai/v1`. Do not "simplify" this to `/v1`.
+ */
 export function getBedrockMantleBaseUrl(region: string): string {
   return `https://bedrock-mantle.${region}.api.aws/openai/v1`;
 }
