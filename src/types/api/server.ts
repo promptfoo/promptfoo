@@ -43,6 +43,14 @@ const ResultParamsSchema = z.object({
   id: z.string().min(1),
 });
 
+const ResultQuerySchema = z.object({
+  includeTraces: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .optional()
+    .transform((value) => value !== false && value !== 'false'),
+  resultProjection: z.enum(['full', 'redteamReport']).optional().default('full'),
+});
+
 const ResultResponseSchema = DataResponseSchema;
 
 const PromptsResponseSchema = z.object({
@@ -119,6 +127,7 @@ export const ServerSchemas = {
   },
   Result: {
     Params: ResultParamsSchema,
+    Query: ResultQuerySchema,
     Response: ResultResponseSchema,
   },
   Prompts: {

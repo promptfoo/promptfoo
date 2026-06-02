@@ -1216,6 +1216,86 @@ describe('evaluator', () => {
 
       expect(results.results).toEqual(await eval1.toEvaluateSummary());
     });
+
+    it('should skip loading traces when includeTraces is false', async () => {
+      const eval1 = await EvalFactory.create();
+      const getTracesSpy = vi.spyOn(eval1, 'getTraces');
+
+      const results = await eval1.toResultsFile({ includeTraces: false });
+
+      expect(getTracesSpy).not.toHaveBeenCalled();
+      expect(results).not.toHaveProperty('traces');
+    });
+
+    it('should remove oversized fields from redteam report result projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          metadata: {
+            pluginId: 'coding-agent:network-egress-bypass',
+            storedGraderResult: { large: 'duplicate grader payload' },
+            redteamHistory: [{ prompt: 'attack', output: 'response' }],
+          },
+          response: {
+            output: 'response',
+            metadata: {
+              redteamFinalPrompt: 'final prompt',
+              storedGraderResult: { large: 'duplicate grader payload' },
+            },
+          },
+          testCase: {
+            vars: { prompt: 'attack' },
+            metadata: {
+              pluginId: 'coding-agent:network-egress-bypass',
+              strategyId: 'jailbreak:meta',
+              purpose: 'duplicate purpose',
+            },
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'attack succeeded',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'attack succeeded',
+                assertion: {
+                  type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
+                  metric: 'CodingAgentNetworkEgressBypass',
+                  value: 'large assertion body',
+                },
+                metadata: {
+                  renderedGradingPrompt: 'large grading prompt',
+                },
+              },
+            ],
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({
+        includeTraces: false,
+        resultProjection: 'redteamReport',
+      });
+      const result = projected.results.results[0];
+
+      expect(result.metadata).toMatchObject({
+        pluginId: 'coding-agent:network-egress-bypass',
+        redteamHistory: [{ prompt: 'attack', output: 'response' }],
+      });
+      expect(result.metadata).not.toHaveProperty('storedGraderResult');
+      expect(result.response?.metadata).toEqual({ redteamFinalPrompt: 'final prompt' });
+      expect(result.testCase.metadata).toEqual({
+        pluginId: 'coding-agent:network-egress-bypass',
+        strategyId: 'jailbreak:meta',
+      });
+      expect(result.gradingResult?.componentResults?.[0]).not.toHaveProperty('metadata');
+      expect(result.gradingResult?.componentResults?.[0].assertion).toEqual({
+        type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
+        metric: 'CodingAgentNetworkEgressBypass',
+      });
+    });
   });
 
   describe('getTablePage', () => {

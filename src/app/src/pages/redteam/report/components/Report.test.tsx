@@ -15,7 +15,7 @@ import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/type
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(
     <TooltipProvider>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={[`/reports${window.location.search}`]}>{ui}</MemoryRouter>
     </TooltipProvider>,
   );
 };
@@ -612,6 +612,7 @@ describe('App component target selection', () => {
       },
     } as unknown as ResultsFile;
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -631,6 +632,7 @@ describe('App component target selection', () => {
     ];
     const evalData = createComponentMockEvalData(2, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -658,6 +660,118 @@ describe('App component target selection', () => {
   });
 });
 
+describe('App component report loading', () => {
+  const mockCallApi = callApi as Mock;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWindowLocation({ search: '' });
+  });
+
+  it('reloads when the evalId prop changes and does not request traces', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', true),
+    ]);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    const renderReport = (evalId: string) => (
+      <TooltipProvider>
+        <MemoryRouter>
+          <App evalId={evalId} />
+        </MemoryRouter>
+      </TooltipProvider>
+    );
+    const { rerender } = render(renderReport('eval-one'));
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/results/eval-one?includeTraces=false&resultProjection=redteamReport',
+        {
+          cache: 'no-store',
+        },
+      );
+    });
+
+    rerender(renderReport('eval-two'));
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/results/eval-two?includeTraces=false&resultProjection=redteamReport',
+        {
+          cache: 'no-store',
+        },
+      );
+    });
+  });
+
+  it('loads the latest red team evaluation when no evalId is provided', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', true),
+    ]);
+    mockCallApi
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [{ evalId: 'latest-redteam-eval' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: evalData }),
+      });
+
+    renderWithProviders(<App />);
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenNthCalledWith(1, '/results?type=redteam', {
+        cache: 'no-store',
+      });
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        2,
+        '/results/latest-redteam-eval?includeTraces=false&resultProjection=redteamReport',
+        {
+          cache: 'no-store',
+        },
+      );
+    });
+  });
+
+  it('shows an error instead of waiting forever when the report request fails', async () => {
+    mockCallApi.mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
+
+    renderWithProviders(<App evalId="eval-broken" />);
+
+    expect(await screen.findByRole('heading', { name: 'Report unavailable' })).toBeInTheDocument();
+    expect(screen.getByText(/Unable to load report data/)).toBeInTheDocument();
+    expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();
+  });
+
+  it('does not present a clean report when aggregate stats exist without result rows', async () => {
+    const evalData = createComponentMockEvalData(1, []);
+    evalData.results.stats = {
+      successes: 597,
+      failures: 410,
+      errors: 1,
+    } as any;
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App evalId="eval-incomplete" />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Report data incomplete' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/aggregate stats for 1,008 tests/)).toBeInTheDocument();
+    expect(screen.queryByTestId('overview-total')).not.toBeInTheDocument();
+  });
+});
+
 describe('App component target selector rendering', () => {
   const mockCallApi = callApi as Mock;
 
@@ -673,6 +787,7 @@ describe('App component target selector rendering', () => {
     ];
     const evalData = createComponentMockEvalData(2, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -686,6 +801,7 @@ describe('App component target selector rendering', () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -702,6 +818,7 @@ describe('App component target selector rendering', () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -720,6 +837,7 @@ describe('App component target selector rendering', () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -759,6 +877,7 @@ describe('App component categoryStats calculation with moderation', () => {
     ];
     const evalData = createComponentMockEvalData(1, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -796,6 +915,7 @@ describe('Filter panel regression tests', () => {
     ];
     const evalData = createComponentMockEvalData(1, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 
@@ -829,6 +949,7 @@ describe('Filter panel regression tests', () => {
     ];
     const evalData = createComponentMockEvalData(1, results);
     mockCallApi.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ data: evalData }),
     });
 

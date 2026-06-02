@@ -12,17 +12,19 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
-import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
+import type { EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
+  evalId: string;
   evalDescription: string;
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
+const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
@@ -114,7 +116,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
     }
   };
 
-  const handleJsonDownload = () => {
+  const handleJsonDownload = async () => {
     setIsDownloading(true);
 
     // Track report export
@@ -124,7 +126,14 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
     });
 
     try {
-      const jsonData = JSON.stringify(evalData, null, 2);
+      const response = await callApi(`/results/${encodeURIComponent(evalId)}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load full evaluation data (${response.status})`);
+      }
+      const body = (await response.json()) as SharedResults;
+      const jsonData = JSON.stringify(body.data, null, 2);
       const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
       const link = document.createElement('a');
       if (link.download !== undefined) {

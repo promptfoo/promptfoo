@@ -11,7 +11,12 @@ vi.mock('@app/stores/userStore', () => ({
 }));
 
 vi.mock('./components/Report', () => ({
-  default: () => <div>Report Component</div>,
+  default: ({ evalId }: { evalId?: string }) => (
+    <div>
+      <span>Report Component</span>
+      <span data-testid="report-eval-id">{evalId}</span>
+    </div>
+  ),
 }));
 
 vi.mock('./components/ReportIndex', () => ({
@@ -68,6 +73,7 @@ describe('ReportPage', () => {
     renderWithRouter('/reports?evalId=test-eval-123');
 
     expect(screen.getByText('Report Component')).toBeInTheDocument();
+    expect(screen.getByTestId('report-eval-id')).toHaveTextContent('test-eval-123');
     expect(screen.queryByText('ReportIndex Component')).toBeNull();
   });
 

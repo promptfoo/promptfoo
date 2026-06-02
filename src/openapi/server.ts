@@ -249,6 +249,7 @@ export function createServerOpenApiRegistry() {
     summary: 'Get one evaluation result',
     request: {
       params: params('ResultParams', ServerSchemas.Result.Params),
+      query: query('ResultQuery', ServerSchemas.Result.Query),
     },
     responses: {
       200: jsonResponse('ResultResponse', ServerSchemas.Result.Response),

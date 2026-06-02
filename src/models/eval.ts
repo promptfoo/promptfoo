@@ -72,6 +72,67 @@ interface FilteredCountRow {
   count: number | null;
 }
 
+export type ResultsFileOptions = {
+  includeTraces?: boolean;
+  resultProjection?: 'full' | 'redteamReport';
+};
+
+function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
+  const metadata = result.metadata
+    ? (({ storedGraderResult: _storedGraderResult, ...rest }) => rest)(result.metadata)
+    : result.metadata;
+
+  const response = result.response
+    ? {
+        ...result.response,
+        metadata: result.response.metadata?.redteamFinalPrompt
+          ? { redteamFinalPrompt: result.response.metadata.redteamFinalPrompt }
+          : undefined,
+      }
+    : result.response;
+
+  const testCaseMetadata = result.testCase?.metadata;
+  const testCase = result.testCase
+    ? {
+        ...result.testCase,
+        metadata: testCaseMetadata
+          ? {
+              ...(testCaseMetadata.pluginId !== undefined && {
+                pluginId: testCaseMetadata.pluginId,
+              }),
+              ...(testCaseMetadata.strategyId !== undefined && {
+                strategyId: testCaseMetadata.strategyId,
+              }),
+            }
+          : undefined,
+      }
+    : result.testCase;
+
+  const gradingResult = result.gradingResult
+    ? {
+        ...result.gradingResult,
+        componentResults: result.gradingResult.componentResults?.map((componentResult) => {
+          const { metadata: _metadata, ...componentWithoutMetadata } = componentResult;
+          const assertion = componentResult.assertion
+            ? (({ value: _value, ...rest }) => rest)(componentResult.assertion)
+            : undefined;
+          return {
+            ...componentWithoutMetadata,
+            ...(assertion && { assertion }),
+          };
+        }),
+      }
+    : result.gradingResult;
+
+  return {
+    ...result,
+    metadata,
+    response,
+    testCase,
+    gradingResult,
+  };
+}
+
 /** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
@@ -1492,13 +1553,24 @@ export default class Eval {
     }
   }
 
-  async toResultsFile(): Promise<ResultsFile> {
-    const traces = await this.getTraces();
+  async toResultsFile({
+    includeTraces = true,
+    resultProjection = 'full',
+  }: ResultsFileOptions = {}): Promise<ResultsFile> {
+    const traces = includeTraces ? await this.getTraces() : [];
+    const evaluateSummary = await this.toEvaluateSummary();
+    const results =
+      resultProjection === 'redteamReport'
+        ? {
+            ...evaluateSummary,
+            results: evaluateSummary.results.map(projectResultForRedteamReport),
+          }
+        : evaluateSummary;
 
-    const results: ResultsFile = {
+    const resultFile: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(),
+      results,
       config: this.config,
       author: this.author || null,
       prompts: this.getPrompts(),
@@ -1507,7 +1579,7 @@ export default class Eval {
       ...(traces.length > 0 && { traces }),
     };
 
-    return results;
+    return resultFile;
   }
 
   async delete({ notify = true }: { notify?: boolean } = {}) {

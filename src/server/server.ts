@@ -185,8 +185,14 @@ export function createApp() {
       replyValidationError(res, paramsResult.error);
       return;
     }
+    const queryResult = ServerSchemas.Result.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      replyValidationError(res, queryResult.error);
+      return;
+    }
     const { id } = paramsResult.data;
-    const file = await readResult(id);
+    const { includeTraces, resultProjection } = queryResult.data;
+    const file = await readResult(id, { includeTraces, resultProjection });
     if (!file) {
       res.status(404).json({ error: 'Result not found' });
       return;

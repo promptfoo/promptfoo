@@ -192,6 +192,58 @@ describe('inline server API DTO validation', () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: 'Result not found' });
+    expect(mockedReadResult).toHaveBeenCalledWith('missing-eval', {
+      includeTraces: true,
+      resultProjection: 'full',
+    });
+  });
+
+  it('allows result callers to omit traces from the response', async () => {
+    mockedReadResult.mockResolvedValue({
+      id: 'eval-1',
+      createdAt: new Date(),
+      result: { config: {} },
+    } as never);
+
+    const response = await api.get('/api/results/eval-1?includeTraces=false');
+
+    expect(response.status).toBe(200);
+    expect(mockedReadResult).toHaveBeenCalledWith('eval-1', {
+      includeTraces: false,
+      resultProjection: 'full',
+    });
+  });
+
+  it('rejects invalid includeTraces query params', async () => {
+    const response = await api.get('/api/results/eval-1?includeTraces=sometimes');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('includeTraces');
+    expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('allows redteam report callers to request compact result projections', async () => {
+    mockedReadResult.mockResolvedValue({
+      id: 'eval-1',
+      createdAt: new Date(),
+      result: { config: {} },
+    } as never);
+
+    const response = await api.get('/api/results/eval-1?resultProjection=redteamReport');
+
+    expect(response.status).toBe(200);
+    expect(mockedReadResult).toHaveBeenCalledWith('eval-1', {
+      includeTraces: true,
+      resultProjection: 'redteamReport',
+    });
+  });
+
+  it('rejects invalid resultProjection query params', async () => {
+    const response = await api.get('/api/results/eval-1?resultProjection=tiny');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('resultProjection');
+    expect(mockedReadResult).not.toHaveBeenCalled();
   });
 
   it('redacts Azure Blob SAS tokens from result and dataset response DTOs', async () => {
