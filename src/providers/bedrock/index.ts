@@ -2079,9 +2079,9 @@ ${prompt}
         0.1,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
-      // OpenAI reasoning models (gpt-oss, gpt-5.x) accept `reasoning_effort` as a
-      // native request field on Bedrock. Forward it as-is and let the API validate
-      // the value for the specific model.
+      // The open-weight gpt-oss models accept `reasoning_effort` as a native request field on
+      // Bedrock's InvokeModel API. Forward it as-is and let the API validate the value.
+      // (Frontier gpt-5.x models don't reach this handler — see the OpenAI Responses provider.)
       addConfigParam(params, 'reasoning_effort', config?.reasoning_effort);
       if ((stop && stop.length > 0) || config?.stop) {
         addConfigParam(params, 'stop', stop || config?.stop, getEnvString('AWS_BEDROCK_STOP'));
