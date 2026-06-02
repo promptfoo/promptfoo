@@ -126,7 +126,7 @@ tracing:
 Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
 
 ```javascript
-const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
+const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
@@ -151,7 +151,7 @@ module.exports = {
   async callApi(prompt, promptfooContext) {
     // Parse trace context from Promptfoo
     if (promptfooContext.traceparent) {
-      const activeContext = trace.propagation.extract(context.active(), {
+      const activeContext = propagation.extract(context.active(), {
         traceparent: promptfooContext.traceparent,
       });
 
@@ -302,6 +302,7 @@ tracing:
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
       # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
   storage:
+    type: sqlite # Required; sqlite is currently the only supported store
     # Remove trace and span records older than this many days
     retentionDays: 30
 ```
@@ -310,9 +311,24 @@ tracing:
 key, so short patterns over-match: `token` also matches `gen_ai.usage.total_tokens`, and
 `key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
 Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` that echoes the value of a redacted attribute. It does
-**not** scan arbitrary free text or trace `metadata` (such as test `vars`) for secrets, so
-avoid placing secrets in test variables when traces are retained.
+and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
+attribute**. A secret that appears solely in a span name, status/error message, or log
+body — without also being a redacted attribute value — is not detected. Redaction also does
+**not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
+secrets in test variables when traces are retained.
+
+:::warning Scope of `redactAttributes`
+
+`redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
+`/v1/traces` and `/v1/logs`. Spans emitted by Promptfoo's **built-in provider
+instrumentation** are exported in-process (not over HTTP) and are **not** filtered by
+`redactAttributes`; values like `promptfoo.request.body` and request headers can therefore
+be stored in the local trace DB. A built-in sanitizer still masks common credential-shaped
+keys (`authorization`, `api_key`, `token`, `password`, `cookie`, …) when traces are read,
+but custom keys you add to `redactAttributes` are only enforced on the HTTP ingest path.
+Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
+
+:::
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
@@ -582,13 +598,13 @@ const provider = new NodeTracerProvider({
 Trace across multiple services:
 
 ```javascript
-// Service A: Forward trace context
+// Service A: Forward trace context (import `propagation` from '@opentelemetry/api')
 const headers = {};
-trace.propagation.inject(context.active(), headers);
+propagation.inject(context.active(), headers);
 await fetch(serviceB, { headers });
 
 // Service B: Extract and continue trace
-const extractedContext = trace.propagation.extract(context.active(), request.headers);
+const extractedContext = propagation.extract(context.active(), request.headers);
 ```
 
 ## Troubleshooting
