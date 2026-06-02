@@ -1,8 +1,5 @@
-import {
-  assertFiniteNonNegativeInteger,
-  assertFiniteNonNegativeNumber,
-  matchesPattern,
-} from './traceUtils';
+import { traceErrorSpansConfigError } from '../util/traceAssertionConfig';
+import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -22,6 +19,11 @@ interface ResolvedTraceErrorSpansValue {
 }
 
 function resolveTraceErrorSpansValue(value: unknown): ResolvedTraceErrorSpansValue {
+  const configError = traceErrorSpansConfigError(value);
+  if (configError) {
+    throw new Error(configError);
+  }
+
   let maxCount: number | undefined;
   let maxPercentage: number | undefined;
   let pattern = '*';
@@ -34,28 +36,13 @@ function resolveTraceErrorSpansValue(value: unknown): ResolvedTraceErrorSpansVal
     maxCount = objValue.max_count;
     maxPercentage = objValue.max_percentage;
     if (objValue.pattern !== undefined) {
-      if (typeof objValue.pattern !== 'string' || !objValue.pattern) {
-        throw new Error('trace-error-spans assertion pattern must be a non-empty string');
-      }
       pattern = objValue.pattern;
-    }
-    if (objValue.requirePresence !== undefined && typeof objValue.requirePresence !== 'boolean') {
-      throw new Error('trace-error-spans assertion requirePresence must be a boolean');
     }
     requirePresence = objValue.requirePresence === true;
   }
 
   if (maxCount === undefined && maxPercentage === undefined) {
     maxCount = 0;
-  }
-  if (maxCount !== undefined) {
-    assertFiniteNonNegativeInteger(maxCount, 'trace-error-spans assertion max_count');
-  }
-  if (maxPercentage !== undefined) {
-    assertFiniteNonNegativeNumber(maxPercentage, 'trace-error-spans assertion max_percentage');
-    if (maxPercentage > 100) {
-      throw new Error('trace-error-spans assertion max_percentage must be between 0 and 100');
-    }
   }
 
   return { maxCount, maxPercentage, pattern, requirePresence };

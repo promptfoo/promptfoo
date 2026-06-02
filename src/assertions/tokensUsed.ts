@@ -1,5 +1,6 @@
 import { renderVarsInObject } from '../util/render';
-import { assertFiniteNonNegativeNumber, matchesPattern } from './traceUtils';
+import { tokensUsedConfigError } from '../util/traceAssertionConfig';
+import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -208,46 +209,21 @@ function resolveTokenUsage(
   return { total: tokensFromProviderResponse(params), usedSource: 'response' };
 }
 
-function validateTokenBudgetBound(boundName: 'min' | 'max', value: unknown): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  assertFiniteNonNegativeNumber(value, `tokens-used ${boundName}`);
-  return value;
-}
-
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
   const value = renderVarsInObject(
     params.renderedValue ?? params.assertion.value,
     params.assertionValueContext.vars,
   ) as TokensUsedValue | undefined;
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('tokens-used assertion must have an object value');
   }
 
-  if (value.min === undefined && value.max === undefined) {
-    throw new Error('tokens-used assertion must include min or max');
+  const configError = tokensUsedConfigError(value);
+  if (configError) {
+    throw new Error(configError);
   }
 
-  if (
-    value.source !== undefined &&
-    value.source !== 'trace' &&
-    value.source !== 'response' &&
-    value.source !== 'auto'
-  ) {
-    throw new Error('tokens-used source must be "trace", "response", or "auto"');
-  }
-
-  if (value.pattern !== undefined && (typeof value.pattern !== 'string' || !value.pattern.trim())) {
-    throw new Error('tokens-used pattern must be a non-empty string');
-  }
-
-  const min = validateTokenBudgetBound('min', value.min);
-  const max = validateTokenBudgetBound('max', value.max);
-  if (min !== undefined && max !== undefined && min > max) {
-    throw new Error('tokens-used min must be less than or equal to max');
-  }
-
+  const { min, max } = value;
   const pattern = value.pattern ?? '*';
   const source = value.source ?? 'auto';
   const { total, usedSource } = resolveTokenUsage(params, source, pattern);

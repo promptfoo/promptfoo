@@ -2,7 +2,14 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import { renderVarsInObject } from '../util/render';
-import { assertFiniteNonNegativeInteger, assertValidRange, matchesPattern } from './traceUtils';
+import {
+  trajectoryCountBoundsError,
+  trajectoryGoalSuccessTimeoutError,
+  trajectoryRedactArgsError,
+  trajectoryToolSequenceModeError,
+  trajectoryToolSetConfigError,
+} from '../util/traceAssertionConfig';
+import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -92,18 +99,11 @@ function resolveTrajectoryCountBounds(
   value: Record<string, unknown>,
   assertionType: string,
 ): Pick<TrajectoryCountValue, 'min' | 'max'> {
+  const boundsError = trajectoryCountBoundsError(value, assertionType);
+  if (boundsError) {
+    throw new Error(boundsError);
+  }
   const { min, max } = value;
-  if (min !== undefined) {
-    assertFiniteNonNegativeInteger(min, `${assertionType} assertion min`);
-  }
-  if (max !== undefined) {
-    assertFiniteNonNegativeInteger(max, `${assertionType} assertion max`);
-  }
-  assertValidRange(
-    min as number | undefined,
-    max as number | undefined,
-    `${assertionType} assertion`,
-  );
   return {
     min: min as number | undefined,
     max: max as number | undefined,
@@ -124,14 +124,11 @@ function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
   ) {
     const objValue = value as TrajectoryGoalSuccessValue;
     const resolved: TrajectoryGoalSuccessValue = { goal: objValue.goal.trim() };
+    const timeoutError = trajectoryGoalSuccessTimeoutError(objValue);
+    if (timeoutError) {
+      throw new Error(timeoutError);
+    }
     if (Object.prototype.hasOwnProperty.call(objValue, 'timeoutMs')) {
-      if (
-        typeof objValue.timeoutMs !== 'number' ||
-        !Number.isFinite(objValue.timeoutMs) ||
-        objValue.timeoutMs <= 0
-      ) {
-        throw new Error('trajectory:goal-success timeoutMs must be a finite positive number');
-      }
       resolved.timeoutMs = objValue.timeoutMs;
     }
     return resolved;
@@ -269,35 +266,21 @@ interface TrajectoryToolSetValue {
 }
 
 function resolveToolSetValue(value: unknown): TrajectoryToolSetValue {
+  const configError = trajectoryToolSetConfigError(value);
+  if (configError) {
+    throw new Error(configError);
+  }
   if (Array.isArray(value)) {
     return { tools: value as Array<string | TrajectoryStepMatcher>, mode: 'subset' };
   }
-  if (
-    value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    Array.isArray((value as TrajectoryToolSetValue).tools)
-  ) {
-    const objValue = value as TrajectoryToolSetValue;
-    const mode = objValue.mode ?? 'subset';
-    if (mode !== 'subset' && mode !== 'exact') {
-      throw new Error('trajectory:tool-set assertion mode must be "subset" or "exact"');
-    }
-    return { tools: objValue.tools, mode };
-  }
-  throw new Error(
-    'trajectory:tool-set assertion must have an array value or an object with a tools array',
-  );
+  const objValue = value as TrajectoryToolSetValue;
+  return { tools: objValue.tools, mode: objValue.mode ?? 'subset' };
 }
 
 export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
   const value = resolveToolSetValue(getRenderedTrajectoryValue(params));
-
-  if (value.tools.length === 0) {
-    throw new Error('trajectory:tool-set assertion requires at least one expected tool');
-  }
 
   const expectedMatchers = value.tools.map((tool, index) => {
     const matcher = normalizeTrajectoryMatcher(tool, 'tool');
@@ -359,12 +342,12 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const sequenceValue = value as Partial<TrajectorySequenceValue>;
-    const mode = sequenceValue.mode === undefined ? 'in_order' : sequenceValue.mode;
-    if (mode !== 'in_order' && mode !== 'exact') {
-      throw new Error('trajectory:tool-sequence assertion mode must be "in_order" or "exact"');
+    const modeError = trajectoryToolSequenceModeError(sequenceValue);
+    if (modeError) {
+      throw new Error(modeError);
     }
     return {
-      mode,
+      mode: sequenceValue.mode === undefined ? 'in_order' : sequenceValue.mode,
       steps: sequenceValue.steps || [],
     };
   }
@@ -554,11 +537,19 @@ function resolveToolArgsMatchValue(value: unknown) {
     );
   }
 
+  // Validate the redaction toggle instead of silently coercing: a stringy value like "true"
+  // (or any non-boolean) must fail loud rather than fail open and leak traced args.
+  const redactError = trajectoryRedactArgsError(value as TrajectoryToolArgsMatchValue);
+  if (redactError) {
+    throw new Error(redactError);
+  }
+  const redactArgsInFailures = (value as TrajectoryToolArgsMatchValue).redactArgsInFailures;
+
   return {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
-    redactArgsInFailures: (value as TrajectoryToolArgsMatchValue).redactArgsInFailures !== false,
+    redactArgsInFailures: redactArgsInFailures !== false,
     defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
     ignore: resolveToolArgsMatchIgnore((value as TrajectoryToolArgsMatchValue).ignore),
   } as const;

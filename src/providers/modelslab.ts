@@ -15,7 +15,7 @@ import { type BlobRef, storeBlob } from '../blobs/index';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 import { ellipsize } from '../util/text';
 import { getRequestTimeoutMs } from './shared';
 

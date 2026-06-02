@@ -111,6 +111,41 @@ describe('TraceStore', () => {
     });
   });
 
+  describe('getTraceMetadata', () => {
+    // This three-way contract is the single source of truth for ingest-time redaction
+    // (otlpReceiver.getRedactAttributePatterns): object => use stored policy, {} => no
+    // policy (no redaction), undefined => no trace row (fall back to receiver default).
+    it('returns the stored metadata object when the trace row has metadata', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([
+          { metadata: { otlpHttpRedactAttributes: ['authorization'] } },
+        ]);
+
+      await expect(traceStore.getTraceMetadata('trace-1')).resolves.toEqual({
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+    });
+
+    it('returns an empty object (not undefined) when the row exists but metadata is null', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([{ metadata: null }]);
+
+      await expect(traceStore.getTraceMetadata('trace-2')).resolves.toEqual({});
+    });
+
+    it('returns undefined when no trace row exists', async () => {
+      mockDb.select().from().where().limit.mockResolvedValueOnce([]);
+
+      await expect(traceStore.getTraceMetadata('trace-3')).resolves.toBeUndefined();
+    });
+  });
+
   describe('addSpans', () => {
     it('should add spans to an existing trace', async () => {
       // Mock trace exists check

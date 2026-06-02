@@ -4750,7 +4750,7 @@ class Evaluator {
 
     let evaluationError: unknown;
     try {
-      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite);
+      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.evalRecord.id);
 
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
@@ -4789,7 +4789,7 @@ class Evaluator {
           logger.debug('[Evaluator] Waiting for span exports to complete...');
           await sleep(3000);
         }
-        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired);
+        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.evalRecord.id);
 
         // Clean up Python worker pools to prevent resource leaks
         await providerRegistry.shutdownAll();

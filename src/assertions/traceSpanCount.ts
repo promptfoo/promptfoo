@@ -1,4 +1,5 @@
-import { assertFiniteNonNegativeInteger, assertValidRange, matchesPattern } from './traceUtils';
+import { traceSpanCountBoundsError } from '../util/traceAssertionConfig';
+import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -24,16 +25,10 @@ export const handleTraceSpanCount = ({
   }
 
   const { pattern, min, max } = value;
-  if (min === undefined && max === undefined) {
-    throw new Error('trace-span-count assertion must include a min or max property');
+  const boundsError = traceSpanCountBoundsError(value);
+  if (boundsError) {
+    throw new Error(boundsError);
   }
-  if (min !== undefined) {
-    assertFiniteNonNegativeInteger(min, 'trace-span-count assertion min');
-  }
-  if (max !== undefined) {
-    assertFiniteNonNegativeInteger(max, 'trace-span-count assertion max');
-  }
-  assertValidRange(min, max, 'trace-span-count assertion');
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Count spans matching the pattern

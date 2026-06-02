@@ -662,6 +662,127 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('redacts span name and statusMessage that echo a redacted attribute value', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'e'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      // Both name and status message echo the value of the redacted attribute.
+                      name: 'Bearer secret-token',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      status: { code: 2, message: 'Bearer secret-token' },
+                      attributes: [
+                        { key: 'authorization', value: { stringValue: 'Bearer secret-token' } },
+                        { key: 'safe', value: { stringValue: 'visible' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        [
+          expect.objectContaining({
+            name: '[REDACTED]',
+            statusMessage: '[REDACTED]',
+            attributes: expect.objectContaining({
+              authorization: '[REDACTED]',
+              safe: 'visible',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('replaces a matched key wholesale when its value is a nested object or array', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['secret'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'f'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        {
+                          key: 'secret.config',
+                          value: {
+                            kvlistValue: {
+                              values: [{ key: 'k', value: { stringValue: 'v' } }],
+                            },
+                          },
+                        },
+                        {
+                          key: 'secret.list',
+                          value: {
+                            arrayValue: {
+                              values: [{ stringValue: 'one' }, { stringValue: 'two' }],
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'ffffffffffffffffffffffffffffffff',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'secret.config': '[REDACTED]',
+              'secret.list': '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
     it('uses trace-specific redaction config instead of the receiver default', async () => {
       const redactingReceiver = new OTLPReceiver({
         acceptFormats: ['json'],
@@ -870,6 +991,182 @@ describe('OTLPReceiver', () => {
         metadata: { commandToolNames: ['bash', 'shell'] },
       });
     });
+
+    it('uses registered evaluation policy for receiver-created traces on a shared receiver', async () => {
+      const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({
+        evaluationId: 'registered-eval',
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'f'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'registered-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'registered-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'ffffffffffffffffffffffffffffffff',
+        evaluationId: 'registered-eval',
+        testCaseId: 'registered-test',
+        metadata: {
+          commandToolNames: ['bash'],
+          otlpHttpRedactAttributes: ['authorization'],
+        },
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'ffffffffffffffffffffffffffffffff',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('drops a registered evaluation policy after deregisterTracePolicy', async () => {
+      // Once an evaluation finishes, its policy is removed so the shared receiver's policy
+      // map can't grow unbounded; a later trace for that eval id falls back to the receiver
+      // default (here: no redaction), proving the policy is gone.
+      const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({
+        evaluationId: 'gc-eval',
+        redactAttributes: ['authorization'],
+      });
+      sharedReceiver.deregisterTracePolicy('gc-eval');
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '1'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'gc-eval' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '11111111111111111111111111111111',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer hidden',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('uses an empty registered evaluation policy instead of older startup defaults', async () => {
+      const sharedReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({ evaluationId: 'no-redaction-eval' });
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '1'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'no-redaction-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'no-redaction-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: '11111111111111111111111111111111',
+        evaluationId: 'no-redaction-eval',
+        testCaseId: 'no-redaction-test',
+        metadata: undefined,
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '11111111111111111111111111111111',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer hidden',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
   });
 
   describe('Singleton startup recovery', () => {
@@ -887,6 +1184,25 @@ describe('OTLPReceiver', () => {
         expect(listenSpy.mock.instances[1]).not.toBe(listenSpy.mock.instances[0]);
       } finally {
         await stopOTLPReceiver();
+      }
+    });
+
+    it('rejects (instead of spuriously resolving) when the port is already in use', async () => {
+      // Regression: Express invokes the listen callback even on EADDRINUSE (with
+      // server.listening === false), which previously resolved listen() successfully and
+      // defeated `failOnReceiverStartFailure`. listen() must reject on bind failure.
+      const http = await import('node:http');
+      const blocker = http.createServer();
+      await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()));
+      const port = (blocker.address() as { port: number }).port;
+      try {
+        const busyReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+        (busyReceiver as any).traceStore = mockTraceStore;
+        await expect(busyReceiver.listen(port, '127.0.0.1')).rejects.toThrow(
+          /EADDRINUSE|already in use/i,
+        );
+      } finally {
+        await new Promise<void>((resolve) => blocker.close(() => resolve()));
       }
     });
   });

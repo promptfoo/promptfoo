@@ -355,13 +355,47 @@ function findUniqueStoredArrayItemMatch(
   return matched ? { matched: true, index: matchedIndex, value: matchedValue } : { matched: false };
 }
 
-function hasSharedStableArrayItemIdentity(value: unknown, storedValue: unknown): boolean {
+type StableIdentityPath = Array<string | number>;
+
+function getValueAtPath(value: unknown, path: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (typeof key === 'number') {
+      if (!Array.isArray(current)) {
+        return undefined;
+      }
+      current = current[key];
+      continue;
+    }
+
+    if (
+      !current ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      isClassInstance(current)
+    ) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function hasUniqueSharedStableArrayItemIdentity(
+  value: unknown,
+  storedValue: unknown,
+  storedItems: readonly unknown[],
+  path: StableIdentityPath = [],
+): boolean {
   if (typeof value === 'string' || typeof storedValue === 'string') {
-    return (
+    const matchesStoredValue =
       typeof value === 'string' &&
       typeof storedValue === 'string' &&
       value === storedValue &&
-      value === redactAzureBlobSasToken(value)
+      value === redactAzureBlobSasToken(value);
+    return (
+      matchesStoredValue &&
+      storedItems.filter((item) => Object.is(getValueAtPath(item, path), value)).length === 1
     );
   }
 
@@ -369,7 +403,12 @@ function hasSharedStableArrayItemIdentity(value: unknown, storedValue: unknown):
     return (
       Array.isArray(value) &&
       Array.isArray(storedValue) &&
-      value.some((item, index) => hasSharedStableArrayItemIdentity(item, storedValue[index]))
+      value.some((item, index) =>
+        hasUniqueSharedStableArrayItemIdentity(item, storedValue[index], storedItems, [
+          ...path,
+          index,
+        ]),
+      )
     );
   }
 
@@ -383,11 +422,37 @@ function hasSharedStableArrayItemIdentity(value: unknown, storedValue: unknown):
   ) {
     const storedObject = storedValue as Record<string, unknown>;
     return Object.entries(value).some(([key, item]) =>
-      hasSharedStableArrayItemIdentity(item, storedObject[key]),
+      hasUniqueSharedStableArrayItemIdentity(item, storedObject[key], storedItems, [...path, key]),
     );
   }
 
-  return value != null && Object.is(value, storedValue);
+  return (
+    value != null &&
+    Object.is(value, storedValue) &&
+    storedItems.filter((item) => Object.is(getValueAtPath(item, path), value)).length === 1
+  );
+}
+
+function findUniqueStoredArrayItemIdentityMatch(
+  value: unknown,
+  storedItems: readonly unknown[],
+): StoredArrayItemMatch {
+  let matchedValue: unknown;
+  let matchedIndex = -1;
+  let matched = false;
+  for (const [index, storedItem] of storedItems.entries()) {
+    if (!hasUniqueSharedStableArrayItemIdentity(value, storedItem, storedItems)) {
+      continue;
+    }
+    if (matched) {
+      return { matched: false };
+    }
+    matched = true;
+    matchedIndex = index;
+    matchedValue = storedItem;
+  }
+
+  return matched ? { matched: true, index: matchedIndex, value: matchedValue } : { matched: false };
 }
 
 function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
@@ -405,23 +470,33 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
     const structuralMatches = value.map((item) =>
       findUniqueStoredArrayItemMatch(item, storedItems),
     );
-    const structurallyMatchedStoredIndexes = new Set(
-      structuralMatches.flatMap((match) => (match.matched ? [match.index] : [])),
+    const identityMatches = value.map((item, index) =>
+      structuralMatches[index].matched
+        ? ({ matched: false } as const)
+        : findUniqueStoredArrayItemIdentityMatch(item, storedItems),
+    );
+    const matchedStoredIndexes = new Set(
+      [...structuralMatches, ...identityMatches].flatMap((match) =>
+        match.matched ? [match.index] : [],
+      ),
     );
     let restored = false;
     const restoredItems = value.map((item, index) => {
       // Prefer unique structural identity for moved items. Preserve same-index
-      // SAS tokens across unrelated edits unless another item claimed that
-      // stored position. Finally, fall back to unambiguous URI identity.
+      // SAS tokens only when the visible item is unchanged or uniquely identifies
+      // the stored item. Finally, fall back to unambiguous URI identity.
       const structuralMatch = structuralMatches[index];
+      const identityMatch = identityMatches[index];
       const storedItem = storedItems[index];
       const canRestorePositionally =
         storedItem !== undefined &&
-        !structurallyMatchedStoredIndexes.has(index) &&
-        (hasSameLength || hasSharedStableArrayItemIdentity(item, storedItem));
+        hasSameLength &&
+        !matchedStoredIndexes.has(index) &&
+        deepEqual(item, redactAzureBlobSasTokens(storedItem));
+      const preferredMatch = structuralMatch.matched ? structuralMatch : identityMatch;
       const storedItemMatch =
-        structuralMatch.matched || !canRestorePositionally
-          ? structuralMatch
+        preferredMatch.matched || !canRestorePositionally
+          ? preferredMatch
           : { matched: true as const, index, value: storedItem };
       const structuralResult = storedItemMatch.matched
         ? restoreAzureBlobSasTokensWithResult(item, storedItemMatch.value)
