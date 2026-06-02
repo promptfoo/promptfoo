@@ -7,6 +7,7 @@ import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
   ENERGY_PLUGINS,
+  ENERGY_PUC_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
   MULTI_INPUT_VAR,
@@ -1983,6 +1984,9 @@ describe('synthesize', () => {
       expect(testCasePluginIds).toHaveLength(ENERGY_PLUGINS.length);
       ENERGY_PLUGINS.forEach((id) => {
         expect(testCasePluginIds).toContain(id);
+      });
+      ENERGY_PUC_PLUGINS.forEach((id) => {
+        expect(testCasePluginIds).not.toContain(id);
       });
       expect(mockPluginAction).toHaveBeenCalledTimes(ENERGY_PLUGINS.length);
       expect(mockPluginAction).toHaveBeenCalledWith(

@@ -11,6 +11,7 @@ import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  ENERGY_PUC_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   REMOTE_ONLY_PLUGIN_IDS,
@@ -659,9 +660,26 @@ function createRemotePlugin<T extends PluginConfig>(
     },
   };
 }
+const energyPucPluginIds = new Set<string>(ENERGY_PUC_PLUGINS);
 const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
-  (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
+  (id) =>
+    id !== 'indirect-prompt-injection' && id !== 'rag-poisoning' && !energyPucPluginIds.has(id),
 ).map((key) => createRemotePlugin(key));
+
+remotePlugins.push(
+  ...ENERGY_PUC_PLUGINS.map((key) =>
+    createRemotePlugin(key, (config: PluginConfig) => {
+      invariant(
+        typeof config.market === 'string' && config.market.trim() !== '',
+        `${key} plugin requires \`config.market\` to be set to a regulator market.`,
+      );
+      invariant(
+        typeof config.marketActorType === 'string' && config.marketActorType.trim() !== '',
+        `${key} plugin requires \`config.marketActorType\` to be set.`,
+      );
+    }),
+  ),
+);
 
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(

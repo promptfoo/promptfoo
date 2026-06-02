@@ -158,6 +158,24 @@ describe('Plugin Documentation', () => {
       ).toEqual([]);
     });
 
+    it('should mark Utilities PUC plugin documentation as remote-only', async () => {
+      const pluginsModule = await import(
+        path.join(__dirname, '../../../src/redteam/constants/plugins.ts')
+      );
+      const docsModule = await import(
+        path.join(__dirname, '../../../site/docs/_shared/data/plugins.ts')
+      );
+      const docsByPluginId = new Map<string, { pluginId: string; isRemote?: boolean }>(
+        docsModule.PLUGINS.map(
+          (plugin: { pluginId: string; isRemote?: boolean }) => [plugin.pluginId, plugin] as const,
+        ),
+      );
+
+      for (const pluginId of pluginsModule.ENERGY_PUC_PLUGINS as readonly string[]) {
+        expect(docsByPluginId.get(pluginId)?.isRemote).toBe(true);
+      }
+    });
+
     it('should have plugin constants and documentation data files', async () => {
       const constantsPath = path.join(__dirname, '../../../src/redteam/constants/plugins.ts');
       const docsPath = path.join(__dirname, '../../../site/docs/_shared/data/plugins.ts');

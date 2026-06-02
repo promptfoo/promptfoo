@@ -305,6 +305,28 @@ describe('Plugins - State Management Unit Tests', () => {
       expect(nextButton).toBeEnabled();
     });
 
+    it('should validate every selected Utilities PUC plugin', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            {
+              id: 'energy:puc-offer-eligibility-gate',
+              config: { market: 'ny-dps', marketActorType: 'esco' },
+            },
+            {
+              id: 'energy:puc-medical-baseline-integrity',
+              config: { market: 'ny-dps', marketActorType: 'utility' },
+            },
+          ],
+        },
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+    });
+
     it('should not include plugins without config in pluginConfig', () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: {

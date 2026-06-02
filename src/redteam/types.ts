@@ -92,6 +92,17 @@ export const PluginConfigSchema = z.object({
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),
+  market: z.string().optional(),
+  markets: z.array(z.string()).optional(),
+  marketSelections: z
+    .array(
+      z.object({
+        market: z.string(),
+        marketActorType: z.enum(['utility', 'esco', 'rep', 'supplier', 'cca']).optional(),
+      }),
+    )
+    .optional(),
+  marketActorType: z.enum(['utility', 'esco', 'rep', 'supplier', 'cca']).optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 

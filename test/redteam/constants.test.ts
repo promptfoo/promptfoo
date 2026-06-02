@@ -9,10 +9,13 @@ import {
   categoryDescriptions,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
+  ENERGY_PLUGINS,
+  ENERGY_PUC_PLUGINS,
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
+  PLUGIN_CATEGORIES,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   REMOTE_ONLY_PLUGIN_IDS,
@@ -185,6 +188,18 @@ describe('constants', () => {
     expect(CONFIG_REQUIRED_PLUGINS).toContain('policy');
     expect(CONFIG_REQUIRED_PLUGINS).toContain('intent');
     expect(Array.isArray(CONFIG_REQUIRED_PLUGINS)).toBe(true);
+  });
+
+  it('Utilities PUC plugins should require direct configuration without joining the energy collection', () => {
+    ENERGY_PUC_PLUGINS.forEach((plugin) => {
+      expect(ENERGY_PLUGINS).not.toContain(plugin);
+      expect(ADDITIONAL_PLUGINS).not.toContain(plugin);
+      expect(CONFIG_REQUIRED_PLUGINS).toContain(plugin);
+      expect(ALL_PLUGINS).toContain(plugin);
+      expect(PLUGIN_CATEGORIES.energy).toContain(plugin);
+      expect(REMOTE_ONLY_PLUGIN_IDS).toContain(plugin);
+      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toContain(plugin);
+    });
   });
 
   describe('categoryDescriptions', () => {

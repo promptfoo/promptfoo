@@ -1,4 +1,4 @@
-import { ENERGY_PLUGINS } from '@promptfoo/redteam/constants';
+import { ENERGY_PLUGINS, ENERGY_PUC_PLUGINS } from '@promptfoo/redteam/constants';
 import { describe, expect, it } from 'vitest';
 import { DOMAIN_SPECIFIC_PLUGINS, getPluginSuite, VERTICAL_SUITES } from './verticalSuites';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -18,9 +18,13 @@ describe('VERTICAL_SUITES', () => {
   it('should have energy suite with every canonical energy plugin', () => {
     const energySuite = VERTICAL_SUITES.find((suite) => suite.id === 'energy');
     const groupedPlugins = energySuite?.pluginGroups.flatMap((group) => group.plugins) || [];
+    const expectedPlugins = [...ENERGY_PLUGINS, ...ENERGY_PUC_PLUGINS];
 
-    expect(energySuite?.plugins).toEqual([...ENERGY_PLUGINS]);
-    expect(new Set(groupedPlugins)).toEqual(new Set(ENERGY_PLUGINS));
+    expect(energySuite?.plugins).toEqual(expectedPlugins);
+    expect(new Set(groupedPlugins)).toEqual(new Set(expectedPlugins));
+    expect(
+      energySuite?.pluginGroups.find((group) => group.name === 'Utilities PUC Compliance')?.plugins,
+    ).toEqual([...ENERGY_PUC_PLUGINS]);
   });
 
   it('should have telecom suite with correct structure', () => {
@@ -165,7 +169,7 @@ describe('DOMAIN_SPECIFIC_PLUGINS', () => {
   });
 
   it('should include energy plugins', () => {
-    ENERGY_PLUGINS.forEach((plugin) => {
+    [...ENERGY_PLUGINS, ...ENERGY_PUC_PLUGINS].forEach((plugin) => {
       expect(DOMAIN_SPECIFIC_PLUGINS).toContain(plugin);
     });
   });

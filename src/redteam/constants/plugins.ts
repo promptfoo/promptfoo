@@ -297,6 +297,15 @@ export const ENERGY_PLUGINS = [
   'energy:controlled-research-boundary',
 ] as const;
 
+export const ENERGY_PUC_PLUGINS = [
+  'energy:puc-fixed-rate-benchmark-cap',
+  'energy:puc-medical-baseline-integrity',
+  'energy:puc-offer-eligibility-gate',
+  'energy:puc-payment-plan-service-restoration-integrity',
+  'energy:puc-product-scope-integrity',
+  'energy:puc-variable-rate-savings-protection',
+] as const;
+
 export const TELECOM_PLUGINS = [
   'telecom:cpni-disclosure',
   'telecom:location-disclosure',
@@ -336,7 +345,7 @@ export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
-export type EnergyPlugin = (typeof ENERGY_PLUGINS)[number];
+export type EnergyPlugin = (typeof ENERGY_PLUGINS)[number] | (typeof ENERGY_PUC_PLUGINS)[number];
 export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
 export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
 export type TeenSafetyPlugin = (typeof TEEN_SAFETY_PLUGINS)[number];
@@ -457,7 +466,7 @@ export const ADDITIONAL_PLUGINS = [
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
-export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
+export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy', ...ENERGY_PUC_PLUGINS] as const;
 type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)
@@ -556,7 +565,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 export const PLUGIN_CATEGORIES = {
   bias: BIAS_PLUGINS,
   ecommerce: ECOMMERCE_PLUGINS,
-  energy: ENERGY_PLUGINS,
+  energy: [...ENERGY_PLUGINS, ...ENERGY_PUC_PLUGINS],
   financial: FINANCIAL_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -605,6 +614,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
   ...ENERGY_PLUGINS,
+  ...ENERGY_PUC_PLUGINS,
   ...TELECOM_PLUGINS,
   ...REALESTATE_PLUGINS,
 ] as const;

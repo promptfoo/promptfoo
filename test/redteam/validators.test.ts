@@ -14,6 +14,7 @@ import {
   type BasePlugin,
   COLLECTIONS,
   ENERGY_PLUGINS,
+  ENERGY_PUC_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -1092,6 +1093,9 @@ describe('RedteamConfigSchema transform', () => {
     );
     expect(result.plugins).toHaveLength(ENERGY_PLUGINS.length);
     expect(result.plugins?.every((plugin) => plugin.numTests === 3)).toBe(true);
+    ENERGY_PUC_PLUGINS.forEach((pluginId) => {
+      expect(result.plugins?.map((plugin) => plugin.id)).not.toContain(pluginId);
+    });
   });
 
   it('should expand coding-agent collections correctly', () => {

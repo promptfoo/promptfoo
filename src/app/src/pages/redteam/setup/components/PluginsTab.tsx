@@ -48,6 +48,7 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { useSearchParams } from 'react-router-dom';
 import { requiresPluginConfig } from '../constants';
+import { isEnergyPucPlugin, isValidEnergyPucConfig } from './energyPucConfig';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -236,6 +237,10 @@ export default function PluginsTab({
       const config = pluginConfig[plugin];
       if (!config || Object.keys(config).length === 0) {
         return false;
+      }
+
+      if (isEnergyPucPlugin(plugin)) {
+        return isValidEnergyPucConfig(plugin, config);
       }
 
       for (const key in config) {

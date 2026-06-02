@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -10,10 +11,27 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import {
+  ENERGY_PUC_MARKETS,
+  ENERGY_PUC_PLUGINS,
+  type EnergyPucMarketActorType,
+  getAllowedEnergyPucActorTypes,
+  getDefaultEnergyPucActorType,
+  getEnergyPucActorTypeLabel,
+  getEnergyPucMarketSelections,
+  normalizeEnergyPucMarketSelections,
+} from './energyPucConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -38,13 +56,13 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Update localConfig when config prop changes
+  // Reset local edits when opening the dialog or switching plugins.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+    if (open && plugin) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -89,6 +107,45 @@ export default function PluginConfigDialog({
 
   const hasEmptyArrayItems = (array: string[] | undefined) => {
     return array?.some((item) => item.trim() === '') ?? false;
+  };
+
+  const handleMarketToggle = (market: string, checked: boolean) => {
+    setLocalConfig((prev) => {
+      const selections = getEnergyPucMarketSelections(prev as Record<string, unknown>);
+      const marketSelections = checked
+        ? [
+            ...selections.filter((selection) => selection.market !== market),
+            {
+              market,
+              marketActorType: plugin ? getDefaultEnergyPucActorType(plugin, market) : undefined,
+            },
+          ]
+        : selections.filter((selection) => selection.market !== market);
+
+      return {
+        ...prev,
+        markets: marketSelections.map((selection) => selection.market),
+        marketSelections,
+      };
+    });
+  };
+
+  const handleMarketActorTypeChange = (
+    market: string,
+    marketActorType: EnergyPucMarketActorType,
+  ) => {
+    setLocalConfig((prev) => {
+      const marketSelections = getEnergyPucMarketSelections(prev as Record<string, unknown>).map(
+        (selection) =>
+          selection.market === market ? { ...selection, marketActorType } : selection,
+      );
+
+      return {
+        ...prev,
+        markets: marketSelections.map((selection) => selection.market),
+        marketSelections,
+      };
+    });
   };
 
   const renderConfigInputs = () => {
@@ -203,6 +260,108 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'energy:puc-fixed-rate-benchmark-cap':
+      case 'energy:puc-medical-baseline-integrity':
+      case 'energy:puc-offer-eligibility-gate':
+      case 'energy:puc-payment-plan-service-restoration-integrity':
+      case 'energy:puc-product-scope-integrity':
+      case 'energy:puc-variable-rate-savings-protection': {
+        const selectedMarketSelections = normalizeEnergyPucMarketSelections(
+          plugin,
+          localConfig as Record<string, unknown>,
+        );
+        const selectedMarketActors = new Map<string, EnergyPucMarketActorType>(
+          selectedMarketSelections.flatMap((selection) =>
+            selection.marketActorType
+              ? [[selection.market, selection.marketActorType] as const]
+              : [],
+          ),
+        );
+        const selectedMarkets = new Set(
+          selectedMarketSelections.map((selection) => selection.market),
+        );
+        const supportedMarkets = ENERGY_PUC_MARKETS.filter(
+          (market) => getAllowedEnergyPucActorTypes(plugin, market.value).length > 0,
+        );
+        specificConfig = (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Configure the Utilities PUC market profile this plugin should test against. The saved
+              config will materialize one plugin entry per selected market so reporting stays
+              market-specific. Markets are regulator packs; the ISO / RTO footprint is shown only
+              for orientation.
+            </p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Markets / Jurisdictions</p>
+              <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+                {supportedMarkets.map((market) => {
+                  const actorTypes = getAllowedEnergyPucActorTypes(plugin, market.value);
+                  const actorType = selectedMarketActors.get(market.value);
+                  const actorTypeOptions =
+                    actorType && !actorTypes.includes(actorType)
+                      ? [actorType, ...actorTypes]
+                      : actorTypes;
+                  const isSelected = selectedMarkets.has(market.value);
+
+                  return (
+                    <div
+                      key={market.value}
+                      className="space-y-2 rounded-md border border-border/70 p-3"
+                    >
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={(checked: boolean | 'indeterminate') =>
+                            handleMarketToggle(market.value, checked === true)
+                          }
+                        />
+                        <span>
+                          {market.label} · {market.isoFootprintLabel}
+                        </span>
+                      </label>
+                      {isSelected && (
+                        <div className="ml-6 space-y-2">
+                          <Label htmlFor={`energy-puc-market-actor-type-${market.value}`}>
+                            Market Actor Type
+                          </Label>
+                          <Select
+                            value={actorType}
+                            onValueChange={(marketActorType) => {
+                              const actorType = actorTypes.find(
+                                (option) => option === marketActorType,
+                              );
+
+                              if (actorType) {
+                                handleMarketActorTypeChange(market.value, actorType);
+                              }
+                            }}
+                          >
+                            <SelectTrigger id={`energy-puc-market-actor-type-${market.value}`}>
+                              <SelectValue placeholder="Select actor type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {actorTypeOptions.map((marketActorType) => (
+                                <SelectItem key={marketActorType} value={marketActorType}>
+                                  {getEnergyPucActorTypeLabel(marketActorType)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Each selected jurisdiction keeps its own actor type and materializes into its own
+                plugin entry.
+              </p>
+            </div>
+          </div>
+        );
+        break;
+      }
       case 'bfla':
       case 'bola':
       case 'ssrf':
@@ -323,6 +482,17 @@ export default function PluginConfigDialog({
   const handleSave = () => {
     if (plugin && localConfig) {
       const configToSave = { ...localConfig };
+
+      if (ENERGY_PUC_PLUGINS.has(plugin)) {
+        const marketSelections = normalizeEnergyPucMarketSelections(
+          plugin,
+          configToSave as Record<string, unknown>,
+        );
+        configToSave.markets = marketSelections.map((selection) => selection.market);
+        (configToSave as Record<string, unknown>).marketSelections = marketSelections;
+        delete configToSave.market;
+        delete configToSave.marketActorType;
+      }
 
       // Remove empty graderGuidance
       if (!configToSave.graderGuidance || (configToSave.graderGuidance as string).trim() === '') {

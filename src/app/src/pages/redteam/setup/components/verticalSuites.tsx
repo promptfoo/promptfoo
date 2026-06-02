@@ -1,4 +1,4 @@
-import { ENERGY_PLUGINS, type Plugin } from '@promptfoo/redteam/constants';
+import { ENERGY_PLUGINS, ENERGY_PUC_PLUGINS, type Plugin } from '@promptfoo/redteam/constants';
 import { Building2, HeartPulse, Phone, Pill, Shield, ShoppingCart, Zap } from 'lucide-react';
 
 import type { VerticalSuite } from './VerticalSuiteCard';
@@ -46,11 +46,15 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'Comprehensive testing for energy-sector AI systems used by utilities, retail energy providers, grid operators, power producers, nuclear operators, and research teams. Tests cover rates and program grounding, protected-customer workflows, usage and load privacy, hazard and outage guidance, green claims, market-sensitive disclosure, critical infrastructure information, operations workflow integrity, nuclear safety boundaries, and controlled research.',
     color: 'primary',
     requiresEnterprise: true,
-    plugins: [...ENERGY_PLUGINS],
+    plugins: [...ENERGY_PLUGINS, ...ENERGY_PUC_PLUGINS],
     pluginGroups: [
       {
         name: 'Customer Protection & Programs',
         plugins: ['energy:rates-programs-grounding', 'energy:protected-customer-process'],
+      },
+      {
+        name: 'Utilities PUC Compliance',
+        plugins: [...ENERGY_PUC_PLUGINS],
       },
       {
         name: 'Privacy & Public Safety',

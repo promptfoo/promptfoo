@@ -15,10 +15,18 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
+import { requiresPluginConfig } from '../constants';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
+import {
+  getEnergyPucMarketSelections,
+  isEnergyPucPlugin,
+  isValidEnergyPucConfig,
+  mergeEnergyPucMarketSelections,
+  normalizeEnergyPucMarketSelections,
+} from './energyPucConfig';
 import PageWrapper from './PageWrapper';
 import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
@@ -31,7 +39,50 @@ interface PluginsProps {
   onBack: () => void;
 }
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+const materializeEnergyPucEntries = (
+  plugin: string,
+  config: Partial<PluginConfig>,
+): Config['plugins'] => {
+  const selections = normalizeEnergyPucMarketSelections(
+    plugin as Plugin,
+    config as Record<string, unknown>,
+  );
+  const baseConfig = { ...config } as Record<string, unknown>;
+  delete baseConfig.market;
+  delete baseConfig.markets;
+  delete baseConfig.marketActorType;
+  delete baseConfig.marketSelections;
+
+  if (selections.length === 0) {
+    return [{ id: plugin, config: baseConfig as PluginConfig }];
+  }
+
+  return selections.map(({ market, marketActorType }) => ({
+    id: plugin,
+    config: {
+      ...baseConfig,
+      market,
+      ...(marketActorType && { marketActorType }),
+    } as PluginConfig,
+  }));
+};
+
+const isPluginConfigValid = (plugin: Plugin, config?: LocalPluginConfig[string]): boolean => {
+  if (!config || Object.keys(config).length === 0) {
+    return false;
+  }
+
+  if (isEnergyPucPlugin(plugin)) {
+    return isValidEnergyPucConfig(plugin, config);
+  }
+
+  return Object.values(config).every((value) => {
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    return typeof value !== 'string' || value.trim() !== '';
+  });
+};
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
@@ -130,7 +181,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       if (typeof plugin === 'object' && plugin.config) {
         // Filter out intent and policy plugins - they don't use this config
         if (plugin.id !== 'intent' && plugin.id !== 'policy') {
-          configs[plugin.id] = plugin.config;
+          if (isEnergyPucPlugin(plugin.id)) {
+            const existingConfig = configs[plugin.id];
+            const marketSelections = mergeEnergyPucMarketSelections(
+              getEnergyPucMarketSelections(existingConfig),
+              getEnergyPucMarketSelections(plugin.config),
+            );
+
+            configs[plugin.id] = {
+              ...existingConfig,
+              ...plugin.config,
+              markets: marketSelections.map((selection) => selection.market),
+              marketSelections,
+            };
+            delete configs[plugin.id].market;
+            delete configs[plugin.id].marketActorType;
+          } else {
+            configs[plugin.id] = plugin.config;
+          }
         }
       }
       return configs;
@@ -206,13 +274,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       );
 
       // Create new plugins array, preserving configs from existing plugins
-      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map((plugin) => {
-        const existing = config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin);
-        if (existing && typeof existing === 'object' && existing.config) {
-          return existing; // Preserve existing config
-        }
-        return plugin;
-      });
+      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).flatMap(
+        (plugin) => {
+          const existing = config.plugins.filter(
+            (p) => (typeof p === 'string' ? p : p.id) === plugin,
+          );
+          if (existing.length > 0) {
+            return existing;
+          }
+          return [plugin];
+        },
+      );
 
       // Combine all plugins and update store
       const allPlugins = [...newPluginsArray, ...policyPlugins, ...intentPlugins];
@@ -223,6 +295,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
+      if (isEnergyPucPlugin(plugin)) {
+        const retainedPlugins = config.plugins.filter((p) => {
+          const id = typeof p === 'string' ? p : p.id;
+          return id !== plugin;
+        });
+        updatePlugins([...retainedPlugins, ...materializeEnergyPucEntries(plugin, newConfig)]);
+        return;
+      }
+
       // Build new plugins array with updated config
       const newPlugins = config.plugins.map((p) => {
         const id = typeof p === 'string' ? p : p.id;
@@ -243,20 +324,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isConfigValid = useCallback(() => {
     for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-        const config = pluginConfig[plugin];
-        if (!config || Object.keys(config).length === 0) {
-          return false;
-        }
-        for (const key in config) {
-          const value = config[key as keyof PluginConfig];
-          if (Array.isArray(value) && value.length === 0) {
-            return false;
-          }
-          if (typeof value === 'string' && value.trim() === '') {
-            return false;
-          }
-        }
+      if (requiresPluginConfig(plugin) && !isPluginConfigValid(plugin, pluginConfig[plugin])) {
+        return false;
       }
     }
     return true;
@@ -293,24 +362,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+      if (!requiresPluginConfig(plugin)) {
         return true;
       }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
+      return isPluginConfigValid(plugin, pluginConfig[plugin]);
     },
     [pluginConfig],
   );
@@ -322,7 +377,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
     if (!isConfigValid()) {
       const missingConfigPlugins = Array.from(selectedPlugins).filter(
-        (plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin),
+        (plugin) => requiresPluginConfig(plugin) && !isPluginConfigured(plugin),
       );
 
       if (missingConfigPlugins.length === 1) {
