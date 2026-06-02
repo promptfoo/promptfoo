@@ -1,5 +1,6 @@
 // provider-simple-traced.js
-// RAG/Agent provider with intricate OpenTelemetry tracing
+// RAG/Agent provider with nested OpenTelemetry tracing for the
+// site/docs/guides/trace-based-agent-evals.md guide.
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
@@ -8,8 +9,13 @@ const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use 
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
-// Configure OTLP exporter
-const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
+// Configure OTLP exporter. The generic endpoint is a base URL; the trace-specific
+// endpoint is already the full export URL.
+const exporterUrl =
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
+  (process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/+$/, '')}/v1/traces`
+    : 'http://127.0.0.1:4318/v1/traces');
 console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
 const exporter = new OTLPTraceExporter({
   url: exporterUrl,
@@ -119,7 +125,7 @@ class SimpleTracedProvider {
 
   async _tracedCallApi(prompt, promptfooContext) {
     // Use the improved runInSpan for the main workflow
-    return runInSpan(
+    const result = await runInSpan(
       'rag_agent_workflow',
       {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
@@ -321,15 +327,19 @@ class SimpleTracedProvider {
             const generationDelay = 750 + Math.random() * 200;
             await new Promise((resolve) => setTimeout(resolve, generationDelay));
 
+            // Body is hardcoded to quantum-computing content so the deterministic
+            // `contains` assertion in promptfooconfig.trace-guide.yaml stays stable.
+            // If you reuse this provider with a different `topic`, replace this
+            // string with topic-aware content before relying on output assertions.
             response = {
               text:
                 `Based on my analysis of ${documents.length} technical documents, here's a comprehensive explanation:\n\n` +
-                `${userIntent.entities.join(' and ')} are fascinating topics in computer science. ` +
-                `After analyzing multiple sources including arxiv papers and textbooks, I can provide the following insights:\n\n` +
-                `1. Core Concepts: The fundamental principles involve...\n` +
-                `2. Key Differences: When comparing these technologies...\n` +
-                `3. Practical Applications: In real-world scenarios...\n\n` +
-                `This synthesis is based on recent research and established knowledge in the field.`,
+                `Quantum computing uses qubits, which can represent richer probability states than classical bits before measurement. ` +
+                `Classical computing stores information as definite 0 or 1 values, while quantum algorithms use superposition, interference, and entanglement to amplify useful answers for certain problems.\n\n` +
+                `1. Core Concepts: Qubits, gates, measurement, and entanglement define the computation model.\n` +
+                `2. Key Differences: Classical computers are deterministic at the bit level; quantum computers are probabilistic and require repeated measurement.\n` +
+                `3. Practical Applications: The clearest near-term uses are simulation, optimization research, and cryptography analysis.\n\n` +
+                `Citations: ${documents.map((d) => d.title).join(', ')}.`,
               citations: documents.map((d) => ({
                 id: d.id,
                 title: d.title,
@@ -369,15 +379,6 @@ class SimpleTracedProvider {
           reasoning_steps: 3,
         });
 
-        // Force flush to ensure spans are sent
-        try {
-          console.log('[Provider] Flushing spans...');
-          await spanProcessor.forceFlush();
-          console.log('[Provider] Spans exported successfully');
-        } catch (error) {
-          console.error('[Provider] Failed to flush spans:', error.message);
-        }
-
         return {
           output: response.text,
           tokenUsage: {
@@ -393,6 +394,17 @@ class SimpleTracedProvider {
         };
       },
     );
+
+    // Force flush after the root span has ended so parent and child spans are exported.
+    try {
+      console.log('[Provider] Flushing spans...');
+      await spanProcessor.forceFlush();
+      console.log('[Provider] Spans exported successfully');
+    } catch (error) {
+      console.error('[Provider] Failed to flush spans:', error.message);
+    }
+
+    return result;
   }
 
   async _untracedCallApi(prompt, promptfooContext) {

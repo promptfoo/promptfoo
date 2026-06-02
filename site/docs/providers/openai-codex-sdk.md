@@ -33,7 +33,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                         |
 | Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                   |
-| Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                 |
+| Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of successful commands that reference `SKILL.md` paths, not a first-class SDK skill event.                                                                                                                                                                                                                             |
 | Multi-turn thread persistence      | Partial    | `persist_threads` pools by prompt template + config, not by rendered prompt values. `deep_tracing` disables thread persistence.                                                                                                                                                                                                                                   |
 | Embeddings/moderation/image APIs   | No         | Use the standard `openai:*` providers for those API surfaces.                                                                                                                                                                                                                                                                                                     |
 | Live partial-token streaming       | No         | `enable_streaming` is used to aggregate Codex events and emit traces; promptfoo still receives the final response after the turn completes.                                                                                                                                                                                                                       |
@@ -374,7 +374,71 @@ When streaming is enabled, the provider processes events like `item.completed` a
 
 ## Tracing and Observability
 
-The Codex SDK provider supports two levels of tracing:
+The Codex SDK provider can expose three layers of evidence for each Codex turn:
+
+1. A normal Promptfoo GenAI span for the whole provider call when `tracing.enabled: true`
+2. Provider-created Codex item spans when `enable_streaming: true`
+3. Native Codex CLI/OpenTelemetry spans when `deep_tracing: true`
+
+Use the first layer for latency, token usage, session IDs, and final output. Add streaming mode when you want to see the steps Codex reported through the SDK, such as shell commands, MCP calls, web searches, file changes, reasoning items, and agent messages. Add deep tracing only when you also want the Codex CLI process to export its own OTEL telemetry into Promptfoo's receiver.
+
+Open an eval result in the web UI, then switch to the **Traces** tab in the details panel to inspect the spans for that turn. Within the Traces tab, the timeline viewer shows Codex item spans, CLI spans, and custom provider spans together:
+
+![Promptfoo Traces tab showing nested operation spans in the timeline viewer](/img/docs/tracing/trace-guide-timeline.png)
+
+### Recommended Configuration
+
+Start with streaming mode. It gives Promptfoo normalized spans for trajectory assertions and works even if the Codex CLI does not emit native OTEL spans:
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      host: '127.0.0.1'
+      port: 4318
+      acceptFormats: ['json']
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.4
+      sandbox_mode: read-only
+      enable_streaming: true
+
+prompts:
+  - 'Inspect this repo and list the files you read before answering.'
+
+tests:
+  - assert:
+      - type: trace-span-count
+        value:
+          pattern: '*'
+          min: 1
+      - type: trajectory:step-count
+        value:
+          type: command
+          min: 1
+```
+
+Then enable `deep_tracing` if you need CLI-side telemetry as child spans of the same Promptfoo trace:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      enable_streaming: true
+      deep_tracing: true
+```
+
+The OTLP receiver defaults to `host: '127.0.0.1'`, which keeps a single-machine eval bound to loopback. Set `host: '0.0.0.0'` (or another interface address) explicitly when a Codex subprocess or external provider must reach the receiver from another host or container.
+
+:::warning
+
+Promptfoo's built-in OTLP receiver is unauthenticated and uses plain HTTP. Do not expose it to the public internet or an untrusted network. For non-loopback use, bind a specific interface when possible, enforce network-level access controls, and route through an authenticated, TLS-terminating collector when traffic crosses a trust boundary. Also configure appropriate `redactAttributes` and avoid placing secrets in trace payloads.
+
+:::
 
 ### Streaming Mode Tracing
 
@@ -396,15 +460,19 @@ providers:
       enable_streaming: true
 ```
 
-With streaming enabled, the provider creates spans for:
+With streaming enabled, the provider calls `thread.runStreamed()` and creates one span per completed Codex stream item. Promptfoo still waits for the turn to finish before returning `response.output`; streaming is used for event visibility, not token-by-token assertions.
 
-- **Provider-level calls** - Overall request timing and token usage
-- **SDK turn markers** - `gen_ai.turn N` spans bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes.
-- **Agent responses** - Individual message completions
-- **Reasoning steps** - Model reasoning captured in span events
-- **Command executions** - Shell commands with exit codes and output
-- **File changes** - File modifications with paths and change types
-- **MCP tool calls** - External tool invocations
+- **Provider call** - Overall request timing, requested model, token usage, session ID, and item counts
+- **SDK turn markers** - Spans named `gen_ai.turn N` bracketing each Codex `turn.started`/`turn.completed` event, with `gen_ai.turn.index` and token usage attributes
+- **Agent messages** - Spans named `agent response` with sanitized `codex.message` attributes
+- **Reasoning items** - Spans named `reasoning` with sanitized reasoning attributes/events
+- **Shell commands** - Spans named `exec <command>` with `codex.command`, `codex.exit_code`, `codex.status`, and sanitized output
+- **File changes** - Spans named `file <change>` with changed file paths and counts
+- **MCP tool calls** - Spans named `mcp <server>/<tool>` with server, tool, input, status, and error attributes
+- **Web searches** - Spans named `search "<query>"` with a sanitized `codex.search.query`
+- **Collaboration events** - Spans for spawn/send/wait items when collaboration mode is enabled
+
+Promptfoo also derives `response.metadata.skillCalls` heuristically from Codex command items that exited successfully and reference a local `.../skills/<name>/SKILL.md` path. Successful execution does not prove the command actually read the file, so keep `enable_streaming: true` on skill evals when you want both trace evidence and `skill-used` assertions.
 
 Every item span (commands, file changes, MCP tools, etc.) is additionally tagged with `gen_ai.turn.index` so callers can correlate it back to the SDK turn that emitted it.
 
@@ -415,7 +483,7 @@ batched into one LLM round-trip.
 
 ### Deep Tracing
 
-To propagate OTEL context into the Codex CLI process and capture CLI-side spans when the installed Codex SDK supports them, enable `deep_tracing`:
+To propagate OTEL context into the Codex CLI process and capture CLI-side spans when the installed Codex SDK/runtime emits them, enable `deep_tracing`:
 
 ```yaml
 providers:
@@ -425,7 +493,17 @@ providers:
       enable_streaming: true
 ```
 
-Deep tracing injects OpenTelemetry environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACEPARENT`, etc.) into the Codex CLI process. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span.
+Deep tracing injects OpenTelemetry environment variables into the Codex CLI process:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` defaults to `http://127.0.0.1:4318`
+- `OTEL_EXPORTER_OTLP_PROTOCOL` defaults to `http/json`
+- `OTEL_SERVICE_NAME` defaults to `codex-cli`
+- `OTEL_TRACES_EXPORTER` defaults to `otlp`
+- `TRACEPARENT` is set from the active Promptfoo provider span when available
+
+Override those values with `cli_env` if you need a different collector, protocol, or service name. When `deep_tracing` is disabled, Promptfoo removes any inherited `TRACEPARENT` from the Codex CLI environment so unrelated parent traces do not accidentally link into eval results.
+
+Promptfoo uses a fresh SDK client/thread per call in deep tracing mode so CLI child spans link to the correct parent request span.
 
 :::warning
 
@@ -444,13 +522,57 @@ That sanitizer applies to spans promptfoo creates from Codex stream events. If `
 
 :::
 
+### Assert on Codex Trajectories
+
+Streaming spans are normalized into trajectory steps. Use command assertions for shell activity, tool assertions for MCP calls, and raw trace assertions for timing or error checks.
+
+```yaml
+tests:
+  - assert:
+      # Did Codex run at least one shell command?
+      - type: trajectory:step-count
+        value:
+          type: command
+          min: 1
+
+      # Did Codex run a command that referenced a particular skill file?
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*token-skill/SKILL.md*'
+          min: 1
+
+      # Did Codex call an MCP tool named search_repo?
+      - type: trajectory:tool-used
+        value: search_repo
+
+      # Did any spans report errors?
+      - type: trace-error-spans
+        value: 0
+
+      # Did the final answer match what the trajectory shows?
+      - type: trajectory:goal-success
+        value: 'Identify the files relevant to the bug and explain the fix without editing files'
+        provider: openai:chat:gpt-5.4-mini
+```
+
+For shell commands, match on `type: command` because Codex command spans are normalized from `codex.command`. For MCP calls, use `trajectory:tool-used` or `trajectory:tool-args-match`; MCP spans are normalized from `mcp <server>/<tool>` plus `codex.mcp.input`.
+
 ### Viewing Traces
 
-Run your eval and view traces in your OTLP-compatible backend (Jaeger, Zipkin, etc.):
+Run the eval with tracing enabled:
 
 ```bash
 promptfoo eval -c promptfooconfig.yaml
 ```
+
+Then inspect traces in any of these places:
+
+- **Promptfoo Web UI**: run `promptfoo view`, open a result details panel, and switch to the **Traces** tab
+- **Exported eval JSON**: add `-o output.json` and inspect each result's trace-backed assertion scores and reasons
+- **External OTLP backend**: configure your app or collector to export there too; for native Codex CLI spans, override `cli_env.OTEL_EXPORTER_OTLP_ENDPOINT`
+
+For general OTEL receiver setup and UI details, see [Tracing](/docs/tracing/). If the trace exists but has no Codex item spans, check `enable_streaming: true`. If deep tracing spans are missing, check that `tracing.otlp.http.enabled: true`, the receiver port matches `OTEL_EXPORTER_OTLP_ENDPOINT`, and `acceptFormats` includes `json`.
 
 ## Git Repository Requirement
 
@@ -647,12 +769,12 @@ providers:
 
 Codex loads [agent skills](https://developers.openai.com/codex/skills) from `.agents/skills/` directories in the `working_dir` hierarchy. Promptfoo does not enable skills via a provider-specific toggle; instead, you point `working_dir` at a repository that already contains the skill files you want Codex to discover.
 
-Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from Codex command text that directly references a local `SKILL.md` file:
+Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from successful Codex command text that references a local `SKILL.md` path. This is path-reference evidence, not proof that Codex read the file:
 
 | Field    | Type   | Description                                           |
 | -------- | ------ | ----------------------------------------------------- |
 | `name`   | string | Skill name inferred from the `SKILL.md` path          |
-| `path`   | string | Skill instruction file path read by Codex             |
+| `path`   | string | Referenced skill instruction file path                |
 | `source` | string | Evidence source. For Codex this is always `heuristic` |
 
 ```yaml title="promptfooconfig.yaml"
@@ -685,7 +807,7 @@ The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional.
 
 `metadata.skillCalls` is a heuristic. The Codex SDK currently does not expose a first-class skill invocation event, so promptfoo infers skill usage from successful shell commands that directly reference `SKILL.md` files under `.agents/skills/<name>/`, absolute `working_dir/.agents/skills/<name>/` paths, the nearest git root's `.agents/skills/<name>/`, `CODEX_HOME/skills/<name>/`, `~/.codex/skills/<name>/`, or `/etc/codex/skills/<name>/`.
 
-Wildcard paths such as `.agents/skills/*/SKILL.md` are ignored, and absolute `.agents/...` paths outside the active repo are ignored. `metadata.attemptedSkillCalls` is emitted only when promptfoo sees more candidate `SKILL.md` paths than confirmed successful reads; because this is heuristic metadata, attempted and successful lists can overlap when a skill path is retried.
+Wildcard paths such as `.agents/skills/*/SKILL.md` are ignored, and absolute `.agents/...` paths outside the active repo are ignored. `metadata.attemptedSkillCalls` is emitted only when promptfoo sees more candidate `SKILL.md` paths than successful command references; because this is heuristic metadata, attempted and successful lists can overlap when a skill path is retried.
 
 :::
 
@@ -693,7 +815,7 @@ For reproducible CI runs, use `cli_env.CODEX_HOME` to point Codex at a project-l
 
 For ChatGPT-login runs, that project-local `CODEX_HOME` must already contain auth state. The checked-in sample fixture intentionally does not, so either run those examples with an API key or set `CODEX_HOME_OVERRIDE="$HOME/.codex"` when you want to reuse your local Codex login.
 
-Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attributes when it detects skill reads. That makes it easier to debug routing in OTEL backends while keeping the main eval assertion surface on `skill-used`.
+Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attributes when it detects skill path references. That makes it easier to debug routing in OTEL backends while keeping the main eval assertion surface on `skill-used`.
 
 To trace what Codex does inside a skill, enable `deep_tracing` on the provider and root-level OTLP tracing in your config. That lets you assert on traced shell commands, MCP tool calls, search steps, and reasoning with the standard trace and trajectory assertions:
 

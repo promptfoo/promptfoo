@@ -12,15 +12,23 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
+The base config intentionally fails its one-second all-span duration ceiling so you can inspect a blocking trace assertion alongside passing checks. Use the trajectory variant below for a fully passing offline run.
+
 To run the trajectory assertion variant from this directory, use:
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache
 ```
 
+To run the complete trace-based agent eval guide variant, including the model-graded `trajectory:goal-success` assertion, set `OPENAI_API_KEY` and run:
+
+```bash
+OPENAI_API_KEY="your-api-key" npx promptfoo@latest eval -c promptfooconfig.trace-guide.yaml --no-cache
+```
+
 ## Environment Variables
 
-This example requires no API keys - it uses a simulated provider that demonstrates tracing patterns.
+The base tracing example requires no API keys - it uses a simulated provider that demonstrates tracing patterns. The `promptfooconfig.trace-guide.yaml` variant requires `OPENAI_API_KEY` for its `trajectory:goal-success` judge assertion.
 
 ## Overview
 
@@ -42,12 +50,13 @@ Promptfoo's OpenTelemetry integration allows you to:
 
 ## Files in This Example
 
-| File                        | Description                                           |
-| --------------------------- | ----------------------------------------------------- |
-| `promptfooconfig.yaml`      | Evaluation config with tracing enabled and assertions |
-| `provider-simple-traced.js` | Simulated RAG provider with comprehensive tracing     |
-| `trace-assertions.js`       | Custom JavaScript assertion for trace validation      |
-| `package.json`              | OpenTelemetry dependencies (v2.x API)                 |
+| File                               | Description                                           |
+| ---------------------------------- | ----------------------------------------------------- |
+| `promptfooconfig.yaml`             | Evaluation config with tracing enabled and assertions |
+| `provider-simple-traced.js`        | Simulated RAG provider with comprehensive tracing     |
+| `promptfooconfig.trace-guide.yaml` | Complete trace and trajectory assertion guide config  |
+| `trace-assertions.js`              | Custom JavaScript assertion for trace validation      |
+| `package.json`                     | OpenTelemetry dependencies (v2.x API)                 |
 
 ## Tracing Configuration
 
@@ -60,7 +69,7 @@ tracing:
     http:
       enabled: true
       port: 4318
-      host: '0.0.0.0'
+      host: '127.0.0.1'
 ```
 
 ## Instrumenting Your Provider
@@ -77,7 +86,7 @@ const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
 // Initialize OpenTelemetry (v2.x API)
 const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:4318/v1/traces',
+  url: 'http://127.0.0.1:4318/v1/traces',
 });
 
 const provider = new NodeTracerProvider({
@@ -173,7 +182,7 @@ After running an evaluation, view traces in the web UI:
 npx promptfoo@latest view
 ```
 
-Click on any test result to see the "Trace Timeline" section showing:
+Open any test result and switch to the **Traces** tab to see the timeline showing:
 
 - Hierarchical span visualization
 - Duration bars showing relative timing
@@ -185,8 +194,11 @@ Click on any test result to see the "Trace Timeline" section showing:
 Configure OpenTelemetry using standard environment variables:
 
 ```bash
-# Custom endpoint (defaults to Promptfoo's receiver)
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+# Generic OTLP HTTP base endpoint (the provider appends /v1/traces)
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
+
+# Or override the full trace export URL directly
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:4318/v1/traces"
 
 # Headers for authentication with external collectors
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
@@ -195,19 +207,11 @@ export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 export PROMPTFOO_TRACING_ENABLED=true
 ```
 
-## Forward to External Collectors
+## Export to External Collectors
 
-Send traces to Jaeger, Honeycomb, or other OTLP-compatible backends:
-
-```yaml
-tracing:
-  enabled: true
-  forwarding:
-    enabled: true
-    endpoint: 'http://jaeger:4318'
-    headers:
-      'api-key': '${JAEGER_API_KEY}'
-```
+Promptfoo's built-in receiver stores traces for evals. To also send traces to Jaeger,
+Honeycomb, or another OTLP-compatible backend, configure an additional exporter in
+your provider SDK or route spans through a collector that fans out to both backends.
 
 ## Troubleshooting
 

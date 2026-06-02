@@ -28,7 +28,6 @@ Tracing provides visibility into:
 - **Built-in OTLP receiver**: No external collector required for basic usage
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
-- **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
 
 ## Built-in Provider Instrumentation
 
@@ -119,6 +118,7 @@ tracing:
   otlp:
     http:
       enabled: true # Required to start the built-in OTLP receiver
+      host: '127.0.0.1' # Keep a local receiver bound to loopback
 ```
 
 ### 2. Instrument Your Provider
@@ -138,7 +138,7 @@ const provider = new NodeTracerProvider({
   spanProcessors: [
     new SimpleSpanProcessor(
       new OTLPTraceExporter({
-        url: 'http://localhost:4318/v1/traces',
+        url: 'http://127.0.0.1:4318/v1/traces',
       }),
     ),
   ],
@@ -201,8 +201,8 @@ After running an evaluation, view traces in the web UI:
    promptfoo view
    ```
 
-3. Click the magnifying glass (🔎) icon on any test result
-4. Scroll to the "Trace Timeline" section
+3. Open any test result
+4. Switch to the **Traces** tab in the details panel
 
 ### 4. Assert on Traced Workflows
 
@@ -215,11 +215,6 @@ tests:
     assert:
       - type: trajectory:tool-used
         value: search_orders
-
-      - type: trajectory:tool-set
-        value:
-          - search_orders
-          - compose_reply
 
       - type: trajectory:tool-args-match
         value:
@@ -386,7 +381,7 @@ You can also configure tracing via environment variables:
 export PROMPTFOO_TRACING_ENABLED=true
 
 # Configure OTLP endpoint (for providers)
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
 
 # Set service name
 export OTEL_SERVICE_NAME="my-rag-application"
@@ -395,22 +390,9 @@ export OTEL_SERVICE_NAME="my-rag-application"
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 ```
 
-### Forwarding to External Collectors
+### External Collectors
 
-Forward traces to external observability platforms:
-
-```yaml
-tracing:
-  enabled: true
-  otlp:
-    http:
-      enabled: true
-  forwarding:
-    enabled: true
-    endpoint: 'http://jaeger:4318' # or Tempo, Honeycomb, etc.
-    headers:
-      'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
-```
+Promptfoo's OTLP receiver stores traces for evals. If you also need traces in Jaeger, Tempo, Honeycomb, or another OTLP-compatible backend, configure your provider SDK or collector pipeline to export there as well.
 
 ## Provider Implementation Guide
 
@@ -446,7 +428,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 
 # Setup - uses protobuf format by default
 provider = TracerProvider()
-exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+exporter = OTLPSpanExporter(endpoint="http://127.0.0.1:4318/v1/traces")
 provider.add_span_processor(SimpleSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
@@ -636,7 +618,7 @@ const extractedContext = propagation.extract(context.active(), request.headers);
 ### Traces Not Appearing
 
 1. **Check tracing is enabled**: Verify `tracing.enabled: true` in config
-2. **Verify OTLP endpoint**: Ensure providers are sending to `http://localhost:4318/v1/traces`
+2. **Verify OTLP endpoint**: Ensure providers are sending to `http://127.0.0.1:4318/v1/traces`
 3. **Check trace context**: Log the `traceparent` value to ensure it's being passed
 4. **Review provider logs**: Look for connection errors or failed exports
 
@@ -838,9 +820,10 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 
 ## Next Steps
 
+- Follow the [Trace-Based Agent Evals guide](/docs/guides/trace-based-agent-evals) to turn traces into trajectory and trace assertions
 - Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
-- Set up forwarding to your observability platform
+- Export traces to your observability platform from your provider SDK or collector when needed
 - Add custom instrumentation for your use case
 - Use traces to optimize provider performance
