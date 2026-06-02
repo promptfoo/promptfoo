@@ -417,6 +417,7 @@ export const ADDITIONAL_PLUGINS = [
   'realestate:accessibility-discrimination',
   'realestate:advertising-discrimination',
   'realestate:source-of-income',
+  'path-traversal',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
