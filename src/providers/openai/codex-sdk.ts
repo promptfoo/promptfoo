@@ -223,9 +223,21 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
+   * provider's model id instead (e.g., 'openai.gpt-5.5' for Amazon Bedrock).
    */
   model?: string;
+
+  /**
+   * Codex model provider to route through, mapped to the CLI's `model_provider` config.
+   * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.5'` and AWS credentials in `cli_env`).
+   * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
+   *
+   * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
+   */
+  model_provider?: string;
 
   /**
    * Sandbox access level controlling filesystem permissions
@@ -352,6 +364,7 @@ const OpenAICodexSDKConfigShape = {
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
   network_access_enabled: z.boolean().optional(),
@@ -630,7 +643,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.providerId = id ?? this.providerId;
     providerRegistry.register(this);
 
-    if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
+    if (
+      this.config.model &&
+      !this.usesCustomModelProvider() &&
+      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
+    ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
   }
@@ -812,14 +829,30 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode) {
+    if (!config.cli_config && !config.collaboration_mode && !config.model_provider) {
       return undefined;
     }
 
     return {
       ...(config.cli_config ?? {}),
+      // The first-class `model_provider` option takes precedence over any value
+      // supplied through raw `cli_config`.
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
+  }
+
+  /**
+   * Whether this provider routes inference through a non-OpenAI Codex model provider
+   * (e.g. `amazon-bedrock`). When it does, the model id belongs to that provider's
+   * namespace, so promptfoo's OpenAI model allowlist no longer applies.
+   */
+  private usesCustomModelProvider(config: OpenAICodexSDKConfig = this.config): boolean {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const provider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+    return typeof provider === 'string' && provider.length > 0 && provider !== 'openai';
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {

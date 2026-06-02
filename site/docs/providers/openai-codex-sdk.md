@@ -97,6 +97,38 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 
 :::
 
+### Option 3: Run on Amazon Bedrock
+
+Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: openai.gpt-5.5 # Bedrock model id (note the openai. prefix)
+      model_provider: amazon-bedrock
+      sandbox_mode: read-only
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+
+prompts:
+  - 'Write a Python function that calculates the factorial of a number'
+```
+
+Notes:
+
+- **Model ids are Bedrock ids**: use `openai.gpt-5.5` / `openai.gpt-5.4`, not the bare `gpt-5.5`. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`), which is separate from the classic `bedrock-runtime` `InvokeModel` API used by the [`bedrock:` provider](/docs/providers/aws-bedrock/).
+- **Region matters**: GPT-5.5 is available in `us-east-2`; GPT-5.4 in `us-east-2` and `us-west-2`. Request model access first.
+- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. The `bedrock:` provider, by contrast, uses the AWS SDK credential chain directly and does not need this.
+
+:::warning
+
+Credentials placed in `cli_env` are exposed to the Codex agent's shell environment. Scope the IAM permissions to Bedrock inference and prefer short-lived credentials.
+
+:::
+
 ## Quick Start
 
 ### Basic Usage
@@ -185,6 +217,7 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
 | `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
 | `model`                  | string   | Model to use                                                                                         | SDK default          |
+| `model_provider`         | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
 | `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
 | `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
 | `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |

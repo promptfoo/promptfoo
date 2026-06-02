@@ -1068,8 +1068,15 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
 frontier model IDs (`openai.gpt-5.5`, `openai.gpt-5.4`) when configured with the
-`amazon-bedrock` provider. Evaluating those model IDs in promptfoo exercises the same
-models that back Codex on Bedrock.
+`amazon-bedrock` provider. There are two distinct ways to use OpenAI-on-Bedrock in
+promptfoo:
+
+- **`bedrock:openai.gpt-5.5`** (this page) — direct single-turn inference via Bedrock's
+  `InvokeModel` API, authenticated with the standard AWS SDK credential chain.
+- **`openai:codex-sdk` with `model_provider: amazon-bedrock`** — runs the full Codex
+  coding agent against the same models through Bedrock's OpenAI-compatible endpoint. See
+  [Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
+  in the Codex SDK docs.
 
 :::
 

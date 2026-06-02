@@ -214,6 +214,37 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it('should not warn about provider-specific model ids when routing through a custom model_provider', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Amazon Bedrock model ids live in a different namespace than OpenAI's allowlist.
+      new OpenAICodexSDKProvider({
+        config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
+      });
+      // Same when the provider is supplied through raw cli_config.
+      new OpenAICodexSDKProvider({
+        config: { model: 'openai.gpt-5.4', cli_config: { model_provider: 'amazon-bedrock' } },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should still warn about unknown models when model_provider is openai', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      new OpenAICodexSDKProvider({
+        config: { model: 'unknown-model', model_provider: 'openai' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for OpenAI Codex SDK: unknown-model',
+      );
+
+      warnSpy.mockRestore();
+    });
+
     it('should reject malformed provider config', () => {
       expect(
         () =>
@@ -2384,6 +2415,46 @@ describe('OpenAICodexSDKProvider', () => {
         expect(MockCodex).toHaveBeenCalledWith(
           expect.objectContaining({
             config: { collaboration_mode: 'coding', model_provider: { timeout: 30 } },
+          }),
+        );
+      });
+
+      it('should map the first-class model_provider into the Codex CLI config object', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.5',
+            model_provider: 'amazon-bedrock',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { model_provider: 'amazon-bedrock' },
+          }),
+        );
+      });
+
+      it('should let the first-class model_provider take precedence over cli_config', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model_provider: 'amazon-bedrock',
+            cli_config: { model_provider: 'openai', model_providers: { 'amazon-bedrock': {} } },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { model_provider: 'amazon-bedrock', model_providers: { 'amazon-bedrock': {} } },
           }),
         );
       });
