@@ -269,11 +269,27 @@ function ProviderConfigEditor({
         if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {
           errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
         }
-        const hasUrl = typeof provider.config?.url === 'string' && validateUrl(provider.config.url);
-        const hasShorthandUrl = validateUrl(getA2AShorthandUrl(provider.id) ?? '');
-        const hasAgentCardUrl =
-          typeof provider.config?.agentCardUrl === 'string' &&
-          validateUrl(provider.config.agentCardUrl);
+        const configuredUrl =
+          typeof provider.config?.url === 'string' ? provider.config.url.trim() : '';
+        const agentCardUrl =
+          typeof provider.config?.agentCardUrl === 'string'
+            ? provider.config.agentCardUrl.trim()
+            : '';
+        const shorthandUrl = getA2AShorthandUrl(provider.id) ?? '';
+
+        const hasUrl = configuredUrl.length > 0 && validateUrl(configuredUrl);
+        const hasShorthandUrl = shorthandUrl.length > 0 && validateUrl(shorthandUrl);
+        const hasAgentCardUrl = agentCardUrl.length > 0 && validateUrl(agentCardUrl);
+
+        if (configuredUrl.length > 0 && !hasUrl) {
+          errors.push('A2A endpoint URL must be a valid HTTP(S) URL');
+        }
+        if (agentCardUrl.length > 0 && !hasAgentCardUrl) {
+          errors.push('A2A Agent Card URL must be a valid HTTP(S) URL');
+        }
+        if (shorthandUrl.length > 0 && !hasShorthandUrl) {
+          errors.push('A2A shorthand URL must be a valid HTTP(S) URL');
+        }
         if (!hasUrl && !hasShorthandUrl && !hasAgentCardUrl) {
           errors.push('A valid A2A endpoint URL or Agent Card URL is required');
         }

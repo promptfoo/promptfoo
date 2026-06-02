@@ -244,6 +244,74 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(false);
     });
 
+    it('should return false from validate() for an invalid A2A endpoint override even when Agent Card URL is valid', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a',
+        config: {
+          agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json',
+          url: 'not-a-url',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith('A2A endpoint URL must be a valid HTTP(S) URL');
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
+    });
+
+    it('should return false from validate() for an invalid A2A Agent Card URL even when shorthand URL is valid', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a:https://agent.example.com/a2a/v1',
+        config: {
+          agentCardUrl: 'not-a-url',
+          url: '',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith('A2A Agent Card URL must be a valid HTTP(S) URL');
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
+    });
+
     it('should return false from validate() for an A2A provider with a non-A2A provider ID', () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();
