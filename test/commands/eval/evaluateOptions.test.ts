@@ -582,6 +582,32 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should make commandLineOptions.filterSample repeatable with a configured seed', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-sample-seed.yaml', {
+        commandLineOptions: {
+          filterSample: 2,
+          filterSampleSeed: 42,
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const firstSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const secondSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+
+      expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(['two', 'three']);
+      expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(
+        secondSuite.tests?.map((test) => test.vars?.input),
+      );
+    });
+
     it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-evaluate-options-filter-range.yaml', {
         evaluateOptions: {

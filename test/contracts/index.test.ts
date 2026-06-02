@@ -5,11 +5,17 @@ import {
   CompletionTokenDetailsSchema,
   DocumentMediaInjectionPlacementSchema,
   DocxInjectionPlacementSchema,
+  EmailSchema,
+  ErrorResponseSchema,
+  GetUserIdResponseSchema,
+  GetUserResponseSchema,
   getInputDescription,
   getInputType,
+  hasFunctionToolCallValidator,
   InputDefinitionObjectSchema,
   InputsSchema,
   isTransformFunction,
+  LoginRequestSchema,
   NunjucksFilterMapSchema,
   normalizeInputDefinition,
   normalizeInputs,
@@ -17,6 +23,8 @@ import {
   PromptSchema,
   ProviderEnvOverridesSchema,
   StringOrFunctionSchema,
+  SuccessResponseSchema,
+  UserSchemas,
 } from '../../src/contracts';
 
 describe('contracts leaf surface', () => {
@@ -33,6 +41,37 @@ describe('contracts leaf surface', () => {
       expect(StringOrFunctionSchema.safeParse('output.trim()').success).toBe(true);
       expect(StringOrFunctionSchema.safeParse(() => 'ok').success).toBe(true);
       expect(isTransformFunction(() => 'ok')).toBe(true);
+    });
+
+    it('re-exports the api/common and api/user DTOs through the barrel', () => {
+      // The browser API client imports these from `@promptfoo/contracts`, so a
+      // future `export *` name collision in the barrel must not silently drop them.
+      expect(EmailSchema.safeParse('user@example.com').success).toBe(true);
+      expect(EmailSchema.safeParse('not-an-email').success).toBe(false);
+
+      expect(SuccessResponseSchema.parse({ success: true, extra: 'kept' })).toEqual({
+        success: true,
+        extra: 'kept',
+      });
+      expect(ErrorResponseSchema.safeParse({ error: 'boom' }).success).toBe(true);
+
+      expect(GetUserResponseSchema.safeParse({ email: null }).success).toBe(true);
+      expect(GetUserResponseSchema.safeParse({ email: 'user@example.com' }).success).toBe(true);
+      expect(GetUserIdResponseSchema.safeParse({ id: 'abc' }).success).toBe(true);
+
+      expect(LoginRequestSchema.safeParse({ apiKey: 'k' }).success).toBe(true);
+      expect(LoginRequestSchema.safeParse({ apiKey: '' }).success).toBe(false);
+
+      // The grouped server-side validation map is reachable through the barrel too.
+      expect(UserSchemas.Login.Request).toBe(LoginRequestSchema);
+      expect(UserSchemas.Get.Response).toBe(GetUserResponseSchema);
+    });
+
+    it('re-exports provider capability helpers through the barrel', () => {
+      expect(hasFunctionToolCallValidator({ validateFunctionToolCall: () => {} })).toBe(true);
+      expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
+        false,
+      );
     });
   });
 

@@ -6,6 +6,7 @@ import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { sleep } from '../util/time';
 import {
   closeTestDatabaseClient,
   registerTestDatabaseClient,
@@ -44,10 +45,8 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   // Enable foreign key constraints (required for referential integrity)
   await client.execute('PRAGMA foreign_keys = ON');
 
-  // better-sqlite3 applied a 5s busy timeout by default; libsql defaults to 0,
-  // i.e. fail immediately when the write lock is held. Restore the prior
-  // behavior so a writer that briefly contends with another process or
-  // connection for the lock waits instead of erroring with SQLITE_BUSY.
+  // Wait briefly when a writer contends with another process or connection for
+  // the lock instead of failing immediately with SQLITE_BUSY.
   await client.execute('PRAGMA busy_timeout = 5000');
 
   // Configure WAL mode unless explicitly disabled or using in-memory database
@@ -84,6 +83,66 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   }
 }
 
+// A statement that fails to acquire its lock never executed, so retrying it is
+// safe (no risk of double-applying a write). Shared-cache table locks surface as
+// SQLITE_LOCKED, which busy_timeout does NOT retry — it only covers SQLITE_BUSY.
+const TRANSIENT_LOCK_RETRY_ATTEMPTS = 10;
+const TRANSIENT_LOCK_RETRY_BASE_MS = 5;
+const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
+
+/**
+ * Detects the transient SQLite lock errors that clear once a contending writer
+ * releases its lock. drizzle re-wraps the libsql error (its own message is just
+ * `Failed query: ...`), so walk the cause chain and match on code/message.
+ */
+function isTransientDatabaseLockError(error: unknown): boolean {
+  for (
+    let current = error as {
+        code?: unknown;
+        extendedCode?: unknown;
+        message?: unknown;
+        cause?: unknown;
+      } | null,
+      depth = 0;
+    current != null && depth < 6;
+    current = (current.cause ?? null) as typeof current, depth++
+  ) {
+    const code = typeof current.code === 'string' ? current.code : '';
+    const extendedCode = typeof current.extendedCode === 'string' ? current.extendedCode : '';
+    if (
+      code.startsWith('SQLITE_BUSY') ||
+      code.startsWith('SQLITE_LOCKED') ||
+      extendedCode.startsWith('SQLITE_BUSY') ||
+      extendedCode.startsWith('SQLITE_LOCKED')
+    ) {
+      return true;
+    }
+    const message = typeof current.message === 'string' ? current.message : '';
+    if (
+      /\bSQLITE_(?:BUSY|LOCKED)\b/.test(message) ||
+      /database (?:is|table is) locked/i.test(message)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+        throw error;
+      }
+      await sleep(
+        Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
+      );
+    }
+  }
+}
+
 function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   const transaction = db.transaction.bind(db);
   type TransactionCallback = Parameters<typeof transaction>[0];
@@ -107,17 +166,24 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
     return (...args: TArgs) => {
       // The outer transaction already owns the serialized queue. If a helper
       // called from that transaction uses the root db handle for a read, queueing
-      // it behind the outer transaction would deadlock.
+      // it behind the outer transaction would deadlock. Retrying here would also
+      // deadlock (the contending lock is the very transaction we are inside), so
+      // run it directly.
       if (activeTransaction.getStore()) {
         return method(...args);
       }
-      return runSerialized(() => method(...args));
+      // Statement-level methods are atomic, so a transient lock failure means
+      // nothing was applied. libsql runs interactive transactions on their own
+      // connection, so a prior writer's table lock can briefly outlive the JS
+      // promise that settled it; retry rides through that window without
+      // weakening isolation (reads still observe only committed rows).
+      return runSerialized(() => withTransientLockRetry(() => method(...args)));
     };
   };
 
-  // better-sqlite3 executed statements synchronously on one connection. libsql opens a
-  // new logical connection for top-level statements and interactive transactions, so an
-  // ordinary write started while a transaction owns the write lock fails with SQLITE_BUSY.
+  // libSQL opens a new logical connection for top-level statements and interactive
+  // transactions, so an ordinary write started while a transaction owns the write lock
+  // fails with SQLITE_BUSY unless root-handle operations are serialized.
   client.execute = serializeClientMethod(client.execute.bind(client)) as typeof client.execute;
   client.batch = serializeClientMethod(client.batch.bind(client));
   client.migrate = serializeClientMethod(client.migrate.bind(client));

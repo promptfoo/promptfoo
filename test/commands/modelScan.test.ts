@@ -3,7 +3,10 @@ import { writeFileSync } from 'fs';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
-import { modelScanCommand } from '../../src/commands/modelScan';
+import {
+  checkModelAuditInstalled as checkModelAuditInstalledFromModelScan,
+  modelScanCommand,
+} from '../../src/commands/modelScan';
 import logger from '../../src/logger';
 import { checkModelAuditInstalled } from '../../src/util/modelAuditInstall';
 import { mockProcessEnv } from '../util/utils';
@@ -1365,6 +1368,10 @@ describe('Re-scan on version change behavior', () => {
 describe('checkModelAuditInstalled', () => {
   beforeEach(async () => {
     await resetModelScanTestMocks();
+  });
+
+  it('remains exported from the modelScan command module for compatibility', () => {
+    expect(checkModelAuditInstalledFromModelScan).toBe(checkModelAuditInstalled);
   });
 
   it('should return installed: true and version when getModelAuditCurrentVersion returns version', async () => {
