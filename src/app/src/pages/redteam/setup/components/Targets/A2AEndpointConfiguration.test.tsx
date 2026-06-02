@@ -9,9 +9,10 @@ import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import type { ProviderOptions } from '../../types';
 
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange }: any) => (
+  default: ({ placeholder, value, onValueChange }: any) => (
     <textarea
       data-testid="code-editor"
+      placeholder={placeholder}
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
     />
@@ -116,6 +117,22 @@ describe('A2AEndpointConfiguration', () => {
         token: '{{A2A_API_KEY}}',
       });
     });
+  });
+
+  it('should use an expression-style transformResponse in the advanced config placeholder', () => {
+    renderA2AConfiguration({
+      id: 'a2a',
+      config: {
+        url: '',
+      },
+    });
+
+    const placeholder = screen.getByTestId('code-editor').getAttribute('placeholder') ?? '';
+
+    expect(placeholder).toContain(
+      '"transformResponse": "result.output || result.message || JSON.stringify(result.raw)"',
+    );
+    expect(placeholder).not.toContain('"transformResponse": "return ');
   });
 
   it('should merge advanced JSON under structured A2A fields', async () => {

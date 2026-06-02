@@ -75,7 +75,7 @@ const A2A_CONFIG_EXAMPLE = {
     role: 'ROLE_USER',
     parts: [{ text: '{{prompt}}' }],
   },
-  transformResponse: 'text || JSON.stringify(json.raw)',
+  transformResponse: 'result.output || result.message || JSON.stringify(result.raw)',
 };
 
 const asA2AConfig = (config?: ProviderOptions['config']): A2AProviderConfig =>
