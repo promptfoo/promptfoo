@@ -1,4 +1,4 @@
-import { traceErrorSpansConfigError } from './traceAssertionConfig';
+import { traceErrorSpansConfigError } from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';

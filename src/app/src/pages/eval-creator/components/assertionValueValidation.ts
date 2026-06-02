@@ -5,7 +5,7 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
-} from '@promptfoo/assertions/traceAssertionConfig';
+} from '@promptfoo/util/traceAssertionConfig';
 
 import type { Assertion, AssertionType } from '@promptfoo/types';
 

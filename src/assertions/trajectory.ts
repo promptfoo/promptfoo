@@ -5,7 +5,7 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
-} from './traceAssertionConfig';
+} from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,

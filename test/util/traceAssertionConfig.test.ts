@@ -7,7 +7,7 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
-} from '../../src/assertions/traceAssertionConfig';
+} from '../../src/util/traceAssertionConfig';
 
 describe('traceAssertionConfig shared validators', () => {
   describe('traceSpanCountBoundsError', () => {

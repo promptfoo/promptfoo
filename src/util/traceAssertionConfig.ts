@@ -7,21 +7,39 @@
  * (which throw on the returned message) and the Eval Creator UI validators (which surface
  * it inline at save time) call these, so save-time and run-time validation cannot drift.
  *
- * These functions are intentionally dependency-light (only pure helpers from
- * `./traceUtils`) so the browser bundle can import them via `@promptfoo/assertions/...`.
+ * This module lives in the shared `util` layer (not `src/assertions`, which is `core`) and
+ * is intentionally dependency-light so the browser bundle can import it via
+ * `@promptfoo/util/traceAssertionConfig` without crossing the app/core boundary.
  *
  * Validators only enforce the hardening rules; structural/presence requirements that
  * differ between the two surfaces (e.g. the UI requiring a span pattern, or the runtime
  * requiring a `goal`) stay with each caller.
  */
-import {
-  finiteNonNegativeIntegerError,
-  finiteNonNegativeNumberError,
-  validRangeError,
-} from './traceUtils';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function finiteNonNegativeNumberError(value: unknown, label: string): string | undefined {
+  return Number.isFinite(value) && (value as number) >= 0
+    ? undefined
+    : `${label} must be a finite non-negative number`;
+}
+
+function finiteNonNegativeIntegerError(value: unknown, label: string): string | undefined {
+  return Number.isFinite(value) && Number.isInteger(value) && (value as number) >= 0
+    ? undefined
+    : `${label} must be a finite non-negative integer`;
+}
+
+function validRangeError(
+  min: number | undefined,
+  max: number | undefined,
+  label: string,
+): string | undefined {
+  return min !== undefined && max !== undefined && max < min
+    ? `${label} max must be greater than or equal to min`
+    : undefined;
 }
 
 /**
