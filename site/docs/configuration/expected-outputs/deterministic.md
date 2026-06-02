@@ -1119,6 +1119,8 @@ For traced usage, matching token-bearing spans are deduplicated by hierarchy. Wh
 matched parent and matched descendants both report token totals, Promptfoo uses the
 larger covered total for that span subtree so nested aggregate spans do not double-count
 usage or discard a parent aggregate that covers more work than its children.
+Within each span, Promptfoo also uses the largest available aggregate or component total
+so incomplete or inconsistent token attributes do not undercount the budget.
 
 ### Trace-Span-Duration
 

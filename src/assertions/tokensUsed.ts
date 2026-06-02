@@ -64,20 +64,16 @@ function sumTokenAttributes(attributes: Record<string, unknown> | undefined): nu
     return 0;
   }
 
-  const aggregateTotal =
-    positiveTokenValue(attributes['gen_ai.usage.total_tokens']) ??
-    positiveTokenValue(attributes['llm.usage.total_tokens']) ??
-    positiveTokenValue(attributes['tokens.used']);
-  if (aggregateTotal !== undefined) {
-    return aggregateTotal;
-  }
+  const candidateTotals = [
+    positiveTokenValue(attributes['gen_ai.usage.total_tokens']),
+    positiveTokenValue(attributes['llm.usage.total_tokens']),
+    positiveTokenValue(attributes['tokens.used']),
+    sumTokenFamily(attributes, ['gen_ai.usage.input_tokens', 'gen_ai.usage.output_tokens']),
+    sumTokenFamily(attributes, ['llm.usage.prompt_tokens', 'llm.usage.completion_tokens']),
+    sumTokenFamily(attributes, ['tokens.prompt', 'tokens.completion']),
+  ].filter((value): value is number => value !== undefined);
 
-  return (
-    sumTokenFamily(attributes, ['gen_ai.usage.input_tokens', 'gen_ai.usage.output_tokens']) ??
-    sumTokenFamily(attributes, ['llm.usage.prompt_tokens', 'llm.usage.completion_tokens']) ??
-    sumTokenFamily(attributes, ['tokens.prompt', 'tokens.completion']) ??
-    0
-  );
+  return candidateTotals.length > 0 ? Math.max(...candidateTotals) : 0;
 }
 
 function hasTokenUsageAttributes(attributes: Record<string, unknown> | undefined): boolean {

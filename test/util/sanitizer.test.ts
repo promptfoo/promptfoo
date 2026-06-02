@@ -456,6 +456,32 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('does not use mutable fields as array item identity when restoring duplicate SAS URIs', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ enabled: false, description: 'edited', file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                enabled: true,
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                enabled: false,
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [{ enabled: false, description: 'edited', file: redactedUri }],
+      });
+    });
+
     it('restores moved and edited duplicate Azure Blob SAS URIs using unique stable identity', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 

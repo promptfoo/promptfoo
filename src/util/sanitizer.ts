@@ -357,6 +357,17 @@ function findUniqueStoredArrayItemMatch(
 
 type StableIdentityPath = Array<string | number>;
 
+// Credential restoration must not use mutable flags or arbitrary metadata to choose a stored item.
+const STABLE_ARRAY_ITEM_IDENTITY_KEYS = new Set(['id', 'key', 'name', 'slug', 'suite']);
+
+function isStableArrayItemIdentityPath(path: StableIdentityPath): boolean {
+  const key = path[path.length - 1];
+  return (
+    typeof key === 'string' &&
+    (STABLE_ARRAY_ITEM_IDENTITY_KEYS.has(key) || /(?:^|[_-])id$/i.test(key) || /Id$/.test(key))
+  );
+}
+
 function getValueAtPath(value: unknown, path: readonly (string | number)[]): unknown {
   let current = value;
   for (const key of path) {
@@ -389,6 +400,7 @@ function hasUniqueSharedStableArrayItemIdentity(
 ): boolean {
   if (typeof value === 'string' || typeof storedValue === 'string') {
     const matchesStoredValue =
+      isStableArrayItemIdentityPath(path) &&
       typeof value === 'string' &&
       typeof storedValue === 'string' &&
       value === storedValue &&
@@ -427,7 +439,9 @@ function hasUniqueSharedStableArrayItemIdentity(
   }
 
   return (
-    value != null &&
+    isStableArrayItemIdentityPath(path) &&
+    typeof value === 'number' &&
+    typeof storedValue === 'number' &&
     Object.is(value, storedValue) &&
     storedItems.filter((item) => Object.is(getValueAtPath(item, path), value)).length === 1
   );
