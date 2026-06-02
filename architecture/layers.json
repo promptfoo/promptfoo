@@ -15,8 +15,16 @@
     {
       "name": "app",
       "roots": ["src/app"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"],
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ],
       "allowedImportPaths": [
+        "src/contracts.ts",
         "src/csv.ts",
         "src/logger.ts",
         "src/providers/constants.ts",
@@ -33,7 +41,6 @@
         "src/tracing/store.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
-        "src/types/api/user.ts",
         "src/types/email.ts",
         "src/types/index.ts",
         "src/types/modelAudit.ts",
