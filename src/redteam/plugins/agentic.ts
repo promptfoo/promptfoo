@@ -491,7 +491,7 @@ function hasVerifierEvidence(
     return false;
   }
 
-  return Array.isArray(evidence.findings) || Boolean(evidence.mode) || Boolean(evidence.trace);
+  return Array.isArray(evidence.findings);
 }
 
 function traceAttributesMatchPlugin(

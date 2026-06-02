@@ -179,6 +179,54 @@ describe('agentic run observations', () => {
     );
   });
 
+  it('classifies guardrail and approval evidence from span events', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-event-controls',
+          testCaseId: 'case-event-controls',
+          traceId: 'trace-event-controls',
+          spans: [
+            {
+              attributes: { 'tool.name': 'update_seat' },
+              events: [
+                {
+                  attributes: { 'guardrails.decision': 'blocked' },
+                  name: 'guardrail update_seat',
+                  timestamp: 2,
+                },
+                {
+                  attributes: { 'approval.required': true },
+                  name: 'approval update_seat',
+                  timestamp: 3,
+                },
+              ],
+              name: 'tool update_seat',
+              spanId: 'span-event-controls',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'blocked',
+          source: 'trace-event',
+          spanId: 'span-event-controls',
+        }),
+        expect.objectContaining({
+          kind: 'approval',
+          source: 'trace-event',
+          spanId: 'span-event-controls',
+        }),
+      ]),
+    );
+  });
+
   it('continues scanning embedded trace evidence blobs until it finds findings', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {

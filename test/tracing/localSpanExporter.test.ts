@@ -46,6 +46,7 @@ describe('LocalSpanExporter', () => {
       startTime: [number, number];
       endTime: [number, number];
       attributes: Record<string, unknown>;
+      events: ReadableSpan['events'];
       status: { code: number; message?: string };
     }> = {},
   ): ReadableSpan {
@@ -68,7 +69,7 @@ describe('LocalSpanExporter', () => {
       status: overrides.status ?? { code: 1 },
       kind: 2, // CLIENT
       links: [],
-      events: [],
+      events: overrides.events ?? [],
       resource: { attributes: {} },
       instrumentationLibrary: { name: 'test' },
       duration: [0, 700000000],
@@ -202,6 +203,38 @@ describe('LocalSpanExporter', () => {
             // Milliseconds: seconds * 1000 + nanoseconds / 1_000_000
             startTime: 100 * 1e3 + 500000000 / 1e6, // 100500 ms
             endTime: 101 * 1e3 + 750000000 / 1e6, // 101750 ms
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('should preserve span events with millisecond timestamps', async () => {
+      const span = createMockSpan({
+        events: [
+          {
+            name: 'guardrail decision',
+            time: [102, 250000000],
+            attributes: { 'guardrails.decision': 'blocked' },
+            droppedAttributesCount: 0,
+          },
+        ],
+      });
+
+      const result = await exportSpans([span]);
+
+      expect(result.code).toBe(ExportResultCode.SUCCESS);
+      expect(mockAddSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({
+            events: [
+              {
+                name: 'guardrail decision',
+                timestamp: 102250,
+                attributes: { 'guardrails.decision': 'blocked' },
+              },
+            ],
           }),
         ],
         expect.any(Object),

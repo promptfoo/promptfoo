@@ -10,6 +10,7 @@ import {
   type DecodedScopeSpans,
   type DecodedSpan,
   decodeExportTraceServiceRequest,
+  longToNumber,
 } from './protobuf';
 import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
@@ -38,10 +39,17 @@ interface OTLPSpan {
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: OTLPAttribute[];
+  events?: OTLPSpanEvent[];
   status?: {
     code: number;
     message?: string;
   };
+}
+
+interface OTLPSpanEvent {
+  timeUnixNano?: string;
+  name: string;
+  attributes?: OTLPAttribute[];
 }
 
 interface OTLPScopeSpan {
@@ -363,9 +371,14 @@ export class OTLPReceiver {
     // credential into an error message) must be scrubbed too — otherwise the secret leaks
     // through a span field the operator believes `redactAttributes` covers.
     const redactedSourceValues = new Set<string>();
-    for (const [key, value] of Object.entries(attributes)) {
-      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-        redactedSourceValues.add(value);
+    for (const attributeSet of [
+      attributes,
+      ...(span.events ?? []).map((event) => event.attributes ?? {}),
+    ]) {
+      for (const [key, value] of Object.entries(attributeSet)) {
+        if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
+          redactedSourceValues.add(value);
+        }
       }
     }
     // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
@@ -377,6 +390,11 @@ export class OTLPReceiver {
       name: scrubEcho(span.name),
       statusMessage: scrubEcho(span.statusMessage),
       attributes: this.redactAttributes(attributes, redactAttributePatterns),
+      events: span.events?.map((event) => ({
+        ...event,
+        name: scrubEcho(event.name),
+        attributes: this.redactAttributes(event.attributes, redactAttributePatterns),
+      })),
     };
   }
 
@@ -706,6 +724,7 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
           };
+          const startTime = Number(span.startTimeUnixNano) / 1_000_000;
 
           traces.push({
             traceId,
@@ -713,9 +732,14 @@ export class OTLPReceiver {
               spanId,
               parentSpanId,
               name: span.name,
-              startTime: Number(span.startTimeUnixNano) / 1_000_000, // Convert to ms
+              startTime, // Convert to ms
               endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
               attributes,
+              events: (span.events ?? []).map((event) => ({
+                name: event.name,
+                timestamp: event.timeUnixNano ? Number(event.timeUnixNano) / 1_000_000 : startTime,
+                attributes: this.parseAttributes(event.attributes),
+              })),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
             },
@@ -893,6 +917,14 @@ export class OTLPReceiver {
           'otel.span.kind': spanKindName,
           'otel.span.kind_code': spanKindCode,
         },
+        events: (span.events ?? []).map((event) => ({
+          name: event.name,
+          timestamp:
+            this.toMilliseconds(event.timeUnixNano) ??
+            this.toMilliseconds(span.startTimeUnixNano) ??
+            0,
+          attributes: this.parseDecodedAttributes(event.attributes),
+        })),
         statusCode: span.status?.code,
         statusMessage: span.status?.message,
       },
@@ -1092,7 +1124,7 @@ export class OTLPReceiver {
     if (value === undefined) {
       return undefined;
     }
-    return Number(value) / 1_000_000;
+    return longToNumber(value) / 1_000_000;
   }
 }
 

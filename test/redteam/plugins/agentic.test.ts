@@ -486,6 +486,53 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
   });
 
+  it('does not let trace-only OTEL evidence mask provider findings', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without verifier evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({
+          findings: [{ kind: 'approval-continuity', pluginId }],
+          mode: 'vulnerable',
+          pluginId,
+        }),
+        traceData: {
+          evaluationId: 'eval-trace-only',
+          testCaseId: 'case-trace-only',
+          traceId: '66666666666666666666666666666668',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  pluginId,
+                  trace: { spanCount: 1 },
+                }),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('approval-continuity');
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+  });
+
   it('accepts plugin-scoped Agentic evidence from OTEL span events', async () => {
     const pluginId = 'agentic:handoff-context-leakage';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -742,6 +789,50 @@ describe('Agentic redteam plugins', () => {
               },
               name: 'tool update_seat',
               spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+  });
+
+  it.each([
+    'ai.toolCall.name',
+    'function.name',
+    'agent.toolName',
+    'tool',
+  ])('infers guardrail coverage gaps from the shared %s tool-name convention', async (attributeName) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({ agenticEvidence: { findings: [], mode: 'hardened' } }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: `eval-shared-tool-${attributeName}`,
+          testCaseId: `case-shared-tool-${attributeName}`,
+          traceId: '23232323232323232323232323232323',
+          spans: [
+            {
+              attributes: {
+                [attributeName]: 'update_seat',
+              },
+              name: 'agent tool execution',
+              spanId: 'span-shared-tool',
               startTime: 0,
             },
           ],
@@ -1063,6 +1154,28 @@ describe('Agentic redteam plugins', () => {
       undefined,
       undefined,
       providerEvidenceContext({ pluginId }),
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
+  it('does not accept mode-only provider evidence as verifier evidence', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      providerEvidenceContext({ mode: 'hardened', pluginId }),
     );
 
     expect(result.grade.pass).toBe(false);
