@@ -843,6 +843,34 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
+#### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
+
+`tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential). Assert this via the `gen_ai.turn.index` tag on the tool spans — both tool calls must carry the **same** index. See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider details.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_orders
+            - search_orders
+      - type: javascript
+        value: |
+          // Both tool calls must have been emitted by the same LLM generation.
+          const turns = context.trace.spans
+            .filter((s) => s.attributes['tool.name'] && s.attributes['gen_ai.turn.index'] != null)
+            .map((s) => s.attributes['gen_ai.turn.index']);
+          return turns.length >= 2 && new Set(turns).size === 1;
+```
+
+Prefer this over counting total `gen_ai.turn` spans: a tool-using task normally takes at least two generations (one to emit the tool calls, one to fold the results into the answer), so `trace-span-count ... max: 1` would reject a correctly-batched run. The index check stays correct regardless of follow-up answer rounds.
+
+Do not use this batching inference with `openai:codex-sdk` or `openai:codex-app-server`: their `gen_ai.turn *` spans represent an SDK or protocol turn that can contain multiple hidden model generations.
+
+For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans (and tag their tool spans with the subagent turn's index), and cached responses emit none. See the [batching caveats](/docs/tracing#per-llm-turn-spans) for the subagent attributes (`gen_ai.turn.is_subagent`) and cache-hit handling.
+
 ### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.

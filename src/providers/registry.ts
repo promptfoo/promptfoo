@@ -5,6 +5,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { isMissingPackageImportError } from '../util/packageImportErrors';
+import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -20,8 +21,6 @@ import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
-import { AwsBedrockConverseProvider } from './bedrock/converse';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -41,12 +40,6 @@ import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
-import { AIStudioChatProvider, AIStudioEmbeddingProvider } from './google/ai.studio';
-import { GeminiImageProvider } from './google/gemini-image';
-import { GoogleImageProvider } from './google/image';
-import { GoogleLiveProvider } from './google/live';
-import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GoogleVideoProvider } from './google/video';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -128,6 +121,16 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
 }
 
 export const providerMap: ProviderFactory[] = [
+  {
+    test: (providerPath: string) => providerPath === 'a2a' || providerPath.startsWith('a2a:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new A2AProvider(providerPath, providerOptions);
+    },
+  },
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
@@ -338,133 +341,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         'IBM BAM provider has been deprecated. The service was sunset in March 2025. Please use the WatsonX provider instead. See https://promptfoo.dev/docs/providers/watsonx for migration instructions.',
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('bedrock:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const modelName = splits.slice(2).join(':');
-
-      // Handle Converse API
-      if (modelType === 'converse') {
-        return new AwsBedrockConverseProvider(modelName, providerOptions);
-      }
-
-      // Handle nova-sonic model
-      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
-        const { NovaSonicProvider } = await import('./bedrock/nova-sonic');
-        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
-      }
-
-      // Handle Luma Ray video model
-      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
-      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
-      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
-        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
-        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
-        // For bedrock:video:luma.ray-v2:0, use modelName directly
-        const videoModelName = modelName.includes('luma.ray')
-          ? modelName
-          : splits.slice(1).join(':') || 'luma.ray-v2:0';
-        return new LumaRayVideoProvider(videoModelName, providerOptions);
-      }
-
-      // Handle Nova Reel video model
-      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
-      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
-      if (
-        modelType.includes('amazon.nova-reel') ||
-        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
-      ) {
-        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
-        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
-        return new NovaReelVideoProvider(videoModelName, providerOptions);
-      }
-
-      // Handle Bedrock Agents
-      if (modelType === 'agents') {
-        const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
-        return new AwsBedrockAgentsProvider(modelName, providerOptions);
-      }
-
-      if (modelType === 'completion') {
-        // Backwards compatibility: `completion` used to be required
-        return new AwsBedrockCompletionProvider(modelName, providerOptions);
-      }
-      if (modelType === 'embeddings' || modelType === 'embedding') {
-        return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
-      }
-      if (modelType === 'kb' || modelType === 'knowledge-base') {
-        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrock/knowledgeBase');
-        return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
-      }
-      // Reconstruct the full model name preserving the original format
-      const fullModelName = splits.slice(1).join(':');
-      return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('bedrock-agent:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const agentId = providerPath.substring('bedrock-agent:'.length);
-      const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
-      return new AwsBedrockAgentsProvider(agentId, providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('sagemaker:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const endpointName = splits.slice(2).join(':');
-
-      // Dynamically import SageMaker provider
-      const { SageMakerCompletionProvider, SageMakerEmbeddingProvider } = await import(
-        './sagemaker'
-      );
-
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);
-      }
-
-      // Handle the 'sagemaker:<endpoint>' format (no model type specified)
-      if (splits.length === 2) {
-        return new SageMakerCompletionProvider(modelType, providerOptions);
-      }
-
-      // Handle special case for JumpStart models
-      if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
-        return new SageMakerCompletionProvider(endpointName, {
-          ...providerOptions,
-          config: {
-            ...providerOptions.config,
-            modelType: 'jumpstart',
-          },
-        });
-      }
-
-      // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
-      return new SageMakerCompletionProvider(endpointName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          modelType,
-        },
-      });
     },
   },
   {
@@ -718,17 +594,15 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
-          apiKeyEnvar: 'FIREWORKS_API_KEY',
-        },
+      const { createFireworksProvider } = await import('./fireworks/chat');
+      return createFireworksProvider(providerPath, {
+        config: providerOptions,
+        // loadApiProvider merges any provider-level `env` block into
+        // providerOptions.env, so let those overrides win over the suite-level
+        // env from context.
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
@@ -1296,33 +1170,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('vertex:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const firstPart = splits[1];
-      if (firstPart === 'video') {
-        const modelName = splits.slice(2).join(':');
-        return new GoogleVideoProvider(modelName, {
-          ...providerOptions,
-          id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
-        });
-      }
-      if (firstPart === 'chat') {
-        return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
-      }
-      if (firstPart === 'embedding' || firstPart === 'embeddings') {
-        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
-      }
-      // Default to chat provider
-      return new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),
     create: async (
       providerPath: string,
@@ -1440,54 +1287,6 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new BrowserProvider(providerPath, providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('google:') || providerPath.startsWith('palm:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-
-      if (splits.length >= 3) {
-        const serviceType = splits[1];
-        const modelName = splits.slice(2).join(':');
-
-        if (serviceType === 'live') {
-          // This is a Live API request
-          return new GoogleLiveProvider(modelName, providerOptions);
-        } else if (serviceType === 'image') {
-          // This is an Imagen image generation request
-          return new GoogleImageProvider(modelName, providerOptions);
-        } else if (serviceType === 'video') {
-          // This is a Veo video generation request
-          return new GoogleVideoProvider(modelName, {
-            ...providerOptions,
-            id: providerPath,
-          });
-        } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
-          if (!modelName) {
-            throw new Error(
-              `Missing model name for ${providerPath}. Use e.g. google:embedding:gemini-embedding-001.`,
-            );
-          }
-          return new AIStudioEmbeddingProvider(modelName, providerOptions);
-        }
-      }
-
-      // Default to regular Google API
-      const modelName = splits[1];
-
-      // Check if this is a Gemini native image generation model
-      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image-preview)
-      if (modelName.includes('-image')) {
-        return new GeminiImageProvider(modelName, providerOptions);
-      }
-
-      return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
   {
@@ -1792,7 +1591,37 @@ function isRedteamProviderPath(providerPath: string): boolean {
   );
 }
 
+function isAwsProviderPath(providerPath: string): boolean {
+  return (
+    providerPath.startsWith('bedrock:') ||
+    providerPath.startsWith('bedrock-agent:') ||
+    providerPath.startsWith('sagemaker:')
+  );
+}
+
+function isGoogleProviderPath(providerPath: string): boolean {
+  return (
+    providerPath.startsWith('vertex:') ||
+    providerPath.startsWith('google:') ||
+    providerPath.startsWith('palm:')
+  );
+}
+
 const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: isAwsProviderPath,
+    factories: async () => {
+      const { awsProviderFactories } = await import('./families/aws');
+      return awsProviderFactories;
+    },
+  },
+  {
+    canHandle: isGoogleProviderPath,
+    factories: async () => {
+      const { googleProviderFactories } = await import('./families/google');
+      return googleProviderFactories;
+    },
+  },
   {
     canHandle: isRedteamProviderPath,
     factories: async () => {
@@ -1841,5 +1670,16 @@ export async function getProviderFactories(
       }
     }),
   );
-  return [...providerMap, ...extraFactorySets.flat()];
+  // Family factories take precedence over the module-scoped providerMap so a
+  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:,
+  // vertex:/google:/palm:, redteam) is not first intercepted by a broader
+  // providerMap entry — notably the generic JS/TS-file factory
+  // (`isJavascriptFile`), which is a prefix-agnostic suffix match and would
+  // otherwise hijack any such path whose final segment ends in
+  // .js/.cjs/.mjs/.ts/.cts/.mts and try to load it as a custom module. Each
+  // family is gated by `canHandle`, and the family prefixes are disjoint from
+  // one another and from every concrete providerMap prefix, so prepending only
+  // changes precedence against that file-suffix catch-all — which is the bug we
+  // are fixing — and is otherwise order-neutral.
+  return [...extraFactorySets.flat(), ...providerMap];
 }
