@@ -7,6 +7,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
@@ -64,10 +65,9 @@ async function generateGcgPrompts(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+          headers: getRemoteGenerationHeaders({
             'x-promptfoo-silent': 'true',
-          },
+          }),
           body: JSON.stringify(payload),
         },
         getRequestTimeoutMs(),

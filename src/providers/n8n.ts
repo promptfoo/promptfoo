@@ -252,6 +252,8 @@ function stableStringify(value: unknown): string {
 const SENSITIVE_HEADER_PATTERN =
   /^(authorization|cookie|proxy-authorization|x-?api-?key|x-?auth-?token|x-?access-?token|x-?secret|x-?signature|bearer)$/i;
 
+type N8nRequestBody = Record<string, any> | any[] | string;
+
 function redactHeadersForFingerprint(
   headers: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
@@ -370,10 +372,17 @@ export class N8nProvider implements ApiProvider {
     };
   }
 
-  private buildRequestBody(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Record<string, any> | string {
+  private addSessionField(body: N8nRequestBody, context?: CallApiContextParams): N8nRequestBody {
+    const sessionId = this.getRequestSessionId(context);
+    if (!sessionId || typeof body !== 'object' || body === null || Array.isArray(body)) {
+      return body;
+    }
+
+    const sessionField = this.config.sessionField || 'sessionId';
+    return body[sessionField] === undefined ? { ...body, [sessionField]: sessionId } : body;
+  }
+
+  private buildRequestBody(prompt: string, context?: CallApiContextParams): N8nRequestBody {
     const templateVars = this.getTemplateVars(prompt, context);
     const nunjucks = getNunjucksEngine();
     const renderValue = (value: any): any => {
@@ -395,26 +404,17 @@ export class N8nProvider implements ApiProvider {
 
     // Default body structure
     if (!this.config.body) {
-      const body: Record<string, any> = { prompt };
-
-      // Include session ID if available
-      const sessionField = this.config.sessionField || 'sessionId';
-      const sessionId = this.getRequestSessionId(context);
-      if (sessionId) {
-        body[sessionField] = sessionId;
-      }
-
-      return body;
+      return this.addSessionField({ prompt }, context);
     }
 
     // Custom body template
     if (typeof this.config.body === 'string') {
       try {
-        return renderValue(JSON.parse(this.config.body));
+        return this.addSessionField(renderValue(JSON.parse(this.config.body)), context);
       } catch {
         const rendered = nunjucks.renderString(this.config.body, templateVars);
         try {
-          return JSON.parse(rendered);
+          return this.addSessionField(JSON.parse(rendered), context);
         } catch {
           if (/^\s*[\[{]/.test(this.config.body)) {
             throw new Error(
@@ -427,10 +427,10 @@ export class N8nProvider implements ApiProvider {
     }
 
     // Object body - render template values
-    return renderValue(this.config.body);
+    return this.addSessionField(renderValue(this.config.body), context);
   }
 
-  private buildGetUrl(body: Record<string, any> | string): string {
+  private buildGetUrl(body: N8nRequestBody): string {
     const requestUrl = new URL(this.getUrl());
 
     if (typeof body === 'string') {

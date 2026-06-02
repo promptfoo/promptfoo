@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
@@ -7,6 +7,7 @@ import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefa
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
   getRemoteHealthUrl,
@@ -493,5 +494,52 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
     expect(getRemoteGenerationUrlForUnaligned()).toBe(
       'https://api.promptfoo.app/api/v1/task/harmful',
     );
+  });
+});
+
+describe('getRemoteGenerationHeaders', () => {
+  beforeEach(() => {
+    vi.stubEnv('PROMPTFOO_API_KEY', '');
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockReturnValue({} as any);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('adds a bearer token when cloud is enabled and there is no remote-generation override', () => {
+    vi.mocked(readGlobalConfig).mockReturnValue({
+      cloud: { apiKey: 'test-cloud-key', apiHost: 'https://onprem.example.com' },
+    } as any);
+
+    expect(getRemoteGenerationHeaders()).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-cloud-key',
+    });
+  });
+
+  it('does NOT add a token when PROMPTFOO_REMOTE_GENERATION_URL is set (self-hosted override)', () => {
+    vi.mocked(readGlobalConfig).mockReturnValue({
+      cloud: { apiKey: 'test-cloud-key' },
+    } as any);
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://self-hosted.example.com/task' : '',
+    );
+
+    const headers = getRemoteGenerationHeaders();
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it('does NOT add a token when cloud is not enabled', () => {
+    expect(getRemoteGenerationHeaders().Authorization).toBeUndefined();
+  });
+
+  it('preserves caller-supplied extra headers', () => {
+    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toMatchObject({
+      'Content-Type': 'application/json',
+      'X-Custom': 'value',
+    });
   });
 });

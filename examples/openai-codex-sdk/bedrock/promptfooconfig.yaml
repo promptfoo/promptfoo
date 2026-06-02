@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Codex SDK running OpenAI frontier models on Amazon Bedrock'
+
+prompts:
+  - 'Write a Python function that calculates the factorial of a number. Output only the code.'
+
+providers:
+  # GPT-5.5 on Bedrock (us-east-2). Codex routes through Bedrock's OpenAI-compatible
+  # endpoint, so the model id uses the openai. prefix.
+  - id: openai:codex-sdk
+    label: codex-gpt-5.5-bedrock
+    config:
+      model: openai.gpt-5.5
+      model_provider: amazon-bedrock
+      model_reasoning_effort: low
+      sandbox_mode: read-only
+      skip_git_repo_check: true
+      # The Codex CLI reads AWS credentials from its own environment. promptfoo runs
+      # the CLI with a minimal env by default, so forward credentials + region here.
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+        # Using temporary credentials (SSO / STS / assumed role / MFA)? Also forward the
+        # session token (leave it out for long-lived IAM keys):
+        # AWS_SESSION_TOKEN: '{{env.AWS_SESSION_TOKEN}}'
+        # Or authenticate another way instead of static keys — forward one of:
+        # AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # a Bedrock API key
+        # AWS_PROFILE: '{{env.AWS_PROFILE}}'                           # a named profile
+
+tests:
+  - assert:
+      - type: contains
+        value: 'def factorial'
