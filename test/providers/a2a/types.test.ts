@@ -74,7 +74,7 @@ describe('A2A type schemas', () => {
     );
   });
 
-  it('parses oauth client credentials with string scopes', () => {
+  it('preserves oauth client credentials string scopes until render time', () => {
     expect(
       A2AAuthSchema.parse({
         clientId: 'client-1',
@@ -87,9 +87,22 @@ describe('A2A type schemas', () => {
       clientId: 'client-1',
       clientSecret: 'secret-1',
       grantType: 'client_credentials',
-      scopes: ['agent:read', 'agent:write', 'profile'],
+      scopes: 'agent:read agent:write,profile',
       tokenUrl: 'https://agent.example.com/oauth/token',
       type: 'oauth',
+    });
+  });
+
+  it('preserves templated oauth scope strings with spaced Nunjucks delimiters', () => {
+    expect(
+      A2AAuthSchema.parse({
+        clientId: 'client-1',
+        clientSecret: 'secret-1',
+        scopes: '{{ env.A2A_SCOPES }}',
+        type: 'oauth',
+      }),
+    ).toMatchObject({
+      scopes: '{{ env.A2A_SCOPES }}',
     });
   });
 

@@ -703,6 +703,46 @@ describe('A2AProvider', () => {
     );
   });
 
+  it('renders templated OAuth scope strings before splitting them', async () => {
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+      jsonResponse({
+        access_token: 'oauth-token',
+        expires_in: 3600,
+      }),
+    );
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'oauth scoped response' }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      auth: {
+        clientId: 'client-1',
+        clientSecret: 'client-secret',
+        grantType: 'client_credentials',
+        scopes: '{{ env.A2A_SCOPES }}',
+        tokenUrl: 'https://auth.example.com/oauth/template-token',
+        type: 'oauth',
+      },
+    }).callApi('hi', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      vars: { env: { A2A_SCOPES: 'a2a.send a2a.read' } },
+    });
+
+    expect(result.output).toBe('oauth scoped response');
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://auth.example.com/oauth/template-token',
+      expect.objectContaining({
+        body: expect.stringContaining('scope=a2a.send+a2a.read'),
+        method: 'POST',
+      }),
+    );
+  });
+
   it('extracts output from a completed task artifact', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({

@@ -195,6 +195,37 @@ function renderTemplate(
   return value;
 }
 
+function splitOAuthScopes(value: string): string[] {
+  return value
+    .split(/[,\s]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+}
+
+function normalizeRenderedOAuthScopes(scopes: unknown): string[] | undefined {
+  if (typeof scopes === 'string') {
+    return splitOAuthScopes(scopes);
+  }
+  if (Array.isArray(scopes)) {
+    return scopes.flatMap((scope) => (typeof scope === 'string' ? splitOAuthScopes(scope) : []));
+  }
+  return undefined;
+}
+
+function normalizeRenderedAuth(auth: unknown): unknown {
+  if (!auth || typeof auth !== 'object') {
+    return auth;
+  }
+  const authObject = auth as Record<string, unknown>;
+  if (authObject.type !== 'oauth' || authObject.scopes === undefined) {
+    return auth;
+  }
+  return {
+    ...authObject,
+    scopes: normalizeRenderedOAuthScopes(authObject.scopes),
+  };
+}
+
 function generateMessageId(prompt: string, context?: CallApiContextParams): string {
   const identity = {
     evaluationId: context?.evaluationId,
@@ -794,7 +825,7 @@ export class A2AProvider implements ApiProvider {
     if (!this.config.auth) {
       return { headers: {}, queryParams: {} };
     }
-    const renderedAuth = renderTemplate(this.config.auth, vars, context);
+    const renderedAuth = normalizeRenderedAuth(renderTemplate(this.config.auth, vars, context));
     const server = { auth: renderedAuth } as MCPServerConfig;
     const oauthToken =
       server.auth?.type === 'oauth'

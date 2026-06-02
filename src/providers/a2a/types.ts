@@ -1,15 +1,7 @@
 import { z } from 'zod';
 
 const RecordSchema = z.record(z.string(), z.unknown());
-const OAuthScopesSchema = z.union([
-  z.array(z.string()),
-  z.string().transform((value) =>
-    value
-      .split(/[,\s]+/)
-      .map((scope) => scope.trim())
-      .filter(Boolean),
-  ),
-]);
+const OAuthScopesSchema = z.union([z.array(z.string()), z.string()]);
 
 export const A2AAuthSchema = z.union([
   z
