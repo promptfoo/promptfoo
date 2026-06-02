@@ -186,6 +186,12 @@ function getRawRequestPromptError(value: unknown, provider: ProviderOptions): st
   return null;
 }
 
+function getHttpPromptError(provider: ProviderOptions): React.ReactNode | null {
+  return provider.config.request === undefined
+    ? getBodyPromptError(provider.config.body, provider)
+    : getRawRequestPromptError(provider.config.request, provider);
+}
+
 function updateGenericProviderField(
   provider: ProviderOptions,
   field: string,
@@ -356,6 +362,9 @@ interface HttpAuthorizationValidationResult {
   fieldErrors: AuthorizationFieldErrors;
 }
 
+const hasConfiguredAuthorizationValue = (value: unknown): boolean =>
+  value !== undefined && value !== '';
+
 function validateHttpSignatureAuthorization(
   provider: ProviderOptions,
 ): HttpAuthorizationValidationResult {
@@ -441,12 +450,18 @@ function validateHttpAuthorization(provider: ProviderOptions): HttpAuthorization
   };
 
   switch (auth.type) {
-    case 'oauth':
+    case 'oauth': {
+      const isPasswordGrant = auth.grantType === 'password';
       requireValue('tokenUrl', auth.tokenUrl, 'Token URL is required for OAuth authentication');
-      if (auth.grantType === 'password') {
+      if (isPasswordGrant) {
         requireValue('username', auth.username, 'Username is required for OAuth password grant');
         requireValue('password', auth.password, 'Password is required for OAuth password grant');
-      } else {
+      }
+      if (
+        !isPasswordGrant ||
+        hasConfiguredAuthorizationValue(auth.clientId) ||
+        hasConfiguredAuthorizationValue(auth.clientSecret)
+      ) {
         requireValue(
           'clientId',
           auth.clientId,
@@ -459,6 +474,7 @@ function validateHttpAuthorization(provider: ProviderOptions): HttpAuthorization
         );
       }
       break;
+    }
     case 'basic':
       requireValue('username', auth.username, 'Username is required for Basic authentication');
       requireValue('password', auth.password, 'Password is required for Basic authentication');
@@ -790,24 +806,26 @@ function ProviderConfigEditor({
         typeof value === 'string' || (typeof value === 'object' && value !== null)
           ? value
           : String(value);
-      setBodyError(getBodyPromptError(value, updatedTarget));
     } else if (field === 'request') {
       updatedTarget.config.request = value as string;
-      setBodyError(getRawRequestPromptError(value, updatedTarget));
     } else if (field === 'inputs') {
       if (value === undefined) {
         delete updatedTarget.inputs;
       } else {
         updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
-        if (hasConfiguredInputs(updatedTarget)) {
-          setBodyError(null);
-        }
       }
     } else if (field === 'steps') {
       setBrowserFieldErrors({});
       updatedTarget.config.steps = value as typeof updatedTarget.config.steps;
     } else {
       updateGenericProviderField(updatedTarget, field, value);
+    }
+
+    if (
+      providerType === 'http' &&
+      (field === 'body' || field === 'request' || field === 'inputs' || field === 'config')
+    ) {
+      setBodyError(getHttpPromptError(updatedTarget));
     }
 
     latestProviderRef.current = updatedTarget;

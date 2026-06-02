@@ -34,6 +34,30 @@ vi.mock('./HttpEndpointConfiguration', () => ({
       </button>
       <button
         type="button"
+        data-testid="replace-http-structured-config-without-prompt"
+        onClick={() =>
+          updateCustomTarget?.('config', {
+            url: 'https://api.example.com/chat',
+            method: 'POST',
+            body: { message: 'hello' },
+          })
+        }
+      >
+        Replace structured config without prompt
+      </button>
+      <button
+        type="button"
+        data-testid="replace-http-raw-config-without-prompt"
+        onClick={() =>
+          updateCustomTarget?.('config', {
+            request: 'POST /chat HTTP/1.1\nHost: api.example.com\n\n{"message":"hello"}',
+          })
+        }
+      >
+        Replace raw config without prompt
+      </button>
+      <button
+        type="button"
         data-testid="switch-signature-auth-to-basic"
         onClick={() => {
           updateCustomTarget?.('signatureAuth', undefined);
@@ -387,7 +411,80 @@ describe('ProviderConfigEditor', () => {
       expect(mockSetError).toHaveBeenCalledWith(expect.stringContaining(expected));
     });
 
-    it('allows OAuth password grants without optional client credentials', () => {
+    it.each([
+      {
+        mode: 'password grants without optional client credentials',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+        },
+        expected: null,
+      },
+      {
+        mode: 'password grants with blank optional client credentials',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientId: '',
+          clientSecret: '',
+        },
+        expected: null,
+      },
+      {
+        mode: 'password grants with a complete optional client credential pair',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientId: 'client-id',
+          clientSecret: 'client-secret',
+        },
+        expected: null,
+      },
+      {
+        mode: 'password grants with only a client ID',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientId: 'client-id',
+        },
+        expected: 'Client Secret is required for OAuth client credentials',
+      },
+      {
+        mode: 'password grants with only a client secret',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientSecret: 'client-secret',
+        },
+        expected: 'Client ID is required for OAuth client credentials',
+      },
+      {
+        mode: 'client credentials grants without credentials',
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl: 'https://auth.example.com/token',
+        },
+        expected:
+          'Client ID is required for OAuth client credentials, Client Secret is required for OAuth client credentials',
+      },
+    ])('validates OAuth $mode', async ({ auth, expected }) => {
+      const mockSetError = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
       renderWithProviders(
@@ -397,16 +494,11 @@ describe('ProviderConfigEditor', () => {
             config: {
               url: 'https://api.example.com/chat',
               body: { message: '{{prompt}}' },
-              auth: {
-                type: 'oauth',
-                grantType: 'password',
-                tokenUrl: 'https://auth.example.com/token',
-                username: 'operator',
-                password: 'secret',
-              },
+              auth,
             },
           }}
           setProvider={vi.fn()}
+          setError={mockSetError}
           onValidationRequest={(validator) => {
             validateFn = validator;
           }}
@@ -415,7 +507,13 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      expect(validateFn!()).toBe(true);
+      await act(async () => {
+        expect(validateFn!()).toBe(expected === null);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expected);
+      if (expected) {
+        expect(screen.getByTestId('http-auth-field-errors')).toHaveTextContent(expected);
+      }
     });
 
     it('explains missing HTTP placeholders as test inputs in eval mode', async () => {
@@ -441,6 +539,87 @@ describe('ProviderConfigEditor', () => {
       const message = await screen.findByTestId('http-body-error');
       expect(message).toHaveTextContent(/replaces with each test input at run time/i);
       expect(message).not.toHaveTextContent(/attack payload/i);
+    });
+
+    it.each([
+      {
+        name: 'structured configs from raw-to-structured transitions, generators, or Postman imports',
+        initialConfig: { request: 'POST /chat HTTP/1.1\n\n{"message":"{{prompt}}"}' },
+        button: 'replace-http-structured-config-without-prompt',
+        expected: 'Request body must contain {{prompt}}',
+        expectedSetError: 'Validation failed',
+      },
+      {
+        name: 'raw configs from generators',
+        initialConfig: {
+          url: 'https://api.example.com/chat',
+          body: { message: '{{prompt}}' },
+        },
+        button: 'replace-http-raw-config-without-prompt',
+        expected: 'Raw request must contain {{prompt}} template variable',
+        expectedSetError: 'Raw request must contain {{prompt}} template variable',
+      },
+    ])('validates atomic HTTP $name', async ({
+      initialConfig,
+      button,
+      expected,
+      expectedSetError,
+    }) => {
+      const user = userEvent.setup();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'http', config: initialConfig }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="redteam"
+        />,
+      );
+
+      await user.click(screen.getByTestId(button));
+
+      await waitFor(() => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expectedSetError);
+      expect(screen.getByTestId('http-body-error')).toHaveTextContent(expected);
+    });
+
+    it('allows atomic HTTP config replacements without {{prompt}} in multi-input mode', async () => {
+      const user = userEvent.setup();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: { request: 'POST /chat HTTP/1.1\n\n{"message":"{{prompt}}"}' },
+            inputs: { userId: 'User ID' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="redteam"
+        />,
+      );
+
+      await user.click(screen.getByTestId('replace-http-structured-config-without-prompt'));
+
+      await waitFor(() => {
+        expect(validateFn!()).toBe(true);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(screen.queryByTestId('http-body-error')).not.toBeInTheDocument();
     });
 
     it('preserves cleared signature auth across sequential HTTP configuration updates', async () => {
