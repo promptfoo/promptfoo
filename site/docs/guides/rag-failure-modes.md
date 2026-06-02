@@ -75,6 +75,7 @@ tests:
       context: |
         handbook.md: Expense reimbursement requires manager approval above $500.
         security.md: Passwords must be rotated every 90 days.
+
     assert:
       - type: context-relevance
         threshold: 0.5
@@ -104,6 +105,7 @@ tests:
       query: What is the max purchase that does not require approval?
       context: |
         Employees can expense up to $500 without manager approval.
+
     assert:
       - type: factuality
         value: employees can expense up to $500 without manager approval
@@ -136,6 +138,7 @@ tests:
       context: |
         Eligible employees can take up to 16 weeks of parental leave.
         The policy does not describe any meal or travel stipend.
+
     assert:
       - type: context-faithfulness
         threshold: 0.95
@@ -256,6 +259,7 @@ tests:
       query: How many weeks is maternity leave?
       context: |
         Eligible employees can take up to 16 weeks of maternity leave.
+
     assert:
       - type: not-is-refusal
       - type: answer-relevance
