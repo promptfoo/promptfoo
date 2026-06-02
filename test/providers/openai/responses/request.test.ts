@@ -58,6 +58,7 @@ describe('OpenAiResponsesProvider request building', () => {
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
           Authorization: 'Bearer test-key',
+          'X-OpenAI-Originator': 'promptfoo',
         }),
       }),
       expect.any(Number),

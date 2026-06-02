@@ -48,6 +48,10 @@ describe('FoundationModelConfiguration', () => {
     expect(apiKeyInput).toHaveValue('test-key-123');
     expect(apiKeyInput).toHaveAttribute('type', 'password');
     expect(apiKeyInput).toHaveAttribute('autocomplete', 'new-password');
+    expect(apiKeyInput).toHaveAttribute('spellcheck', 'false');
+    expect(apiKeyInput).toHaveAttribute('data-1p-ignore');
+    expect(apiKeyInput).toHaveAttribute('data-lpignore', 'true');
+    expect(apiKeyInput).toHaveAttribute('data-form-type', 'other');
     expect(apiKeyInput).toHaveAccessibleDescription(/included in this provider configuration/i);
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
     expect(apiBaseUrlInput).toHaveAccessibleDescription(/For proxies, local models/i);

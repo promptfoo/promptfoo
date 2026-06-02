@@ -16,6 +16,7 @@ import type { ProviderOptions } from '../../types';
 const priorityOrder = [
   // Most common ways to test your own application
   'http',
+  'a2a',
   'python',
   'javascript',
   // Most popular AI providers (direct API access)
@@ -42,6 +43,13 @@ const allProviderOptions = [
     label: 'WebSocket',
     description: 'Real-time WebSocket connections',
     tag: 'app',
+  },
+  {
+    value: 'a2a',
+    label: 'A2A Agent',
+    description: 'Connect to Agent2Agent HTTP+JSON agents',
+    tag: 'agents',
+    recommended: true,
   },
   {
     value: 'python',
@@ -506,6 +514,11 @@ const CONFIGURED_PROVIDER_DRAFTS: Record<string, (label: string | undefined) => 
       timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
       stateful: true,
     },
+  }),
+  a2a: (label) => ({
+    id: 'a2a',
+    label,
+    config: { url: '' },
   }),
   browser: (label) => ({
     id: 'browser',

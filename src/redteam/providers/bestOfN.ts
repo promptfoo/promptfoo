@@ -10,6 +10,7 @@ import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
@@ -81,9 +82,7 @@ export default class BestOfNProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
             prompt: context.vars[this.config.injectVar],

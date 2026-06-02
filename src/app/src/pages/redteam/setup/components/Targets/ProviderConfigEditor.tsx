@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -39,6 +40,9 @@ const shouldRemoveMcpConfig = (
   currentProviderType === 'bedrock' &&
   previousTargetId.startsWith('bedrock:converse:') &&
   !nextTargetId.startsWith('bedrock:converse:');
+
+const containsNunjucksTemplate = (value: string): boolean =>
+  /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
 
 const EXAMPLE_PROVIDER_IDS = [
   'file:///path/to/custom_provider.js',
@@ -80,6 +84,38 @@ const FOUNDATION_MODEL_TYPES = [
   'perplexity',
   'cerebras',
 ];
+
+const CUSTOM_CONFIGURATION_PROVIDER_TYPES = [
+  'custom',
+  'sagemaker',
+  'databricks',
+  'cloudflare-ai',
+  'fireworks',
+  'together',
+  'replicate',
+  'huggingface',
+  'github',
+  'xai',
+  'ai21',
+  'aimlapi',
+  'hyperbolic',
+  'fal',
+  'voyage',
+  'ollama',
+  'vllm',
+  'localai',
+  'llamafile',
+  'llama.cpp',
+  'text-generation-webui',
+  'javascript',
+  'python',
+  'go',
+  'mcp',
+  'exec',
+];
+
+const usesCustomTargetConfiguration = (providerType: string | undefined): boolean =>
+  CUSTOM_CONFIGURATION_PROVIDER_TYPES.includes(providerType || '');
 
 const FOUNDATION_ERROR_FIELD_BY_CONFIG_FIELD: Partial<
   Record<string, keyof FoundationModelFieldErrors>
@@ -300,7 +336,6 @@ function validateTlsConfig(provider: ProviderOptions): string[] {
       } else {
         requireValue(tls.jksContent, 'JKS keystore content is required');
       }
-      requireValue(tls.keyAlias, 'JKS key alias is required');
       break;
     case 'pfx':
       if ((tls.pfxInputType ?? 'upload') === 'path') {
@@ -560,11 +595,56 @@ function validateCustomProvider(
   return errors;
 }
 
+function validateA2AProvider(
+  provider: ProviderOptions,
+  advancedConfigError: string | null,
+  validateUrl: (url: string) => boolean,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (!provider.id || provider.id.trim() === '') {
+    errors.push('Provider ID is required');
+  } else if (provider.id !== 'a2a' && !provider.id.startsWith('a2a:')) {
+    errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
+  }
+
+  const configuredUrl = typeof provider.config?.url === 'string' ? provider.config.url.trim() : '';
+  const agentCardUrl =
+    typeof provider.config?.agentCardUrl === 'string' ? provider.config.agentCardUrl.trim() : '';
+  const shorthandUrl = provider.id?.startsWith('a2a:')
+    ? provider.id.slice('a2a:'.length).trim()
+    : '';
+
+  const isValidA2AUrl = (url: string): boolean =>
+    url.length > 0 && (validateUrl(url) || containsNunjucksTemplate(url));
+  const hasUrl = isValidA2AUrl(configuredUrl);
+  const hasShorthandUrl = isValidA2AUrl(shorthandUrl);
+  const hasAgentCardUrl = isValidA2AUrl(agentCardUrl);
+
+  if (configuredUrl.length > 0 && !hasUrl) {
+    errors.push('A2A endpoint URL must be a valid HTTP(S) URL');
+  }
+  if (agentCardUrl.length > 0 && !hasAgentCardUrl) {
+    errors.push('A2A Agent Card URL must be a valid HTTP(S) URL');
+  }
+  if (shorthandUrl.length > 0 && !hasShorthandUrl) {
+    errors.push('A2A shorthand URL must be a valid HTTP(S) URL');
+  }
+  if (!hasUrl && !hasShorthandUrl && !hasAgentCardUrl) {
+    errors.push('A valid A2A endpoint URL or Agent Card URL is required');
+  }
+  if (advancedConfigError) {
+    errors.push(advancedConfigError);
+  }
+
+  return errors;
+}
+
 function getProviderValidationResult(
   provider: ProviderOptions,
   providerType: string | undefined,
   bodyError: React.ReactNode | null,
   extensionErrors: boolean,
+  a2aAdvancedConfigError: string | null,
   validateUrl: (url: string, type?: 'http' | 'websocket') => boolean,
 ): ProviderValidationResult {
   let result: ProviderValidationResult = {
@@ -593,7 +673,9 @@ function getProviderValidationResult(
   } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
     result.errors = validateAgentProvider(provider);
     result.agentIdError = typeof result.errors[0] === 'string' ? result.errors[0] : null;
-  } else if (['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
+  } else if (providerType === 'a2a') {
+    result.errors = validateA2AProvider(provider, a2aAdvancedConfigError, validateUrl);
+  } else if (usesCustomTargetConfiguration(providerType)) {
     result.customIdError = getCustomProviderIdError(provider);
     result.errors = validateCustomProvider(provider, bodyError);
   }
@@ -625,6 +707,7 @@ function ProviderConfigEditor({
     JSON.stringify(provider.config, null, 2),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
+  const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
   const [foundationFieldErrors, setFoundationFieldErrors] = useState<FoundationModelFieldErrors>(
     {},
   );
@@ -641,6 +724,7 @@ function ProviderConfigEditor({
       return;
     }
     previousProviderTypeRef.current = providerType;
+    setRawConfigJson(JSON.stringify(provider.config, null, 2));
     setBodyError(null);
     setUrlError(null);
     setFoundationFieldErrors({});
@@ -648,7 +732,8 @@ function ProviderConfigEditor({
     setCustomIdError(null);
     setAuthorizationFieldErrors({});
     setBrowserFieldErrors({});
-  }, [providerType]);
+    setA2AAdvancedConfigError(null);
+  }, [provider.config, providerType]);
 
   useEffect(() => {
     latestProviderRef.current = provider;
@@ -766,6 +851,7 @@ function ProviderConfigEditor({
       providerType,
       bodyError,
       extensionErrors,
+      a2aAdvancedConfigError,
       validateUrl,
     );
     setFoundationFieldErrors(nextFoundationFieldErrors);
@@ -786,7 +872,16 @@ function ProviderConfigEditor({
       onValidate(!hasErrors);
     }
     return !hasErrors;
-  }, [providerType, provider, bodyError, extensionErrors, setError, onValidate, validateUrl]);
+  }, [
+    providerType,
+    provider,
+    bodyError,
+    extensionErrors,
+    a2aAdvancedConfigError,
+    setError,
+    onValidate,
+    validateUrl,
+  ]);
 
   useEffect(() => {
     if (validateAll) {
@@ -803,7 +898,7 @@ function ProviderConfigEditor({
 
   return (
     <div>
-      {providerType === 'custom' && (
+      {usesCustomTargetConfiguration(providerType) && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
@@ -847,6 +942,17 @@ function ProviderConfigEditor({
         />
       )}
 
+      {providerType === 'a2a' && (
+        <A2AEndpointConfiguration
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson={rawConfigJson}
+          setRawConfigJson={setRawConfigJson}
+          bodyError={bodyError}
+          onAdvancedConfigErrorChange={setA2AAdvancedConfigError}
+        />
+      )}
+
       {/* Foundation model providers */}
       {FOUNDATION_MODEL_TYPES.includes(providerType || '') && (
         <FoundationModelConfiguration
@@ -854,63 +960,6 @@ function ProviderConfigEditor({
           updateCustomTarget={updateCustomTarget}
           providerType={providerType || ''}
           fieldErrors={foundationFieldErrors}
-        />
-      )}
-
-      {/* Cloud and enterprise providers - use custom config for now */}
-      {[
-        'sagemaker',
-        'databricks',
-        'cloudflare-ai',
-        'fireworks',
-        'together',
-        'replicate',
-        'huggingface',
-      ].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
-          setBodyError={setBodyError}
-          providerType={providerType}
-          mode={mode}
-          idError={customIdError}
-        />
-      )}
-
-      {/* Specialized providers - use custom config for now */}
-      {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(
-        providerType || '',
-      ) && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
-          setBodyError={setBodyError}
-          providerType={providerType}
-          mode={mode}
-          idError={customIdError}
-        />
-      )}
-
-      {/* Local model providers - use custom config for now */}
-      {['ollama', 'vllm', 'localai', 'llamafile', 'llama.cpp', 'text-generation-webui'].includes(
-        providerType || '',
-      ) && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
-          setBodyError={setBodyError}
-          providerType={providerType}
-          mode={mode}
-          idError={customIdError}
         />
       )}
 
@@ -922,21 +971,6 @@ function ProviderConfigEditor({
           agentType={providerType || ''}
           mode={mode}
           providerIdError={agentIdError}
-        />
-      )}
-
-      {/* Custom providers */}
-      {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={setRawConfigJson}
-          bodyError={bodyError}
-          setBodyError={setBodyError}
-          providerType={providerType}
-          mode={mode}
-          idError={customIdError}
         />
       )}
 

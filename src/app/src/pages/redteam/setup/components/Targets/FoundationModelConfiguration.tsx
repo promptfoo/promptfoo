@@ -623,6 +623,9 @@ const FoundationModelConfiguration = ({
                   onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
                   autoComplete="new-password"
                   spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
                   aria-describedby={`${fieldErrorIdPrefix}-api-key-help`}
                 />
                 <Button
