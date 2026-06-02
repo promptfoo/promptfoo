@@ -1,3 +1,12 @@
+import {
+  traceErrorSpansConfigError,
+  traceSpanCountBoundsError,
+  traceSpanDurationConfigError,
+  trajectoryCountBoundsError,
+  trajectoryGoalSuccessTimeoutError,
+  trajectoryRedactArgsError,
+} from '@promptfoo/assertions/traceAssertionConfig';
+
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -395,34 +404,18 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  if (
-    (value.min !== undefined && (typeof value.min !== 'number' || !Number.isFinite(value.min))) ||
-    (value.max !== undefined && (typeof value.max !== 'number' || !Number.isFinite(value.max)))
-  ) {
-    return 'Enter numeric trace span count limits.';
-  }
-  // Mirror the runtime requirement (at least one bound) so a pattern-only config is caught
-  // at save time instead of throwing during evaluation.
-  if (value.min === undefined && value.max === undefined) {
-    return 'Enter at least a min or max span count.';
-  }
-  return undefined;
+  // Delegate the bound rules (at-least-one, finite non-negative integers, max >= min) to the
+  // shared validator the runtime uses, so save-time and run-time validation cannot drift.
+  return traceSpanCountBoundsError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
-  if (
-    value.percentile !== undefined &&
-    (typeof value.percentile !== 'number' ||
-      !Number.isFinite(value.percentile) ||
-      value.percentile < 0 ||
-      value.percentile > 100)
-  ) {
-    return 'Enter a trace span percentile from 0 to 100.';
-  }
-  return undefined;
+  // Shared validator enforces non-negative max, pattern, requirePresence, and the
+  // percentile/method rules exactly as the runtime does.
+  return traceSpanDurationConfigError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -435,14 +428,21 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
   if (value.mode !== undefined && value.mode !== 'partial' && value.mode !== 'exact') {
     return 'Set trajectory tool args mode to "partial" or "exact".';
   }
-  return undefined;
+  // A non-boolean redactArgsInFailures must fail loud here too, not fail open at eval time.
+  return trajectoryRedactArgsError(value);
 }
 
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || (typeof value.min !== 'number' && typeof value.max !== 'number')) {
     return 'Enter JSON with a minimum or maximum trajectory step count.';
   }
-  return undefined;
+  return trajectoryCountBoundsError(value, 'trajectory:step-count');
+}
+
+function getTraceErrorSpansValueError(value: unknown): string | undefined {
+  // A number (max error-span count) or an object with max_count/max_percentage/pattern/
+  // requirePresence; any other value resolves to defaults at runtime and is accepted.
+  return traceErrorSpansConfigError(value);
 }
 
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
@@ -488,6 +488,20 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:tool-sequence'
   ) {
     return getTrajectoryToolSequenceValueError(assertion.value);
+  }
+  if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
+    return getTraceErrorSpansValueError(assertion.value);
+  }
+  if (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') {
+    // tool-used can be a string/array (no count bounds) or an object carrying min/max counts.
+    // Presence is validated by getNamedMatcherValueError; only the count bounds live here, and
+    // they are checked first to match the runtime (bounds resolve before the name/pattern check).
+    if (isRecord(assertion.value)) {
+      const boundsError = trajectoryCountBoundsError(assertion.value, 'trajectory:tool-used');
+      if (boundsError) {
+        return boundsError;
+      }
+    }
   }
 
   return undefined;
@@ -585,12 +599,18 @@ function getBasicExpectedValueError(assertion: Assertion): string | undefined {
 }
 
 function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
+  if (!TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)) {
+    return undefined;
+  }
   if (
-    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
     !(isRecord(assertion.value) && hasNonBlankString(assertion.value.goal))
   ) {
     return 'Enter the goal that the agent should achieve.';
+  }
+  // Goal is present; mirror the runtime check that an optional timeoutMs is a positive number.
+  if (isRecord(assertion.value)) {
+    return trajectoryGoalSuccessTimeoutError(assertion.value);
   }
 
   return undefined;

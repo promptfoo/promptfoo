@@ -21,30 +21,31 @@ export function matchesPattern(spanName: string, pattern: string): boolean {
   return regex.test(spanName);
 }
 
-export function assertFiniteNonNegativeNumber(
-  value: unknown,
-  label: string,
-): asserts value is number {
-  if (!Number.isFinite(value) || (value as number) < 0) {
-    throw new Error(`${label} must be a finite non-negative number`);
-  }
+/**
+ * Return-string validators for assertion config bounds. They are the single source of
+ * truth for these messages: `traceAssertionConfig.ts` composes them into per-assertion
+ * validators that both the runtime handlers (throwing on the returned message) and the
+ * Eval Creator UI (surfacing it at save time) use, so the two surfaces cannot drift.
+ * Keep them error-returning (not throwing) so both call sites can share the logic.
+ */
+export function finiteNonNegativeNumberError(value: unknown, label: string): string | undefined {
+  return Number.isFinite(value) && (value as number) >= 0
+    ? undefined
+    : `${label} must be a finite non-negative number`;
 }
 
-export function assertFiniteNonNegativeInteger(
-  value: unknown,
-  label: string,
-): asserts value is number {
-  if (!Number.isFinite(value) || !Number.isInteger(value) || (value as number) < 0) {
-    throw new Error(`${label} must be a finite non-negative integer`);
-  }
+export function finiteNonNegativeIntegerError(value: unknown, label: string): string | undefined {
+  return Number.isFinite(value) && Number.isInteger(value) && (value as number) >= 0
+    ? undefined
+    : `${label} must be a finite non-negative integer`;
 }
 
-export function assertValidRange(
+export function validRangeError(
   min: number | undefined,
   max: number | undefined,
   label: string,
-): void {
-  if (min !== undefined && max !== undefined && max < min) {
-    throw new Error(`${label} max must be greater than or equal to min`);
-  }
+): string | undefined {
+  return min !== undefined && max !== undefined && max < min
+    ? `${label} max must be greater than or equal to min`
+    : undefined;
 }
