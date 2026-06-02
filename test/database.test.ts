@@ -10,6 +10,26 @@ import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
 
+async function removeDatabaseFile(filePath: string): Promise<void> {
+  const maxAttempts = process.platform === 'win32' ? 10 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fs.promises.rm(filePath, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const isRetriableWindowsLock = code === 'EBUSY' || code === 'EPERM';
+
+      if (!isRetriableWindowsLock || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 describe('database WAL mode', () => {
   let tempDir: string;
 
@@ -102,9 +122,9 @@ describe('database WAL mode', () => {
     await db.run('INSERT INTO deleted_database_probe (id) VALUES (1)');
     await database.closeDb();
 
-    fs.rmSync(dbPath, { force: true });
-    fs.rmSync(`${dbPath}-shm`, { force: true });
-    fs.rmSync(`${dbPath}-wal`, { force: true });
+    await removeDatabaseFile(dbPath);
+    await removeDatabaseFile(`${dbPath}-shm`);
+    await removeDatabaseFile(`${dbPath}-wal`);
     expect(fs.existsSync(dbPath)).toBe(false);
 
     const recreatedDb = await database.getDb();
