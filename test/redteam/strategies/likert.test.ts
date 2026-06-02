@@ -5,6 +5,7 @@ import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
@@ -45,6 +46,10 @@ describe('likert strategy', () => {
     vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'http://test.com';
     });
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    }));
     vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
       (strategyName) =>
         `${strategyName} requires remote generation, which has been explicitly disabled.`,

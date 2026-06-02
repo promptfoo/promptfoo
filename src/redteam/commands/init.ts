@@ -85,12 +85,12 @@ redteam:
   purpose: {{ purpose | dump }}
   {% endif %}
   # Default number of inputs to generate for each plugin.
-  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length) * languages.length)
-  # Languages.length is 1 by default, but is added when the multilingual strategy is used.
+  # Strategies and languages multiply the generated inputs. Some plugins can also
+  # generate additional inputs for each configured item, such as privacy geography.
   numTests: {{numTests}}
 
   {% if plugins.length > 0 -%}
-  # Each plugin generates {{numTests}} adversarial inputs.
+  # Most plugins generate {{numTests}} adversarial inputs.
   # To control the number of tests for each plugin, use:
   # - id: plugin-name
   #   numTests: 10
@@ -356,6 +356,10 @@ export async function redteamInit(directory: string | undefined) {
       { name: `I'll choose later`, value: 'Other' },
       { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
       { name: 'openai:gpt-5', value: 'openai:gpt-5' },
+      {
+        name: 'anthropic:claude-opus-4-8',
+        value: 'anthropic:messages:claude-opus-4-8',
+      },
       {
         name: 'anthropic:claude-opus-4-6',
         value: 'anthropic:messages:claude-opus-4-6',

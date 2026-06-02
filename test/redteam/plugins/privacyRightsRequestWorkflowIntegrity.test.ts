@@ -35,6 +35,10 @@ describe('PrivacyRightsRequestWorkflowIntegrityPlugin', () => {
     vi.resetAllMocks();
   });
 
+  it('disables remote generation because workflow evidence must remain local', () => {
+    expect(PrivacyRightsRequestWorkflowIntegrityPlugin.canGenerateRemote).toBe(false);
+  });
+
   it('requires a supported privacy geography', () => {
     expect(
       () =>
@@ -122,6 +126,32 @@ describe('PrivacyRightsRequestWorkflowIntegrityPlugin', () => {
     expect(tests[0].metadata).not.toHaveProperty('frameworkGuidance');
   });
 
+  it('prefers modern geographies over stale legacy framework config', async () => {
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
+      output: 'Prompt: Please stop sharing my data for ads.',
+    });
+
+    const plugin = new PrivacyRightsRequestWorkflowIntegrityPlugin(
+      mockProvider,
+      mockPurpose,
+      mockInjectVar,
+      {
+        geographies: ['eu-gdpr'],
+        frameworks: ['hipaa'],
+      },
+    );
+
+    const tests = await plugin.generateTests(1, 0);
+
+    expect(tests[0].metadata).toMatchObject({
+      privacyGeography: 'eu-gdpr',
+      pluginConfig: {
+        geographies: ['eu-gdpr'],
+      },
+    });
+    expect(tests[0].metadata?.pluginConfig).not.toHaveProperty('frameworks');
+  });
+
   it('includes workflow context and ignores legacy privacy-policy config', async () => {
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -159,6 +189,29 @@ describe('PrivacyRightsRequestWorkflowIntegrityPlugin', () => {
     );
   });
 
+  it('preserves Nunjucks endraw tags in workflow evidence without rendering their contents', async () => {
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
+      output: 'Prompt: Please route my deletion request through the approved workflow.',
+    });
+
+    const plugin = new PrivacyRightsRequestWorkflowIntegrityPlugin(
+      mockProvider,
+      mockPurpose,
+      mockInjectVar,
+      {
+        geographies: ['eu-gdpr'],
+        rightsRequestPolicyContent:
+          'Preserve this literal text: {%- endraw -%} {{ purpose }} {% raw %}.',
+      },
+    );
+
+    await plugin.generateTests(1, 0);
+
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('{%- endraw -%} {{ purpose }} {% raw %}'),
+    );
+  });
+
   it('loads rightsRequestPolicy from a file:// reference', async () => {
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -179,6 +232,28 @@ describe('PrivacyRightsRequestWorkflowIntegrityPlugin', () => {
 
     expect(tests[0].metadata?.rightsRequestPolicy).toContain('approved DSR queue');
     expect(tests[0].metadata?.rightsRequestPolicy).toContain('Verify the account');
+  });
+
+  it('rejects unreadable workflow file references without exposing the resolved path', () => {
+    const missingPath = path.join(workflowFixtureDir, 'missing-workflow.md');
+
+    expect(() => {
+      new PrivacyRightsRequestWorkflowIntegrityPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        geographies: ['california-ccpa'],
+        rightsRequestPolicy: `file://${missingPath}`,
+      });
+    }).toThrow(
+      'Privacy Rights Request Workflow Integrity plugin could not load `config.rightsRequestPolicy` from the provided file:// reference.',
+    );
+
+    try {
+      new PrivacyRightsRequestWorkflowIntegrityPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        geographies: ['california-ccpa'],
+        rightsRequestPolicy: `file://${missingPath}`,
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(missingPath);
+    }
   });
 
   it('rejects unsupported geographies and legacy frameworks', () => {

@@ -864,6 +864,31 @@ describe('PluginsTab', () => {
           ),
         ).not.toBeInTheDocument();
       });
+
+      test('Marks unsupported privacy rights geography config as needing configuration', async () => {
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: [
+                {
+                  id: 'privacy:rights-request-workflow-integrity',
+                  config: { geographies: ['unsupported'] },
+                },
+              ],
+            },
+          });
+        });
+
+        renderComponent();
+
+        expect(
+          screen.getByTestId(
+            'selected-plugin-needs-config-privacy:rights-request-workflow-integrity',
+          ),
+        ).toBeInTheDocument();
+      });
     });
   });
 

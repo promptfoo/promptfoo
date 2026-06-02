@@ -26,10 +26,13 @@ const FILE_REF_PREFIX = 'file://';
 const URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 const URI_SCHEME_ERROR =
   'Automated Decision Response Integrity plugin requires file-backed URI references to use the file:// scheme.';
+const FILE_LOAD_ERROR =
+  'Automated Decision Response Integrity plugin could not load `config.decisionResponsePolicy` from the provided file:// reference.';
 const PROFILE_CONFIG_ERROR =
   'Automated Decision Response Integrity plugin requires `config.profiles` with at least one supported decision-response profile.';
 const UNSUPPORTED_PROFILE_ERROR =
   'Automated Decision Response Integrity plugin supports only these `config.profiles` values: california-ccpa-admt, eu-ai-act-high-risk-explanation, colorado-ai-act-consequential-decision.';
+const NUNJUCKS_ENDRAW_TAG_PATTERN = /\{%-?\s*endraw\s*-?%\}/gi;
 
 const DEFAULT_EXAMPLES = dedent`
   <Example>
@@ -82,17 +85,25 @@ function resolveOptionalDecisionResponsePolicy(config: PluginConfig): string | u
     return uploadedContent;
   }
 
-  const policy = config.decisionResponsePolicy?.trim();
-  if (!policy) {
+  const rawValue = config.decisionResponsePolicy;
+  if (rawValue === undefined || (typeof rawValue === 'string' && rawValue.trim() === '')) {
     return undefined;
   }
 
+  assertOptionalText(rawValue, 'decisionResponsePolicy');
+  const policy = rawValue.trim();
   invariant(
     policy.startsWith(FILE_REF_PREFIX) || !URI_SCHEME_PATTERN.test(policy),
     URI_SCHEME_ERROR,
   );
 
-  const loaded = policy.startsWith(FILE_REF_PREFIX) ? maybeLoadFromExternalFile(policy) : policy;
+  let loaded: unknown;
+  try {
+    loaded = policy.startsWith(FILE_REF_PREFIX) ? maybeLoadFromExternalFile(policy) : policy;
+  } catch {
+    invariant(false, FILE_LOAD_ERROR);
+  }
+
   assertOptionalText(loaded, 'decisionResponsePolicy');
 
   return loaded;
@@ -134,10 +145,15 @@ function buildRawContextBlock(label: string, value: string | undefined): string 
     return '';
   }
 
+  const escapedValue = value.replace(
+    NUNJUCKS_ENDRAW_TAG_PATTERN,
+    (tag) => `{% endraw %}{{ ${JSON.stringify(tag)} }}{% raw %}`,
+  );
+
   return dedent`
     {% raw %}
     <${label}>
-    ${value.replace(/\{% endraw %\}/g, '{% endraw_placeholder %}')}
+    ${escapedValue}
     </${label}>
     {% endraw %}
   `;

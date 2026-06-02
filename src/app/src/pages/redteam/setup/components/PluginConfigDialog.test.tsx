@@ -330,6 +330,126 @@ describe('PluginConfigDialog - OSS', () => {
         );
       });
     });
+
+    it('replaces unsupported decision response profiles when selecting a supported profile', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="decisioning:automated-decision-response-integrity"
+          config={{ profiles: ['unsupported'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('California CCPA ADMT'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'decisioning:automated-decision-response-integrity',
+          {
+            profiles: ['california-ccpa-admt'],
+          },
+        );
+      });
+    });
+
+    it('shows string decision response profile config and removes empty optional evidence on save', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="decisioning:automated-decision-response-integrity"
+          config={{ profiles: 'eu-ai-act-high-risk-explanation', decisionResponsePolicy: '' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('EU AI Act High-Risk Explanation')).toBeChecked();
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'decisioning:automated-decision-response-integrity',
+          {
+            profiles: 'eu-ai-act-high-risk-explanation',
+          },
+        );
+      });
+    });
+
+    it('replaces unsupported and legacy privacy rights config when selecting a geography', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{ geographies: ['unsupported'], frameworks: ['gdpr'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('EU GDPR'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('privacy:rights-request-workflow-integrity', {
+          geographies: ['eu-gdpr'],
+        });
+      });
+    });
+
+    it('preserves legacy framework geography selections when adding a modern geography', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{ frameworks: ['gdpr'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('EU GDPR')).toBeChecked();
+
+      await user.click(screen.getByLabelText('California CCPA'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('privacy:rights-request-workflow-integrity', {
+          geographies: ['eu-gdpr', 'california-ccpa'],
+        });
+      });
+    });
+
+    it('shows string geography config and removes empty optional workflow evidence on save', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{ geographies: 'california-ccpa', rightsRequestPolicy: '' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('California CCPA')).toBeChecked();
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('privacy:rights-request-workflow-integrity', {
+          geographies: 'california-ccpa',
+        });
+      });
+    });
   });
 
   describe('Read-Only Plugins', () => {

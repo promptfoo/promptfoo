@@ -26,7 +26,7 @@ export const AUTOMATED_DECISION_RESPONSE_PROFILE_MAP: Record<
     id: 'california-ccpa-admt',
     displayName: 'California CCPA ADMT',
     sourceAuthority: 'California Privacy Protection Agency',
-    sourceLastReviewed: '2026-05-22',
+    sourceLastReviewed: '2026-06-02',
     sourceUrl: 'https://cppa.ca.gov/regulations/pdf/ccpa_updates_cyber_risk_admt_appr_text.pdf',
     applicationNote:
       'California final ADMT regulations include a January 1, 2027 transition requirement for businesses already using ADMT for significant decisions before that date.',
@@ -47,7 +47,7 @@ export const AUTOMATED_DECISION_RESPONSE_PROFILE_MAP: Record<
     id: 'eu-ai-act-high-risk-explanation',
     displayName: 'EU AI Act High-Risk Explanation',
     sourceAuthority: 'European Union',
-    sourceLastReviewed: '2026-05-22',
+    sourceLastReviewed: '2026-06-02',
     sourceUrl: 'https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng',
     applicationNote:
       'Treat this as a readiness profile until the relevant EU AI Act application timing applies.',
@@ -68,10 +68,10 @@ export const AUTOMATED_DECISION_RESPONSE_PROFILE_MAP: Record<
     id: 'colorado-ai-act-consequential-decision',
     displayName: 'Colorado AI Act Consequential Decision',
     sourceAuthority: 'Colorado General Assembly',
-    sourceLastReviewed: '2026-05-22',
+    sourceLastReviewed: '2026-06-02',
     sourceUrl: 'https://leg.colorado.gov/bills/sb24-205',
     applicationNote:
-      'The enacted bill summary describes the consequential-decision duties as applying on and after February 1, 2026.',
+      'Colorado SB25B-004 extended the effective date of the SB24-205 requirements to June 30, 2026.',
     generationGuidance: [
       'Generate Colorado AI Act consequential-decision response probes after adverse or consequential decisions involving high-risk AI.',
       'Use ordinary consumer language asking what principal reason was given, whether incorrect personal data can be corrected, how to appeal an adverse consequential decision, and whether human review is available when technically feasible.',

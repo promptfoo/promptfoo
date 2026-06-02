@@ -40,6 +40,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { normalizePrivacyRightsGeographies } from './plugins/privacyRightsRequestWorkflowIntegrity';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -413,6 +414,19 @@ function getPluginLanguageCount(
   return Array.isArray(pluginLanguageConfig) ? pluginLanguageConfig.length : 1;
 }
 
+function getPluginExpansionCount(plugin: SynthesizeOptions['plugins'][number]): number {
+  if (plugin.id !== 'privacy:rights-request-workflow-integrity') {
+    return 1;
+  }
+
+  try {
+    return normalizePrivacyRightsGeographies(plugin.config ?? {}).length;
+  } catch {
+    // Plugin validation will report invalid config later. Keep early totals usable.
+    return 1;
+  }
+}
+
 // Cache resolved intent counts per plugin instance. Resolving `file://`
 // intent lists requires disk I/O + parsing; `getExpectedPluginTestCount` is
 // invoked many times per run (totals, logging, progress, reporting), so we
@@ -453,12 +467,18 @@ function getIntentTestCount(plugin: SynthesizeOptions['plugins'][number]): numbe
   return count;
 }
 
+function getExpectedPluginTestCountPerLanguage(
+  plugin: SynthesizeOptions['plugins'][number],
+): number {
+  return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * getPluginExpansionCount(plugin);
+}
+
 function getExpectedPluginTestCount(
   plugin: SynthesizeOptions['plugins'][number],
   language?: string | string[],
 ): number {
   const languageCount = getPluginLanguageCount(plugin, language);
-  return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * languageCount;
+  return getExpectedPluginTestCountPerLanguage(plugin) * languageCount;
 }
 
 /**
@@ -519,20 +539,17 @@ function addLanguageToPluginMetadata(
 ): TestCase {
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
-  const includePluginConfig = !(
-    test.metadata &&
-    Object.hasOwn(test.metadata, 'pluginConfig') &&
-    test.metadata.pluginConfig === undefined
-  );
+  const hasExplicitPluginConfig =
+    test.metadata != null && Object.hasOwn(test.metadata, 'pluginConfig');
+  const testPluginConfig = test.metadata?.pluginConfig as Record<string, any> | undefined;
+  const includePluginConfig = !(hasExplicitPluginConfig && testPluginConfig === undefined);
+  const pluginConfigForMetadata = hasExplicitPluginConfig ? testPluginConfig : plugin.config;
 
   // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
   // then fall back to the original plugin.config?.modifiers
   const pluginModifiers = buildRedteamModifiers({
     maxCharsPerMessage,
-    pluginConfig:
-      (test.metadata?.pluginConfig as Record<string, any> | undefined) ||
-      plugin.config ||
-      undefined,
+    pluginConfig: testPluginConfig || plugin.config || undefined,
     testGenerationInstructions,
   });
 
@@ -542,10 +559,7 @@ function addLanguageToPluginMetadata(
       ...test.metadata,
       pluginId: plugin.id,
       ...(includePluginConfig && {
-        pluginConfig: {
-          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-          ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
-        },
+        pluginConfig: resolvePluginConfigWithMaxChars(pluginConfigForMetadata, maxCharsPerMessage),
       }),
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
       modifiers: {
@@ -1351,6 +1365,7 @@ export async function synthesize({
       // Generate tests for each language in parallel using Promise.allSettled
       const allPluginTests: TestCase[] = [];
       const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
+      const expectedTestCountPerLanguage = getExpectedPluginTestCountPerLanguage(plugin);
 
       const languagePromises = languages.map(async (lang) => {
         const pluginTests = await action({
@@ -1395,7 +1410,7 @@ export async function synthesize({
             return {
               lang: langKey,
               tests: constrainedTests,
-              requested: plugin.numTests,
+              requested: expectedTestCountPerLanguage,
               generated: constrainedTests.length,
             };
           }
@@ -1407,7 +1422,7 @@ export async function synthesize({
           return {
             lang: langKey,
             tests: [],
-            requested: plugin.numTests,
+            requested: expectedTestCountPerLanguage,
             generated: 0,
           };
         }
@@ -1427,7 +1442,10 @@ export async function synthesize({
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
-          resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
+          resultsPerLanguage[lang || 'default'] = {
+            requested: expectedTestCountPerLanguage,
+            generated: 0,
+          };
         }
       }
 

@@ -15,6 +15,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
+import { isPluginConfigComplete, requiresPluginConfig } from '../constants';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
@@ -22,7 +23,6 @@ import CustomPoliciesTab from './CustomPoliciesTab';
 import PageWrapper from './PageWrapper';
 import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { Config, LocalPluginConfig } from '../types';
 
@@ -30,14 +30,6 @@ interface PluginsProps {
   onNext: () => void;
   onBack: () => void;
 }
-
-const PLUGINS_REQUIRING_CONFIG = [
-  'indirect-prompt-injection',
-  'decisioning:automated-decision-response-integrity',
-  'privacy-policy-consistency',
-  'privacy:rights-request-workflow-integrity',
-  'prompt-extraction',
-];
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
@@ -109,55 +101,6 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     </p>
   ),
 };
-
-function hasConfiguredPluginValues(plugin: string, config: PluginConfig | undefined): boolean {
-  if (!config || Object.keys(config).length === 0) {
-    return false;
-  }
-
-  if (
-    plugin === 'privacy:rights-request-workflow-integrity' &&
-    !hasPrivacyRightsGeographyConfig(config)
-  ) {
-    return false;
-  }
-
-  if (
-    plugin === 'decisioning:automated-decision-response-integrity' &&
-    !hasAutomatedDecisionResponseProfileConfig(config)
-  ) {
-    return false;
-  }
-
-  return Object.values(config).every((value) => {
-    if (Array.isArray(value)) {
-      return value.length > 0;
-    }
-    return typeof value !== 'string' || value.trim() !== '';
-  });
-}
-
-function hasNonEmptyStringList(value: unknown): boolean {
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((entry) => entry.trim())
-      .some(Boolean);
-  }
-
-  return (
-    Array.isArray(value) &&
-    value.some((entry) => typeof entry === 'string' && entry.trim().length > 0)
-  );
-}
-
-function hasPrivacyRightsGeographyConfig(config: PluginConfig): boolean {
-  return hasNonEmptyStringList(config.geographies) || hasNonEmptyStringList(config.frameworks);
-}
-
-function hasAutomatedDecisionResponseProfileConfig(config: PluginConfig): boolean {
-  return hasNonEmptyStringList(config.profiles);
-}
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
@@ -298,10 +241,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isConfigValid = useCallback(() => {
     for (const plugin of selectedPlugins) {
-      if (
-        PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-        !hasConfiguredPluginValues(plugin, pluginConfig[plugin])
-      ) {
+      if (requiresPluginConfig(plugin) && !isPluginConfigComplete(plugin, pluginConfig[plugin])) {
         return false;
       }
     }
@@ -339,10 +279,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+      if (!requiresPluginConfig(plugin)) {
         return true;
       }
-      return hasConfiguredPluginValues(plugin, pluginConfig[plugin]);
+      return isPluginConfigComplete(plugin, pluginConfig[plugin]);
     },
     [pluginConfig],
   );
@@ -354,7 +294,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
     if (!isConfigValid()) {
       const missingConfigPlugins = Array.from(selectedPlugins).filter(
-        (plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin),
+        (plugin) => requiresPluginConfig(plugin) && !isPluginConfigured(plugin),
       );
 
       if (missingConfigPlugins.length === 1) {

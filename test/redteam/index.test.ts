@@ -1348,6 +1348,43 @@ describe('synthesize', () => {
       });
     });
 
+    it('should preserve an explicit sanitized plugin config in generated metadata', async () => {
+      const sensitivePolicy = 'Sensitive privacy policy contents.';
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'privacy probe' },
+          metadata: {
+            pluginId: 'privacy-policy-consistency',
+            pluginConfig: { modifiers: {} },
+            privacyPolicy: sensitivePolicy,
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'privacy-policy-consistency',
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [
+          {
+            id: 'privacy-policy-consistency',
+            numTests: 1,
+            config: { privacyPolicy: sensitivePolicy },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.privacyPolicy).toBe(sensitivePolicy);
+      expect(result.testCases[0].metadata?.pluginConfig).toEqual({ modifiers: {} });
+      expect(result.testCases[0].metadata?.pluginConfig).not.toHaveProperty('privacyPolicy');
+    });
+
     it('should handle strategies that return undefined test cases', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([
         { vars: { query: 'test1' }, metadata: { pluginId: 'test-plugin' } },
@@ -2146,6 +2183,25 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 6,
       totalPluginTests: 6,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should multiply privacy rights workflow tests by selected geography count', () => {
+    const plugins = [
+      {
+        id: 'privacy:rights-request-workflow-integrity',
+        numTests: 2,
+        config: { geographies: ['california-ccpa', 'eu-gdpr'] },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 4,
+      totalPluginTests: 4,
       effectiveStrategyCount: 0,
       includeBasicTests: true,
     });

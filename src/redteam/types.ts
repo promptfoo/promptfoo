@@ -94,12 +94,12 @@ export const PluginConfigSchema = z.object({
   privacyPolicy: z.string().optional(),
   privacyPolicyContent: z.string().optional(),
   privacyPolicyFileName: z.string().optional(),
-  geographies: z.array(z.string()).optional(),
+  geographies: z.union([z.string(), z.array(z.string())]).optional(),
   frameworks: z.union([z.string(), z.array(z.string())]).optional(),
   rightsRequestPolicy: z.string().optional(),
   rightsRequestPolicyContent: z.string().optional(),
   rightsRequestPolicyFileName: z.string().optional(),
-  profiles: z.array(z.string()).optional(),
+  profiles: z.union([z.string(), z.array(z.string())]).optional(),
   decisionResponsePolicy: z.string().optional(),
   decisionResponsePolicyContent: z.string().optional(),
   decisionResponsePolicyFileName: z.string().optional(),
@@ -330,6 +330,7 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  tags?: Record<string, string>;
   strict?: boolean;
 
   // Used by webui

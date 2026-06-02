@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const PLUGINS_DIR = path.join(__dirname, '../../../src/redteam/plugins');
 const DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/plugins');
+const SIDEBAR_PATH = path.join(__dirname, '../../../site/sidebars.js');
 
 function getFiles(dir: string, extension: string, excludes: string[] = []): string[] {
   return fs
@@ -162,6 +163,13 @@ describe('Plugin Documentation', () => {
 
       expect(fs.existsSync(constantsPath)).toBe(true);
       expect(fs.existsSync(docsPath)).toBe(true);
+    });
+
+    it('should include privacy plugin documentation in the sidebar', () => {
+      const sidebar = fs.readFileSync(SIDEBAR_PATH, 'utf8');
+
+      expect(sidebar).toContain("'red-team/plugins/privacy-policy-consistency'");
+      expect(sidebar).toContain("'red-team/plugins/privacy-rights-request-workflow-integrity'");
     });
   });
 });

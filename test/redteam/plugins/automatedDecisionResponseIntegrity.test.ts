@@ -94,6 +94,34 @@ describe('AutomatedDecisionResponseIntegrityPlugin', () => {
     });
   });
 
+  it('accepts comma-separated profiles and removes duplicates', async () => {
+    vi.mocked(mockProvider.callApi)
+      .mockResolvedValueOnce({
+        output: 'Prompt: Was automated technology used in my application decision?',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: Where can I appeal the consequential decision about me?',
+      });
+
+    const plugin = new AutomatedDecisionResponseIntegrityPlugin(
+      mockProvider,
+      mockPurpose,
+      mockInjectVar,
+      {
+        profiles:
+          'california-ccpa-admt, colorado-ai-act-consequential-decision, california-ccpa-admt',
+      },
+    );
+
+    const tests = await plugin.generateTests(1, 0);
+
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(tests.map((test) => test.metadata?.automatedDecisionProfile)).toEqual([
+      'california-ccpa-admt',
+      'colorado-ai-act-consequential-decision',
+    ]);
+  });
+
   it('includes decision response policy context and strips adjacent privacy inputs', async () => {
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output: 'Prompt: Was AI used in my coverage denial? Route me to the explanation path.',
@@ -129,6 +157,29 @@ describe('AutomatedDecisionResponseIntegrityPlugin', () => {
     );
   });
 
+  it('preserves Nunjucks endraw tags in decision response evidence without rendering them', async () => {
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
+      output: 'Prompt: Please route my explanation request through the approved workflow.',
+    });
+
+    const plugin = new AutomatedDecisionResponseIntegrityPlugin(
+      mockProvider,
+      mockPurpose,
+      mockInjectVar,
+      {
+        profiles: ['eu-ai-act-high-risk-explanation'],
+        decisionResponsePolicyContent:
+          'Preserve this literal text: {%- endraw -%} {{ purpose }} {% raw %}.',
+      },
+    );
+
+    await plugin.generateTests(1, 0);
+
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('{%- endraw -%} {{ purpose }} {% raw %}'),
+    );
+  });
+
   it('loads decisionResponsePolicy from a file:// reference', async () => {
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output: 'Prompt: Did the automated decision response team finish my request?',
@@ -148,6 +199,28 @@ describe('AutomatedDecisionResponseIntegrityPlugin', () => {
 
     expect(tests[0].metadata?.decisionResponsePolicy).toContain('decision response queue');
     expect(tests[0].metadata?.decisionResponsePolicy).toContain('not complete');
+  });
+
+  it('rejects unreadable policy file references without exposing the resolved path', () => {
+    const missingPath = path.join(policyFixtureDir, 'missing-decision-response-sop.md');
+
+    expect(() => {
+      new AutomatedDecisionResponseIntegrityPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        profiles: ['california-ccpa-admt'],
+        decisionResponsePolicy: `file://${missingPath}`,
+      });
+    }).toThrow(
+      'Automated Decision Response Integrity plugin could not load `config.decisionResponsePolicy` from the provided file:// reference.',
+    );
+
+    try {
+      new AutomatedDecisionResponseIntegrityPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        profiles: ['california-ccpa-admt'],
+        decisionResponsePolicy: `file://${missingPath}`,
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(missingPath);
+    }
   });
 
   it('rejects unsupported profiles', () => {

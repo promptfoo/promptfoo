@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { PLUGINS_REQUIRING_CONFIG, requiresPluginConfig } from './constants';
+import {
+  isPluginConfigComplete,
+  PLUGINS_REQUIRING_CONFIG,
+  requiresPluginConfig,
+} from './constants';
 
 describe('requiresPluginConfig', () => {
   it('should return true for indirect-prompt-injection plugin', () => {
@@ -64,5 +68,95 @@ describe('requiresPluginConfig', () => {
   it('should be case-sensitive', () => {
     expect(requiresPluginConfig('Indirect-Prompt-Injection')).toBe(false);
     expect(requiresPluginConfig('PROMPT-EXTRACTION')).toBe(false);
+  });
+});
+
+describe('isPluginConfigComplete', () => {
+  const privacyPlugin = 'privacy:rights-request-workflow-integrity';
+  const decisionPlugin = 'decisioning:automated-decision-response-integrity';
+
+  it('accepts supported modern geography config', () => {
+    expect(isPluginConfigComplete(privacyPlugin, { geographies: ['california-ccpa'] })).toBe(true);
+    expect(isPluginConfigComplete(privacyPlugin, { geographies: 'california-ccpa, eu-gdpr' })).toBe(
+      true,
+    );
+  });
+
+  it('accepts supported legacy framework config', () => {
+    expect(isPluginConfigComplete(privacyPlugin, { frameworks: ['ccpa'] })).toBe(true);
+  });
+
+  it('rejects unsupported modern geography config', () => {
+    expect(isPluginConfigComplete(privacyPlugin, { geographies: ['unsupported'] })).toBe(false);
+    expect(
+      isPluginConfigComplete(privacyPlugin, { geographies: ['california-ccpa', 'unsupported'] }),
+    ).toBe(false);
+  });
+
+  it('prefers supported modern geographies over stale legacy framework config', () => {
+    expect(
+      isPluginConfigComplete(privacyPlugin, {
+        geographies: ['california-ccpa'],
+        frameworks: ['hipaa'],
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects unsupported legacy framework config', () => {
+    expect(isPluginConfigComplete(privacyPlugin, { frameworks: ['hipaa'] })).toBe(false);
+  });
+
+  it('allows empty optional workflow evidence but rejects non-file URI references', () => {
+    expect(
+      isPluginConfigComplete(privacyPlugin, {
+        geographies: ['eu-gdpr'],
+        rightsRequestPolicy: '',
+      }),
+    ).toBe(true);
+    expect(
+      isPluginConfigComplete(privacyPlugin, {
+        geographies: ['eu-gdpr'],
+        rightsRequestPolicy: 'https://example.com/workflow',
+      }),
+    ).toBe(false);
+  });
+
+  it('validates privacy policy consistency references', () => {
+    expect(
+      isPluginConfigComplete('privacy-policy-consistency', {
+        privacyPolicy: 'file://privacy-policy.md',
+      }),
+    ).toBe(true);
+    expect(
+      isPluginConfigComplete('privacy-policy-consistency', {
+        privacyPolicy: 'https://example.com/privacy-policy',
+      }),
+    ).toBe(false);
+  });
+
+  it('validates automated decision response profiles and optional evidence', () => {
+    expect(
+      isPluginConfigComplete(decisionPlugin, {
+        profiles: 'california-ccpa-admt, eu-ai-act-high-risk-explanation',
+      }),
+    ).toBe(true);
+    expect(
+      isPluginConfigComplete(decisionPlugin, {
+        profiles: ['unsupported'],
+      }),
+    ).toBe(false);
+    expect(
+      isPluginConfigComplete(decisionPlugin, {
+        profiles: ['california-ccpa-admt'],
+        decisionResponsePolicy: 'https://example.com/sop',
+      }),
+    ).toBe(false);
+    expect(
+      isPluginConfigComplete(decisionPlugin, {
+        profiles: ['california-ccpa-admt'],
+        decisionResponsePolicyContent: 'Uploaded SOP content',
+        decisionResponsePolicy: 'https://example.com/sop',
+      }),
+    ).toBe(true);
   });
 });

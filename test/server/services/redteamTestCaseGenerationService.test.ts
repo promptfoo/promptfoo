@@ -31,6 +31,10 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   }));
   vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
     getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+    getRemoteGenerationHeaders: vi.fn((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    })),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   }));
   vi.doMock('../../../src/providers/shared', () => ({
@@ -144,6 +148,43 @@ describe('redteamTestCaseGenerationService', () => {
   });
 
   describe('getPluginConfigurationError', () => {
+    it('validates privacy policy consistency config before preview generation', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: {},
+        }),
+      ).toBe(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: { privacyPolicy: 'https://example.com/privacy-policy' },
+        }),
+      ).toBe(
+        'Privacy Policy Consistency plugin requires file-backed URI references to use the file:// scheme.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy-policy-consistency',
+          config: { privacyPolicyContent: 'Resolved policy contents.' },
+        }),
+      ).toBeNull();
+      const missingPolicyError = getPluginConfigurationError({
+        id: 'privacy-policy-consistency',
+        config: { privacyPolicy: 'file:///definitely/does/not/exist/privacy-policy.md' },
+      });
+      expect(missingPolicyError).toBe(
+        'Privacy Policy Consistency plugin could not load `config.privacyPolicy` from the provided file:// reference.',
+      );
+      expect(missingPolicyError).not.toContain('/definitely/does/not/exist');
+    });
+
     it('requires privacy geographies for privacy rights workflow test generation', async () => {
       const { getPluginConfigurationError } = await import(
         '../../../src/server/services/redteamTestCaseGenerationService'
@@ -155,7 +196,15 @@ describe('redteamTestCaseGenerationService', () => {
           config: {},
         }),
       ).toBe(
-        'Privacy Rights Request Workflow Integrity plugin requires privacy geographies configuration',
+        'Privacy Rights Request Workflow Integrity plugin requires `config.geographies` with at least one supported privacy geography.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { geographies: ['unsupported'] },
+        }),
+      ).toBe(
+        'Privacy Rights Request Workflow Integrity plugin supports only these `config.geographies` values: california-ccpa, eu-gdpr.',
       );
       expect(
         getPluginConfigurationError({
@@ -166,9 +215,26 @@ describe('redteamTestCaseGenerationService', () => {
       expect(
         getPluginConfigurationError({
           id: 'privacy:rights-request-workflow-integrity',
+          config: { geographies: ['eu-gdpr'], frameworks: ['unsupported'] },
+        }),
+      ).toBeNull();
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
           config: { frameworks: ['gdpr'] },
         }),
       ).toBeNull();
+      const missingWorkflowError = getPluginConfigurationError({
+        id: 'privacy:rights-request-workflow-integrity',
+        config: {
+          geographies: ['eu-gdpr'],
+          rightsRequestPolicy: 'file:///definitely/does/not/exist/privacy-workflow.md',
+        },
+      });
+      expect(missingWorkflowError).toBe(
+        'Privacy Rights Request Workflow Integrity plugin could not load `config.rightsRequestPolicy` from the provided file:// reference.',
+      );
+      expect(missingWorkflowError).not.toContain('/definitely/does/not/exist');
     });
 
     it('requires profiles for automated decision response test generation', async () => {
@@ -182,7 +248,15 @@ describe('redteamTestCaseGenerationService', () => {
           config: {},
         }),
       ).toBe(
-        'Automated Decision Response Integrity plugin requires decision-response profiles configuration',
+        'Automated Decision Response Integrity plugin requires `config.profiles` with at least one supported decision-response profile.',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: { profiles: ['unsupported'] },
+        }),
+      ).toBe(
+        'Automated Decision Response Integrity plugin supports only these `config.profiles` values: california-ccpa-admt, eu-ai-act-high-risk-explanation, colorado-ai-act-consequential-decision.',
       );
       expect(
         getPluginConfigurationError({
@@ -190,6 +264,17 @@ describe('redteamTestCaseGenerationService', () => {
           config: { profiles: ['california-ccpa-admt'] },
         }),
       ).toBeNull();
+      const missingPolicyError = getPluginConfigurationError({
+        id: 'decisioning:automated-decision-response-integrity',
+        config: {
+          profiles: ['california-ccpa-admt'],
+          decisionResponsePolicy: 'file:///definitely/does/not/exist/decision-response-sop.md',
+        },
+      });
+      expect(missingPolicyError).toBe(
+        'Automated Decision Response Integrity plugin could not load `config.decisionResponsePolicy` from the provided file:// reference.',
+      );
+      expect(missingPolicyError).not.toContain('/definitely/does/not/exist');
     });
   });
 });

@@ -26,6 +26,7 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 

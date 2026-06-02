@@ -1,4 +1,8 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import {
+  getConfiguredAutomatedDecisionResponseProfiles,
+  getConfiguredPrivacyRightsGeographies,
+} from '../../constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -101,7 +105,29 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 
 export function getEstimatedProbes(config: Config) {
   const numTests = config.numTests ?? 5;
-  const baseProbes = numTests * config.plugins.length;
+  const baseProbes = config.plugins.reduce((total, plugin) => {
+    if (
+      typeof plugin === 'object' &&
+      plugin !== null &&
+      plugin.id === 'privacy:rights-request-workflow-integrity'
+    ) {
+      const geographyCount = getConfiguredPrivacyRightsGeographies(plugin.config ?? {}).length;
+      return total + numTests * Math.max(geographyCount, 1);
+    }
+
+    if (
+      typeof plugin === 'object' &&
+      plugin !== null &&
+      plugin.id === 'decisioning:automated-decision-response-integrity'
+    ) {
+      const profileCount = getConfiguredAutomatedDecisionResponseProfiles(
+        plugin.config ?? {},
+      ).length;
+      return total + numTests * Math.max(profileCount, 1);
+    }
+
+    return total + numTests;
+  }, 0);
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {

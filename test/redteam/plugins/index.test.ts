@@ -7,6 +7,7 @@ import {
   ALL_PLUGINS,
   BASE_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -169,6 +170,20 @@ describe('Plugins', () => {
           privacyPolicy: 'Resolved privacy policy contents.',
         }),
       ).not.toThrow();
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'https://example.com/privacy-policy',
+        }),
+      ).toThrow(
+        'Privacy Policy Consistency plugin requires file-backed URI references to use the file:// scheme.',
+      );
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'file:///definitely/does/not/exist/privacy-policy.md',
+        }),
+      ).toThrow(
+        'Privacy Policy Consistency plugin could not load `config.privacyPolicy` from the provided file:// reference.',
+      );
     });
 
     it('should validate privacy rights workflow geography config', async () => {
@@ -800,6 +815,7 @@ describe('Plugins', () => {
         ...Object.keys(HARM_PLUGINS),
         ...PII_PLUGINS,
         ...ADDITIONAL_PLUGINS,
+        ...CONFIG_REQUIRED_PLUGINS,
       ];
 
       // Verify all expected plugin keys are present in the registry
