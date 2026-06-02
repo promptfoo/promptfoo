@@ -23,12 +23,16 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 
 /**
  * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
- * (everything in the `openai.` namespace except the open-weight `gpt-oss` models). Matches
- * region-prefixed ids too (e.g. `us.openai.gpt-5.5`) so they don't fall through to the
- * InvokeModel path.
+ * (a bare `openai.` id that is not an open-weight `gpt-oss` model, e.g. `openai.gpt-5.5`).
+ *
+ * Only the bare ids are accepted. AWS's GPT-5.5 / GPT-5.4 model cards list just the bare model
+ * ids and explicitly mark the Geo and Global inference IDs as "Not supported", so a
+ * region/geo-prefixed id such as `us.openai.gpt-5.5` is not a real Bedrock model. Matching it
+ * here would route an invalid id to the mantle endpoint; instead it falls through to a clear
+ * error (see `getHandlerForModel` in ./index.ts) that points at the supported bare id.
  */
 export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
-  return modelName.includes('openai.') && !modelName.includes('gpt-oss');
+  return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
 }
 
 /**
@@ -96,12 +100,13 @@ function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string 
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   /**
-   * Strip the Bedrock `openai.` prefix (and any region prefix such as `us.`) so the base
-   * provider's GPT-5 / o-series capability detection and the OpenAI billing tables match.
-   * The request still sends the real `this.modelName` (e.g. `openai.gpt-5.5`) as the model id.
+   * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
+   * detection and the OpenAI billing tables match. The request still sends the real
+   * `this.modelName` (e.g. `openai.gpt-5.5`) as the model id. Only bare `openai.` ids reach
+   * this provider (see {@link isBedrockOpenAiResponsesModel}), so no region prefix is expected.
    */
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^.*?openai\./, '');
+    return this.modelName.replace(/^openai\./, '');
   }
 
   /**

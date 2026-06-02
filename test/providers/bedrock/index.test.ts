@@ -2177,12 +2177,25 @@ describe('BEDROCK_MODEL OPENAI', () => {
       );
     });
 
-    it('should strip the <reasoning> block by default to match the OpenAI provider', async () => {
+    it('should return the model output verbatim by default (reasoning preserved for assertions/red-team)', async () => {
+      // An eval framework must not hide application-visible content by default. The raw
+      // <reasoning>...</reasoning> block the API returned stays in `output` unless the user
+      // explicitly opts into a transformation via showThinking.
       const mockResponse = {
         choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
       };
 
-      expect(modelHandler.output({}, mockResponse)).toBe('The answer is 42.');
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        '<reasoning>Think think</reasoning>The answer is 42.',
+      );
+    });
+
+    it('should strip the <reasoning> block when showThinking is false (parity with the openai: providers)', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('The answer is 42.');
     });
 
     it('should surface reasoning as Thinking: when showThinking is true', async () => {
@@ -2195,7 +2208,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       );
     });
 
-    it('should strip a multi-line <reasoning> block and leading whitespace by default', async () => {
+    it('should strip a multi-line <reasoning> block and leading whitespace when showThinking is false', async () => {
       const mockResponse = {
         choices: [
           {
@@ -2206,32 +2219,38 @@ describe('BEDROCK_MODEL OPENAI', () => {
         ],
       };
 
-      expect(modelHandler.output({}, mockResponse)).toBe('Final answer');
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Final answer');
     });
 
-    it('should leave content untouched when no reasoning block is present', async () => {
+    it('should leave content untouched when no reasoning block is present (any showThinking value)', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Just the answer.' } }],
       };
 
       expect(modelHandler.output({}, mockResponse)).toBe('Just the answer.');
       expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe('Just the answer.');
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Just the answer.');
     });
 
-    it('should fall back to the full content when only a reasoning block is present (no final answer)', async () => {
-      // Stripping a reasoning-only response would collapse output to '' — fall back instead.
+    it('should handle a reasoning-only response across all showThinking values', async () => {
       const mockResponse = {
         choices: [{ message: { content: '<reasoning>just thinking</reasoning>' } }],
       };
 
+      // Default: verbatim.
       expect(modelHandler.output({}, mockResponse)).toBe('<reasoning>just thinking</reasoning>');
-      // showThinking still surfaces the reasoning even when the answer is empty.
+      // showThinking:false would strip to '', so it falls back to the full content instead of
+      // silently dropping the whole response.
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
+        '<reasoning>just thinking</reasoning>',
+      );
+      // showThinking:true still surfaces the reasoning even when the answer is empty.
       expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
         'Thinking: just thinking\n\n',
       );
     });
 
-    it('should not strip an unterminated <reasoning> tag (returns content verbatim, no data loss)', async () => {
+    it('should return content verbatim for an unterminated <reasoning> tag (no data loss)', async () => {
       const mockResponse = {
         choices: [{ message: { content: '<reasoning>oops no closing tag, the answer is 42' } }],
       };
@@ -2239,9 +2258,12 @@ describe('BEDROCK_MODEL OPENAI', () => {
       expect(modelHandler.output({}, mockResponse)).toBe(
         '<reasoning>oops no closing tag, the answer is 42',
       );
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
+        '<reasoning>oops no closing tag, the answer is 42',
+      );
     });
 
-    it('should only strip a leading <reasoning> block, leaving later ones as answer content', async () => {
+    it('should only strip the leading <reasoning> block when showThinking is false, leaving later ones as answer content', async () => {
       const mockResponse = {
         choices: [
           {
@@ -2254,18 +2276,17 @@ describe('BEDROCK_MODEL OPENAI', () => {
       };
 
       // Non-greedy match strips only the first block; subsequent ones are part of the answer.
-      expect(modelHandler.output({}, mockResponse)).toBe(
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
         'answer with <reasoning>literal</reasoning> data',
       );
     });
 
-    it('should not strip a <reasoning> block that does not start the content', async () => {
+    it('should not strip a mid-content <reasoning> block when showThinking is false (regex is start-anchored)', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'The answer <reasoning>is</reasoning> here.' } }],
       };
 
-      // The regex is anchored to the start, so mid-content reasoning-as-data is preserved.
-      expect(modelHandler.output({}, mockResponse)).toBe(
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
         'The answer <reasoning>is</reasoning> here.',
       );
     });
@@ -3279,9 +3300,19 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   describe('getHandlerForModel OpenAI routing', () => {
-    it('should resolve gpt-oss OpenAI model ids to the InvokeModel OpenAI handler', () => {
+    it('should resolve versioned gpt-oss runtime ids to the InvokeModel OpenAI handler', () => {
       expect(getHandlerForModel('openai.gpt-oss-120b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
       expect(getHandlerForModel('openai.gpt-oss-20b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
+      // Registered bare safeguard ids resolve via the exact-match lookup.
+      expect(getHandlerForModel('openai.gpt-oss-safeguard-120b')).toBe(BEDROCK_MODEL.OPENAI);
+    });
+
+    it('should reject the bare Mantle gpt-oss id instead of sending it to InvokeModel', () => {
+      // `openai.gpt-oss-120b` (no version suffix) is the Bedrock Mantle id; the bedrock:
+      // provider uses the InvokeModel runtime API, so it must reject it with the runtime id.
+      expect(() => getHandlerForModel('openai.gpt-oss-120b')).toThrow(/Mantle id/);
+      expect(() => getHandlerForModel('openai.gpt-oss-120b')).toThrow(/openai\.gpt-oss-120b-1:0/);
+      expect(() => getHandlerForModel('openai.gpt-oss-20b')).toThrow(/Mantle id/);
     });
 
     it('should throw a clear error for frontier gpt-5.x ids on the InvokeModel path', () => {
@@ -3289,6 +3320,13 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       // a direct/forced InvokeModel resolution should explain that rather than silently try.
       expect(() => getHandlerForModel('openai.gpt-5.5')).toThrow(/Responses API/);
       expect(() => getHandlerForModel('openai.gpt-5.4')).toThrow(/Responses API/);
+    });
+
+    it('should suggest the bare frontier id when a region/geo-prefixed frontier id is forced down InvokeModel', () => {
+      // AWS offers no Geo/Global inference profiles for the frontier models; the error should
+      // point at the supported bare id rather than echo the invalid prefixed one.
+      expect(() => getHandlerForModel('us.openai.gpt-5.5')).toThrow(/bedrock:openai\.gpt-5\.5/);
+      expect(() => getHandlerForModel('global.openai.gpt-5.4')).toThrow(/bedrock:openai\.gpt-5\.4/);
     });
 
     it('should still throw for genuinely unknown models', () => {

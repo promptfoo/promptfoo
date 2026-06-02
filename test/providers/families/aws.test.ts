@@ -98,4 +98,18 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
     expect(provider.constructor.name).toBe(expectedClass);
   });
+
+  it.each([
+    'bedrock:us.openai.gpt-5.5',
+    'bedrock:eu.openai.gpt-5.4',
+    'bedrock:global.openai.gpt-5.5',
+  ])('rejects region/geo-prefixed frontier id %s with a clear error pointing at the bare id', async (providerPath) => {
+    // AWS does not offer Geo/Global inference profiles for the frontier models, so these are
+    // not real Bedrock ids. They must not be routed to the mantle endpoint; instead the
+    // InvokeModel fallback throws an actionable error suggesting the supported bare id.
+    restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+    const provider = await bedrockFactory.create(providerPath, { config: {} }, ctx);
+    expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+    await expect(provider.callApi('hi')).rejects.toThrow(/Responses API.*bedrock:openai\.gpt-5\./s);
+  });
 });

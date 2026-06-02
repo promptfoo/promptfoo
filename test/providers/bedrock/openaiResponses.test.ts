@@ -33,10 +33,14 @@ describe('bedrock openaiResponses helper', () => {
       expect(isBedrockOpenAiResponsesModel('qwen.qwen3-32b-v1:0')).toBe(false);
     });
 
-    it('matches region-prefixed frontier ids', () => {
-      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-5.5')).toBe(true);
-      expect(isBedrockOpenAiResponsesModel('eu.openai.gpt-5.4')).toBe(true);
-      // ...but still excludes region-prefixed gpt-oss
+    it('rejects region/geo-prefixed frontier ids (AWS offers only the bare ids)', () => {
+      // AWS's GPT-5.5 / GPT-5.4 model cards mark Geo and Global inference IDs as "Not
+      // supported", so a prefixed id is not a real Bedrock model — it must not be routed to the
+      // mantle endpoint; it falls through to a clear error instead.
+      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-5.5')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('eu.openai.gpt-5.4')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('global.openai.gpt-5.5')).toBe(false);
+      // ...and region-prefixed gpt-oss is likewise not a Responses model.
       expect(isBedrockOpenAiResponsesModel('us.openai.gpt-oss-120b')).toBe(false);
     });
   });
@@ -140,7 +144,6 @@ describe('bedrock openaiResponses helper', () => {
     it.each([
       'openai.gpt-5.5',
       'openai.gpt-5.4',
-      'us.openai.gpt-5.5',
     ])('computes a finite, non-zero cost end-to-end for %s via the OpenAI billing tables', (modelId) => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider(modelId, {});
@@ -228,13 +231,6 @@ describe('bedrock openaiResponses helper', () => {
       expect(direct.getApiUrl()).toBe(
         new OpenAiResponsesProvider('gpt-5.5', { config: { apiKey: 'k' } }).getApiUrl(),
       );
-    });
-
-    it('strips a region prefix for capability detection on profile ids', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
-      const provider = createBedrockOpenAiResponsesProvider('us.openai.gpt-5.5', {});
-      expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
-      expect((provider as any).isGPT5Model()).toBe(true);
     });
   });
 });

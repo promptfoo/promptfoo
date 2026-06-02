@@ -405,11 +405,14 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
    * do not use this handler — they go through the OpenAI Responses provider, which returns the
    * final answer only.)
    *
-   * Defaults to `false`: the reasoning block is stripped and `output` is the clean
-   * final answer, matching OpenAI's first-party Chat Completions API (which hides
-   * chain-of-thought) and the `openai:` providers. Set to `true` to surface the
-   * reasoning, formatted as `Thinking: <reasoning>\n\n<answer>` for consistency with
-   * the OpenAI chat provider.
+   * - **unset (default):** the model output is returned verbatim (reasoning block included).
+   *   An eval framework should not hide application-visible content by default, so the raw
+   *   response stays available to assertions and red-team graders.
+   * - **`true`:** the reasoning is surfaced in the `Thinking: <reasoning>\n\n<answer>` format
+   *   the OpenAI chat provider uses, for consistency across providers.
+   * - **`false`:** the reasoning block is stripped and `output` is the clean final answer,
+   *   matching OpenAI's first-party Chat Completions API (which hides chain-of-thought) and
+   *   the `openai:` providers.
    */
   showThinking?: boolean;
 }
@@ -2106,26 +2109,28 @@ ${prompt}
         throw new Error(`OpenAI API error: ${responseJson.error}`);
       }
       const content = responseJson.choices?.[0]?.message?.content;
-      if (typeof content !== 'string') {
+      const showThinking = (config as BedrockOpenAIGenerationOptions)?.showThinking;
+      // Bedrock's InvokeModel surfaces the model's chain-of-thought inline, wrapped in
+      // <reasoning>...</reasoning> before the final answer. By DEFAULT promptfoo returns the
+      // model output verbatim so nothing the API returned is hidden from assertions or
+      // red-team graders — an eval framework should not silently drop application-visible
+      // content. `showThinking` makes the two transformations opt-in.
+      if (typeof content !== 'string' || showThinking === undefined) {
         return content;
       }
-      // Unlike OpenAI's first-party Chat Completions API (which hides chain-of-thought
-      // and returns only the final answer), Bedrock's InvokeModel prepends the model
-      // reasoning wrapped in <reasoning>...</reasoning>. Split it out so that, by
-      // default, `output` is the clean final answer — matching the OpenAI provider.
       const reasoningMatch = content.match(/^\s*<reasoning>([\s\S]*?)<\/reasoning>\s*([\s\S]*)$/);
       if (!reasoningMatch) {
         return content;
       }
       const [, reasoning, answer] = reasoningMatch;
-      // Opt in to surfacing reasoning. Format it the same way the OpenAI chat provider
-      // does (`Thinking: ...`) so outputs stay consistent across providers.
-      if ((config as BedrockOpenAIGenerationOptions)?.showThinking === true) {
+      // showThinking: true → surface the reasoning in the OpenAI chat provider's `Thinking: ...`
+      // format so outputs read consistently across providers.
+      if (showThinking) {
         return `Thinking: ${reasoning.trim()}\n\n${answer}`;
       }
-      // If the model returned only a reasoning block with no final answer, stripping would
-      // collapse `output` to an empty string. Fall back to the original content so the whole
-      // response is never silently dropped.
+      // showThinking: false → strip the reasoning to the clean final answer (parity with the
+      // openai: providers, which hide chain-of-thought). If the model returned only a reasoning
+      // block, fall back to the original content so the whole response is never silently dropped.
       return answer.trim() === '' ? content : answer;
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
@@ -2576,13 +2581,30 @@ export function getHandlerForModel(
   // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the
   // OpenAI Responses provider in src/providers/families/aws.ts before reaching this handler.
   if (modelName.includes('openai.gpt-oss')) {
-    return BEDROCK_MODEL.OPENAI;
+    // The registered runtime ids (e.g. openai.gpt-oss-120b-1:0, openai.gpt-oss-safeguard-120b)
+    // are resolved by the exact-match lookup above. Any gpt-oss id reaching here is
+    // unregistered: a versioned id (…-N:M) is still an InvokeModel runtime id (forward-compat
+    // for new versions), but a bare id such as `openai.gpt-oss-120b` is the Bedrock Mantle id,
+    // which the InvokeModel (bedrock-runtime) API does not serve — reject it with the runtime
+    // id to use instead of silently sending the wrong id.
+    if (/-\d+:\d+$/.test(modelName)) {
+      return BEDROCK_MODEL.OPENAI;
+    }
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" looks like the Bedrock Mantle id for an open-weight ` +
+        `gpt-oss model. promptfoo's bedrock: provider calls the InvokeModel (bedrock-runtime) ` +
+        `API, which uses the versioned runtime id — e.g. "bedrock:openai.gpt-oss-120b-1:0". See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+    );
   }
   if (modelName.includes('openai.')) {
+    // Suggest the bare frontier id: AWS does not offer region/geo/global inference profiles for
+    // the gpt-5.x frontier models, so a prefixed id like `us.openai.gpt-5.5` is not valid.
+    const bareFrontierId = modelName.replace(/^[a-z]+\.(?=openai\.)/, '');
     throw new Error(
       `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
-        `models (gpt-5.x) use the OpenAI-compatible Responses API — use "bedrock:${modelName}" ` +
-        `(promptfoo routes it automatically) and set AWS_BEARER_TOKEN_BEDROCK. See ` +
+        `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
+        `"bedrock:${bareFrontierId}" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
     );
   }
