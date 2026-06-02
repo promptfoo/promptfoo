@@ -75,6 +75,13 @@ function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T
   ) as T;
 }
 
+export function sanitizePromptForArtifact<T extends Prompt>(
+  prompt: T,
+  stripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
+): T {
+  return projectPrompt(sanitizeForDbWithSecrets(prompt), stripPromptText);
+}
+
 function projectTestCase(
   testCase: AtomicTestCase,
   options: { stripMetadata: boolean; stripVars: boolean },
@@ -594,10 +601,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }),
     ...(artifactResult.prompt
       ? {
-          prompt: projectPrompt(
-            sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
-            shouldStripPromptText,
-          ),
+          prompt: sanitizePromptForArtifact(artifactResult.prompt as Prompt, shouldStripPromptText),
         }
       : {}),
     ...(artifactResult.provider
@@ -722,7 +726,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
             ...(headPrompts
               ? {
                   prompts: headPrompts.map((prompt) =>
-                    projectPrompt(sanitizeForDbWithSecrets(prompt), shouldStripPromptText),
+                    sanitizePromptForArtifact(prompt, shouldStripPromptText),
                   ),
                 }
               : {}),

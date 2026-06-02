@@ -16,6 +16,7 @@ import logger from '../logger';
 import {
   asEvaluateResult,
   getResultIndexKey,
+  sanitizePromptForArtifact,
   sanitizeResultForJsonlArtifact,
   sanitizeTableForArtifact,
 } from '../models/evalResult';
@@ -487,6 +488,11 @@ function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummar
     summary.results = (summary.results as object[]).map((result) =>
       sanitizeResultForJsonlArtifact(result),
     ) as T['results'];
+  }
+  if ('prompts' in summary && Array.isArray(summary.prompts)) {
+    (summary as EvaluateSummaryV3).prompts = summary.prompts.map((prompt) =>
+      sanitizePromptForArtifact(prompt),
+    );
   }
   // Legacy (V2) summaries also carry a denormalized `table` whose head, rows, and outputs embed
   // copies of prompt, variable, response, metadata, grading, and test-case data.

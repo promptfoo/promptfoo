@@ -429,6 +429,51 @@ describe('writeOutput', () => {
     expect(written).not.toContain('sk-var-should-not-persist');
   });
 
+  it('honors prompt stripping across V3 summary prompt copies', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+    try {
+      const eval_ = new Eval({});
+      await eval_.addPrompts([
+        {
+          raw: 'summary-prompt-secret',
+          label: 'summary-prompt-label-secret',
+          provider: 'provider',
+          config: { apiKey: 'summary-prompt-api-key-secret', temperature: 0.1 },
+        },
+      ]);
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: { raw: 'summary-prompt-secret', label: 'summary-prompt-label-secret' },
+        response: { output: 'Test output' },
+        vars: {},
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        promptId: 'prompt',
+      });
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const summaryPrompt = JSON.parse(written).results.prompts[0];
+      expect(summaryPrompt.raw).toBe('[prompt stripped]');
+      expect(summaryPrompt.label).toBe('[prompt stripped]');
+      expect(summaryPrompt.config.apiKey).toBe('[REDACTED]');
+      expect(summaryPrompt.config.temperature).toBe(0.1);
+      expect(written).not.toContain('summary-prompt-secret');
+      expect(written).not.toContain('summary-prompt-label-secret');
+      expect(written).not.toContain('summary-prompt-api-key-secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it.each([
     {
       extension: 'json',
