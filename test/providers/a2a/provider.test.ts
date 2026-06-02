@@ -1111,6 +1111,44 @@ describe('A2AProvider', () => {
     expect(result.raw).toHaveLength(4);
   });
 
+  it('replaces existing streaming artifacts when append is false', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      sseResponse([
+        {
+          task: {
+            id: 'task-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        },
+        {
+          artifactUpdate: {
+            append: false,
+            taskId: 'task-1',
+            artifact: { artifactId: 'artifact-1', parts: [{ text: 'stale draft' }] },
+          },
+        },
+        {
+          artifactUpdate: {
+            append: false,
+            taskId: 'task-1',
+            artifact: { artifactId: 'artifact-1', parts: [{ text: 'final answer' }] },
+          },
+        },
+        {
+          statusUpdate: {
+            taskId: 'task-1',
+            status: { state: 'TASK_STATE_COMPLETED' },
+          },
+        },
+      ]),
+    );
+
+    const result = await provider({ mode: 'stream' }).callApi('hi');
+
+    expect(result.output).toBe('final answer');
+    expect(result.output).not.toContain('stale draft');
+  });
+
   it('returns a provider error for malformed SSE events', async () => {
     const encoder = new TextEncoder();
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(

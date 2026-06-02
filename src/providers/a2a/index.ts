@@ -498,6 +498,19 @@ function mergeArtifactUpdate(
   const append = (event as { append?: unknown }).append === true;
   const artifacts = existingTask.artifacts ?? [];
   if (!append) {
+    if (artifact.artifactId) {
+      const existingIndex = artifacts.findIndex(
+        (existingArtifact) => existingArtifact.artifactId === artifact.artifactId,
+      );
+      if (existingIndex >= 0) {
+        return {
+          ...existingTask,
+          artifacts: artifacts.map((existingArtifact, index) =>
+            index === existingIndex ? artifact : existingArtifact,
+          ),
+        };
+      }
+    }
     return {
       ...existingTask,
       artifacts: [...artifacts, artifact],
