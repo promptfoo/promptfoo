@@ -91,6 +91,7 @@ const mocks = vi.hoisted(() => {
   const actionGithub = {
     getGitHubContext: vi.fn(),
     getPRFiles: vi.fn(),
+    partitionReviewCommentsByDiff: vi.fn(),
   };
 
   const config = {
@@ -243,6 +244,13 @@ function setupMocks() {
     sha: 'abc123',
   });
   mocks.actionGithub.getPRFiles.mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]);
+  mocks.actionGithub.partitionReviewCommentsByDiff.mockImplementation(
+    async (_token: string, _context: unknown, comments: unknown[]) => ({
+      lineComments: comments,
+      generalComments: [],
+      invalidLineComments: [],
+    }),
+  );
   mocks.config.generateConfigFile.mockReturnValue('/tmp/test-config.yaml');
 }
 
@@ -768,6 +776,43 @@ describe('code-scan-action main', () => {
       expect(createComment).not.toHaveBeenCalled();
       const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
       expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+    });
+
+    it('routes mixed-skip findings that cannot be placed in the diff to general comments', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mocks.actionGithub.partitionReviewCommentsByDiff.mockImplementation(
+        async (_token: string, _context: unknown, comments: unknown[]) => ({
+          lineComments: [],
+          generalComments: [],
+          invalidLineComments: comments,
+        }),
+      );
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/outside-diff.ts',
+            line: 500,
+            finding: 'This finding cannot be placed on the visible PR diff.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/outside-diff.ts:500**'),
+        }),
+      );
     });
 
     it('posts file-only mixed-skip findings as general fallback comments and writes SARIF', async () => {

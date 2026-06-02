@@ -23,7 +23,7 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
+import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
 
 interface ActionInputs {
   apiHost: string;
@@ -386,7 +386,13 @@ function buildCommentBody(comment: Comment): string {
 
 function buildGeneralCommentBody(comment: Comment): string {
   const body = buildCommentBody(comment);
-  return comment.file ? `**${comment.file}**\n\n${body}` : body;
+  const location =
+    comment.file && comment.line
+      ? comment.startLine && comment.startLine !== comment.line
+        ? `${comment.file}:${comment.startLine}-${comment.line}`
+        : `${comment.file}:${comment.line}`
+      : comment.file;
+  return location ? `**${location}**\n\n${body}` : body;
 }
 
 function toReviewComment(comment: Comment) {
@@ -460,14 +466,19 @@ async function postFallbackComments(
 
   try {
     const octokit = github.getOctokit(githubToken);
-    const { lineComments, generalComments, reviewBody } = prepareComments(
-      comments,
-      review,
-      minimumSeverity,
+    const {
+      lineComments: preparedLineComments,
+      generalComments,
+      reviewBody,
+    } = prepareComments(comments, review, minimumSeverity);
+    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+      githubToken,
+      context,
+      preparedLineComments,
     );
 
     await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, generalComments);
+    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
 
     core.info('✅ All comments posted to PR by action');
   } catch (error) {

@@ -4,7 +4,11 @@
 
 import * as github from '@actions/github';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
+import {
+  getGitHubContext,
+  partitionReviewCommentsByDiff,
+  postReviewComments,
+} from '../../code-scan-action/src/github';
 import type { Octokit } from '@octokit/rest';
 
 const mocks = vi.hoisted(() => {
@@ -103,15 +107,17 @@ describe('GitHub API Client', () => {
         },
       },
     };
-    mocks.Octokit.mockImplementation(() => ({
-      pulls: {
-        createReview: vi.fn().mockResolvedValue({}),
-        get: vi.fn().mockResolvedValue({ data: mockDiff }),
-      },
-      issues: {
-        createComment: vi.fn().mockResolvedValue({}),
-      },
-    }));
+    mocks.Octokit.mockImplementation(function () {
+      return {
+        pulls: {
+          createReview: vi.fn().mockResolvedValue({}),
+          get: vi.fn().mockResolvedValue({ data: mockDiff }),
+        },
+        issues: {
+          createComment: vi.fn().mockResolvedValue({}),
+        },
+      } as unknown as Octokit;
+    });
   });
 
   describe('getGitHubContext', () => {
@@ -412,6 +418,44 @@ describe('GitHub API Client', () => {
         issue_number: 123,
         body: expect.stringContaining('src/auth.ts:42'),
       });
+    });
+  });
+
+  describe('partitionReviewCommentsByDiff', () => {
+    const mockContext = {
+      owner: 'test-owner',
+      repo: 'test-repo',
+      number: 123,
+      sha: 'abc123',
+    };
+
+    it('clamps comments to visible diff lines and routes unmapped files to general comments', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          line: 500,
+          finding: 'Finding in a changed file',
+        },
+        {
+          file: 'src/outside-diff.ts',
+          line: 12,
+          finding: 'Finding outside the diff',
+        },
+      ]);
+
+      expect(result.lineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          line: 61,
+        }),
+      ]);
+      expect(result.generalComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/outside-diff.ts',
+          line: 12,
+        }),
+      ]);
     });
   });
 });
