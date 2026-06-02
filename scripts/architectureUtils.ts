@@ -689,18 +689,65 @@ export function findBackEdges(edges: CrossLayerEdge[], tierOrder: string[]): Cro
   });
 }
 
+export interface ForbiddenDependencyViolation {
+  from: string;
+  to: string;
+  path: CrossLayerEdge[];
+}
+
+function findDependencyPath(
+  edgesByFrom: Map<string, CrossLayerEdge[]>,
+  from: string,
+  to: string,
+): CrossLayerEdge[] | undefined {
+  const queue: Array<{ layer: string; path: CrossLayerEdge[] }> = [{ layer: from, path: [] }];
+  const visited = new Set([from]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const edge of edgesByFrom.get(current.layer) ?? []) {
+      const path = [...current.path, edge];
+      if (edge.to === to) {
+        return path;
+      }
+      if (!visited.has(edge.to)) {
+        visited.add(edge.to);
+        queue.push({ layer: edge.to, path });
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /**
- * Returns cross-layer edges that violate an explicit `forbiddenDependencies`
- * lock — i.e. a layer importing one of the layers it has declared off-limits.
+ * Returns direct or transitive dependency paths that violate an explicit
+ * `forbiddenDependencies` lock.
  */
-export function findForbiddenDependencyEdges(
+export function findForbiddenDependencyViolations(
   config: LayerConfig,
   edges: CrossLayerEdge[],
-): CrossLayerEdge[] {
-  const forbiddenByLayer = new Map(
-    config.layers.map((layer) => [layer.name, new Set(layer.forbiddenDependencies ?? [])]),
-  );
-  return edges.filter((edge) => forbiddenByLayer.get(edge.from)?.has(edge.to) ?? false);
+): ForbiddenDependencyViolation[] {
+  const edgesByFrom = new Map<string, CrossLayerEdge[]>();
+  for (const edge of edges) {
+    const outgoing = edgesByFrom.get(edge.from) ?? [];
+    outgoing.push(edge);
+    edgesByFrom.set(edge.from, outgoing);
+  }
+  for (const outgoing of edgesByFrom.values()) {
+    outgoing.sort((left, right) => left.to.localeCompare(right.to));
+  }
+
+  const violations: ForbiddenDependencyViolation[] = [];
+  for (const layer of config.layers) {
+    for (const forbidden of layer.forbiddenDependencies ?? []) {
+      const path = findDependencyPath(edgesByFrom, layer.name, forbidden);
+      if (path !== undefined) {
+        violations.push({ from: layer.name, to: forbidden, path });
+      }
+    }
+  }
+  return violations;
 }
 
 export type EdgeBaseline = Record<string, number>;
