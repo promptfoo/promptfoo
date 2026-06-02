@@ -364,6 +364,13 @@ describe('production layer config', () => {
     expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
   });
 
+  it('allows core logic to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const coreLayer = config.layers.find((layer) => layer.name === 'core');
+
+    expect(coreLayer?.allowedDependencies).toContain('contracts');
+  });
+
   it('keeps the contracts leaf layer free of disallowed external dependencies', () => {
     const leafExternal = findViolations(process.cwd(), readLayerConfig(process.cwd())).filter(
       (violation) => violation.kind === 'leaf-external',
