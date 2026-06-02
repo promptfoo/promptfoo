@@ -1371,6 +1371,26 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     server.send({
+      id: 506,
+      method: 'mcpServer/elicitation/request',
+      params: {
+        threadId: 'thr_advanced_policy',
+        turnId: 'turn_advanced_policy',
+        mode: 'form',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+    });
+    const missingAllowlistFieldsElicitation = await waitForMessage(
+      server,
+      (message) => message.id === 506 && message.result,
+    );
+    expect(missingAllowlistFieldsElicitation.result).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    });
+
+    server.send({
       method: 'item/agentMessage/delta',
       params: {
         threadId: 'thr_advanced_policy',
@@ -1412,6 +1432,11 @@ describe('OpenAICodexAppServerProvider', () => {
       }),
       expect.objectContaining({
         id: 505,
+        method: 'mcpServer/elicitation/request',
+        response: { action: 'decline', content: null, _meta: null },
+      }),
+      expect.objectContaining({
+        id: 506,
         method: 'mcpServer/elicitation/request',
         response: { action: 'decline', content: null, _meta: null },
       }),

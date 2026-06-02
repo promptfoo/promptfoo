@@ -2510,7 +2510,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private buildMcpElicitationResponse(
-    params: any,
+    params: { serverName?: string; message?: string } | undefined,
     policy: CodexAppServerMcpElicitationPolicy = 'decline',
   ): {
     action: 'accept' | 'decline' | 'cancel';
@@ -2522,8 +2522,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     if (
-      (policy.allowed_server_names && !policy.allowed_server_names.includes(params?.serverName)) ||
-      (policy.allowed_messages && !policy.allowed_messages.includes(params?.message))
+      (policy.allowed_server_names &&
+        (typeof params?.serverName !== 'string' ||
+          !policy.allowed_server_names.includes(params.serverName))) ||
+      (policy.allowed_messages &&
+        (typeof params?.message !== 'string' || !policy.allowed_messages.includes(params.message)))
     ) {
       return { action: 'decline', content: null, _meta: null };
     }
