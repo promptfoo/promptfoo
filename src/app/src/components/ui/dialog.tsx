@@ -12,19 +12,9 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
-function containsDialogDescription(children: React.ReactNode): boolean {
-  return React.Children.toArray(children).some((child) => {
-    if (!React.isValidElement(child)) {
-      return false;
-    }
-
-    if (child.type === DialogDescription) {
-      return true;
-    }
-
-    return containsDialogDescription((child.props as { children?: React.ReactNode }).children);
-  });
-}
+const DialogDescriptionRegistrationContext = React.createContext<
+  ((id: string) => () => void) | null
+>(null);
 
 function DialogOverlay({
   className,
@@ -49,6 +39,7 @@ function DialogContent({
   ref,
   hideDescription = true,
   hideCloseButton = false,
+  'aria-describedby': ariaDescribedBy,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   /** When true (default), adds a visually hidden description to suppress Radix a11y warnings */
@@ -56,26 +47,40 @@ function DialogContent({
   /** When true, hides the default close button (useful when providing a custom close button) */
   hideCloseButton?: boolean;
 }) {
-  const hasVisibleDescription = !hideDescription && containsDialogDescription(children);
+  const hiddenDescriptionId = React.useId();
+  const [descriptionIds, setDescriptionIds] = React.useState<string[]>([]);
+  const registerDescription = React.useCallback((id: string) => {
+    setDescriptionIds((currentIds) => (currentIds.includes(id) ? currentIds : [...currentIds, id]));
+    return () =>
+      setDescriptionIds((currentIds) => currentIds.filter((currentId) => currentId !== id));
+  }, []);
+  const registeredDescriptionIds = descriptionIds.join(' ') || undefined;
+  const fallbackDescriptionId = hideDescription ? hiddenDescriptionId : undefined;
+  const contentDescriptionId =
+    ariaDescribedBy === undefined
+      ? registeredDescriptionIds || fallbackDescriptionId
+      : ariaDescribedBy;
 
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         ref={ref}
-        {...(hasVisibleDescription ? {} : { 'aria-describedby': undefined })}
+        aria-describedby={contentDescriptionId}
         className={cn(
           'fixed left-[50%] top-[50%] z-(--z-modal) grid w-full max-w-lg max-h-[calc(100vh-4rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
           className,
         )}
         {...props}
       >
-        {hideDescription && (
-          <DialogPrimitive.Description className="sr-only">
-            Dialog content
-          </DialogPrimitive.Description>
-        )}
-        {children}
+        <DialogDescriptionRegistrationContext.Provider value={registerDescription}>
+          {hideDescription && ariaDescribedBy === undefined && descriptionIds.length === 0 && (
+            <DialogPrimitive.Description id={hiddenDescriptionId} className="sr-only">
+              Dialog content
+            </DialogPrimitive.Description>
+          )}
+          {children}
+        </DialogDescriptionRegistrationContext.Provider>
         {!hideCloseButton && (
           <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground cursor-pointer">
             <X className="size-4" />
@@ -133,11 +138,19 @@ function DialogTitle({
 
 function DialogDescription({
   className,
+  id,
   ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
+  const generatedId = React.useId();
+  const descriptionId = id ?? generatedId;
+  const registration = React.useContext(DialogDescriptionRegistrationContext);
+
+  React.useLayoutEffect(() => registration?.(descriptionId), [descriptionId, registration]);
+
   return (
     <DialogPrimitive.Description
+      id={descriptionId}
       ref={ref}
       className={cn('text-sm text-muted-foreground', className)}
       {...props}

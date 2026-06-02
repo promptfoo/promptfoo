@@ -58,6 +58,27 @@ describe('Dialog', () => {
     );
   });
 
+  it('associates a visible description that uses a custom id', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent hideDescription={false}>
+          <DialogTitle>Custom description dialog</DialogTitle>
+          <DialogDescription id="custom-dialog-description">
+            Described with a caller-provided id.
+          </DialogDescription>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Custom description dialog' })).toHaveAttribute(
+      'aria-describedby',
+      'custom-dialog-description',
+    );
+    expect(
+      screen.getByRole('dialog', { name: 'Custom description dialog' }),
+    ).toHaveAccessibleDescription('Described with a caller-provided id.');
+  });
+
   it('keeps aria-describedby unset when visible descriptions are enabled but absent', () => {
     render(
       <Dialog defaultOpen>
@@ -70,6 +91,38 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Undescribed dialog' })).not.toHaveAttribute(
       'aria-describedby',
     );
+  });
+
+  it('uses the hidden fallback description when no visible description is mounted', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogTitle>Fallback description dialog</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(
+      screen.getByRole('dialog', { name: 'Fallback description dialog' }),
+    ).toHaveAccessibleDescription('Dialog content');
+  });
+
+  it('honors an explicit aria-describedby without rendering the hidden fallback', () => {
+    render(
+      <>
+        <p id="external-dialog-description">External description</p>
+        <Dialog defaultOpen>
+          <DialogContent aria-describedby="external-dialog-description">
+            <DialogTitle>Externally described dialog</DialogTitle>
+          </DialogContent>
+        </Dialog>
+      </>,
+    );
+
+    expect(
+      screen.getByRole('dialog', { name: 'Externally described dialog' }),
+    ).toHaveAccessibleDescription('External description');
+    expect(screen.queryByText('Dialog content')).not.toBeInTheDocument();
   });
 
   it('closes dialog on close button click', async () => {
