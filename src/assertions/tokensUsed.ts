@@ -1,5 +1,5 @@
 import { renderVarsInObject } from '../util/render';
-import { tokensUsedConfigError } from '../util/traceAssertionConfig';
+import { isNunjucksOutputExpression, tokensUsedConfigError } from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -205,14 +205,38 @@ function resolveTokenUsage(
   return { total: tokensFromProviderResponse(params), usedSource: 'response' };
 }
 
+function coerceRenderedBudgetBound(rawValue: unknown, renderedValue: unknown): unknown {
+  if (
+    !isNunjucksOutputExpression(rawValue) ||
+    typeof renderedValue !== 'string' ||
+    !renderedValue.trim()
+  ) {
+    return renderedValue;
+  }
+
+  const numericValue = Number(renderedValue);
+  return Number.isFinite(numericValue) ? numericValue : renderedValue;
+}
+
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
-  const value = renderVarsInObject(
+  const rawValue = params.assertion.value;
+  const renderedValue = renderVarsInObject(
     params.renderedValue ?? params.assertion.value,
     params.assertionValueContext.vars,
-  ) as TokensUsedValue | undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  );
+  if (!renderedValue || typeof renderedValue !== 'object' || Array.isArray(renderedValue)) {
     throw new Error('tokens-used assertion must have an object value');
   }
+
+  const rawObject =
+    rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
+      ? (rawValue as Record<string, unknown>)
+      : {};
+  const value = {
+    ...(renderedValue as Record<string, unknown>),
+    min: coerceRenderedBudgetBound(rawObject.min, (renderedValue as Record<string, unknown>).min),
+    max: coerceRenderedBudgetBound(rawObject.max, (renderedValue as Record<string, unknown>).max),
+  } as TokensUsedValue;
 
   const configError = tokensUsedConfigError(value);
   if (configError) {

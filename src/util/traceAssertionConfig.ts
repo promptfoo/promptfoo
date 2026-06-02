@@ -32,6 +32,24 @@ function finiteNonNegativeIntegerError(value: unknown, label: string): string | 
     : `${label} must be a finite non-negative integer`;
 }
 
+/**
+ * Returns true only when the entire authored value is one Nunjucks output expression.
+ * Partial strings must stay strings so runtime validation can reject them.
+ */
+export function isNunjucksOutputExpression(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{{') || !trimmed.endsWith('}}')) {
+    return false;
+  }
+
+  const expression = trimmed.slice(2, -2);
+  return Boolean(expression.trim()) && !expression.includes('{{') && !expression.includes('}}');
+}
+
 function validRangeError(
   min: number | undefined,
   max: number | undefined,

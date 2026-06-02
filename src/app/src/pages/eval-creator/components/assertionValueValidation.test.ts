@@ -277,6 +277,19 @@ describe('structured value assertions', () => {
     ).toBeUndefined();
     expect(
       getRunnableAssertionValueError(
+        make({ type: 'tokens-used', value: { max: '{{ token_budget }}' } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(make({ type: 'tokens-used', value: { max: '100' } as any })),
+    ).toMatch(/finite non-negative number/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'tokens-used', value: { max: '100{{ "" }}' } as any }),
+      ),
+    ).toMatch(/finite non-negative number/);
+    expect(
+      getRunnableAssertionValueError(
         make({ type: 'tokens-used', value: { max: 100, pattern: '  ' } as any }),
       ),
     ).toMatch(/non-empty string/);

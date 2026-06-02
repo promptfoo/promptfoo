@@ -355,96 +355,53 @@ function findUniqueStoredArrayItemMatch(
   return matched ? { matched: true, index: matchedIndex, value: matchedValue } : { matched: false };
 }
 
-type StableIdentityPath = Array<string | number>;
-
 // Credential restoration must not use mutable flags or arbitrary metadata to choose a stored item.
 const STABLE_ARRAY_ITEM_IDENTITY_KEYS = new Set(['id', 'key', 'name', 'slug', 'suite']);
 
-function isStableArrayItemIdentityPath(path: StableIdentityPath): boolean {
-  const key = path[path.length - 1];
-  return (
-    typeof key === 'string' &&
-    (STABLE_ARRAY_ITEM_IDENTITY_KEYS.has(key) || /(?:^|[_-])id$/i.test(key) || /Id$/.test(key))
-  );
-}
-
-function getValueAtPath(value: unknown, path: readonly (string | number)[]): unknown {
-  let current = value;
-  for (const key of path) {
-    if (typeof key === 'number') {
-      if (!Array.isArray(current)) {
-        return undefined;
-      }
-      current = current[key];
-      continue;
-    }
-
-    if (
-      !current ||
-      typeof current !== 'object' ||
-      Array.isArray(current) ||
-      isClassInstance(current)
-    ) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[key];
-  }
-  return current;
+function isStableArrayItemIdentityKey(key: string): boolean {
+  return STABLE_ARRAY_ITEM_IDENTITY_KEYS.has(key) || /(?:^|[_-])id$/i.test(key) || /Id$/.test(key);
 }
 
 function hasUniqueSharedStableArrayItemIdentity(
   value: unknown,
   storedValue: unknown,
   storedItems: readonly unknown[],
-  path: StableIdentityPath = [],
 ): boolean {
-  if (typeof value === 'string' || typeof storedValue === 'string') {
-    const matchesStoredValue =
-      isStableArrayItemIdentityPath(path) &&
-      typeof value === 'string' &&
-      typeof storedValue === 'string' &&
-      value === storedValue &&
-      value === redactAzureBlobSasToken(value);
-    return (
-      matchesStoredValue &&
-      storedItems.filter((item) => Object.is(getValueAtPath(item, path), value)).length === 1
-    );
-  }
-
-  if (Array.isArray(value) || Array.isArray(storedValue)) {
-    return (
-      Array.isArray(value) &&
-      Array.isArray(storedValue) &&
-      value.some((item, index) =>
-        hasUniqueSharedStableArrayItemIdentity(item, storedValue[index], storedItems, [
-          ...path,
-          index,
-        ]),
-      )
-    );
-  }
-
   if (
-    value &&
-    storedValue &&
-    typeof value === 'object' &&
-    typeof storedValue === 'object' &&
-    !isClassInstance(value) &&
-    !isClassInstance(storedValue)
+    !value ||
+    !storedValue ||
+    typeof value !== 'object' ||
+    typeof storedValue !== 'object' ||
+    Array.isArray(value) ||
+    Array.isArray(storedValue) ||
+    isClassInstance(value) ||
+    isClassInstance(storedValue)
   ) {
-    const storedObject = storedValue as Record<string, unknown>;
-    return Object.entries(value).some(([key, item]) =>
-      hasUniqueSharedStableArrayItemIdentity(item, storedObject[key], storedItems, [...path, key]),
-    );
+    return false;
   }
 
-  return (
-    isStableArrayItemIdentityPath(path) &&
-    typeof value === 'number' &&
-    typeof storedValue === 'number' &&
-    Object.is(value, storedValue) &&
-    storedItems.filter((item) => Object.is(getValueAtPath(item, path), value)).length === 1
-  );
+  const storedObject = storedValue as Record<string, unknown>;
+  return Object.entries(value).some(([key, item]) => {
+    if (
+      !isStableArrayItemIdentityKey(key) ||
+      (typeof item !== 'string' && typeof item !== 'number') ||
+      !Object.is(item, storedObject[key]) ||
+      (typeof item === 'string' && item !== redactAzureBlobSasToken(item))
+    ) {
+      return false;
+    }
+
+    return (
+      storedItems.filter(
+        (storedItem) =>
+          storedItem !== null &&
+          typeof storedItem === 'object' &&
+          !Array.isArray(storedItem) &&
+          !isClassInstance(storedItem) &&
+          Object.is((storedItem as Record<string, unknown>)[key], item),
+      ).length === 1
+    );
+  });
 }
 
 function findUniqueStoredArrayItemIdentityMatch(
