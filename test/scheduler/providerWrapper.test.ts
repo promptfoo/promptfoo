@@ -120,6 +120,23 @@ describe('providerWrapper', () => {
       expect(capturedOptions.isRateLimited(result, undefined)).toBe(true);
     });
 
+    it('should detect explicit transient rate limit metadata without error text parsing', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const result: ProviderResponse = {
+        error: 'SDK throttle',
+        metadata: { rateLimitKind: 'rate_limit' },
+      };
+      expect(capturedOptions.isRateLimited(result, undefined)).toBe(true);
+    });
+
     it('should detect rate limit from error message', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {

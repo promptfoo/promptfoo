@@ -139,6 +139,10 @@ describe('evaluator trace integration', () => {
 
     // Verify trace context was generated
     expect(evaluatorTracing.generateTraceContextIfNeeded).toHaveBeenCalled();
+    expect(evaluatorTracing.startOtlpReceiverIfNeeded).toHaveBeenCalledWith(
+      testSuite,
+      'test-eval-id',
+    );
 
     // Verify trace was fetched for assertion
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
@@ -276,5 +280,33 @@ describe('evaluator trace integration', () => {
         success: true,
       }),
     );
+  });
+
+  it('should still run evaluator cleanup when receiver startup is fatal', async () => {
+    vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mockRejectedValueOnce(
+      new Error('receiver failed'),
+    );
+
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [],
+      tests: [],
+      tracing: {
+        enabled: true,
+        failOnReceiverStartFailure: true,
+        otlp: {
+          http: {
+            enabled: true,
+            port: 4318,
+            host: '127.0.0.1',
+          },
+        },
+      },
+    };
+
+    await expect(evaluate(testSuite, mockEval, {})).rejects.toThrow('receiver failed');
+    expect(evaluatorTracing.stopOtlpReceiverIfNeeded).toHaveBeenCalled();
+    expect(mockFlushOtel).not.toHaveBeenCalled();
+    expect(mockShutdownOtel).not.toHaveBeenCalled();
   });
 });
