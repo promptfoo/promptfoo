@@ -30,6 +30,13 @@ describe('bedrock openaiResponses helper', () => {
       expect(isBedrockOpenAiResponsesModel('anthropic.claude-opus-4-8')).toBe(false);
       expect(isBedrockOpenAiResponsesModel('qwen.qwen3-32b-v1:0')).toBe(false);
     });
+
+    it('matches region-prefixed frontier ids', () => {
+      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-5.5')).toBe(true);
+      expect(isBedrockOpenAiResponsesModel('eu.openai.gpt-5.4')).toBe(true);
+      // ...but still excludes region-prefixed gpt-oss
+      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-oss-120b')).toBe(false);
+    });
   });
 
   describe('getBedrockMantleBaseUrl', () => {
@@ -117,6 +124,41 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.reasoning).toEqual({ effort: 'high' });
       expect(body.text?.verbosity).toBe('low');
       expect(body.temperature).toBeUndefined();
+    });
+
+    it('honors AWS_BEARER_TOKEN_BEDROCK and AWS_REGION supplied via promptfoo env overrides', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: undefined,
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.4', {
+        env: { AWS_BEARER_TOKEN_BEDROCK: 'override-key', AWS_REGION: 'us-west-2' } as any,
+      });
+      expect((provider.config as any).apiKey).toBe('override-key');
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+    });
+
+    it('pins the mantle endpoint even when OPENAI_API_HOST is set', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        OPENAI_API_HOST: 'unrelated.example.com',
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { region: 'us-east-2' },
+      });
+      // Base getApiUrl() would prefer OPENAI_API_HOST; the subclass must override that.
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
+    });
+
+    it('strips a region prefix for capability detection on profile ids', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('us.openai.gpt-5.5', {});
+      expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
+      expect((provider as any).isGPT5Model()).toBe(true);
     });
   });
 });

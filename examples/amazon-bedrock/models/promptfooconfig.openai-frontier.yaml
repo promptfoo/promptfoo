@@ -47,5 +47,8 @@ tests:
   - vars:
       question: 'Explain the concept of machine learning in two sentences.'
     assert:
-      - type: llm-rubric
-        value: 'Response clearly and accurately explains machine learning in roughly two sentences.'
+      # Deterministic assertions keep this example runnable with only a Bedrock API key.
+      # (A model-graded assertion like `llm-rubric` would require a separate grader provider
+      # with its own credentials — see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/)
+      - type: icontains-any
+        value: ['data', 'model', 'train', 'learn', 'pattern']

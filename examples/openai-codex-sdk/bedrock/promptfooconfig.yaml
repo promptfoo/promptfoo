@@ -22,9 +22,11 @@ providers:
         AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
         AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
         # Using temporary credentials (SSO / STS / assumed role / MFA)? Also forward the
-        # session token (leave it out for long-lived IAM keys). Or set AWS_BEARER_TOKEN_BEDROCK
-        # / AWS_PROFILE instead.
+        # session token (leave it out for long-lived IAM keys):
         # AWS_SESSION_TOKEN: '{{env.AWS_SESSION_TOKEN}}'
+        # Or authenticate another way instead of static keys — forward one of:
+        # AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # a Bedrock API key
+        # AWS_PROFILE: '{{env.AWS_PROFILE}}'                           # a named profile
 
 tests:
   - assert:

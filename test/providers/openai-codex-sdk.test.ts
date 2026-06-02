@@ -2511,6 +2511,39 @@ describe('OpenAICodexSDKProvider', () => {
         }
       });
 
+      it('should not leak an inherited OpenAI key into the CLI env when routing to a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
+          // Ambient OpenAI key unrelated to the Bedrock backend.
+          env: { OPENAI_API_KEY: 'sk-unrelated' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+        expect(codexCall?.env?.OPENAI_API_KEY).toBeUndefined();
+        expect(codexCall?.env?.CODEX_API_KEY).toBeUndefined();
+      });
+
+      it('should still inject an explicit config.apiKey when routing to a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.5',
+            model_provider: 'amazon-bedrock',
+            apiKey: 'explicit-key',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+        expect(codexCall?.env?.OPENAI_API_KEY).toBe('explicit-key');
+      });
+
       it('should warn when CODEX_HOME from process.env is omitted from the default minimal CLI env', async () => {
         const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
         mockRun.mockResolvedValue(createMockResponse('Response'));

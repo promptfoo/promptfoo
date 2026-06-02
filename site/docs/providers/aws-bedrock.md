@@ -196,7 +196,7 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 | `stopSequences`       | Array of stop sequences                         |
 | `thinking`            | Extended thinking configuration (Claude models) |
 | `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
-| `showThinking`        | Include thinking in output (default: false)     |
+| `showThinking`        | Include thinking in output (default: true)      |
 | `performanceConfig`   | Performance settings (`latency: optimized`)     |
 | `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
 | `guardrailIdentifier` | Guardrail ID for content filtering              |
@@ -1007,15 +1007,12 @@ providers:
       max_output_tokens: 2048
 ```
 
-This is also equivalent to configuring the OpenAI Responses provider directly:
-
-```yaml
-providers:
-  - id: openai:responses:openai.gpt-5.5
-    config:
-      apiBaseUrl: https://bedrock-mantle.us-east-2.api.aws/openai/v1
-      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
-```
+Prefer the `bedrock:openai.gpt-5.5` form above. It wraps the OpenAI Responses provider,
+points it at the mantle endpoint, and normalizes the `openai.`-prefixed id for GPT-5
+capability detection (reasoning effort, verbosity) and billing. Using
+`openai:responses:openai.gpt-5.5` directly is **not** equivalent — the base provider does
+not recognize the `openai.` prefix as a GPT-5 model, so reasoning/verbosity controls would
+be dropped.
 
 #### Open-weight models (GPT OSS)
 

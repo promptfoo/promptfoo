@@ -23,10 +23,12 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 
 /**
  * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
- * (everything under the `openai.` namespace except the open-weight `gpt-oss` models).
+ * (everything in the `openai.` namespace except the open-weight `gpt-oss` models). Matches
+ * region-prefixed ids too (e.g. `us.openai.gpt-5.5`) so they don't fall through to the
+ * InvokeModel path.
  */
 export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
-  return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
+  return modelName.includes('openai.') && !modelName.includes('gpt-oss');
 }
 
 /**
@@ -47,6 +49,8 @@ function resolveRegion(config: Record<string, any>, env?: EnvOverrides): string 
     config.region ||
     env?.AWS_BEDROCK_REGION ||
     getEnvString('AWS_BEDROCK_REGION') ||
+    env?.AWS_REGION ||
+    env?.AWS_DEFAULT_REGION ||
     process.env.AWS_REGION ||
     process.env.AWS_DEFAULT_REGION ||
     DEFAULT_BEDROCK_OPENAI_REGION
@@ -70,12 +74,22 @@ function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string 
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   /**
-   * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
-   * detection and the OpenAI billing tables match. The request still sends the real
-   * `this.modelName` (e.g. `openai.gpt-5.5`) as the model id.
+   * Strip the Bedrock `openai.` prefix (and any region prefix such as `us.`) so the base
+   * provider's GPT-5 / o-series capability detection and the OpenAI billing tables match.
+   * The request still sends the real `this.modelName` (e.g. `openai.gpt-5.5`) as the model id.
    */
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^openai\./, '');
+    return this.modelName.replace(/^.*?openai\./, '');
+  }
+
+  /**
+   * Pin requests to the Bedrock mantle endpoint configured on this provider. The base
+   * `getApiUrl()` prefers `apiHost`/`OPENAI_API_HOST` over `apiBaseUrl`, so without this an
+   * ambient `OPENAI_API_HOST` (set for an unrelated OpenAI-compatible provider) would hijack
+   * Bedrock calls and send the Bedrock bearer token to the wrong host.
+   */
+  getApiUrl(): string {
+    return this.config.apiBaseUrl || super.getApiUrl();
   }
 }
 

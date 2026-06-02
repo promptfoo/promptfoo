@@ -766,7 +766,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Inject only the resolved Codex/OpenAI API key from provider env/config.
     // Other promptfoo env overrides should be passed explicitly via cli_env so
     // unrelated secrets are not exposed to shell commands.
-    if (apiKey) {
+    //
+    // When routing through a non-OpenAI model provider (e.g. `amazon-bedrock`), an
+    // OPENAI_API_KEY / CODEX_API_KEY inherited from the ambient environment is unrelated to
+    // the actual backend (Bedrock authenticates via AWS credentials in cli_env). Don't leak
+    // it into the agent's shell unless it was set explicitly via config.apiKey.
+    const injectApiKey =
+      apiKey && (!this.usesCustomModelProvider(config) || Boolean(config.apiKey));
+    if (injectApiKey) {
       sortedEnv.OPENAI_API_KEY = apiKey;
       sortedEnv.CODEX_API_KEY = apiKey;
     }
