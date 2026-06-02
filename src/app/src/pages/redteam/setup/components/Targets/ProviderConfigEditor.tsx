@@ -38,6 +38,9 @@ const shouldRemoveMcpConfig = (
   previousTargetId.startsWith('bedrock:converse:') &&
   !nextTargetId.startsWith('bedrock:converse:');
 
+const containsNunjucksTemplate = (value: string): boolean =>
+  /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -277,9 +280,15 @@ function ProviderConfigEditor({
             : '';
         const shorthandUrl = getA2AShorthandUrl(provider.id) ?? '';
 
-        const hasUrl = configuredUrl.length > 0 && validateUrl(configuredUrl);
-        const hasShorthandUrl = shorthandUrl.length > 0 && validateUrl(shorthandUrl);
-        const hasAgentCardUrl = agentCardUrl.length > 0 && validateUrl(agentCardUrl);
+        const hasUrl =
+          configuredUrl.length > 0 &&
+          (validateUrl(configuredUrl) || containsNunjucksTemplate(configuredUrl));
+        const hasShorthandUrl =
+          shorthandUrl.length > 0 &&
+          (validateUrl(shorthandUrl) || containsNunjucksTemplate(shorthandUrl));
+        const hasAgentCardUrl =
+          agentCardUrl.length > 0 &&
+          (validateUrl(agentCardUrl) || containsNunjucksTemplate(agentCardUrl));
 
         if (configuredUrl.length > 0 && !hasUrl) {
           errors.push('A2A endpoint URL must be a valid HTTP(S) URL');

@@ -209,6 +209,107 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(true);
     });
 
+    it('should return true from validate() for an A2A provider with a templated endpoint URL', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a',
+        config: {
+          url: '{{ env.A2A_URL }}',
+          mode: 'send',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('should return true from validate() for an A2A provider with a templated Agent Card URL host', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a',
+        config: {
+          agentCardUrl: 'https://{{ env.A2A_HOST }}/.well-known/agent-card.json',
+          mode: 'auto',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('should return true from validate() for an A2A provider with a templated shorthand URL', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      const a2aProvider: ProviderOptions = {
+        id: 'a2a:{{ env.A2A_URL }}',
+        config: {
+          mode: 'send',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={a2aProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="a2a"
+        />,
+      );
+
+      const isValid = validateFn!();
+
+      expect(isValid).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
     it('should return false from validate() for an A2A provider without endpoint details', () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();
