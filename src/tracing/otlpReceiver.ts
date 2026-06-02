@@ -376,14 +376,14 @@ export class OTLPReceiver {
         redactedSourceValues.add(value);
       }
     }
-    const scrubEcho = (value: string): string =>
-      redactedSourceValues.has(value) ? '[REDACTED]' : value;
+    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
+    const scrubEcho = <T extends string | undefined>(value: T): T =>
+      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
 
     return {
       ...span,
       name: scrubEcho(span.name),
-      statusMessage:
-        span.statusMessage === undefined ? span.statusMessage : scrubEcho(span.statusMessage),
+      statusMessage: scrubEcho(span.statusMessage),
       attributes: this.redactAttributes(attributes, redactAttributePatterns),
     };
   }
