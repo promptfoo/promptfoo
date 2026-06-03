@@ -431,10 +431,60 @@ export interface BoundaryViolation {
   importedLayer: string;
 }
 
-export function findUnclassifiedFiles(repoRoot: string, config: LayerConfig): string[] {
-  return getSourceFiles(repoRoot, true, config.ignoredRoots).filter(
-    (sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified',
-  );
+export interface ArchitectureModuleReference {
+  importer: string;
+  importerLayer: string;
+  specifier: string;
+  resolvedImport?: string;
+  importedLayer?: string;
+}
+
+export interface ArchitectureSourceScan {
+  sourceFiles: string[];
+  references: ArchitectureModuleReference[];
+}
+
+/**
+ * Reads and parses the checked source tree once so callers that need multiple
+ * architecture views can reuse the same module-reference scan.
+ */
+export function scanArchitectureSources(
+  repoRoot: string,
+  config: LayerConfig,
+): ArchitectureSourceScan {
+  const publicFacade = normalizePath(config.publicFacade);
+  const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots);
+  const references: ArchitectureModuleReference[] = [];
+
+  for (const importer of sourceFiles) {
+    if (normalizePath(importer) === publicFacade) {
+      continue;
+    }
+
+    const importerLayer = getLayerForFile(importer, config);
+    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
+    for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
+      references.push({
+        importer,
+        importerLayer,
+        specifier,
+        ...(resolvedImport
+          ? { resolvedImport, importedLayer: getLayerForFile(resolvedImport, config) }
+          : {}),
+      });
+    }
+  }
+
+  return { sourceFiles, references };
+}
+
+export function findUnclassifiedFiles(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots),
+): string[] {
+  return sourceFiles.filter((sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified');
 }
 
 /**
@@ -443,19 +493,27 @@ export function findUnclassifiedFiles(repoRoot: string, config: LayerConfig): st
  * reads required to scan source files; no `process.exit`. Exposed so the
  * pipeline can be unit-tested against fixture trees.
  */
-export function findViolations(repoRoot: string, config: LayerConfig): BoundaryViolation[] {
+export function findViolations(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceScan = scanArchitectureSources(repoRoot, config),
+): BoundaryViolation[] {
   const publicFacade = normalizePath(config.publicFacade);
   const leafLayers = new Set(config.leafLayers ?? []);
   const layersByName = new Map(config.layers.map((layer) => [layer.name, layer]));
   const violations: BoundaryViolation[] = [];
 
-  for (const importer of getSourceFiles(repoRoot, true, config.ignoredRoots)) {
+  for (const {
+    importer,
+    importerLayer,
+    specifier,
+    resolvedImport,
+    importedLayer,
+  } of sourceScan.references) {
     if (normalizePath(importer) === publicFacade) {
       continue;
     }
 
-    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
-    const importerLayer = getLayerForFile(importer, config);
     const importerIsLeaf = leafLayers.has(importerLayer);
     const allowedExternal = importerIsLeaf
       ? new Set(
@@ -465,68 +523,41 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
         )
       : null;
 
-    for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
-      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
-      if (!resolvedImport) {
-        // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
-        // A leaf layer may import only its allowlisted external packages and Node builtins; flag
-        // any other bare specifier.
-        if (importerIsLeaf) {
-          const externalName = getExternalModuleName(specifier);
-          if (externalName && !allowedExternal!.has(externalName)) {
-            violations.push({
-              kind: 'leaf-external',
-              importer,
-              importerLayer,
-              specifier,
-              imported: specifier,
-              importedLayer: 'external',
-            });
-          }
-        }
-        continue;
-      }
-
-      const importedLayer = getLayerForFile(resolvedImport, config);
-
-      if (resolvedImport === publicFacade) {
-        violations.push({
-          kind: 'facade',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
-
-      if (leafLayers.has(importerLayer)) {
-        if (importedLayer !== importerLayer) {
+    if (!resolvedImport || !importedLayer) {
+      // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
+      // A leaf layer may import only its allowlisted external packages and Node builtins; flag
+      // any other bare specifier.
+      if (importerIsLeaf) {
+        const externalName = getExternalModuleName(specifier);
+        if (externalName && !allowedExternal!.has(externalName)) {
           violations.push({
-            kind: 'leaf',
+            kind: 'leaf-external',
             importer,
             importerLayer,
             specifier,
-            imported: resolvedImport,
-            importedLayer,
+            imported: specifier,
+            importedLayer: 'external',
           });
         }
       }
+      continue;
+    }
 
-      const importerConfig = layersByName.get(importerLayer);
-      const allowedLayerDependency =
-        importedLayer === importerLayer ||
-        (importerConfig?.allowedDependencies.includes(importedLayer) ?? false);
+    if (resolvedImport === publicFacade) {
+      violations.push({
+        kind: 'facade',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
+    }
 
-      if (
-        importedLayer !== importerLayer &&
-        resolvedImport !== publicFacade &&
-        !leafLayers.has(importerLayer) &&
-        importerConfig &&
-        !allowedLayerDependency
-      ) {
+    if (leafLayers.has(importerLayer)) {
+      if (importedLayer !== importerLayer) {
         violations.push({
-          kind: 'layer',
+          kind: 'leaf',
           importer,
           importerLayer,
           specifier,
@@ -534,22 +565,44 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
           importedLayer,
         });
       }
+    }
 
-      if (
-        importedLayer !== importerLayer &&
-        allowedLayerDependency &&
-        importerConfig?.allowedImportPaths &&
-        !importerConfig.allowedImportPaths.includes(resolvedImport)
-      ) {
-        violations.push({
-          kind: 'path',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
+    const importerConfig = layersByName.get(importerLayer);
+    const allowedLayerDependency =
+      importedLayer === importerLayer ||
+      (importerConfig?.allowedDependencies.includes(importedLayer) ?? false);
+
+    if (
+      importedLayer !== importerLayer &&
+      resolvedImport !== publicFacade &&
+      !leafLayers.has(importerLayer) &&
+      importerConfig &&
+      !allowedLayerDependency
+    ) {
+      violations.push({
+        kind: 'layer',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
+    }
+
+    if (
+      importedLayer !== importerLayer &&
+      allowedLayerDependency &&
+      importerConfig?.allowedImportPaths &&
+      !importerConfig.allowedImportPaths.includes(resolvedImport)
+    ) {
+      violations.push({
+        kind: 'path',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
     }
   }
 
@@ -559,49 +612,38 @@ export function findViolations(repoRoot: string, config: LayerConfig): BoundaryV
 export interface CrossLayerEdge {
   from: string;
   to: string;
-  /** Number of import statements crossing from `from` to `to`. */
+  /** Number of module references crossing from `from` to `to`. */
   count: number;
   /** Distinct importer files behind the edge, sorted. */
   files: string[];
 }
 
 /**
- * Tallies the directed cross-layer import edges across the source tree. Each
- * edge is an (importerLayer -> importedLayer) pair with the number of import
- * statements and the distinct importer files behind it. The public facade file
- * is skipped as an importer (it intentionally re-exports every layer);
- * same-layer and unresolved/external imports are ignored. Pure function aside
- * from the source reads, so it can be unit-tested against fixture trees.
+ * Tallies the directed cross-layer module-reference edges across the source
+ * tree. Each edge is an (importerLayer -> importedLayer) pair with the number
+ * of module references and the distinct importer files behind it. The public
+ * facade file is skipped as an importer (it intentionally re-exports every
+ * layer); same-layer and unresolved/external references are ignored. Pure
+ * function aside from the source reads, so it can be unit-tested against
+ * fixture trees.
  */
-export function computeCrossLayerEdges(repoRoot: string, config: LayerConfig): CrossLayerEdge[] {
-  const publicFacade = normalizePath(config.publicFacade);
+export function computeCrossLayerEdges(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceScan = scanArchitectureSources(repoRoot, config),
+): CrossLayerEdge[] {
   const tallies = new Map<string, { count: number; files: Set<string> }>();
 
-  for (const importer of getSourceFiles(repoRoot, true, config.ignoredRoots)) {
-    if (normalizePath(importer) === publicFacade) {
+  for (const { importer, importerLayer, resolvedImport, importedLayer } of sourceScan.references) {
+    if (!resolvedImport || !importedLayer || importedLayer === importerLayer) {
       continue;
     }
 
-    const importerLayer = getLayerForFile(importer, config);
-    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
-
-    for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
-      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
-      if (!resolvedImport) {
-        continue;
-      }
-
-      const importedLayer = getLayerForFile(resolvedImport, config);
-      if (importedLayer === importerLayer) {
-        continue;
-      }
-
-      const key = edgeKey(importerLayer, importedLayer);
-      const tally = tallies.get(key) ?? { count: 0, files: new Set<string>() };
-      tally.count += 1;
-      tally.files.add(importer);
-      tallies.set(key, tally);
-    }
+    const key = edgeKey(importerLayer, importedLayer);
+    const tally = tallies.get(key) ?? { count: 0, files: new Set<string>() };
+    tally.count += 1;
+    tally.files.add(importer);
+    tallies.set(key, tally);
   }
 
   return [...tallies.entries()]
@@ -758,15 +800,20 @@ export function edgeKey(from: string, to: string): string {
   return `${from}${EDGE_SEPARATOR}${to}`;
 }
 
-/** Builds a baseline mapping each cross-layer edge to its current import count. */
-export function buildEdgeBaseline(edges: CrossLayerEdge[]): EdgeBaseline {
+/** Builds a baseline mapping each cross-layer edge to its current module-reference count. */
+export function buildEdgeBaseline(edges: CrossLayerEdge[], config: LayerConfig): EdgeBaseline {
+  const layerNames = new Set(config.layers.map((layer) => layer.name));
   const baseline: EdgeBaseline = {};
   for (const edge of edges
     .slice()
     .sort((left, right) =>
       edgeKey(left.from, left.to).localeCompare(edgeKey(right.from, right.to)),
     )) {
-    baseline[edgeKey(edge.from, edge.to)] = edge.count;
+    const key = edgeKey(edge.from, edge.to);
+    if (!layerNames.has(edge.from) || !layerNames.has(edge.to)) {
+      throw new Error(`Cannot build edge baseline: edge "${key}" references an unknown layer.`);
+    }
+    baseline[key] = edge.count;
   }
   return baseline;
 }

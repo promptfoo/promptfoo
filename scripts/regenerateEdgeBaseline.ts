@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildEdgeBaseline, computeCrossLayerEdges, readLayerConfig } from './architectureUtils';
+import {
+  buildEdgeBaseline,
+  computeCrossLayerEdges,
+  readLayerConfig,
+  scanArchitectureSources,
+} from './architectureUtils';
 
 /**
  * Regenerates architecture/edge-baseline.json from the current source tree.
@@ -14,8 +19,9 @@ import { buildEdgeBaseline, computeCrossLayerEdges, readLayerConfig } from './ar
  */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = readLayerConfig(repoRoot);
-const edges = computeCrossLayerEdges(repoRoot, config);
-const baseline = buildEdgeBaseline(edges);
+const sourceScan = scanArchitectureSources(repoRoot, config);
+const edges = computeCrossLayerEdges(repoRoot, config, sourceScan);
+const baseline = buildEdgeBaseline(edges, config);
 
 const baselinePath = path.join(repoRoot, 'architecture/edge-baseline.json');
 fs.writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 2)}\n`);
