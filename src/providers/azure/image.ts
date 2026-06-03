@@ -49,9 +49,10 @@ export function validateMaiImageDimensions(
   width: number,
   height: number,
 ): { valid: boolean; message?: string } {
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
-    return { valid: false, message: 'Image width and height must be positive integers.' };
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    return { valid: false, message: 'Image width and height must be integers.' };
   }
+  // A non-positive size is also caught here, since anything below 768 is invalid.
   if (width < MIN_DIMENSION || height < MIN_DIMENSION) {
     return {
       valid: false,
@@ -89,6 +90,24 @@ export function extractMaiImageTokenUsage(
   const prompt =
     (num(usage?.num_input_text_tokens) ?? 0) + (num(usage?.num_input_image_tokens) ?? 0);
   return { prompt, completion, total: prompt + completion };
+}
+
+/**
+ * Compact, log-safe summary of a MAI image response: replaces base64 image
+ * payloads with their length so error messages don't serialize ~750KB blobs.
+ */
+export function summarizeImageResponse(value: unknown): string {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as any).data)) {
+    return JSON.stringify(value);
+  }
+  const record = value as Record<string, unknown>;
+  const data = (record.data as unknown[]).map((item) => {
+    const b64 = (item as any)?.b64_json;
+    return typeof b64 === 'string'
+      ? { ...(item as object), b64_json: `<${b64.length} base64 chars>` }
+      : item;
+  });
+  return JSON.stringify({ ...record, data });
 }
 
 export class AzureImageProvider extends AzureGenericProvider {
@@ -225,7 +244,7 @@ export class AzureImageProvider extends AzureGenericProvider {
         // A 2xx response without image data still gets cached by fetchWithCache;
         // evict it so a transient bad payload isn't served on every rerun.
         await evictFromCache?.();
-        return { error: `No image data found in response: ${JSON.stringify(data)}` };
+        return { error: `No image data found in response: ${summarizeImageResponse(data)}` };
       }
 
       const dataUrl = `data:image/png;base64,${b64}`;
@@ -281,7 +300,7 @@ export class AzureImageProvider extends AzureGenericProvider {
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API response error: ${String(err)}: ${summarizeImageResponse(data)}`,
       };
     }
   }

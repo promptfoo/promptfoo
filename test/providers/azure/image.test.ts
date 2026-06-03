@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { AzureImageProvider, validateMaiImageDimensions } from '../../../src/providers/azure/image';
+import {
+  AzureImageProvider,
+  summarizeImageResponse,
+  validateMaiImageDimensions,
+} from '../../../src/providers/azure/image';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -60,6 +64,23 @@ describe('validateMaiImageDimensions', () => {
   it('rejects non-integer / non-positive dimensions', () => {
     expect(validateMaiImageDimensions(0, 1024).valid).toBe(false);
     expect(validateMaiImageDimensions(1024.5, 1024).valid).toBe(false);
+  });
+});
+
+describe('summarizeImageResponse', () => {
+  it('replaces base64 payloads with their length and keeps other fields', () => {
+    const summary = summarizeImageResponse({
+      data: [{ b64_json: 'a'.repeat(5000), revised_prompt: 'p' }],
+      usage: { num_output_tokens: 10 },
+    });
+    expect(summary).not.toContain('aaaa');
+    expect(summary).toContain('<5000 base64 chars>');
+    expect(summary).toContain('revised_prompt');
+    expect(summary).toContain('num_output_tokens');
+  });
+
+  it('falls back to plain JSON for non-image-shaped values', () => {
+    expect(summarizeImageResponse({ error: { code: 'X' } })).toBe('{"error":{"code":"X"}}');
   });
 });
 

@@ -205,12 +205,6 @@ export interface AzureImageOptions extends AzureCompletionOptions {
   apiPath?: string;
 }
 
-export interface AzureImageProviderOptions {
-  config?: AzureImageOptions;
-  id?: string;
-  env?: EnvOverrides;
-}
-
 // =============================================================================
 // Azure Video Generation Types (Sora)
 // =============================================================================
