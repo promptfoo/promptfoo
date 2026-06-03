@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { redteamSetupCommand } from '../../../src/commands/redteam/setup';
 import { getDefaultPort } from '../../../src/constants';
-import { redteamSetupCommand } from '../../../src/redteam/commands/setup';
 import { startServer } from '../../../src/server/server';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { setupEnv } from '../../../src/util/index';

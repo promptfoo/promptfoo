@@ -1,13 +1,15 @@
+import fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import {
-  doEval,
-  EvalRunError,
+  doEval as commandDoEval,
+  EvalCommandSchema as commandEvalCommandSchema,
+  EvalRunError as commandEvalRunError,
+  showRedteamProviderLabelMissingWarning as commandShowRedteamProviderLabelMissingWarning,
   evalCommand,
-  showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import {
@@ -20,6 +22,17 @@ import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import {
+  doEval,
+  EvalCommandSchema,
+  EvalRunError,
+  showRedteamProviderLabelMissingWarning,
+} from '../../src/node/doEval';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+} from '../../src/node/retry';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
@@ -28,6 +41,7 @@ import {
   checkCloudPermissions,
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
+import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
@@ -52,6 +66,11 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
   };
 });
 vi.mock('../../src/migrate');
+vi.mock('../../src/node/retry', () => ({
+  deleteErrorResults: vi.fn(),
+  getErrorResultIds: vi.fn(),
+  recalculatePromptMetrics: vi.fn(),
+}));
 vi.mock('../../src/providers');
 vi.mock('../../src/redteam/shared', async (importOriginal) => {
   return {
@@ -136,6 +155,17 @@ vi.mock('../../src/database/index', async (importOriginal) => {
   };
 });
 
+describe('eval command compatibility exports', () => {
+  it('preserves the established command-module runtime exports', () => {
+    expect(commandDoEval).toBe(doEval);
+    expect(commandEvalCommandSchema).toBe(EvalCommandSchema);
+    expect(commandEvalRunError).toBe(EvalRunError);
+    expect(commandShowRedteamProviderLabelMissingWarning).toBe(
+      showRedteamProviderLabelMissingWarning,
+    );
+  });
+});
+
 describe('evalCommand', () => {
   let program: Command;
   const defaultConfig = {} as UnifiedConfig;
@@ -167,6 +197,9 @@ describe('evalCommand', () => {
     vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
+    vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
+    vi.mocked(getErrorResultIds).mockResolvedValue([]);
+    vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
 
   it('should create eval command with correct options', () => {
@@ -665,6 +698,111 @@ describe('evalCommand', () => {
     expect(runDbMigrations).toHaveBeenCalledTimes(1);
   });
 
+  it('should expand directory config arguments before resolving config', async () => {
+    const cmdObj = { config: ['/suite'], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: { prompts: ['from-dir'] },
+        defaultConfigPath: '/suite/promptfooconfig.yaml',
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(cmdObj.config).toEqual(['/suite/promptfooconfig.yaml']);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ config: ['/suite/promptfooconfig.yaml'] }),
+      expect.objectContaining({ prompts: ['from-dir'] }),
+    );
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
+  it('should preserve --config ordering when expanding a directory entry', async () => {
+    // combineConfigs applies configs in array order (later entries override earlier
+    // ones), so a directory must be resolved in place rather than moved to the end.
+    const cmdObj = { config: ['/base.yaml', '/suite', '/override.yaml'], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockImplementation(
+      async (target) =>
+        ({
+          isDirectory: () => target === '/suite',
+        }) as any,
+    );
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: { prompts: ['from-dir'] },
+        defaultConfigPath: '/suite/promptfooconfig.yaml',
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    // The resolved directory config stays in its original position, so /override.yaml
+    // still wins over it (regression: it used to be appended after /override.yaml).
+    expect(cmdObj.config).toEqual(['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml']);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: ['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml'],
+      }),
+      expect.objectContaining({ prompts: ['from-dir'] }),
+    );
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
+  it('should normalize a non-array config to an array before resolving a directory entry', async () => {
+    // Defensive: a non-Commander caller could pass config as a bare string. The directory
+    // resolution mutates the array in place, so a string must be normalized first (otherwise
+    // the in-place assignment throws in strict mode / corrupts the value).
+    const cmdObj = { config: '/suite' as unknown as string[], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: { prompts: ['from-dir'] },
+        defaultConfigPath: '/suite/promptfooconfig.yaml',
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(cmdObj.config).toEqual(['/suite/promptfooconfig.yaml']);
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
+  it('should warn when a directory config argument has no default config file', async () => {
+    const cmdObj = { config: ['/empty-suite'], write: false };
+    const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No configuration file found in directory: /empty-suite.'),
+    );
+    expect(cmdObj.config).toEqual(['/empty-suite']);
+
+    loggerWarnSpy.mockClear();
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
   it('should throw without mutating process.exitCode for reusable callers', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
@@ -883,6 +1021,90 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should pause CLI database evaluations on SIGINT and return the partial eval', async () => {
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+      if (event === 'SIGINT') {
+        sigintHandler = listener as NodeJS.SignalsListener;
+      }
+      return process;
+    });
+    const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      sigintHandler?.('SIGINT');
+      return evalRecord as Eval;
+    });
+
+    try {
+      const result = await doEval({ write: true }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(result).toBeInstanceOf(Eval);
+      expect(result.persisted).toBe(true);
+      expect(removeListenerSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    } finally {
+      processOnSpy.mockRestore();
+      removeListenerSpy.mockRestore();
+    }
+  });
+
+  it('should force exit if SIGINT pause shutdown times out', async () => {
+    vi.useFakeTimers();
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+      if (event === 'SIGINT') {
+        sigintHandler = listener as NodeJS.SignalsListener;
+      }
+      return process;
+    });
+    const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      sigintHandler?.('SIGINT');
+      await vi.advanceTimersByTimeAsync(10000);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: true }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+      expect(exitSpy).toHaveBeenCalledWith(130);
+    } finally {
+      vi.useRealTimers();
+      processOnSpy.mockRestore();
+      removeListenerSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('should force exit immediately on a second SIGINT', async () => {
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+      if (event === 'SIGINT') {
+        sigintHandler = listener as NodeJS.SignalsListener;
+      }
+      return process;
+    });
+    const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      sigintHandler?.('SIGINT');
+      sigintHandler?.('SIGINT');
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: true }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+      expect(exitSpy).toHaveBeenCalledWith(130);
+    } finally {
+      processOnSpy.mockRestore();
+      removeListenerSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
   it('preserves the just-completed Eval as cliFallback when watch mode cannot find configs', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
@@ -934,6 +1156,140 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should watch config-adjacent prompt, provider, and var files in watch mode', async () => {
+    const config = {
+      prompts: ['file://prompts/main.txt', { id: 'file://prompts/object.txt' }],
+      providers: ['file://providers/provider.yaml'],
+      tests: ['file://vars/scenario.yaml', { vars: { body: 'file://vars/body.txt', inline: 'x' } }],
+    } as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      config,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        '/suite/promptfooconfig.yaml',
+        path.resolve('/suite', 'prompts/main.txt'),
+        path.resolve('/suite', 'prompts/object.txt'),
+        path.resolve('/suite', 'providers/provider.yaml'),
+        path.resolve('/suite', 'vars/scenario.yaml'),
+        path.resolve('/suite', 'vars/body.txt'),
+      ]),
+      { ignored: /^\./, persistent: true },
+    );
+
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    chokidarMocks.handlers.get('ready')?.();
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      'Watching for file changes on /suite/promptfooconfig.yaml ...',
+    );
+
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    chokidarMocks.handlers.get('error')?.(new Error('watch failed'));
+    expect(loggerErrorSpy).toHaveBeenCalledWith('Watcher error: Error: watch failed');
+
+    loggerInfoSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
+  });
+
+  it('should resume an existing eval with persisted prompts', async () => {
+    const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+    resumeEval.prompts = [
+      { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
+    ] as any;
+    (resumeEval as any).runtimeOptions = { repeat: 2, cache: false, maxConcurrency: 2, delay: 0 };
+    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
+      expect(testSuite.prompts).toEqual([
+        { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
+      ]);
+      expect(options).toEqual(expect.objectContaining({ repeat: 2, cache: false }));
+      return evalRecord as Eval;
+    });
+
+    try {
+      const result = await doEval(
+        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        defaultConfigPath,
+        {},
+      );
+
+      expect(result).toBe(resumeEval);
+      expect(findByIdSpy).toHaveBeenCalledWith('eval-123');
+    } finally {
+      findByIdSpy.mockRestore();
+    }
+  });
+
+  it('should retry error results from the latest eval and clean up after success', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
+      expect(testSuite.prompts).toEqual([{ raw: 'retry prompt', label: 'Retry', config: {} }]);
+      return evalRecord as Eval;
+    });
+
+    try {
+      const result = await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
+
+      expect(result).toBe(latestEval);
+      expect(latestSpy).toHaveBeenCalledTimes(1);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('should return the latest eval when retry-errors finds no error results', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce([]);
+
+    try {
+      const result = await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
+
+      expect(result).toBe(latestEval);
+      expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
   it('should preserve reusable caller event sources when invoking the evaluator', async () => {
     const mockEvalRecord = new Eval(defaultConfig);
     vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
@@ -958,6 +1314,64 @@ describe('evalCommand', () => {
       expect.any(Eval),
       expect.objectContaining({ eventSource: 'cli' }),
     );
+  });
+
+  it('should set the configured failed-test exit code when CLI pass rate is too low', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    vi.stubEnv('PROMPTFOO_PASS_RATE_THRESHOLD', '75');
+    vi.stubEnv('PROMPTFOO_FAILED_TEST_EXIT_CODE', '42');
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      (evalRecord as Eval).prompts = [
+        {
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 1,
+            testErrorCount: 0,
+          },
+        },
+      ] as any;
+      return evalRecord as Eval;
+    });
+
+    try {
+      const result = await doEval({ write: false }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(result).toBeInstanceOf(Eval);
+      expect(process.exitCode).toBe(42);
+      expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining('Pass rate'));
+    } finally {
+      vi.unstubAllEnvs();
+      loggerInfoSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('should await async provider cleanup after evaluation', async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    } as ApiProvider;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [provider],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval({}, defaultConfig, defaultConfigPath, {});
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it('should handle redteam config', async () => {
