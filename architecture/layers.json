@@ -85,26 +85,26 @@
       "name": "view-server",
       "roots": ["src/server"],
       "allowedDependencies": [
+        "cli",
         "core",
         "legacy-contracts",
         "legacy-runtime",
         "node",
         "providers",
         "redteam"
-      ],
-      "forbiddenDependencies": ["cli"]
+      ]
     },
     {
       "name": "redteam",
       "roots": ["src/redteam"],
       "allowedDependencies": [
+        "cli",
         "core",
         "legacy-contracts",
         "legacy-runtime",
         "node",
         "providers"
-      ],
-      "forbiddenDependencies": ["cli", "view-server"]
+      ]
     },
     {
       "name": "providers",
@@ -125,15 +125,7 @@
         "src/storage",
         "src/util"
       ],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "providers",
-        "redteam",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
     },
     {
       "name": "core",
