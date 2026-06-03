@@ -605,7 +605,9 @@ export class OTLPReceiver {
   }
 
   private getRegisteredTracePolicy(info?: TraceInfo): RegisteredTracePolicy | undefined {
-    return info?.evaluationId ? this.tracePoliciesByEvaluationId.get(info.evaluationId) : undefined;
+    return info?.evaluationId
+      ? this.tracePoliciesByEvaluationId.get(info.evaluationId)
+      : undefined;
   }
 
   private getFallbackTracePolicy(): RegisteredTracePolicy {
