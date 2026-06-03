@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import * as fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import * as path from 'path';
 
@@ -89,6 +90,8 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
 const TRANSIENT_LOCK_RETRY_ATTEMPTS = 10;
 const TRANSIENT_LOCK_RETRY_BASE_MS = 5;
 const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
+const WINDOWS_DB_CLOSE_RELEASE_ATTEMPTS = 50;
+const WINDOWS_DB_CLOSE_RELEASE_INTERVAL_MS = 100;
 
 /**
  * Detects the transient SQLite lock errors that clear once a contending writer
@@ -139,6 +142,31 @@ async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T
       await sleep(
         Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
       );
+    }
+  }
+}
+
+async function waitForWindowsFileHandleRelease(dbPath: string): Promise<void> {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  for (let attempt = 1; attempt <= WINDOWS_DB_CLOSE_RELEASE_ATTEMPTS; attempt++) {
+    try {
+      const fileHandle = await fs.open(dbPath, 'r+');
+      await fileHandle.close();
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        return;
+      }
+      if ((code === 'EBUSY' || code === 'EPERM') && attempt < WINDOWS_DB_CLOSE_RELEASE_ATTEMPTS) {
+        await sleep(WINDOWS_DB_CLOSE_RELEASE_INTERVAL_MS);
+        continue;
+      }
+      logger.warn(`Database file handle remained busy after close: ${error}`);
+      return;
     }
   }
 }
@@ -256,6 +284,7 @@ export async function getDb() {
 
 export async function closeDb() {
   if (sqliteInstance) {
+    const dbPath = sqliteInstanceIsTesting ? null : getDbPath();
     try {
       // Attempt to checkpoint WAL file before closing
       if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
@@ -273,6 +302,9 @@ export async function closeDb() {
         // libsql Client.close() is synchronous; the WAL checkpoint above already
         // awaited the I/O that needed to finish before the underlying connection drops.
         sqliteInstance.close();
+        if (dbPath) {
+          await waitForWindowsFileHandleRelease(dbPath);
+        }
       }
 
       logger.debug('Database connection closed successfully');

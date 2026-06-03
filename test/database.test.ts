@@ -10,6 +10,26 @@ import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
 
+async function removeDatabaseFile(filePath: string): Promise<void> {
+  const maxAttempts = process.platform === 'win32' ? 50 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fs.promises.rm(filePath, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const isRetriableWindowsLock = code === 'EBUSY' || code === 'EPERM';
+
+      if (!isRetriableWindowsLock || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 describe('database WAL mode', () => {
   let tempDir: string;
 
@@ -90,6 +110,28 @@ describe('database WAL mode', () => {
     await database.getDb();
 
     expect(fs.existsSync(database.getDbPath())).toBe(true);
+  });
+
+  it('recreates a file-backed database after its database file is deleted', async () => {
+    const database = await import('../src/database');
+    const db = await database.getDb();
+    const dbPath = database.getDbPath();
+
+    expect(path.dirname(dbPath)).toBe(tempDir);
+    await db.run('CREATE TABLE deleted_database_probe (id INTEGER PRIMARY KEY)');
+    await db.run('INSERT INTO deleted_database_probe (id) VALUES (1)');
+    await database.closeDb();
+
+    await removeDatabaseFile(dbPath);
+    await removeDatabaseFile(`${dbPath}-shm`);
+    await removeDatabaseFile(`${dbPath}-wal`);
+    expect(fs.existsSync(dbPath)).toBe(false);
+
+    const recreatedDb = await database.getDb();
+    await recreatedDb.run('CREATE TABLE recreated_database_probe (id INTEGER PRIMARY KEY)');
+
+    expect(fs.existsSync(dbPath)).toBe(true);
+    await expect(recreatedDb.all('SELECT id FROM deleted_database_probe')).rejects.toThrow();
   });
 
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {

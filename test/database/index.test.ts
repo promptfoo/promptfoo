@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'node:fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -14,10 +15,19 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { sleep } from '../../src/util/time';
 
 vi.mock('../../src/envars');
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, open: vi.fn(actual.open) };
+});
+vi.mock('../../src/util/time', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/util/time')>();
+  return { ...actual, sleep: vi.fn(actual.sleep) };
+});
 
 describe('database', () => {
   let tempConfigDir: string;
@@ -26,6 +36,7 @@ describe('database', () => {
     vi.clearAllMocks();
     vi.mocked(getConfigDirectoryPath).mockReset();
     vi.mocked(getEnvBool).mockReset();
+    vi.mocked(sleep).mockReset();
     await closeDb();
     tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-db-index-'));
     vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
@@ -250,6 +261,44 @@ describe('database', () => {
       await closeDb();
       await closeDb();
       expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('waits for Windows file-backed database handles to release after close', async () => {
+      vi.mocked(getEnvBool).mockImplementation((key) => {
+        if (key === 'IS_TESTING') {
+          return false;
+        }
+        return false;
+      });
+
+      const dbFilePath = path.join(tempConfigDir, 'promptfoo.db');
+      fs.writeFileSync(dbFilePath, '');
+
+      const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+      const fileHandle = { close: vi.fn().mockResolvedValue(undefined) } as unknown as Awaited<
+        ReturnType<typeof fsPromises.open>
+      >;
+      const openMock = vi
+        .mocked(fsPromises.open)
+        .mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EBUSY' }))
+        .mockResolvedValueOnce(fileHandle);
+
+      try {
+        await getDb();
+        await closeDb();
+
+        expect(openMock).toHaveBeenCalledWith(dbFilePath, 'r+');
+        expect(openMock).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(sleep)).toHaveBeenCalledWith(100);
+        expect(fileHandle.close).toHaveBeenCalledTimes(1);
+      } finally {
+        openMock.mockReset();
+        if (platformDescriptor) {
+          Object.defineProperty(process, 'platform', platformDescriptor);
+        }
+      }
     });
   });
 
