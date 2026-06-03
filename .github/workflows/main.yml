@@ -349,6 +349,7 @@ jobs:
       - name: Run Tests
         run: |
           python -m unittest discover -s src/python -p '*_test.py'
+          python -m unittest discover -s examples/redteam-agents-sdk -p '*_test.py'
 
   docs:
     name: Build Docs

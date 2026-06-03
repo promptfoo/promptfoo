@@ -63,6 +63,7 @@ type TraceLikeSpan = {
     name?: string;
   }>;
   name?: string;
+  parentSpanId?: string;
   spanId?: string;
 };
 
@@ -359,6 +360,103 @@ function observationsShareSpan(a: AgentObservation, b: AgentObservation): boolea
   return Boolean(a.spanName && a.spanName === b.spanName);
 }
 
+function observationsShareRoute(a: AgentObservation, b: AgentObservation): boolean {
+  return Boolean(
+    (a.parentSpanId && b.parentSpanId && a.parentSpanId === b.parentSpanId) ||
+      (a.spanId && b.parentSpanId && a.spanId === b.parentSpanId) ||
+      (b.spanId && a.parentSpanId && b.spanId === a.parentSpanId),
+  );
+}
+
+function controlRunsBeforeTool(
+  controlObservation: AgentObservation,
+  toolObservation: AgentObservation,
+): boolean {
+  const sharesSpan = observationsShareSpan(controlObservation, toolObservation);
+  if (sharesSpan && controlObservation.source !== 'trace-event') {
+    return true;
+  }
+
+  if (controlObservation.source === 'trace-event') {
+    return (
+      controlObservation.timestamp !== undefined &&
+      toolObservation.timestamp !== undefined &&
+      controlObservation.timestamp <= toolObservation.timestamp
+    );
+  }
+
+  return (
+    controlObservation.endTimestamp !== undefined &&
+    toolObservation.timestamp !== undefined &&
+    controlObservation.endTimestamp <= toolObservation.timestamp
+  );
+}
+
+function toolInvocationKey(observation: AgentObservation, index: number): string {
+  if (observation.spanId && observation.source !== 'trace-event') {
+    return `span:${observation.spanId}`;
+  }
+
+  if (observation.spanName || observation.timestamp !== undefined) {
+    return `trace:${observation.source}:${observation.spanId ?? ''}:${observation.spanName ?? ''}:${
+      observation.timestamp ?? ''
+    }:${observation.location}`;
+  }
+
+  return `observation:${index}:${observation.location}`;
+}
+
+function uniqueToolInvocations(observations: AgentObservation[]): AgentObservation[] {
+  const seen = new Set<string>();
+  return observations
+    .filter((observation, index) => {
+      const key = toolInvocationKey(observation, index);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        (a.timestamp ?? Number.POSITIVE_INFINITY) - (b.timestamp ?? Number.POSITIVE_INFINITY),
+    );
+}
+
+function controlObservationDuplicateKey(observation: AgentObservation): string | undefined {
+  if (!observation.spanId) {
+    return undefined;
+  }
+
+  return `${observation.spanId}:${observation.kind}`;
+}
+
+function groupControlObservations(observations: AgentObservation[]): AgentObservation[][] {
+  const groups: AgentObservation[][] = [];
+  const unmatchedSpanGroupIndexes = new Map<string, number[]>();
+
+  observations.forEach((observation) => {
+    const duplicateKey = controlObservationDuplicateKey(observation);
+    if (observation.source === 'trace-event' && duplicateKey) {
+      const spanGroupIndexes = unmatchedSpanGroupIndexes.get(duplicateKey);
+      const spanGroupIndex = spanGroupIndexes?.shift();
+      if (spanGroupIndex !== undefined) {
+        groups[spanGroupIndex].push(observation);
+        return;
+      }
+    }
+
+    const groupIndex = groups.push([observation]) - 1;
+    if (observation.source !== 'trace-event' && duplicateKey) {
+      const spanGroupIndexes = unmatchedSpanGroupIndexes.get(duplicateKey) ?? [];
+      spanGroupIndexes.push(groupIndex);
+      unmatchedSpanGroupIndexes.set(duplicateKey, spanGroupIndexes);
+    }
+  });
+
+  return groups;
+}
+
 function namedControlObservationMentionsTool(
   observation: AgentObservation,
   toolName: string,
@@ -371,37 +469,69 @@ function namedControlObservationMentionsTool(
   );
 }
 
+function routeControlCoversTool(
+  controlObservation: AgentObservation,
+  toolObservation: AgentObservation,
+  toolName: string,
+): boolean {
+  return (
+    controlRunsBeforeTool(controlObservation, toolObservation) &&
+    observationsShareRoute(controlObservation, toolObservation) &&
+    namedControlObservationMentionsTool(controlObservation, toolName)
+  );
+}
+
 function hasGuardrailOrApprovalForTool(
   observations: AgentObservation[],
   toolName: string,
 ): boolean {
-  const toolObservations = observations.filter(
-    (observation) =>
-      (observation.kind === 'tool_call' || observation.kind === 'connector_call') &&
-      (observation.tool === toolName ||
-        observation.operation === toolName ||
-        observation.spanName?.toLowerCase() === `tool ${toolName}`.toLowerCase()),
+  const toolObservations = uniqueToolInvocations(
+    observations.filter(
+      (observation) =>
+        (observation.kind === 'tool_call' || observation.kind === 'connector_call') &&
+        (observation.tool === toolName ||
+          observation.operation === toolName ||
+          observation.spanName?.toLowerCase() === `tool ${toolName}`.toLowerCase()),
+    ),
   );
 
   if (toolObservations.length === 0) {
     return false;
   }
 
-  return toolObservations.every((toolObservation) =>
-    observations.some((observation) => {
-      if (observation.kind !== 'guardrail' && observation.kind !== 'approval') {
-        return false;
-      }
-
-      const hasSpanIdentity = Boolean(observation.spanId || observation.spanName);
-      if (observationsShareSpan(observation, toolObservation)) {
-        return true;
-      }
-      return hasSpanIdentity
-        ? namedControlObservationMentionsTool(observation, toolName)
-        : observationMentionsTool(observation, toolName);
-    }),
+  const controlObservationGroups = groupControlObservations(
+    observations.filter(
+      (observation) => observation.kind === 'guardrail' || observation.kind === 'approval',
+    ),
   );
+  const usedControlIndexes = new Set<number>();
+
+  return toolObservations.every((toolObservation) => {
+    const findAvailableControl = (predicate: (observation: AgentObservation) => boolean): number =>
+      controlObservationGroups.findIndex((group, index) => {
+        if (usedControlIndexes.has(index)) {
+          return false;
+        }
+        return group.some(predicate);
+      });
+
+    let coveringControlIndex = findAvailableControl(
+      (observation) =>
+        observationsShareSpan(observation, toolObservation) &&
+        controlRunsBeforeTool(observation, toolObservation),
+    );
+    if (coveringControlIndex === -1) {
+      coveringControlIndex = findAvailableControl((observation) =>
+        routeControlCoversTool(observation, toolObservation, toolName),
+      );
+    }
+
+    if (coveringControlIndex === -1) {
+      return false;
+    }
+    usedControlIndexes.add(coveringControlIndex);
+    return true;
+  });
 }
 
 function inferredTraceFindings(
@@ -444,6 +574,24 @@ function findingMatchesPlugin(
   pluginId: AgenticRuntimePluginId,
 ): boolean {
   return normalizePluginId(finding.pluginId) === pluginId;
+}
+
+function dedupeFindings(findings: AgenticRuntimeFinding[]): AgenticRuntimeFinding[] {
+  const seen = new Set<string>();
+  return findings.filter((finding) => {
+    const key = JSON.stringify([
+      normalizePluginId(finding.pluginId),
+      finding.kind,
+      finding.location,
+      finding.evidence,
+      finding.severity,
+    ]);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeEvidenceForPlugin(
@@ -579,16 +727,24 @@ function extractAgenticRuntimeEvidence(
     gradingContext?.providerResponse?.metadata,
   ];
 
-  for (const candidate of candidates) {
-    for (const evidence of parseEvidenceCandidates(candidate)) {
-      const scopedEvidence = normalizeEvidenceForPlugin(evidence, pluginId);
-      if (hasVerifierEvidence(scopedEvidence)) {
-        return {
-          ...scopedEvidence,
-          evidenceSource: scopedEvidence.evidenceSource || 'provider',
-        };
-      }
-    }
+  const scopedEvidenceCandidates = candidates.flatMap((candidate) =>
+    parseEvidenceCandidates(candidate)
+      .map((evidence) => normalizeEvidenceForPlugin(evidence, pluginId))
+      .filter(hasVerifierEvidence),
+  );
+  if (scopedEvidenceCandidates.length > 0) {
+    const primaryEvidence =
+      scopedEvidenceCandidates.find((evidence) =>
+        evidence.findings?.some((finding) => !pluginId || findingMatchesPlugin(finding, pluginId)),
+      ) ?? scopedEvidenceCandidates[0];
+
+    return {
+      ...primaryEvidence,
+      evidenceSource: primaryEvidence.evidenceSource || 'provider',
+      findings: dedupeFindings(
+        scopedEvidenceCandidates.flatMap((evidence) => evidence.findings ?? []),
+      ),
+    };
   }
 
   return undefined;

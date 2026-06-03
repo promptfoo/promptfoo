@@ -34,6 +34,7 @@ export type AgentObservation = {
   actor?: string;
   command?: string;
   connector?: string;
+  endTimestamp?: number;
   evidence?: string;
   fieldLocations?: Partial<
     Record<'command' | 'evidence' | 'input' | 'output' | 'path' | 'text' | 'tool', string>
@@ -46,12 +47,14 @@ export type AgentObservation = {
   operation?: string;
   outcome?: string;
   output?: string;
+  parentSpanId?: string;
   path?: string;
   pluginId?: string;
   severity?: string;
   source: AgentObservationSource;
   spanId?: string;
   spanName?: string;
+  timestamp?: number;
   text?: string;
   to?: string;
   tool?: string;
@@ -121,12 +124,16 @@ const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS = [
 
 type TraceLikeSpan = {
   attributes?: Record<string, unknown>;
+  endTime?: number;
   events?: Array<{
     attributes?: Record<string, unknown>;
     name?: string;
+    timestamp?: number;
   }>;
   name?: string;
+  parentSpanId?: string;
   spanId?: string;
+  startTime?: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -356,15 +363,18 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'guardrail',
+      endTimestamp: span.endTime,
       location,
       outcome: stringifyValue(
         guardrailDecision ??
           getAttribute(attributes, ['guardrail.outcome']) ??
           attributes['codex.status'],
       ),
+      parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
       spanName: span.name,
+      timestamp: span.startTime,
       text: span.name,
     };
   }
@@ -376,11 +386,14 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'approval',
+      endTimestamp: span.endTime,
       location,
       outcome: stringifyValue(attributes['approval.outcome'] ?? attributes['codex.status']),
+      parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
       spanName: span.name,
+      timestamp: span.startTime,
       text: span.name,
     };
   }
@@ -406,25 +419,24 @@ function findingObservationsFromAttributes(
           fieldLocations: { evidence: location },
           findingKind: stringifyValue(finding.kind),
           kind: 'finding',
-          location: `${location} finding ${index + 1}`,
+          location: stringifyValue(finding.location) || `${location} finding ${index + 1}`,
           pluginId:
             normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
+          parentSpanId: span?.parentSpanId,
           severity: stringifyValue(finding.severity),
           source,
           spanId: span?.spanId,
           spanName: span?.name,
+          timestamp: span?.startTime,
           text: stringifyValue(finding.evidence),
         });
       });
     });
-    if (observations.length > 0) {
-      return observations;
-    }
   }
 
   const pluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
   if (!pluginId) {
-    return observations;
+    return dedupeFindingObservations(observations);
   }
 
   const findingEvidence = stringifyValue(
@@ -438,7 +450,7 @@ function findingObservationsFromAttributes(
     getAttribute(attributes, AGENTIC_RUNTIME_FINDING_SEVERITY_ATTRS),
   );
   if (!findingEvidence && !findingKind && !findingLocation && !findingSeverity) {
-    return observations;
+    return dedupeFindingObservations(observations);
   }
 
   observations.push({
@@ -447,15 +459,35 @@ function findingObservationsFromAttributes(
     findingKind,
     kind: 'finding',
     location: findingLocation || location,
+    parentSpanId: span?.parentSpanId,
     pluginId,
     severity: findingSeverity,
     source,
     spanId: span?.spanId,
     spanName: span?.name,
+    timestamp: span?.startTime,
     text: findingEvidence,
   });
 
-  return observations;
+  return dedupeFindingObservations(observations);
+}
+
+function dedupeFindingObservations(observations: AgentObservation[]): AgentObservation[] {
+  const seen = new Set<string>();
+  return observations.filter((observation) => {
+    const key = JSON.stringify([
+      observation.pluginId,
+      observation.findingKind,
+      observation.location,
+      observation.evidence,
+      observation.severity,
+    ]);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizedToolObservationsFromAttributes(
@@ -471,9 +503,11 @@ function normalizedToolObservationsFromAttributes(
           fieldLocations: { tool: baseLocation },
           kind: 'tool_call',
           location: baseLocation,
+          parentSpanId: span?.parentSpanId,
           source,
           spanId: span?.spanId,
           spanName: span?.name,
+          timestamp: span?.startTime,
           tool,
         },
       ]
@@ -498,9 +532,11 @@ function observationFromMappedTraceAttribute(
   const baseObservation = {
     fieldLocations: { [mapped.field]: location },
     location,
+    parentSpanId: span?.parentSpanId,
     source,
     spanId: span?.spanId,
     spanName: span?.name,
+    timestamp: span?.startTime,
   } satisfies Partial<AgentObservation>;
 
   if (mapped.kind === 'command') {
@@ -575,9 +611,11 @@ function observationsFromTraceAttributes(
       fieldLocations: { tool: baseLocation },
       kind: 'tool_call',
       location: baseLocation,
+      parentSpanId: span?.parentSpanId,
       source,
       spanId: span?.spanId,
       spanName: span?.name,
+      timestamp: span?.startTime,
       tool: spanTool,
     });
   }
@@ -611,7 +649,9 @@ export function observationsFromTraceData(
       const eventSpan = {
         attributes: event.attributes,
         name: event.name,
+        parentSpanId: traceSpan.parentSpanId,
         spanId: traceSpan.spanId,
+        startTime: event.timestamp,
       };
       const eventControlObservation = controlObservationFromSpan(
         eventSpan,
