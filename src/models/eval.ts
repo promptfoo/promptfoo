@@ -108,11 +108,19 @@ function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
 
   const redteamFinalPrompt =
     result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
+  // Layer-mode strategies (e.g. indirect-web-pwn) embed the attack payload at runtime and
+  // surface it through `transformDisplayVars` rather than the test-case vars. The report
+  // reads it to display the real injected input, so keep it in the compact projection.
+  const transformDisplayVars = result.response?.metadata?.transformDisplayVars;
+  const responseMetadata = {
+    ...(redteamFinalPrompt !== undefined && { redteamFinalPrompt }),
+    ...(transformDisplayVars !== undefined && { transformDisplayVars }),
+  };
   const response = result.response
     ? {
         output: result.response.output,
         ...(result.response.prompt !== undefined && { prompt: result.response.prompt }),
-        ...(redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
+        ...(Object.keys(responseMetadata).length > 0 && { metadata: responseMetadata }),
       }
     : result.response;
 

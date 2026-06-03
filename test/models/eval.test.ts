@@ -1265,6 +1265,7 @@ describe('evaluator', () => {
             output: 'response',
             metadata: {
               redteamFinalPrompt: 'final prompt',
+              transformDisplayVars: { embeddedInjection: 'runtime payload' },
               storedGraderResult: { large: 'duplicate grader payload' },
             },
           },
@@ -1312,7 +1313,13 @@ describe('evaluator', () => {
         redteamHistory: [{ prompt: 'attack', output: 'response' }],
       });
       expect(result.metadata).not.toHaveProperty('storedGraderResult');
-      expect(result.response?.metadata).toEqual({ redteamFinalPrompt: 'final prompt' });
+      // The report renders `redteamFinalPrompt` and surfaces `transformDisplayVars` (layer-mode
+      // strategies like indirect-web-pwn) as the injected attack input, so both must survive
+      // while the heavy `storedGraderResult` is dropped.
+      expect(result.response?.metadata).toEqual({
+        redteamFinalPrompt: 'final prompt',
+        transformDisplayVars: { embeddedInjection: 'runtime payload' },
+      });
       expect(result.testCase.metadata).toEqual({
         pluginId: 'coding-agent:network-egress-bypass',
         strategyId: 'jailbreak:meta',
@@ -1364,6 +1371,46 @@ describe('evaluator', () => {
       });
 
       expect('table' in projected.results && projected.results.table.body).toEqual([]);
+    });
+
+    it('preserves transformDisplayVars when redteamFinalPrompt is absent', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'response',
+            metadata: {
+              transformDisplayVars: { embeddedInjection: 'runtime payload' },
+              storedGraderResult: { large: 'duplicate grader payload' },
+            },
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].response?.metadata).toEqual({
+        transformDisplayVars: { embeddedInjection: 'runtime payload' },
+      });
+    });
+
+    it('drops response metadata entirely when no report-relevant fields remain', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'response',
+            metadata: {
+              storedGraderResult: { large: 'duplicate grader payload' },
+              http: { status: 200, statusText: 'OK' },
+            },
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].response?.metadata).toBeUndefined();
     });
   });
 

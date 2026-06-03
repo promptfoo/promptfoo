@@ -57,7 +57,16 @@ vi.mock('./Overview', () => ({
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({ default: () => null }));
 vi.mock('./StrategyStats', () => ({ default: () => null }));
-vi.mock('./RiskCategories', () => ({ default: () => null }));
+vi.mock('./RiskCategories', () => ({
+  default: ({ failuresByPlugin }: { failuresByPlugin?: Record<string, { prompt: string }[]> }) => (
+    <div data-testid="risk-categories-failure-prompts">
+      {Object.values(failuresByPlugin ?? {})
+        .flat()
+        .map((failure) => failure.prompt)
+        .join('|')}
+    </div>
+  ),
+}));
 vi.mock('./TestSuites', () => ({ default: () => null }));
 vi.mock('./FrameworkCompliance', () => ({ default: () => null }));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
@@ -675,6 +684,30 @@ describe('App component target selection', () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByText(/2 probes/)).toBeInTheDocument();
+  });
+
+  it('surfaces transformDisplayVars as the attack prompt for layer-mode failures', async () => {
+    // Layer-mode strategies (e.g. indirect-web-pwn) embed the payload at runtime via
+    // response.metadata.transformDisplayVars rather than the test-case vars, so the report must
+    // fall back to it to display the real injected input.
+    const layerResult = {
+      ...createComponentMockResult(0, 'plugin1', false),
+      vars: {},
+      response: {
+        output: 'test output',
+        metadata: { transformDisplayVars: { prompt: 'INJECTED_LAYER_PAYLOAD' } },
+      },
+    } as unknown as EvaluateResult;
+    const evalData = createComponentMockEvalData(1, [layerResult]);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
+    expect(failurePrompts).toHaveTextContent('INJECTED_LAYER_PAYLOAD');
   });
 });
 
