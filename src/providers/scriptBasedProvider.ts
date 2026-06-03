@@ -1,7 +1,7 @@
 import { getResolvedRelativePath } from '../util/file';
 
-import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ProviderLoadContext } from './registryTypes';
 
 /**
  * Creates a factory for script-based providers (exec, golang, python)
@@ -34,7 +34,7 @@ export function createScriptBasedProviderFactory(
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      _context: ProviderLoadContext,
     ) => {
       // Extract the script path from the provider path
       let scriptPath: string;

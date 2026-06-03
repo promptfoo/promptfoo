@@ -95,6 +95,24 @@ provider-runtime, webhook, and redteam handlers.
 `runAssertion()` and `runAssertions()` compatibility APIs, which also accept an
 injected registry for focused tests and custom host compositions.
 
+Provider families follow an ordered plugin contract before they become separate
+packages. The `promptfoo/provider-plugin` subpath is the package-neutral consumer
+surface for the versioned manifest, registry, registration, and typed load-error
+contracts. `src/providers/pluginRegistry.ts` owns deterministic first-match
+registration, lazy loading, disposal, and typed load errors. The full Promptfoo
+composition root registers the built-in AWS, Google, and redteam manifests ahead of
+external registrations, while `src/providers/registry.ts` remains the legacy fallback
+map. A claiming manifest must return a factory that matches the requested provider ID;
+matching plugin factories then run ahead of the fallback so broad file-provider
+matching cannot intercept that ID. Provider plugins may depend on provider contracts,
+but not the CLI, server, root facade, or full-package built-in composition.
+
+This V1 surface makes provider composition and artifact testing possible, but it is
+not yet the final ABI for independently published provider packages. Its factory
+types still use transitional provider contracts from `src/types/providers.ts`.
+Those contracts must move to a narrower portable surface before extracting a real
+`@promptfoo/provider-*` package.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a

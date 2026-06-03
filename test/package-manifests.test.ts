@@ -105,6 +105,27 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
   });
 
+  it('publishes the provider plugin subpath', () => {
+    const packageJson = readPackageJson<{
+      exports?: Record<string, unknown>;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    }>('package.json');
+
+    expect(packageJson.exports?.['./provider-plugin']).toEqual({
+      import: {
+        types: './dist/src/provider-plugin.d.ts',
+        default: './dist/src/provider-plugin.js',
+      },
+      require: {
+        types: './dist/src/provider-plugin.d.cts',
+        default: './dist/src/provider-plugin.cjs',
+      },
+    });
+    expect(packageJson.typesVersions?.['*']?.['provider-plugin']).toEqual([
+      'dist/src/provider-plugin.d.ts',
+    ]);
+  });
+
   it('keeps the contracts subpath extension-safe for emitted ESM', () => {
     const contractsDir = path.join(process.cwd(), 'src', 'contracts');
     const files = [
