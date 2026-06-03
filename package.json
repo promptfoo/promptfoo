@@ -24,6 +24,16 @@
         "types": "./dist/src/contracts.d.cts",
         "default": "./dist/src/contracts.cjs"
       }
+    },
+    "./provider-plugin": {
+      "import": {
+        "types": "./dist/src/provider-plugin.d.ts",
+        "default": "./dist/src/provider-plugin.js"
+      },
+      "require": {
+        "types": "./dist/src/provider-plugin.d.cts",
+        "default": "./dist/src/provider-plugin.cjs"
+      }
     }
   },
   "workspaces": [
@@ -36,6 +46,9 @@
     "*": {
       "contracts": [
         "dist/src/contracts.d.ts"
+      ],
+      "provider-plugin": [
+        "dist/src/provider-plugin.d.ts"
       ]
     }
   },

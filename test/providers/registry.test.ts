@@ -870,10 +870,11 @@ describe('Provider Registry', () => {
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:llama-3.3-70b-versatile', groqOptions, {
-        ...mockContext,
-        options: groqOptions,
-      });
+      const provider = await factory!.create(
+        'groq:llama-3.3-70b-versatile',
+        groqOptions,
+        mockContext,
+      );
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('groq:llama-3.3-70b-versatile');
 
@@ -892,10 +893,7 @@ describe('Provider Registry', () => {
         id: undefined,
         config: { gatewayUrl: 'http://localhost:5000' },
       };
-      const provider = await factory!.create('mlflow-gateway:my-endpoint', options, {
-        ...mockContext,
-        options,
-      });
+      const provider = await factory!.create('mlflow-gateway:my-endpoint', options, mockContext);
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('mlflow-gateway:my-endpoint');
 
@@ -915,10 +913,11 @@ describe('Provider Registry', () => {
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:responses:openai/gpt-oss-120b', groqOptions, {
-        ...mockContext,
-        options: groqOptions,
-      });
+      const provider = await factory!.create(
+        'groq:responses:openai/gpt-oss-120b',
+        groqOptions,
+        mockContext,
+      );
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('groq:responses:openai/gpt-oss-120b');
 
@@ -1005,10 +1004,7 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
 
       const orcaOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, {
-        ...mockContext,
-        options: orcaOptions,
-      });
+      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, mockContext);
       expect(provider.id()).toBe('orcarouter:openai/gpt-4o');
 
       const autoProvider = await factory!.create(

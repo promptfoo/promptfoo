@@ -35,6 +35,10 @@ const requiredPackagedPaths = [
   'dist/src/index.js',
   'dist/src/main.js',
   'dist/src/package.json',
+  'dist/src/provider-plugin.cjs',
+  'dist/src/provider-plugin.d.cts',
+  'dist/src/provider-plugin.d.ts',
+  'dist/src/provider-plugin.js',
   'dist/src/python/persistent_wrapper.py',
   'dist/src/python/wrapper.py',
   'dist/src/ruby/wrapper.rb',
@@ -260,6 +264,7 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
       "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
+      "import { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } from 'promptfoo/provider-plugin';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -269,6 +274,9 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected ESM provider capability export');",
       '}',
+      'if (PROVIDER_PLUGIN_API_VERSION !== 1 || typeof ProviderPluginRegistry !== "function") {',
+      "  throw new Error('Missing expected ESM provider plugin export');",
+      '}',
       '',
     ].join('\n'),
   );
@@ -277,6 +285,7 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
       "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
+      "const { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } = require('promptfoo/provider-plugin');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -286,6 +295,45 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected CJS provider capability export');",
       '}',
+      'if (PROVIDER_PLUGIN_API_VERSION !== 1 || typeof ProviderPluginRegistry !== "function") {',
+      "  throw new Error('Missing expected CJS provider plugin export');",
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'mixed-provider-plugin.mjs'),
+    [
+      "import { createRequire } from 'node:module';",
+      "import { loadApiProvider } from 'promptfoo';",
+      '',
+      'const require = createRequire(import.meta.url);',
+      "const cjsPromptfoo = require('promptfoo');",
+      "const { PROVIDER_PLUGIN_API_VERSION, registerProviderPlugin } = require('promptfoo/provider-plugin');",
+      "if (typeof cjsPromptfoo.loadApiProvider !== 'function') {",
+      "  throw new Error('CommonJS root entrypoint failed to load beside the ESM root');",
+      '}',
+      'const dispose = registerProviderPlugin({',
+      '  apiVersion: PROVIDER_PLUGIN_API_VERSION,',
+      "  name: 'artifact-mixed-format',",
+      "  canHandle: (providerPath) => providerPath.startsWith('artifact-mixed:'),",
+      '  load: async () => [{',
+      "    test: (providerPath) => providerPath.startsWith('artifact-mixed:'),",
+      '    create: async () => ({',
+      "      id: () => 'artifact-mixed-format',",
+      "      callApi: async () => ({ output: 'mixed-format-ok' }),",
+      '    }),',
+      '  }],',
+      '});',
+      '',
+      'try {',
+      "  const provider = await loadApiProvider('artifact-mixed:model');",
+      "  if (provider.id() !== 'artifact-mixed-format') {",
+      "    throw new Error('CommonJS plugin registration was invisible to the ESM host');",
+      '  }',
+      '} finally {',
+      '  dispose();',
+      '}',
       '',
     ].join('\n'),
   );
@@ -294,6 +342,8 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
       "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } from 'promptfoo/provider-plugin';",
+      "import type { ProviderPluginManifest } from 'promptfoo/provider-plugin';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -305,6 +355,9 @@ function writeConsumerScripts(consumerDir: string): void {
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
       'void response;',
+      'const registry = new ProviderPluginRegistry();',
+      "const manifest: ProviderPluginManifest = { apiVersion: PROVIDER_PLUGIN_API_VERSION, name: 'consumer', canHandle: () => false, load: async () => [] };",
+      'registry.register(manifest);',
       'if (!isTransformFunction(transform) || !hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected TypeScript contracts export');",
       '}',
@@ -440,6 +493,7 @@ function main(): void {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
+    run(process.execPath, ['mixed-provider-plugin.mjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);

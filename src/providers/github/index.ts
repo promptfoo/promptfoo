@@ -1,11 +1,12 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { LoadApiProviderContext, ProviderOptions } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
+import type { ProviderLoadContext } from '../registryTypes';
 
 export function createGitHubProvider(
   providerPath: string,
   providerOptions: ProviderOptions,
-  _context: LoadApiProviderContext,
+  _context: ProviderLoadContext,
 ) {
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':') || 'openai/gpt-5';
