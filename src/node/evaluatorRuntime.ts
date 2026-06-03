@@ -1,13 +1,14 @@
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
+import { EvalEvaluationStore } from './evaluationStore';
 
 import type {
-  EvalResultPersistence,
   EvaluatorResultWriter,
   EvaluatorResultWriterOptions,
   EvaluatorRuntime,
 } from '../evaluator/runtime';
-import type { EvaluateResult } from '../types/index';
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
 
 function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[] {
   if (Array.isArray(outputPath)) {
@@ -16,12 +17,12 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
   return outputPath && getOutputFileFormat(outputPath) === 'jsonl' ? [outputPath] : [];
 }
 
-export const nodeEvaluatorRuntime: EvaluatorRuntime = {
-  createResultWriters(outputPath, options: EvaluatorResultWriterOptions): EvaluatorResultWriter[] {
-    return getJsonlOutputPaths(outputPath).map((path) => new JsonlFileWriter(path, options));
+export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
+  createEvaluationStore(evaluation) {
+    return new EvalEvaluationStore(evaluation);
   },
 
-  persistResult(evalRecord: EvalResultPersistence, result: EvaluateResult): Promise<void> {
-    return evalRecord.addResult(result);
+  createResultWriters(outputPath, options: EvaluatorResultWriterOptions): EvaluatorResultWriter[] {
+    return getJsonlOutputPaths(outputPath).map((path) => new JsonlFileWriter(path, options));
   },
 };

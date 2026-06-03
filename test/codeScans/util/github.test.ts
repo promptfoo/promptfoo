@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_CLEAR_MESSAGE, prepareComments } from '../../../src/codeScan/util/github';
+import {
+  ALL_CLEAR_MESSAGE,
+  hasPrPostableFindings,
+  prepareComments,
+} from '../../../src/codeScan/util/github';
 import { CodeScanSeverity, type Comment } from '../../../src/types/codeScan';
 
 describe('prepareComments', () => {
@@ -42,14 +46,23 @@ describe('prepareComments', () => {
         severity: CodeScanSeverity.MEDIUM,
         finding: 'General security issue',
       },
+      {
+        file: 'src/file-only.ts',
+        line: null,
+        severity: CodeScanSeverity.LOW,
+        finding: 'File-level security issue',
+      },
     ];
 
     const result = prepareComments(comments, 'Review text', 'low');
 
     expect(result.lineComments).toHaveLength(1);
     expect(result.lineComments[0].file).toBe('src/test.ts');
-    expect(result.generalComments).toHaveLength(1);
-    expect(result.generalComments[0].file).toBeNull();
+    expect(result.generalComments).toHaveLength(2);
+    expect(result.generalComments.map((comment) => comment.file)).toEqual([
+      null,
+      'src/file-only.ts',
+    ]);
   });
 
   it('should filter out severity=none from general comments', () => {
@@ -72,6 +85,30 @@ describe('prepareComments', () => {
 
     expect(result.generalComments).toHaveLength(1);
     expect(result.generalComments[0].severity).toBe(CodeScanSeverity.LOW);
+  });
+
+  it('should recognize fileless findings as PR-postable but reject severity=none comments', () => {
+    expect(
+      hasPrPostableFindings([
+        {
+          file: null,
+          line: null,
+          severity: CodeScanSeverity.HIGH,
+          finding: 'General security issue',
+        },
+      ]),
+    ).toBe(true);
+
+    expect(
+      hasPrPostableFindings([
+        {
+          file: 'src/test.ts',
+          line: 42,
+          severity: CodeScanSeverity.NONE,
+          finding: 'No issue found',
+        },
+      ]),
+    ).toBe(false);
   });
 
   it('should append severity threshold', () => {
