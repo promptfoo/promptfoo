@@ -292,6 +292,29 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with loaded from file');
     });
 
+    it('should resolve file:// references nested inside an object var', async () => {
+      const prompt = toPrompt('Report: {{ reporting_period.previous.report }}');
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: {
+            period: '2024-02-15',
+            report: 'file://data/mixed_report.html.txt',
+          },
+        },
+      };
+
+      fsMocks.readFileSync.mockReturnValueOnce('<html>report content</html>');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fsMocks.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('mixed_report.html.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Report: <html>report content</html>');
+    });
+
     it('should load external js files in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
       const vars = {
