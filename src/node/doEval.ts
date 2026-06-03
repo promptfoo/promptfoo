@@ -261,8 +261,17 @@ export async function doEval(
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {
-            cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
-            cmdObj.config.push(newConfigPath);
+            // Replace the directory entry in place so the original --config ordering is
+            // preserved. combineConfigs() applies configs in array order (later entries
+            // override earlier ones), so removing the directory and appending the resolved
+            // path to the end would change precedence when a directory is passed alongside
+            // other --config files (e.g. `--config base.yaml dir/ override.yaml`).
+            const configIndex = cmdObj.config.indexOf(configPath);
+            if (configIndex === -1) {
+              cmdObj.config.push(newConfigPath);
+            } else {
+              cmdObj.config[configIndex] = newConfigPath;
+            }
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
             logger.warn(
