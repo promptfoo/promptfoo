@@ -336,6 +336,7 @@ export async function generateTraceContextIfNeeded(
   testIdx: number,
   promptIdx: number,
   testSuite?: TestSuite,
+  evalId?: string,
 ): Promise<{
   traceparent?: string;
   evaluationId?: string;
@@ -364,7 +365,7 @@ export async function generateTraceContextIfNeeded(
   logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
   // Get evaluation ID from test metadata (set by Evaluator class)
-  let evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
+  let evaluationId = test.metadata?.evaluationId || evalId || evaluateOptions?.eventSource;
   if (!evaluationId) {
     logger.warn(
       '[EvaluatorTracing] No evaluation ID found in test metadata or evaluateOptions, trace will not be linked to evaluation',

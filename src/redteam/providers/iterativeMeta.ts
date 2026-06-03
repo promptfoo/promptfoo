@@ -3,6 +3,7 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { flushOtel } from '../../tracing/otelSdk';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
@@ -449,6 +450,7 @@ export async function runMetaAgentRedteam({
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
+        await flushOtel();
         traceContext = await fetchTraceContext(traceId, {
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,

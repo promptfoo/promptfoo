@@ -76,7 +76,7 @@ As a fallback for a trusted non-traced harness, the target provider can return J
 }
 ```
 
-Do not put verifier evidence in final model text. Promptfoo ignores model-controlled final output so a target cannot forge a clean result.
+Do not put verifier evidence in final model text, command output, or provider-raw command items. Promptfoo ignores those model-controlled surfaces so a target cannot forge a result.
 
 If `findings` contains a matching `pluginId`, Promptfoo fails the row. If plugin-scoped evidence includes an explicit `findings` array with no matching finding, the row passes. Fields such as `mode`, `trace`, or `evidenceSource` do not count as verifier evidence by themselves. If plugin-scoped evidence is missing, the row fails with `verifierStatus: missing-evidence`; treat that as a harness configuration problem, not an application security pass.
 

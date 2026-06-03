@@ -62,6 +62,15 @@ function createInitialGradingContext({
   return gradingContext;
 }
 
+function shouldRegradeStoredAgenticResult({
+  assertionValueContext,
+  baseType,
+}: Pick<AssertionParams, 'assertionValueContext' | 'baseType'>): boolean {
+  return Boolean(
+    baseType.startsWith('promptfoo:redteam:agentic:') && assertionValueContext.trace?.spans?.length,
+  );
+}
+
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
@@ -84,26 +93,35 @@ export const handleRedteam = async ({
     assertion.type.includes(test.metadata.pluginId)
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
+    if (shouldRegradeStoredAgenticResult({ assertionValueContext, baseType })) {
+      logger.debug(
+        '[Redteam] Regrading stored agentic result because final trace evidence is now available',
+        {
+          pluginId: test.metadata.pluginId,
+          traceId: assertionValueContext.trace?.traceId,
+        },
+      );
+    } else {
+      // Check if any turns had grader errors (even though we have a stored result)
+      const redteamHistory = providerResponse.metadata?.redteamHistory as
+        | Array<{ graderError?: string }>
+        | undefined;
+      const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
 
-    // Check if any turns had grader errors (even though we have a stored result)
-    const redteamHistory = providerResponse.metadata?.redteamHistory as
-      | Array<{ graderError?: string }>
-      | undefined;
-    const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
-
-    return {
-      ...storedResult,
-      assertion: {
-        ...(storedResult.assertion ?? assertion),
-        value: storedResult.assertion?.value || assertion.value,
-      },
-      metadata: {
-        ...test.metadata,
-        ...storedResult.metadata,
-        // Propagate gradingIncomplete if any turns had grader errors
-        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
-      },
-    };
+      return {
+        ...storedResult,
+        assertion: {
+          ...(storedResult.assertion ?? assertion),
+          value: storedResult.assertion?.value || assertion.value,
+        },
+        metadata: {
+          ...test.metadata,
+          ...storedResult.metadata,
+          // Propagate gradingIncomplete if any turns had grader errors
+          ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
+        },
+      };
+    }
   }
 
   const grader = getGraderById(assertion.type);
@@ -112,7 +130,7 @@ export const handleRedteam = async ({
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
   // Build grading context from provider response metadata, test metadata, and locally
-  // captured assertion trace data. Keep raw trace data in-process for deterministic
+  // captured assertion trace data. Keep raw trace data in-process for trace-aware
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });

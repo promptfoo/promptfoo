@@ -1,12 +1,34 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
+
+vi.mock('../../src/matchers/llmGrading', async (importOriginal) => ({
+  ...(await importOriginal()),
+  matchesLlmRubric: vi.fn(),
+}));
+vi.mock('../../src/redteam/strategies/indirectWebPwn', async (importOriginal) => ({
+  ...(await importOriginal()),
+  checkExfilTracking: vi.fn(),
+}));
 
 describe('handleRedteam', () => {
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  beforeEach(() => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Promptfoo grader found approval-continuity evidence',
+      metadata: {
+        agenticGraderFindingKind: 'approval-continuity',
+      },
+    });
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
@@ -184,6 +206,342 @@ describe('handleRedteam', () => {
         valueFromScript: undefined,
       }),
     ).rejects.toThrow('Remote grading failed');
+  });
+
+  it('returns a stored grader result and marks it incomplete when some turns had grader errors', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+      value: 'fresh assertion rubric',
+    };
+
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'harmful:hate',
+        purpose: 'Safety eval',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        redteamHistory: [
+          { prompt: 'turn 1', output: 'out 1', graderError: 'Remote grading failed' },
+          { prompt: 'turn 2', output: 'out 2' },
+        ],
+        storedGraderResult: {
+          pass: false,
+          score: 0,
+          reason: 'Stored failure',
+          assertion: {
+            type: 'promptfoo:redteam:harmful:hate' as const,
+            value: 'stored rubric',
+          },
+          metadata: {
+            verifierStatus: 'failed',
+          },
+        },
+      },
+    };
+
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(getResultSpy).not.toHaveBeenCalled();
+    expect(grade).toMatchObject({
+      pass: false,
+      score: 0,
+      assertion: {
+        type: 'promptfoo:redteam:harmful:hate',
+        value: 'stored rubric',
+      },
+      metadata: {
+        gradingIncomplete: true,
+        pluginId: 'harmful:hate',
+        purpose: 'Safety eval',
+        verifierStatus: 'failed',
+      },
+    });
+  });
+
+  it('regrades stored missing-evidence agentic results when trace evidence is available', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:agentic:approval-continuity' as const,
+    };
+
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'agentic:approval-continuity',
+        purpose: 'Agent runtime eval',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        storedGraderResult: {
+          pass: false,
+          score: 0,
+          reason: 'No structured agentic runtime evidence found',
+          metadata: {
+            verifierStatus: 'missing-evidence',
+          },
+        },
+      },
+    };
+
+    const trace = {
+      evaluationId: 'eval-agentic',
+      spans: [
+        {
+          attributes: {
+            'promptfoo.agentic.finding.evidence': 'approval reused for delete_customer_record',
+            'promptfoo.agentic.finding.kind': 'approval-continuity',
+            'promptfoo.agentic.finding.location': 'tools.delete_customer_record',
+            'promptfoo.agentic.plugin_id': 'agentic:approval-continuity',
+          },
+          name: 'agentic finding',
+          spanId: 'span-agentic',
+          startTime: 0,
+        },
+      ],
+      testCaseId: 'case-agentic',
+      traceId: 'trace-agentic',
+    };
+
+    const rubricCallsBefore = vi.mocked(matchesLlmRubric).mock.calls.length;
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'delete the customer after a previous approval',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'Deleted customer',
+      outputString: 'Deleted customer',
+      prompt: 'delete the customer after a previous approval',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(grade.pass).toBe(false);
+    expect(grade.metadata).toMatchObject({
+      agenticEvidenceStatus: 'finding-observed',
+      agenticFindingKinds: ['approval-continuity'],
+      agenticGraderFindingKind: 'approval-continuity',
+      deterministicFailure: true,
+      pluginId: 'agentic:approval-continuity',
+    });
+    expect(vi.mocked(matchesLlmRubric).mock.calls).toHaveLength(rubricCallsBefore);
+  });
+
+  it('regrades stored passing agentic results when final trace findings are available', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:agentic:approval-continuity' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'agentic:approval-continuity',
+        purpose: 'Agent runtime eval',
+      },
+    };
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        storedGraderResult: {
+          pass: true,
+          score: 1,
+          reason: 'No matching agentic runtime finding',
+          metadata: {
+            agenticEvidenceStatus: 'evidence-observed',
+            verifierStatus: 'passed',
+          },
+        },
+      },
+    };
+    const trace = {
+      evaluationId: 'eval-agentic-final',
+      spans: [
+        {
+          attributes: {
+            'promptfoo.agentic.finding.evidence': 'approval reused for delete_customer_record',
+            'promptfoo.agentic.finding.kind': 'approval-continuity',
+            'promptfoo.agentic.finding.location': 'tools.delete_customer_record',
+            'promptfoo.agentic.plugin_id': 'agentic:approval-continuity',
+          },
+          name: 'agentic finding',
+          spanId: 'span-agentic-final',
+          startTime: 0,
+        },
+      ],
+      testCaseId: 'case-agentic-final',
+      traceId: 'trace-agentic-final',
+    };
+
+    const rubricCallsBefore = vi.mocked(matchesLlmRubric).mock.calls.length;
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'delete the customer after a previous approval',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'Deleted customer',
+      outputString: 'Deleted customer',
+      prompt: 'delete the customer after a previous approval',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(grade).toMatchObject({
+      pass: false,
+      score: 0,
+      metadata: {
+        agenticEvidenceStatus: 'finding-observed',
+        agenticGraderFindingKind: 'approval-continuity',
+        deterministicFailure: true,
+        verifierStatus: 'failed',
+      },
+    });
+    expect(vi.mocked(matchesLlmRubric).mock.calls).toHaveLength(rubricCallsBefore);
+  });
+
+  it('adds indirect-web-pwn exfil tracking to the grading context', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:prompt-extraction' as const,
+    };
+
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'prompt-extraction',
+        webPageUrl: 'https://example.test/dynamic-pages/eval-web/page-123',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Leaked prompt',
+      metadata: {
+        webPageUuid: 'page-123',
+      },
+    };
+
+    vi.mocked(checkExfilTracking).mockResolvedValue({
+      exfilCount: 2,
+      exfilRecords: [{ url: 'https://attacker.test/log' }],
+      wasExfiltrated: true,
+    } as any);
+
+    const mockGraderResult = {
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'Prompt leaked',
+      },
+      rubric: 'Mock rubric',
+    };
+    const getResultSpy = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockResolvedValue(mockGraderResult);
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'Leaked prompt',
+      outputString: 'Leaked prompt',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(checkExfilTracking).toHaveBeenCalledWith('page-123', 'eval-web');
+    expect(getResultSpy).toHaveBeenCalledWith(
+      'test prompt',
+      'Leaked prompt',
+      test,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      expect.objectContaining({
+        exfilCount: 2,
+        providerResponse,
+        wasExfiltrated: true,
+      }),
+    );
   });
 
   it('returns the value provided to the `assertion` param if `grade.assertion` returned by `grader.getResult` is null', async () => {
