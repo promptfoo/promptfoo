@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './dialog';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('Dialog', () => {
   it('renders dialog trigger', () => {
@@ -44,6 +48,8 @@ describe('Dialog', () => {
   });
 
   it('associates an intentionally visible description with dialog content', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     render(
       <Dialog defaultOpen>
         <DialogContent hideDescription={false}>
@@ -56,9 +62,12 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Configured dialog' })).toHaveAccessibleDescription(
       'Explains what saving these settings changes.',
     );
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('associates a visible description that uses a custom id', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     render(
       <Dialog defaultOpen>
         <DialogContent hideDescription={false}>
@@ -77,9 +86,36 @@ describe('Dialog', () => {
     expect(
       screen.getByRole('dialog', { name: 'Custom description dialog' }),
     ).toHaveAccessibleDescription('Described with a caller-provided id.');
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it('associates an asChild description using the mounted child id', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <Dialog defaultOpen>
+        <DialogContent hideDescription={false}>
+          <DialogTitle>Slotted description dialog</DialogTitle>
+          <DialogDescription asChild>
+            <div id="slotted-dialog-description">Description rendered through a child.</div>
+          </DialogDescription>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Slotted description dialog' })).toHaveAttribute(
+      'aria-describedby',
+      'slotted-dialog-description',
+    );
+    expect(
+      screen.getByRole('dialog', { name: 'Slotted description dialog' }),
+    ).toHaveAccessibleDescription('Description rendered through a child.');
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('keeps aria-describedby unset when visible descriptions are enabled but absent', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     render(
       <Dialog defaultOpen>
         <DialogContent hideDescription={false}>
@@ -91,9 +127,12 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Undescribed dialog' })).not.toHaveAttribute(
       'aria-describedby',
     );
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('uses the hidden fallback description when no visible description is mounted', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     render(
       <Dialog defaultOpen>
         <DialogContent>
@@ -105,9 +144,12 @@ describe('Dialog', () => {
     expect(
       screen.getByRole('dialog', { name: 'Fallback description dialog' }),
     ).toHaveAccessibleDescription('Dialog content');
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('honors an explicit aria-describedby without rendering the hidden fallback', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     render(
       <>
         <p id="external-dialog-description">External description</p>
@@ -123,6 +165,7 @@ describe('Dialog', () => {
       screen.getByRole('dialog', { name: 'Externally described dialog' }),
     ).toHaveAccessibleDescription('External description');
     expect(screen.queryByText('Dialog content')).not.toBeInTheDocument();
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('closes dialog on close button click', async () => {

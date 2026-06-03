@@ -47,7 +47,6 @@ function DialogContent({
   /** When true, hides the default close button (useful when providing a custom close button) */
   hideCloseButton?: boolean;
 }) {
-  const hiddenDescriptionId = React.useId();
   const [descriptionIds, setDescriptionIds] = React.useState<string[]>([]);
   const registerDescription = React.useCallback((id: string) => {
     setDescriptionIds((currentIds) => (currentIds.includes(id) ? currentIds : [...currentIds, id]));
@@ -55,18 +54,23 @@ function DialogContent({
       setDescriptionIds((currentIds) => currentIds.filter((currentId) => currentId !== id));
   }, []);
   const registeredDescriptionIds = descriptionIds.join(' ') || undefined;
-  const fallbackDescriptionId = hideDescription ? hiddenDescriptionId : undefined;
-  const contentDescriptionId =
+  const showFallbackDescription =
+    hideDescription && ariaDescribedBy === undefined && descriptionIds.length === 0;
+  const descriptionProps =
     ariaDescribedBy === undefined
-      ? registeredDescriptionIds || fallbackDescriptionId
-      : ariaDescribedBy;
+      ? registeredDescriptionIds === undefined
+        ? hideDescription
+          ? {}
+          : { 'aria-describedby': undefined }
+        : { 'aria-describedby': registeredDescriptionIds }
+      : { 'aria-describedby': ariaDescribedBy };
 
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         ref={ref}
-        aria-describedby={contentDescriptionId}
+        {...descriptionProps}
         className={cn(
           'fixed left-[50%] top-[50%] z-(--z-modal) grid w-full max-w-lg max-h-[calc(100vh-4rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
           className,
@@ -74,11 +78,12 @@ function DialogContent({
         {...props}
       >
         <DialogDescriptionRegistrationContext.Provider value={registerDescription}>
-          {hideDescription && ariaDescribedBy === undefined && descriptionIds.length === 0 && (
-            <DialogPrimitive.Description id={hiddenDescriptionId} className="sr-only">
-              Dialog content
-            </DialogPrimitive.Description>
-          )}
+          <DialogPrimitive.Description
+            aria-hidden={showFallbackDescription ? undefined : true}
+            className="sr-only"
+          >
+            {showFallbackDescription ? 'Dialog content' : ''}
+          </DialogPrimitive.Description>
           {children}
         </DialogDescriptionRegistrationContext.Provider>
         {!hideCloseButton && (
@@ -144,14 +149,23 @@ function DialogDescription({
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
   const generatedId = React.useId();
   const descriptionId = id ?? generatedId;
+  const descriptionRef = React.useRef<HTMLParagraphElement>(null);
+  React.useImperativeHandle(ref, () => descriptionRef.current!);
   const registration = React.useContext(DialogDescriptionRegistrationContext);
-
-  React.useLayoutEffect(() => registration?.(descriptionId), [descriptionId, registration]);
+  const unregisterRef = React.useRef<(() => void) | undefined>(undefined);
+  const setDescriptionRef = React.useCallback(
+    (node: HTMLParagraphElement | null) => {
+      unregisterRef.current?.();
+      unregisterRef.current = node?.id ? registration?.(node.id) : undefined;
+      descriptionRef.current = node;
+    },
+    [registration],
+  );
 
   return (
     <DialogPrimitive.Description
       id={descriptionId}
-      ref={ref}
+      ref={setDescriptionRef}
       className={cn('text-sm text-muted-foreground', className)}
       {...props}
     />
