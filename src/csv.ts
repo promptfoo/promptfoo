@@ -325,7 +325,10 @@ export function serializeObjectArrayAsCSV(vars: object[]): string {
 }
 
 function isNumericCell(value: string): boolean {
-  return value.trim() !== '' && !Number.isNaN(Number(value));
+  // Only finite numbers are safe to leave unescaped — `Number('-Infinity')` is a
+  // valid (non-NaN) number, so guard with isFinite so "-Infinity"/"+Infinity"
+  // (and overflow like "-1e400") are still treated as formula triggers.
+  return value.trim() !== '' && Number.isFinite(Number(value));
 }
 
 /**
@@ -352,9 +355,11 @@ export function escapeCsvFormula(value: string): string {
   if (value.length === 0) {
     return value;
   }
-  // Spreadsheets strip leading whitespace before parsing, so inspect the first
-  // non-whitespace character. This also covers leading TAB / CR obfuscation.
-  const unpadded = value.replace(/^\s+/, '');
+  // Spreadsheets strip leading whitespace AND zero-width characters before parsing,
+  // so inspect the first visible character after removing both (this also covers
+  // leading TAB / CR obfuscation). JS `\s` already covers BOM/NBSP but misses the
+  // zero-width space/non-joiner/joiner (U+200B–U+200D), so strip those explicitly.
+  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
   const firstChar = unpadded[0];
   if (firstChar === undefined) {
     return value;

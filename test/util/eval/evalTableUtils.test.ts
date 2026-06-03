@@ -1886,4 +1886,27 @@ describe('evalTableToCsv formula injection (CWE-1236)', () => {
       vi.unstubAllEnvs();
     }
   });
+
+  it('escapes formula triggers in header cells (var name and bare prompt label)', () => {
+    // A var named "=evil" and a provider-less prompt label "=cmd()" both land in the
+    // header row; the csvStringify-boundary escaping must cover headers, not just body.
+    const table = {
+      head: {
+        vars: ['=evilVar'],
+        prompts: [createCompletedPrompt('{{x}}', { provider: '', label: '=cmd()' })],
+      },
+      body: [
+        {
+          test: { vars: { '=evilVar': 'v' }, description: 'd' },
+          testIdx: 0,
+          vars: ['v'],
+          outputs: [{ pass: true, text: 'ok' } as EvaluateTableOutput],
+        },
+      ],
+    };
+
+    const [headerRow] = parseCsv(evalTableToCsv(table)) as string[][];
+    expect(headerRow).toContain("'=evilVar");
+    expect(headerRow).toContain("'=cmd()");
+  });
 });
