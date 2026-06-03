@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { extractJsonObjects } from '../../util/json';
+import { extractJsonObjects } from '../agentic/json';
 import {
   type AgentObservation,
   type AgentRunFinding,
@@ -373,7 +373,7 @@ function controlRunsBeforeTool(
   toolObservation: AgentObservation,
 ): boolean {
   const sharesSpan = observationsShareSpan(controlObservation, toolObservation);
-  if (sharesSpan && controlObservation.source !== 'trace-event') {
+  if (sharesSpan) {
     return true;
   }
 

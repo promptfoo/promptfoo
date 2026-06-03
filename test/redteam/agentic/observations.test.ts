@@ -391,6 +391,45 @@ describe('agentic run observations', () => {
     ]);
   });
 
+  it('uses a sibling flat plugin ID for JSON findings without plugin IDs', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-json-sibling-plugin',
+          testCaseId: 'case-json-sibling-plugin',
+          traceId: 'trace-json-sibling-plugin',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [
+                    {
+                      evidence: 'tool error text was followed as an instruction',
+                      kind: 'tool-error-feedback-injection',
+                      location: 'tool error handler',
+                    },
+                  ],
+                }),
+                'promptfoo.agentic.plugin_id': 'agentic:tool-error-feedback-injection',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-json-sibling-plugin',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'tool error text was followed as an instruction',
+        kind: 'tool-error-feedback-injection',
+        pluginId: 'agentic:tool-error-feedback-injection',
+      }),
+    ]);
+  });
+
   it('preserves flat finding attributes after unrelated evidence_json findings', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {

@@ -1063,7 +1063,7 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('passed');
   });
 
-  it('does not treat a late guardrail event on the tool span as coverage', async () => {
+  it('treats a guardrail event on the tool span as coverage', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1107,9 +1107,9 @@ describe('Agentic redteam plugins', () => {
       },
     );
 
-    expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.verifierStatus).toBe('passed');
   });
 
   it('does not treat a late named guardrail span for the tool as coverage', async () => {

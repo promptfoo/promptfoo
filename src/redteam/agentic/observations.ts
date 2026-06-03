@@ -1,9 +1,5 @@
-import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
-import { extractJsonObjects } from '../../util/json';
+import { extractJsonObjects } from './json';
 
-import type { TraceContextData } from '../../tracing/traceContext';
-import type { ProviderResponse } from '../../types/providers';
-import type { TraceData } from '../../types/tracing';
 import type { RedteamGradingContext } from '../grading/types';
 
 export type AgentObservationKind =
@@ -136,6 +132,29 @@ type TraceLikeSpan = {
   startTime?: number;
 };
 
+type TraceDataLike = {
+  spans?: unknown[];
+};
+
+type ProviderResponseLike = {
+  output?: unknown;
+  raw?: unknown;
+};
+
+const TOOL_NAME_ATTRIBUTE_KEYS = [
+  'tool.name',
+  'tool_name',
+  'tool',
+  'function.name',
+  'function_name',
+  'ai.toolCall.name',
+  'gen_ai.tool.name',
+  'agent.tool_name',
+  'agent.tool',
+  'agent.toolName',
+  'codex.mcp.tool',
+] as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -204,6 +223,23 @@ function getAttribute(
     const match = lowerCaseEntries.find(([candidate]) => candidate === key.toLowerCase());
     if (match) {
       return match[1];
+    }
+  }
+
+  return undefined;
+}
+
+function getToolNameFromAttributes(
+  attributes: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!attributes) {
+    return undefined;
+  }
+
+  for (const key of TOOL_NAME_ATTRIBUTE_KEYS) {
+    const value = attributes[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
     }
   }
 
@@ -410,6 +446,7 @@ function findingObservationsFromAttributes(
   const observations: AgentObservation[] = [];
   const evidenceJson = getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS);
   const parsedEvidenceCandidates = parseAgentEvidenceCandidates(evidenceJson);
+  const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 
   if (parsedEvidenceCandidates.some((evidence) => Array.isArray(evidence.findings))) {
     parsedEvidenceCandidates.forEach((parsedEvidence) => {
@@ -421,7 +458,9 @@ function findingObservationsFromAttributes(
           kind: 'finding',
           location: stringifyValue(finding.location) || `${location} finding ${index + 1}`,
           pluginId:
-            normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
+            normalizePluginId(finding.pluginId) ??
+            normalizePluginId(parsedEvidence.pluginId) ??
+            spanPluginId,
           parentSpanId: span?.parentSpanId,
           severity: stringifyValue(finding.severity),
           source,
@@ -434,7 +473,7 @@ function findingObservationsFromAttributes(
     });
   }
 
-  const pluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
+  const pluginId = spanPluginId;
   if (!pluginId) {
     return dedupeFindingObservations(observations);
   }
@@ -624,7 +663,7 @@ function observationsFromTraceAttributes(
 }
 
 export function observationsFromTraceData(
-  traceData?: Pick<TraceData, 'spans'> | Pick<TraceContextData, 'spans'> | null,
+  traceData?: TraceDataLike | null,
   source: AgentObservationSource = 'trace',
 ): AgentObservation[] {
   if (!traceData?.spans) {
@@ -822,7 +861,7 @@ export function observationsFromProviderRaw(raw: unknown): AgentObservation[] {
 }
 
 export function observationsFromProviderResponse(
-  providerResponse?: ProviderResponse,
+  providerResponse?: ProviderResponseLike,
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
 
