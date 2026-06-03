@@ -158,53 +158,51 @@ describe('monkeyPatchFetch', () => {
   it.each([
     'https://onprem.example.com/api/v1/task', // same host, default :443 -> different origin
     'http://onprem.example.com:8443/api/v1/task', // same host:port -> http vs https
-  ])(
-    'should not attach the token to %s when the cloud host is https://onprem.example.com:8443',
-    async (url) => {
-      const mockResponse = createMockResponse({ ok: true, status: 200 });
-      mockOriginalFetch.mockResolvedValue(mockResponse);
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com:8443');
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+  ])('should not attach the token to %s when the cloud host is https://onprem.example.com:8443', async (url) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com:8443');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
 
-      await monkeyPatchFetch(url);
+    await monkeyPatchFetch(url);
 
-      expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
-    },
-  );
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
+  });
 
-  it.each(['', 'not a url', 'onprem.example.com'])(
-    'should fail closed (no token) when getApiHost() returns the unparseable value %p',
-    async (host) => {
-      const mockResponse = createMockResponse({ ok: true, status: 200 });
-      mockOriginalFetch.mockResolvedValue(mockResponse);
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue(host);
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+  it.each([
+    '',
+    'not a url',
+    'onprem.example.com',
+  ])('should fail closed (no token) when getApiHost() returns the unparseable value %p', async (host) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue(host);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
 
-      const url = 'https://api.promptfoo.dev/api/v1/task';
-      await monkeyPatchFetch(url);
+    const url = 'https://api.promptfoo.dev/api/v1/task';
+    await monkeyPatchFetch(url);
 
-      expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
-    },
-  );
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
+  });
 
-  it.each(['Authorization', 'authorization'])(
-    'should not override a caller-supplied %s header for cloud requests',
-    async (headerName) => {
-      const mockResponse = createMockResponse({ ok: true, status: 200 });
-      mockOriginalFetch.mockResolvedValue(mockResponse);
-      // The saved token differs from the caller-supplied one: e.g. validating/rotating
-      // a new key against an already-logged-in cloud host must send the new token, not
-      // the saved one. Regression guard for CloudConfig.validateApiToken().
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+  it.each([
+    'Authorization',
+    'authorization',
+  ])('should not override a caller-supplied %s header for cloud requests', async (headerName) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    // The saved token differs from the caller-supplied one: e.g. validating/rotating
+    // a new key against an already-logged-in cloud host must send the new token, not
+    // the saved one. Regression guard for CloudConfig.validateApiToken().
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
 
-      const url = CLOUD_API_HOST + '/api/v1/users/me';
-      await monkeyPatchFetch(url, { headers: { [headerName]: 'Bearer caller-token' } });
+    const url = CLOUD_API_HOST + '/api/v1/users/me';
+    await monkeyPatchFetch(url, { headers: { [headerName]: 'Bearer caller-token' } });
 
-      expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
-        headers: { [headerName]: 'Bearer caller-token' },
-      });
-    },
-  );
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: { [headerName]: 'Bearer caller-token' },
+    });
+  });
 
   it('should not add Authorization header for cloud API requests when no token available', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
