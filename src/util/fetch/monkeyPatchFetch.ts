@@ -29,10 +29,6 @@ function getSafeProxyForConnectionLog(): string {
 }
 
 /**
- * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
- */
-
-/**
  * Returns true when `url` targets the configured Promptfoo Cloud origin: the public
  * cloud host by default, or the on-prem host when one is configured via
  * `cloudConfig.getApiHost()`. Matching is scheme+host+port exact (`URL.origin`), so
@@ -66,23 +62,18 @@ export function getCloudBearerToken(url: string | URL | Request): string | undef
 }
 
 /**
- * Case-insensitive check for a caller-supplied `Authorization` header across the
- * shapes `HeadersInit` can take. Used to avoid overriding an explicit credential
- * (e.g. the token being validated during cloud login/rotation).
+ * Case-insensitive check for a caller-supplied `Authorization` header. Request headers on
+ * this path are always a plain object (see the `Record<string, string>` cast in
+ * monkeyPatchFetch), so an object scan suffices. Used to avoid overriding an explicit
+ * credential — e.g. the token being validated during cloud login/rotation.
  */
-function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
-  if (!headers) {
-    return false;
-  }
-  if (headers instanceof Headers) {
-    return headers.has('Authorization');
-  }
-  if (Array.isArray(headers)) {
-    return headers.some(([name]) => name.toLowerCase() === 'authorization');
-  }
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
   return Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
 }
 
+/**
+ * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
+ */
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
@@ -116,7 +107,7 @@ export async function monkeyPatchFetch(
   // override an Authorization header the caller set explicitly — token
   // validation/rotation sends the token being validated, not the saved one.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !hasAuthorizationHeader(opts.headers)) {
+  if (cloudAuth && !hasAuthorizationHeader(headers)) {
     opts.headers = {
       ...(opts.headers || {}),
       Authorization: cloudAuth,

@@ -505,7 +505,7 @@ describe('getRemoteGenerationHeaders', () => {
   });
 
   it('preserves caller-supplied extra headers', () => {
-    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toMatchObject({
+    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toEqual({
       'Content-Type': 'application/json',
       'X-Custom': 'value',
     });
