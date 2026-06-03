@@ -237,7 +237,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
-  'validators/testProvider.test.ts',
+  'node/testProvider.test.ts',
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;

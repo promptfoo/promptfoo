@@ -22,7 +22,7 @@ import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
 
-import type { TestSuite } from '../../types/index';
+import type { TestCase, TestSuite } from '../../types/index';
 
 /**
  * Logs a warning when a filter returns no tests.
@@ -62,6 +62,7 @@ export interface FilterOptions {
 }
 
 type Tests = NonNullable<TestSuite['tests']>;
+type TestFilterFn = (test: TestCase) => boolean;
 
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
@@ -85,9 +86,18 @@ function createSeededRandom(seed: number): () => number {
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that failed in the specified eval
  */
-async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterFailingTests(
+  testSuite: TestSuite,
+  pathOrId: string,
+  extractedTestFilter?: TestFilterFn,
+): Promise<Tests> {
   // Filter for all non-successful results (both assertion failures and errors)
-  return filterTestsByResults(testSuite, pathOrId, (result) => !result.success);
+  return filterTestsByResults(
+    testSuite,
+    pathOrId,
+    (result) => !result.success,
+    extractedTestFilter,
+  );
 }
 
 /**
@@ -96,12 +106,17 @@ async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promi
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that failed assertions (not errors) in the specified eval
  */
-async function filterFailingOnlyTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterFailingOnlyTests(
+  testSuite: TestSuite,
+  pathOrId: string,
+  extractedTestFilter?: TestFilterFn,
+): Promise<Tests> {
   // Filter for assertion failures only, excluding errors
   return filterTestsByResults(
     testSuite,
     pathOrId,
     (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
+    extractedTestFilter,
   );
 }
 
@@ -111,11 +126,16 @@ async function filterFailingOnlyTests(testSuite: TestSuite, pathOrId: string): P
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that resulted in errors in the specified evaluation
  */
-async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterErrorTests(
+  testSuite: TestSuite,
+  pathOrId: string,
+  extractedTestFilter?: TestFilterFn,
+): Promise<Tests> {
   return filterTestsByResults(
     testSuite,
     pathOrId,
     (result) => result.failureReason === ResultFailureReason.ERROR,
+    extractedTestFilter,
   );
 }
 
@@ -137,6 +157,7 @@ async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise
  */
 export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
   let tests = testSuite.tests || [];
+  let metadataFilter: TestFilterFn | undefined;
 
   logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
   logger.debug(`Initial test count: ${tests.length}`);
@@ -166,7 +187,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     );
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
-    tests = tests.filter((test) => {
+    metadataFilter = (test) => {
       if (!test.metadata) {
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
@@ -194,10 +215,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       }
 
       return true;
-    });
+    };
+    tests = tests.filter(metadataFilter);
 
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
+
+  const resultFilterTestSuite = metadataFilter ? { ...testSuite, tests } : testSuite;
 
   // Handle failing, failingOnly, and errorsOnly filters
   // - failing: all non-successful results (failures + errors)
@@ -208,8 +232,16 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(
       'Using both --filter-failing-only and --filter-errors-only together (equivalent to --filter-failing)',
     );
-    const failingOnlyTests = await filterFailingOnlyTests(testSuite, options.failingOnly);
-    const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
+    const failingOnlyTests = await filterFailingOnlyTests(
+      resultFilterTestSuite,
+      options.failingOnly,
+      metadataFilter,
+    );
+    const errorTests = await filterErrorTests(
+      resultFilterTestSuite,
+      options.errorsOnly,
+      metadataFilter,
+    );
 
     // Create a union of both sets, deduplicating by test identity
     const seen = new Set<string>();
@@ -234,13 +266,17 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     }
   } else if (options.failing) {
     // --filter-failing includes both failures and errors
-    tests = await filterFailingTests(testSuite, options.failing);
+    tests = await filterFailingTests(resultFilterTestSuite, options.failing, metadataFilter);
     if (tests.length === 0) {
       logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
     }
   } else if (options.failingOnly) {
     // --filter-failing-only includes only assertion failures (excludes errors)
-    tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
+    tests = await filterFailingOnlyTests(
+      resultFilterTestSuite,
+      options.failingOnly,
+      metadataFilter,
+    );
     if (tests.length === 0) {
       logNoTestsWarning(
         'filter-failing-only',
@@ -249,7 +285,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       );
     }
   } else if (options.errorsOnly) {
-    tests = await filterErrorTests(testSuite, options.errorsOnly);
+    tests = await filterErrorTests(resultFilterTestSuite, options.errorsOnly, metadataFilter);
     if (tests.length === 0) {
       logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
     }

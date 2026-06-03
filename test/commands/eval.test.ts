@@ -720,6 +720,62 @@ describe('evalCommand', () => {
     loadDefaultConfigSpy.mockRestore();
   });
 
+  it('should preserve --config ordering when expanding a directory entry', async () => {
+    // combineConfigs applies configs in array order (later entries override earlier
+    // ones), so a directory must be resolved in place rather than moved to the end.
+    const cmdObj = { config: ['/base.yaml', '/suite', '/override.yaml'], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockImplementation(
+      async (target) =>
+        ({
+          isDirectory: () => target === '/suite',
+        }) as any,
+    );
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: { prompts: ['from-dir'] },
+        defaultConfigPath: '/suite/promptfooconfig.yaml',
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    // The resolved directory config stays in its original position, so /override.yaml
+    // still wins over it (regression: it used to be appended after /override.yaml).
+    expect(cmdObj.config).toEqual(['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml']);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: ['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml'],
+      }),
+      expect.objectContaining({ prompts: ['from-dir'] }),
+    );
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
+  it('should normalize a non-array config to an array before resolving a directory entry', async () => {
+    // Defensive: a non-Commander caller could pass config as a bare string. The directory
+    // resolution mutates the array in place, so a string must be normalized first (otherwise
+    // the in-place assignment throws in strict mode / corrupts the value).
+    const cmdObj = { config: '/suite' as unknown as string[], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: { prompts: ['from-dir'] },
+        defaultConfigPath: '/suite/promptfooconfig.yaml',
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(cmdObj.config).toEqual(['/suite/promptfooconfig.yaml']);
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
   it('should warn when a directory config argument has no default config file', async () => {
     const cmdObj = { config: ['/empty-suite'], write: false };
     const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);

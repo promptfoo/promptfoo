@@ -23,6 +23,13 @@ interface Result {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Minimal view of the session-relevant fields read off `provider.config` when
+ * building troubleshooting advice. Intentionally local and not derived from
+ * `HttpProviderConfig`: importing that would re-add a `node -> providers`
+ * dependency this module was moved here to avoid. Keep it to the fields this
+ * file actually reads.
+ */
 interface ProviderSessionConfig {
   body?: unknown;
   headers?: Record<string, unknown>;
