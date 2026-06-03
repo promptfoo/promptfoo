@@ -380,17 +380,19 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
       });
     }
 
-    if (errorRowsDeleted && jsonlOutputPaths.length > 0) {
-      try {
-        await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
-      } catch (outputError) {
-        logger.warn(
-          'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
-          {
-            error: outputError,
-            outputPaths: jsonlOutputPaths,
-          },
-        );
+    if (errorRowsDeleted) {
+      if (jsonlOutputPaths.length > 0) {
+        try {
+          await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
+        } catch (outputError) {
+          logger.warn(
+            'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
+            {
+              error: outputError,
+              outputPaths: jsonlOutputPaths,
+            },
+          );
+        }
       }
     }
 
