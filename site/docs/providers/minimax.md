@@ -45,10 +45,16 @@ When MiniMax reports prompt-cache reads, promptfoo calculates cost using the ret
 
 ### MiniMax-M3 (Default)
 
-- Latest flagship model with a 512K context window and up to 128K output
-- Supports image input
+- Latest flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
+- Multimodal: supports text, image, and video input
 - Input: $0.12/1M (cache hit), $0.6/1M (cache miss)
 - Output: $2.4/1M
+
+:::note
+
+M3 is the default and costs roughly 2x M2.7 per token. For cost-sensitive workloads, pin `minimax:MiniMax-M2.7` (or `MiniMax-M2.7-highspeed`) explicitly.
+
+:::
 
 ### MiniMax-M2.7
 
