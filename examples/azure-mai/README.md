@@ -39,7 +39,7 @@ promptfoo view
 
 ## What's in this Example
 
-- `promptfooconfig.yaml` — generates images with `MAI-Image-2.5` through the Microsoft `azure:image` provider, reporting per-image cost from the API's `num_output_tokens`
+- `promptfooconfig.yaml` — generates images with `MAI-Image-2.5` through the Microsoft `azure:image` provider, reporting per-image token usage and cost from the API's `usage` response
 - `promptfooconfig.vision-judge.yaml` — uses a vision LLM as a judge on the generated images (see below)
 - Shows how to wire reasoning/chat MAI models (`MAI-Thinking-1`, `MAI-DS-R1`) via `azure:chat`
 

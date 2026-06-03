@@ -19,6 +19,9 @@ description: Microsoft MAI models on Azure AI Foundry (Foundry Models sold by Az
 #        export AZURE_API_KEY=<key>            # or use `az login` (Entra ID)
 #   3. Run:  promptfoo eval --no-cache
 
+prompts:
+  - '{{prompt}}'
+
 providers:
   - id: azure:image:mai-image-2-5
     label: MAI-Image-2.5
@@ -35,9 +38,6 @@ providers:
   #   label: MAI-Thinking-1
   #   config:
   #     max_completion_tokens: 2048
-
-prompts:
-  - '{{prompt}}'
 
 tests:
   - vars:

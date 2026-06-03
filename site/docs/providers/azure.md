@@ -1090,6 +1090,9 @@ export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
 ### Image generation (`azure:image`)
 
 ```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{prompt}}'
+
 providers:
   - id: azure:image:mai-image-2-5
     config:
@@ -1098,9 +1101,6 @@ providers:
       model: MAI-Image-2.5
       width: 1024 # min 768; width * height must be <= 1,048,576
       height: 1024
-
-prompts:
-  - '{{prompt}}'
 
 tests:
   - vars:
