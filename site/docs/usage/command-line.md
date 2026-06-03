@@ -908,6 +908,7 @@ Run the complete red teaming process (init, generate, and evaluate).
 | `--remote`                                         | Force remote inference wherever possible                                         | false                |
 | `--force`                                          | Force generation even if no changes are detected                                 | false                |
 | `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
+| `-y, --yes`                                        | Continue after partial test generation without prompting                         | false                |
 | `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
 | `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
 | `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |

@@ -969,6 +969,8 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
   injectVar: string;
+  pluginResults: Record<string, { requested: number; generated: number }>;
+  strategyResults: Record<string, { requested: number; generated: number }>;
   failedPlugins: FailedPluginInfo[];
 }> {
   // Add abort check helper
@@ -1326,6 +1328,8 @@ export async function synthesize({
     // Check for abort signal before generating tests
     checkAbort();
 
+    const numTests = plugin.numTests ?? 0;
+
     if (showProgressBar) {
       progressBar?.update({ task: plugin.id });
     } else {
@@ -1345,7 +1349,7 @@ export async function synthesize({
           : [undefined];
 
       logger.debug(
-        `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${plugin.config?.language ? ' (plugin override)' : ''}`,
+        `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${numTests}${plugin.config?.language ? ' (plugin override)' : ''}`,
       );
 
       // Generate tests for each language in parallel using Promise.allSettled
@@ -1357,7 +1361,7 @@ export async function synthesize({
           provider: redteamProvider,
           purpose,
           injectVar,
-          n: plugin.numTests,
+          n: numTests,
           delayMs: delay || 0,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
@@ -1395,7 +1399,7 @@ export async function synthesize({
             return {
               lang: langKey,
               tests: constrainedTests,
-              requested: plugin.numTests,
+              requested: numTests,
               generated: constrainedTests.length,
             };
           }
@@ -1407,7 +1411,7 @@ export async function synthesize({
           return {
             lang: langKey,
             tests: [],
-            requested: plugin.numTests,
+            requested: numTests,
             generated: 0,
           };
         }
@@ -1427,7 +1431,7 @@ export async function synthesize({
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
-          resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
+          resultsPerLanguage[lang || 'default'] = { requested: numTests, generated: 0 };
         }
       }
 
@@ -1530,7 +1534,7 @@ export async function synthesize({
             plugin.id,
             customPluginConfig,
           );
-          const customTests = await customPlugin.generateTests(plugin.numTests, delay);
+          const customTests = await customPlugin.generateTests(numTests, delay);
 
           // Add metadata to each test case
           const testCasesWithMetadata = filterOversizedTestCases(
@@ -1551,7 +1555,7 @@ export async function synthesize({
           return {
             lang,
             tests: testCasesWithMetadata as TestCaseWithPlugin[],
-            requested: plugin.numTests,
+            requested: numTests,
             generated: testCasesWithMetadata.length,
           };
         });
@@ -1569,7 +1573,7 @@ export async function synthesize({
             logger.warn(
               `[Language Processing] Error generating tests for custom plugin ${plugin.id}: ${result.reason}`,
             );
-            resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
+            resultsPerLanguage[lang || 'default'] = { requested: numTests, generated: 0 };
           }
         }
 
@@ -1612,13 +1616,13 @@ export async function synthesize({
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         const displayId = getPluginDisplayId(plugin);
-        pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
+        pluginResults[displayId] = { requested: numTests, generated: 0 };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       const displayId = getPluginDisplayId(plugin);
-      pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
-      progressBar?.increment(plugin.numTests);
+      pluginResults[displayId] = { requested: numTests, generated: 0 };
+      progressBar?.increment(numTests);
     }
   });
 
@@ -1699,5 +1703,13 @@ export async function synthesize({
     .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
     .map(([pluginId, { requested }]) => ({ pluginId, requested }));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar, failedPlugins };
+  return {
+    purpose,
+    entities,
+    testCases: finalTestCases,
+    injectVar,
+    pluginResults,
+    strategyResults,
+    failedPlugins,
+  };
 }

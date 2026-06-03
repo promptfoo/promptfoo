@@ -2,12 +2,14 @@ import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
+import * as readline from 'readline';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { doEval } from '../../src/commands/eval';
+import { isNonInteractive } from '../../src/envars';
 import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
-import { doGenerateRedteam } from '../../src/redteam/commands/generate';
+import { doGenerateRedteamWithResult as doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -16,6 +18,16 @@ import { initVerboseToggle } from '../../src/util/verboseToggle';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 vi.mock('../../src/redteam/commands/generate');
+vi.mock('../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/envars')>()),
+  isNonInteractive: vi.fn(() => false),
+}));
+vi.mock('readline', () => ({
+  createInterface: vi.fn(() => ({
+    close: vi.fn(),
+    question: vi.fn((_question: string, callback: (answer: string) => void) => callback('y')),
+  })),
+}));
 vi.mock('../../src/util/verboseToggle', () => ({
   initVerboseToggle: vi.fn(),
 }));
@@ -27,6 +39,12 @@ vi.mock('../../src/commands/eval', async (importOriginal) => {
       table: [],
       version: 3,
       createdAt: new Date().toISOString(),
+      durationMs: 1000,
+      evaluationDurationMs: 500,
+      persisted: false,
+      setGenerationDurationMs: vi.fn(),
+      save: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
       results: {
         table: [],
         summary: {
@@ -117,8 +135,21 @@ describe('doRedteamRun', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(isNonInteractive).mockReturnValue(false);
 
     dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
+    vi.mocked(readline.createInterface).mockReturnValue({
+      close: vi.fn(),
+      question: vi.fn((_question: string, callback: (answer: string) => void) => callback('y')),
+    } as any);
+    vi.mocked(doEval).mockResolvedValue({
+      durationMs: 1000,
+      evaluationDurationMs: 500,
+      persisted: false,
+      setGenerationDurationMs: vi.fn(),
+      save: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
+    } as any);
     vi.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });
     vi.mocked(loadDefaultConfig).mockResolvedValue({
       defaultConfig: {},
@@ -140,7 +171,11 @@ describe('doRedteamRun', () => {
     vi.mocked(yaml.dump).mockImplementation(function () {
       return 'mocked-yaml-content';
     });
-    vi.mocked(doGenerateRedteam).mockResolvedValue({});
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {},
+      strategyResults: {},
+    });
   });
 
   afterEach(() => {
@@ -188,6 +223,92 @@ describe('doRedteamRun', () => {
         output: path.normalize(`${dirPath}/redteam.yaml`),
       }),
     );
+  });
+
+  it('should continue without prompting when generation errors are acknowledged with yes', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 0 },
+      },
+      strategyResults: {
+        jailbreak: { requested: 5, generated: 2 },
+      },
+    });
+
+    await doRedteamRun({ yes: true });
+
+    expect(readline.createInterface).not.toHaveBeenCalled();
+    expect(doEval).toHaveBeenCalled();
+  });
+
+  it('should continue without prompting in a non-interactive CLI environment', async () => {
+    vi.mocked(isNonInteractive).mockReturnValue(true);
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 0 },
+      },
+      strategyResults: {},
+    });
+
+    await doRedteamRun({ eventSource: 'cli' });
+
+    expect(readline.createInterface).not.toHaveBeenCalled();
+    expect(doEval).toHaveBeenCalled();
+  });
+
+  it('should continue without prompting for non-CLI callers', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 0 },
+      },
+      strategyResults: {},
+    });
+
+    await doRedteamRun({ eventSource: 'library' });
+
+    expect(readline.createInterface).not.toHaveBeenCalled();
+    expect(doEval).toHaveBeenCalled();
+  });
+
+  it('should cancel before evaluation when generation errors are not confirmed', async () => {
+    vi.mocked(readline.createInterface).mockReturnValue({
+      close: vi.fn(),
+      question: vi.fn((_question: string, callback: (answer: string) => void) => callback('n')),
+    } as any);
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 0 },
+      },
+      strategyResults: {},
+    });
+
+    await doRedteamRun({ eventSource: 'cli' });
+
+    expect(readline.createInterface).toHaveBeenCalled();
+    expect(doEval).not.toHaveBeenCalled();
+  });
+
+  it('should prompt before evaluation when a plugin only partially generates tests', async () => {
+    vi.mocked(readline.createInterface).mockReturnValue({
+      close: vi.fn(),
+      question: vi.fn((_question: string, callback: (answer: string) => void) => callback('n')),
+    } as any);
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 2 },
+      },
+      strategyResults: {},
+    });
+
+    await doRedteamRun({ eventSource: 'cli' });
+
+    expect(readline.createInterface).toHaveBeenCalled();
+    expect(doEval).not.toHaveBeenCalled();
   });
 
   it('should apply runtime tags to the eval without adding them to generated test cases', async () => {
@@ -440,7 +561,11 @@ describe('doRedteamRun', () => {
     it('should call cleanup function when no test cases are generated', async () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
-      vi.mocked(doGenerateRedteam).mockResolvedValue(null);
+      vi.mocked(doGenerateRedteam).mockResolvedValue({
+        config: null,
+        pluginResults: {},
+        strategyResults: {},
+      });
 
       await doRedteamRun({ eventSource: 'cli' });
 

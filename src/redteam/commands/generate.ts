@@ -72,6 +72,21 @@ import type {
   SynthesizeOptions,
 } from '../types';
 
+type GenerationMetricResults = Record<string, { requested: number; generated: number }>;
+
+export type RedteamGenerationResult = {
+  config: Partial<UnifiedConfig> | null;
+  pluginResults: GenerationMetricResults;
+  strategyResults: GenerationMetricResults;
+};
+
+function emptyResults(): Pick<RedteamGenerationResult, 'pluginResults' | 'strategyResults'> {
+  return {
+    pluginResults: {},
+    strategyResults: {},
+  };
+}
+
 /**
  * Handles failed plugins based on strict mode.
  * In strict mode, throws PartialGenerationError.
@@ -243,6 +258,13 @@ async function withGenerationConcurrency<T>(
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
+  const result = await doGenerateRedteamWithResult(options);
+  return result.config;
+}
+
+export async function doGenerateRedteamWithResult(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<RedteamGenerationResult> {
   setupEnv(options.envFile);
   const cacheOverride = options.cache === false ? false : undefined;
   if (cacheOverride === false) {
@@ -254,7 +276,7 @@ export async function doGenerateRedteam(
 
 async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig> | null> {
+): Promise<RedteamGenerationResult> {
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
@@ -309,7 +331,7 @@ async function doGenerateRedteamInternal(
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );
-      return redteamContent;
+      return { config: redteamContent, ...emptyResults() };
     }
   }
 
@@ -383,7 +405,7 @@ async function doGenerateRedteamInternal(
         )} first`,
       ),
     );
-    return null;
+    return { config: null, ...emptyResults() };
   }
 
   // Validate email for remote generation
@@ -638,6 +660,8 @@ async function doGenerateRedteamInternal(
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
+  let pluginResults: GenerationMetricResults = {};
+  let strategyResults: GenerationMetricResults = {};
 
   if (contexts && contexts.length > 0) {
     // Multi-context mode: generate tests for each context
@@ -682,6 +706,18 @@ async function doGenerateRedteamInternal(
         allFailedPlugins.push(...contextResult.failedPlugins);
       }
       firstContextPurpose ??= contextResult.purpose;
+
+      for (const [pluginId, result] of Object.entries(contextResult.pluginResults ?? {})) {
+        pluginResults[pluginId] = pluginResults[pluginId] ?? { requested: 0, generated: 0 };
+        pluginResults[pluginId].requested += result.requested;
+        pluginResults[pluginId].generated += result.generated;
+      }
+
+      for (const [strategyId, result] of Object.entries(contextResult.strategyResults ?? {})) {
+        strategyResults[strategyId] = strategyResults[strategyId] ?? { requested: 0, generated: 0 };
+        strategyResults[strategyId].requested += result.requested;
+        strategyResults[strategyId].generated += result.generated;
+      }
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
@@ -745,6 +781,8 @@ async function doGenerateRedteamInternal(
     purpose = result.purpose;
     entities = result.entities;
     finalInjectVar = result.injectVar;
+    pluginResults = result.pluginResults;
+    strategyResults = result.strategyResults;
     failedPlugins = result.failedPlugins;
   }
 
@@ -777,7 +815,7 @@ async function doGenerateRedteamInternal(
 
     if (redteamTests.length === 0) {
       logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));
-      return null;
+      return { config: null, pluginResults, strategyResults };
     }
 
     const authoredPurpose =
@@ -813,7 +851,7 @@ async function doGenerateRedteamInternal(
         chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
       );
       // No need to return anything, Burp outputs are only invoked via command line.
-      return {};
+      return { config: {}, pluginResults, strategyResults };
     } else if (options.output) {
       const existingYaml = configPath
         ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
@@ -970,7 +1008,7 @@ async function doGenerateRedteamInternal(
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
     });
 
-    return ret;
+    return { config: ret, pluginResults, strategyResults };
   } finally {
     await cleanupProvider();
   }

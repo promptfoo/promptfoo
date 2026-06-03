@@ -244,6 +244,11 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+      expect(result.pluginResults).toEqual({
+        plugin1: { requested: 2, generated: 1 },
+        plugin2: { requested: 3, generated: 1 },
+      });
+      expect(result.strategyResults).toEqual({});
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
@@ -313,6 +318,9 @@ describe('synthesize', () => {
           }),
         ]),
       );
+      expect(result.strategyResults).toEqual({
+        goat: { requested: 1, generated: 1 },
+      });
     });
 
     it('should pass shared generation options through custom file plugins', async () => {

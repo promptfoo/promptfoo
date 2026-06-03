@@ -1,10 +1,12 @@
 import fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import * as readline from 'readline';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
+import { isNonInteractive } from '../envars';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -13,12 +15,102 @@ import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
-import { doGenerateRedteam } from './commands/generate';
+import { doGenerateRedteamWithResult } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
+
+type GenerationMetricResults = Record<string, { requested: number; generated: number }>;
+
+async function checkGenerationErrorsAndConfirm(
+  pluginResults: GenerationMetricResults = {},
+  strategyResults: GenerationMetricResults = {},
+  forceYes = false,
+  isCliInvocation = false,
+): Promise<boolean> {
+  const metricEntries = [...Object.entries(pluginResults), ...Object.entries(strategyResults)];
+  const hasErrors = metricEntries.some(
+    ([, { requested, generated }]) => requested > 0 && generated < requested,
+  );
+
+  if (!hasErrors) {
+    return true;
+  }
+
+  const totalRequested = metricEntries.reduce((sum, [, result]) => sum + result.requested, 0);
+  const totalGenerated = metricEntries.reduce((sum, [, result]) => sum + result.generated, 0);
+
+  logger.warn(
+    chalk.yellow(
+      `\nGeneration completed with errors (${totalGenerated}/${totalRequested} requested tests generated):`,
+    ),
+  );
+
+  const failedPlugins = Object.entries(pluginResults).filter(
+    ([, { requested, generated }]) => requested > 0 && generated === 0,
+  );
+  if (failedPlugins.length > 0) {
+    logger.warn(chalk.red('  Failed plugins (0 tests generated):'));
+    failedPlugins.forEach(([id]) => logger.warn(chalk.red(`    - ${id}`)));
+  }
+
+  const partialPlugins = Object.entries(pluginResults).filter(
+    ([, { requested, generated }]) => generated > 0 && generated < requested,
+  );
+  if (partialPlugins.length > 0) {
+    logger.warn(chalk.yellow('  Partial plugins (fewer tests than requested):'));
+    partialPlugins.forEach(([id, { requested, generated }]) =>
+      logger.warn(chalk.yellow(`    - ${id}: ${generated}/${requested} tests`)),
+    );
+  }
+
+  const failedStrategies = Object.entries(strategyResults).filter(
+    ([, { requested, generated }]) => requested > 0 && generated === 0,
+  );
+  if (failedStrategies.length > 0) {
+    logger.warn(chalk.red('  Failed strategies (0 tests generated):'));
+    failedStrategies.forEach(([id]) => logger.warn(chalk.red(`    - ${id}`)));
+  }
+
+  const partialStrategies = Object.entries(strategyResults).filter(
+    ([, { requested, generated }]) => generated > 0 && generated < requested,
+  );
+  if (partialStrategies.length > 0) {
+    logger.warn(chalk.yellow('  Partial strategies (fewer tests than requested):'));
+    partialStrategies.forEach(([id, { requested, generated }]) =>
+      logger.warn(chalk.yellow(`    - ${id}: ${generated}/${requested} tests`)),
+    );
+  }
+
+  if (forceYes) {
+    logger.info(chalk.cyan('Continuing with scan (--yes flag provided)...'));
+    return true;
+  }
+
+  if (!isCliInvocation || isNonInteractive()) {
+    logger.info(chalk.cyan('Continuing with scan without interactive confirmation...'));
+    return true;
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(
+      chalk.cyan(
+        '\nGeneration step contains errors. Do you want to continue with the scan? (y/N): ',
+      ),
+      (answer) => {
+        rl.close();
+        resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+      },
+    );
+  });
+}
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);
@@ -88,15 +180,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // Generate new test cases
     logger.info('Generating test cases...');
     // Strip run-specific tags from the generation options so they do not leak into the
-    // reusable generated redteam.yaml (which feeds `doGenerateRedteam`). The tags still reach
+    // reusable generated redteam.yaml (which feeds `doGenerateRedteamWithResult`). The tags still reach
     // the eval below via `evalOptions`, which is destructured from the untouched `options`
     // object (see the `doEval` call), where they are persisted onto the eval result.
     const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
-    let redteamConfig;
+    let generateResult;
     const generationStartTime = Date.now();
     try {
-      redteamConfig = await doGenerateRedteam({
+      generateResult = await doGenerateRedteamWithResult({
         ...passThroughOptions,
         ...(options.liveRedteamConfig?.commandLineOptions || {}),
         ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
@@ -123,8 +215,19 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const generationDurationMs = Date.now() - generationStartTime;
 
     // Check if redteam.yaml exists before running evaluation
-    if (!redteamConfig || !(await pathExists(redteamPath))) {
+    if (!generateResult.config || !(await pathExists(redteamPath))) {
       logger.info('No test cases generated. Skipping scan.');
+      return;
+    }
+
+    const shouldContinue = await checkGenerationErrorsAndConfirm(
+      generateResult.pluginResults,
+      generateResult.strategyResults,
+      options.yes,
+      isCliInvocation,
+    );
+    if (!shouldContinue) {
+      logger.info('Scan cancelled by user.');
       return;
     }
 

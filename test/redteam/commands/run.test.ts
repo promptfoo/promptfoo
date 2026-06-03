@@ -65,6 +65,20 @@ describe('redteamRunCommand', () => {
     process.exitCode = originalExitCode;
   });
 
+  it('should pass the --yes flag through to the run workflow', async () => {
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+
+    await runCommand!.parseAsync(['node', 'test', '--yes']);
+
+    expect(doRedteamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        yes: true,
+        eventSource: 'cli',
+      }),
+    );
+  });
+
   it('should use target option to set cloud target when UUID is provided', async () => {
     // Mock the getConfigFromCloud function
     const mockConfig = {

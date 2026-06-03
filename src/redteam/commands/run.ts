@@ -48,6 +48,7 @@ export function redteamRunCommand(program: Command) {
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option('-y, --yes', 'Continue after partial test generation without prompting', false)
     .option(
       '--strict',
       'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',

@@ -16,7 +16,11 @@ import {
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
-import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
+import {
+  doGenerateRedteam,
+  doGenerateRedteamWithResult,
+  redteamGenerateCommand,
+} from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractA2AAgentCardInfo } from '../../../src/redteam/extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
@@ -49,6 +53,8 @@ type SynthesizeMockResult = {
   purpose: string;
   entities: string[];
   injectVar: string;
+  pluginResults: Record<string, { requested: number; generated: number }>;
+  strategyResults: Record<string, { requested: number; generated: number }>;
   failedPlugins: FailedPluginInfo[];
 };
 
@@ -118,6 +124,8 @@ vi.mock('../../../src/redteam', () => ({
     purpose: '',
     entities: [],
     injectVar: 'input',
+    pluginResults: {},
+    strategyResults: {},
     failedPlugins: [],
   } satisfies SynthesizeMockResult),
 }));
@@ -321,7 +329,7 @@ describe('doGenerateRedteam', () => {
     });
   });
 
-  it('should generate redteam tests and write to output file', async () => {
+  it('should generate redteam tests, expose metrics internally, and preserve the public return shape', async () => {
     vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
@@ -355,10 +363,13 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: { redteam: { requested: 1, generated: 1 } },
+      strategyResults: { basic: { requested: 1, generated: 1 } },
       failedPlugins: [],
     });
 
-    await doGenerateRedteam(options);
+    const result = await doGenerateRedteamWithResult(options);
+    const publicResult = await doGenerateRedteam(options);
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -391,6 +402,9 @@ describe('doGenerateRedteam', () => {
       'output.yaml',
       expect.any(Array),
     );
+    expect(result.pluginResults).toEqual({ redteam: { requested: 1, generated: 1 } });
+    expect(result.strategyResults).toEqual({ basic: { requested: 1, generated: 1 } });
+    expect(publicResult).toEqual(result.config);
   });
 
   it('should write to config file when write option is true', async () => {
@@ -413,6 +427,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -470,6 +486,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -506,6 +524,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -558,6 +578,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -614,6 +636,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -681,6 +705,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -749,6 +775,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -805,6 +833,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -865,6 +895,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -907,6 +939,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -936,6 +970,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -963,6 +999,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1001,6 +1039,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1043,6 +1083,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1093,6 +1135,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1126,6 +1170,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [{ pluginId: 'pii', requested: 5 }],
     });
 
@@ -1155,6 +1201,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [
         { pluginId: 'pii', requested: 5 },
         { pluginId: 'harmful:hate', requested: 3 },
@@ -1192,6 +1240,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [
         { pluginId: 'pii', requested: 5 },
         { pluginId: 'harmful:hate', requested: 3 },
@@ -1217,6 +1267,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [{ pluginId: 'pii', requested: 5 }],
     });
 
@@ -1253,6 +1305,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [], // No failures
     });
 
@@ -1312,6 +1366,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Generated purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1359,6 +1415,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1409,6 +1467,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1451,6 +1511,8 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -1501,6 +1563,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -1546,6 +1610,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -1586,6 +1652,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -1644,6 +1712,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -1689,6 +1759,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -1796,6 +1868,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -1845,6 +1919,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       } satisfies SynthesizeMockResult);
     });
@@ -2114,6 +2190,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       } satisfies SynthesizeMockResult);
 
@@ -2291,6 +2369,8 @@ describe('doGenerateRedteam', () => {
           purpose: 'Test purpose',
           entities: [],
           injectVar: 'input',
+          pluginResults: {},
+          strategyResults: {},
           failedPlugins: [],
         } satisfies SynthesizeMockResult;
       });
@@ -2329,6 +2409,8 @@ describe('doGenerateRedteam', () => {
           purpose: 'Test purpose',
           entities: [],
           injectVar: 'input',
+          pluginResults: {},
+          strategyResults: {},
           failedPlugins: [],
         } satisfies SynthesizeMockResult;
       });
@@ -2398,6 +2480,8 @@ describe('doGenerateRedteam', () => {
             purpose: 'Test purpose',
             entities: [],
             injectVar: 'input',
+            pluginResults: {},
+            strategyResults: {},
             failedPlugins: [],
           } satisfies SynthesizeMockResult;
         })
@@ -2410,6 +2494,8 @@ describe('doGenerateRedteam', () => {
             purpose: 'Test purpose',
             entities: [],
             injectVar: 'input',
+            pluginResults: {},
+            strategyResults: {},
             failedPlugins: [],
           } satisfies SynthesizeMockResult;
         });
@@ -2457,6 +2543,8 @@ describe('doGenerateRedteam', () => {
           purpose: 'Test purpose',
           entities: [],
           injectVar: 'input',
+          pluginResults: {},
+          strategyResults: {},
           failedPlugins: [],
         } satisfies SynthesizeMockResult;
       });
@@ -2795,6 +2883,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Root purpose for Alice',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -2849,6 +2939,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Inferred purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -2899,6 +2991,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -2965,6 +3059,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Resolved purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3029,6 +3125,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Context purpose for admin',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3103,6 +3201,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3169,6 +3269,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3234,6 +3336,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Single purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3285,6 +3389,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3349,6 +3455,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
         failedPlugins: [],
       });
 
@@ -3429,6 +3537,8 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3486,6 +3596,8 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3541,6 +3653,8 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3627,6 +3741,8 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3679,6 +3795,8 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3734,6 +3852,8 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3933,6 +4053,8 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
 
@@ -3983,6 +4105,8 @@ describe('target ID extraction for retry strategy', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      pluginResults: {},
+      strategyResults: {},
       failedPlugins: [],
     });
   });
