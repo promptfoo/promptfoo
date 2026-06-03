@@ -1,6 +1,6 @@
 import { getMissingAssertionVariables } from './assertionPrerequisites';
 import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
-import type { AssertionOrSet, ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+import type { AssertionOrSet, ProviderOptions, TestCase, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
 
@@ -57,7 +57,7 @@ function getVars(testCase: Record<string, unknown>): Record<string, unknown> {
   return isRecord(testCase.vars) ? testCase.vars : {};
 }
 
-function hasExternalVarsReference(value: unknown): boolean {
+export function hasExternalVarsReference(value: unknown): boolean {
   if (typeof value === 'string') {
     return value.trim() !== '';
   }
@@ -170,9 +170,46 @@ function promptMatchesReference(prompt: NormalizedPrompt, reference: string): bo
   );
 }
 
+interface PathProviderReference {
+  kind: 'file' | 'exec' | 'python' | 'golang';
+  path: string;
+}
+
+function getPathProviderReference(value: string): PathProviderReference | undefined {
+  const prefixedPath = (['file://', 'exec:', 'python:', 'golang:'] as const)
+    .map((prefix) => ({ prefix, path: value.slice(prefix.length) }))
+    .find(({ prefix }) => value.startsWith(prefix));
+  const bareFilePath =
+    !prefixedPath && /\.(?:js|mjs|ts)$/i.test(value) && /[\\/]/.test(value) ? value : undefined;
+  const providerPath = prefixedPath?.path ?? bareFilePath;
+  if (!providerPath) {
+    return undefined;
+  }
+
+  const normalizedPath = providerPath.replace(/\\/g, '/').replace(/^\.\//, '');
+  const kind = prefixedPath?.prefix.replace(/:\/\/|:$/, '') ?? 'file';
+  return {
+    kind: kind as PathProviderReference['kind'],
+    path: normalizedPath,
+  };
+}
+
+function pathProviderReferencesMatch(reference: string, providerId: string): boolean {
+  const referencePath = getPathProviderReference(reference);
+  const providerPath = getPathProviderReference(providerId);
+  return (
+    referencePath !== undefined &&
+    providerPath !== undefined &&
+    referencePath.kind === providerPath.kind &&
+    referencePath.path === providerPath.path
+  );
+}
+
 function providerMatchesReference(provider: ProviderOptions, reference: string): boolean {
   return (
-    (hasRunnableProviderId(provider) && referenceMatchesValue(reference, provider.id)) ||
+    (hasRunnableProviderId(provider) &&
+      (referenceMatchesValue(reference, provider.id) ||
+        pathProviderReferencesMatch(reference, provider.id))) ||
     (typeof provider.label === 'string' && referenceMatchesValue(reference, provider.label))
   );
 }
@@ -222,6 +259,32 @@ function getRunnablePromptsForTest(
   );
 }
 
+function getRequiredVariablesForRunnablePrompts(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+  providers: ProviderOptions[],
+  prompts: NormalizedPrompt[],
+): string[] {
+  return extractVariablesFromPrompts(
+    getRunnablePromptsForTest(testCase, defaultTest, providers, prompts).map(
+      (prompt) => prompt.raw,
+    ),
+  );
+}
+
+export function getRequiredVariablesForTest(
+  testCase: TestCase,
+  config: Pick<Partial<UnifiedConfig>, 'providers' | 'prompts' | 'defaultTest'>,
+): string[] {
+  const defaultTest = isRecord(config.defaultTest) ? config.defaultTest : {};
+  return getRequiredVariablesForRunnablePrompts(
+    testCase as Record<string, unknown>,
+    defaultTest,
+    normalizeProviders(config.providers),
+    normalizePromptCandidates(config.prompts),
+  );
+}
+
 function countOutputsForTest(
   testCase: Record<string, unknown>,
   defaultTest: Record<string, unknown>,
@@ -245,6 +308,106 @@ function countOutputsForTest(
         ).length,
       0,
     );
+}
+
+function countStaticVarCombinations(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+): number | undefined {
+  if (hasExternalVarsReference(testCase.vars) || hasExternalVarsReference(defaultTest.vars)) {
+    return undefined;
+  }
+
+  const defaultOptions = isRecord(defaultTest.options) ? defaultTest.options : {};
+  const testOptions = isRecord(testCase.options) ? testCase.options : {};
+  const disableVarExpansion = testOptions.disableVarExpansion ?? defaultOptions.disableVarExpansion;
+  if (disableVarExpansion === true) {
+    return 1;
+  }
+  if (testOptions.transformVars || defaultOptions.transformVars) {
+    return undefined;
+  }
+
+  const vars = {
+    ...getVars(defaultTest),
+    ...getVars(testCase),
+  };
+  let combinationCount = 1;
+
+  for (const value of Object.values(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      return undefined;
+    }
+
+    // The evaluator expands string arrays, while non-string arrays remain one value.
+    if (Array.isArray(value) && typeof value[0] === 'string') {
+      combinationCount *= value.length;
+    }
+  }
+
+  return combinationCount;
+}
+
+function countRepeats(repeat: unknown): number | undefined {
+  if (repeat === undefined || repeat === 0) {
+    return 1;
+  }
+  if (typeof repeat !== 'number' || !Number.isFinite(repeat)) {
+    return undefined;
+  }
+  return Math.max(0, Math.ceil(repeat));
+}
+
+function hasRuntimeDependentSuiteShape(config: Partial<UnifiedConfig>): boolean {
+  const hasScenarios = Array.isArray(config.scenarios)
+    ? config.scenarios.length > 0
+    : config.scenarios !== undefined;
+  const hasExtensions = Array.isArray(config.extensions)
+    ? config.extensions.length > 0
+    : config.extensions !== undefined;
+
+  return (
+    (config.defaultTest !== undefined && !isRecord(config.defaultTest)) ||
+    hasScenarios ||
+    hasExtensions ||
+    config.evaluateOptions?.filterRange !== undefined
+  );
+}
+
+function countPlannedBaseRequests(
+  tests: UnifiedConfig['tests'] | undefined,
+  defaultTest: Record<string, unknown>,
+  providers: ProviderOptions[],
+  prompts: NormalizedPrompt[],
+  repeat: unknown,
+): number | undefined {
+  if (!Array.isArray(tests) || !tests.every(isRecord)) {
+    return undefined;
+  }
+
+  const repeatCount = countRepeats(repeat);
+  if (repeatCount === undefined) {
+    return undefined;
+  }
+
+  let requestCount = 0;
+  for (const testCase of tests) {
+    const outputCount = countOutputsForTest(testCase, defaultTest, providers, prompts);
+    if (outputCount === 0 || testCase.providerOutput) {
+      continue;
+    }
+    if (hasDynamicOutputForTest(testCase, defaultTest, providers, prompts)) {
+      return undefined;
+    }
+
+    const combinationCount = countStaticVarCombinations(testCase, defaultTest);
+    if (combinationCount === undefined) {
+      return undefined;
+    }
+    requestCount += outputCount * combinationCount * repeatCount;
+  }
+
+  return requestCount;
 }
 
 function mayLoadMultiplePromptsAtRuntime(rawPrompt: string): boolean {
@@ -621,7 +784,7 @@ export function normalizePromptsForJob(
     return Object.entries(prompts)
       .filter(
         (entry): entry is [string, string] =>
-          entry[0].trim() !== '' && typeof entry[1] === 'string' && entry[1].trim() !== '',
+          entry[0].trim() !== '' && typeof entry[1] === 'string',
       )
       .map(([raw, label]) => ({ raw, label }));
   }
@@ -674,7 +837,6 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     });
   }
 
-  const defaultVars = getVars(defaultTest);
   const testCasesMissingVariables =
     requiredVariables.length > 0 && Array.isArray(config.tests)
       ? config.tests.flatMap((testCase, index) => {
@@ -682,10 +844,11 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
             return [];
           }
 
-          const testRequiredVariables = extractVariablesFromPrompts(
-            getRunnablePromptsForTest(testCase, defaultTest, providers, promptCandidates).map(
-              (prompt) => prompt.raw,
-            ),
+          const testRequiredVariables = getRequiredVariablesForRunnablePrompts(
+            testCase,
+            defaultTest,
+            providers,
+            promptCandidates,
           );
           const hasMissingVariables = testRequiredVariables.some(
             (variable) => !hasConfigVariable(testCase, defaultTest, variable),
@@ -717,6 +880,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     ),
   );
 
+  const defaultVars = getVars(defaultTest);
   const assertionVariableIssues = Array.isArray(config.tests)
     ? config.tests.flatMap((testCase, index) => {
         if (!isRecord(testCase)) {
@@ -795,8 +959,14 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     testCasesMissingAssertionVariables,
     testCasesWithInvalidAssertions,
     defaultTestHasInvalidAssertions,
-    plannedBaseRequestCount: Array.isArray(config.tests)
-      ? providerCount * promptCount * testCount
-      : undefined,
+    plannedBaseRequestCount: hasRuntimeDependentSuiteShape(config)
+      ? undefined
+      : countPlannedBaseRequests(
+          config.tests,
+          defaultTest,
+          providers,
+          promptCandidates,
+          config.evaluateOptions?.repeat,
+        ),
   };
 }

@@ -23,6 +23,7 @@ interface AddLocalProviderDialogProps {
 const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialogProps) => {
   const [path, setPath] = React.useState('');
   const [error, setError] = React.useState('');
+  const pathHelperTextId = 'provider-path-help';
 
   const handleSubmit = () => {
     const trimmedPath = path.trim();
@@ -69,7 +70,7 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
-            Enter the absolute path to your local provider implementation (.py, .js or .rb file).
+            Enter the absolute path to a JavaScript/TypeScript, Python, Go, or Ruby provider file.
             This file will be referenced in your promptfoo configuration.
           </p>
 
@@ -83,9 +84,15 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
                 setPath(e.target.value);
                 setError('');
               }}
+              aria-invalid={Boolean(error)}
+              aria-describedby={pathHelperTextId}
               className={error ? 'border-destructive' : ''}
             />
-            <HelperText error={!!error}>
+            <HelperText
+              id={pathHelperTextId}
+              error={Boolean(error)}
+              role={error ? 'alert' : undefined}
+            >
               {error || 'Example: /home/user/projects/my-provider.py'}
             </HelperText>
           </div>

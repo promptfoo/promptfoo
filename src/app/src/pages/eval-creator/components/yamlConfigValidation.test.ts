@@ -26,8 +26,10 @@ describe('isFullYamlConfig', () => {
     ).toBe(false);
   });
 
-  it('rejects prompt-only test filters rather than treating them as a full config', () => {
-    expect(isFullYamlConfig({ prompts: ['Greeting prompt'] })).toBe(false);
+  it('accepts partial top-level config sections', () => {
+    expect(isFullYamlConfig({ providers: ['echo'] })).toBe(true);
+    expect(isFullYamlConfig({ prompts: ['Greeting prompt'] })).toBe(true);
+    expect(isFullYamlConfig({ providers: ['echo'], prompts: ['Greeting prompt'] })).toBe(true);
   });
 
   it('rejects a single test case that includes both provider and prompt filters', () => {

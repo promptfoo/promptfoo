@@ -4,8 +4,39 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProvidersListSection } from './ProvidersListSection';
 import type { ProviderOptions } from '@promptfoo/types';
 
+const showToastMock = vi.fn();
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
+}));
+
 vi.mock('./AddProviderDialog', () => ({
-  default: vi.fn(() => null),
+  default: vi.fn(
+    ({
+      open,
+      onSave,
+      initialProvider,
+    }: {
+      open: boolean;
+      onSave: (provider: ProviderOptions) => void;
+      initialProvider?: ProviderOptions;
+    }) =>
+      open ? (
+        <button
+          type="button"
+          onClick={() =>
+            onSave(
+              initialProvider
+                ? { ...initialProvider, label: 'Updated model' }
+                : { id: 'openai:gpt-4o', label: 'New model' },
+            )
+          }
+        >
+          {initialProvider ? 'Save mock edits' : 'Save mock provider'}
+        </button>
+      ) : null,
+  ),
 }));
 
 describe('ProvidersListSection', () => {
@@ -19,14 +50,36 @@ describe('ProvidersListSection', () => {
     vi.clearAllMocks();
   });
 
+  it('explains providers before users configure the first one', () => {
+    render(<ProvidersListSection providers={[]} onChange={onChange} />);
+
+    expect(screen.getByText(/providers are the models, agents, or endpoints/i)).toBeInTheDocument();
+    expect(screen.getByText(/add more later to compare outputs/i)).toBeInTheDocument();
+  });
+
   it('asks for confirmation before deleting a provider', async () => {
     const user = userEvent.setup();
     render(<ProvidersListSection providers={providers} onChange={onChange} />);
 
     await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
 
-    expect(screen.getByRole('dialog', { name: 'Delete provider?' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Delete Primary model?' }),
+    ).toHaveAccessibleDescription(
+      'This removes Primary model from this evaluation. Future runs will no longer send prompts or test cases to it. This action cannot be undone.',
+    );
+    expect(screen.getByText(/removes Primary model from this evaluation/i)).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('warns when deleting the only provider will prevent running', async () => {
+    const user = userEvent.setup();
+    render(<ProvidersListSection providers={[providers[0]]} onChange={onChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
+
+    expect(screen.getByText(/this is your only provider/i)).toBeInTheDocument();
+    expect(screen.getByText(/add another provider before you can run/i)).toBeInTheDocument();
   });
 
   it('removes the provider after deletion is confirmed', async () => {
@@ -37,5 +90,43 @@ describe('ProvidersListSection', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     expect(onChange).toHaveBeenCalledWith([providers[1]]);
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Primary model deleted. Future runs no longer send requests to it.',
+      'success',
+    );
+  });
+
+  it('confirms the impact of adding another provider', async () => {
+    const user = userEvent.setup();
+    render(<ProvidersListSection providers={providers} onChange={onChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+    await user.click(screen.getByRole('button', { name: 'Save mock provider' }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      ...providers,
+      { id: 'openai:gpt-4o', label: 'New model' },
+    ]);
+    expect(showToastMock).toHaveBeenCalledWith(
+      'New model added. By default it receives every prompt and test case; YAML routing can narrow that set.',
+      'success',
+    );
+  });
+
+  it('confirms saved edits to a provider', async () => {
+    const user = userEvent.setup();
+    render(<ProvidersListSection providers={providers} onChange={onChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Edit Primary model' }));
+    await user.click(screen.getByRole('button', { name: 'Save mock edits' }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      { id: 'openai:gpt-4.1', label: 'Updated model' },
+      providers[1],
+    ]);
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Provider settings saved for Updated model. Future runs use these settings.',
+      'success',
+    );
   });
 });

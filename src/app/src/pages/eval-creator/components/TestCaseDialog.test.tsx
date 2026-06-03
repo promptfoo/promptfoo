@@ -38,17 +38,26 @@ describe('TestCaseForm', () => {
     return render(<TestCaseForm {...defaultProps} {...props} />);
   };
 
-  it('should render with the title "Add Test Case" and show both "Add Test Case" and "Add Another" buttons when initialValues is undefined and open is true', () => {
+  it('explains how test cases run and offers add-and-continue in create mode', () => {
     renderComponent();
 
     const dialogTitle = screen.getByRole('heading', { name: 'Add Test Case' });
     expect(dialogTitle).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add Test Case' })).toHaveAccessibleDescription(
+      'Set inputs for one evaluation example, then add optional pass or fail checks. By default, a test case runs against every configured prompt and provider; YAML routing can narrow that set.',
+    );
 
     const addTestCaseButton = screen.getByRole('button', { name: 'Add Test Case' });
     expect(addTestCaseButton).toBeInTheDocument();
 
-    const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
     expect(addAnotherButton).toBeInTheDocument();
+    expect(screen.getByText(/set inputs for one evaluation example/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /By default, a test case runs against every configured prompt and provider/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('should render with the title "Edit Test Case" and show only the "Update Test Case" button when initialValues is provided and open is true', () => {
@@ -61,7 +70,7 @@ describe('TestCaseForm', () => {
 
     expect(screen.getByText('Edit Test Case')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Update Test Case' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Add Another' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add and create another' })).toBeNull();
   });
 
   it('keeps dialog actions visible while the test case form scrolls independently', () => {
@@ -106,7 +115,7 @@ describe('TestCaseForm', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("should call onAdd with the current form state and shouldClose=false, then reset the form but not call onCancel when the 'Add Another' button is clicked in add mode", async () => {
+  it('acknowledges a saved test case while keeping the add flow open for another', async () => {
     renderComponent();
 
     const testVars = { var1: 'value1', var2: 'value2' };
@@ -120,7 +129,7 @@ describe('TestCaseForm', () => {
       assertsFormProps.onAdd(testAsserts);
     });
 
-    const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
     await userEvent.click(addAnotherButton);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
@@ -134,6 +143,152 @@ describe('TestCaseForm', () => {
     );
 
     expect(onCancel).not.toHaveBeenCalled();
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
+      'Test case added. By default it runs across every prompt and provider; YAML routing can narrow that set. Enter values for the next test case.',
+    );
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+  });
+
+  it('keeps intentional blank inputs when creating another test case', async () => {
+    renderComponent();
+
+    act(() => {
+      mockVarsForm.mock.lastCall?.[0].onAdd({ var1: '', var2: '' }, 'var1');
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Add and create another' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Test Case' }));
+
+    expect(onAdd).toHaveBeenNthCalledWith(
+      1,
+      {
+        description: '',
+        vars: { var1: '' },
+        assert: [],
+      },
+      false,
+    );
+    expect(onAdd).toHaveBeenNthCalledWith(
+      2,
+      {
+        description: '',
+        vars: {},
+        assert: [],
+      },
+      true,
+    );
+  });
+
+  it('prevents saving while an assertion is missing a required value', () => {
+    renderComponent();
+
+    act(() => {
+      mockAssertsForm.mock.calls[0][0].onValidityChange?.(false);
+    });
+
+    const alert = screen.getByRole('alert');
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
+
+    expect(alert).toHaveTextContent('Complete the highlighted assertion values before saving.');
+    expect(addButton).toBeDisabled();
+    expect(addAnotherButton).toBeDisabled();
+    expect(addButton).toHaveAttribute('aria-describedby', 'test-case-assertion-error');
+
+    act(() => {
+      mockAssertsForm.mock.lastCall?.[0].onValidityChange?.(true);
+    });
+
+    expect(addButton).not.toBeDisabled();
+    expect(addAnotherButton).not.toBeDisabled();
+  });
+
+  it('reveals and requires variables needed by selected context assertions', () => {
+    renderComponent({ varsList: [] });
+
+    act(() => {
+      mockAssertsForm.mock.calls[0][0].onAdd([{ type: 'context-faithfulness' }]);
+    });
+
+    expect(mockVarsForm.mock.lastCall?.[0].varsList).toEqual(['query', 'context']);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Context assertions require values for: query, context.',
+    );
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    expect(addButton).toBeDisabled();
+    expect(addButton).toHaveAttribute('aria-describedby', 'test-case-assertion-variable-error');
+
+    act(() => {
+      mockVarsForm.mock.lastCall?.[0].onAdd({
+        query: 'What changed?',
+        context: 'The release includes a new API.',
+      });
+    });
+
+    expect(addButton).not.toBeDisabled();
+  });
+
+  it('reveals and requires variables needed by inherited context assertions', () => {
+    renderComponent({
+      varsList: [],
+      inheritedAssertions: [{ type: 'context-relevance' }],
+    });
+
+    expect(mockVarsForm.mock.lastCall?.[0].varsList).toEqual(['query', 'context']);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Context assertions require values for: query, context.',
+    );
+    expect(screen.getByRole('button', { name: 'Add Test Case' })).toBeDisabled();
+  });
+
+  it('accepts inherited context variables without saving them as local overrides', async () => {
+    renderComponent({
+      varsList: [],
+      inheritedAssertions: [{ type: 'context-faithfulness' }],
+      inheritedVars: {
+        query: 'What changed?',
+        context: 'The release includes a new API.',
+      },
+    });
+
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    expect(addButton).toBeEnabled();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await userEvent.click(addButton);
+
+    expect(onAdd).toHaveBeenCalledWith(
+      {
+        description: '',
+        vars: {},
+        assert: [],
+      },
+      true,
+    );
+  });
+
+  it('accepts external inherited vars for context assertions without saving local overrides', async () => {
+    renderComponent({
+      varsList: [],
+      inheritedAssertions: [{ type: 'context-faithfulness' }],
+      inheritedVars: 'file://defaults.yaml',
+    });
+
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    expect(addButton).toBeEnabled();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await userEvent.click(addButton);
+
+    expect(onAdd).toHaveBeenCalledWith(
+      {
+        description: '',
+        vars: {},
+        assert: [],
+      },
+      true,
+    );
   });
 
   it("should call onAdd with the updated form state and shouldClose=true, then reset the form and call onCancel when the 'Update Test Case' button is clicked in edit mode", async () => {
@@ -178,6 +333,27 @@ describe('TestCaseForm', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('confirms before cancelling a test case with unsaved changes', async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    await user.type(screen.getByLabelText('Description'), 'Draft case');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Discard test case changes?' }),
+    ).toHaveAccessibleDescription('Your unsaved inputs and assertions will be lost.');
+    expect(onCancel).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.queryByText('Discard test case changes?')).toBeNull();
+    expect(screen.getByLabelText('Description')).toHaveValue('Draft case');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('should update form fields when initialValues change', () => {
@@ -243,9 +419,15 @@ describe('TestCaseForm', () => {
       assertsFormProps.onAdd(testAsserts);
     });
 
-    await act(async () => {
-      onCancel();
-    });
+    rerender(
+      <TestCaseForm
+        open={false}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues}
+      />,
+    );
 
     rerender(
       <TestCaseForm
@@ -264,7 +446,7 @@ describe('TestCaseForm', () => {
     expect(lastAssertsFormCall[0].initialValues).toEqual(initialValues.assert);
   });
 
-  it('should call onAdd when form is submitted with empty data (empty vars and asserts)', async () => {
+  it('does not store displayed blank variables when submitted untouched', async () => {
     renderComponent();
 
     const addButton = screen.getByRole('button', { name: 'Add Test Case' });
@@ -295,7 +477,7 @@ describe('TestCaseForm', () => {
     expect(mockVarsForm).toHaveBeenCalled();
 
     const varsFormProps = mockVarsForm.mock.calls[0][0];
-    expect(varsFormProps.initialValues || {}).toEqual({});
+    expect(varsFormProps.initialValues || {}).toEqual({ var1: '', var2: '' });
 
     expect(mockAssertsForm).toHaveBeenCalled();
     const assertsFormProps = mockAssertsForm.mock.calls[0][0];
