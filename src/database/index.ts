@@ -35,19 +35,71 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
+const caseInsensitiveFileSystemCache = new Map<string, boolean>();
+
+function swapFirstLetterCase(value: string): string {
+  return value.replace(/[a-zA-Z]/, (character) =>
+    character === character.toLowerCase() ? character.toUpperCase() : character.toLowerCase(),
+  );
+}
+
+function isCaseInsensitiveFileSystem(existingPath: string): boolean {
+  if (process.platform === 'win32') {
+    return true;
+  }
+
+  const cachedResult = caseInsensitiveFileSystemCache.get(existingPath);
+  if (cachedResult !== undefined) {
+    return cachedResult;
+  }
+
+  let currentPath = existingPath;
+  while (true) {
+    const basename = path.basename(currentPath);
+    const swappedBasename = swapFirstLetterCase(basename);
+    if (swappedBasename !== basename) {
+      try {
+        const swappedPath = path.join(path.dirname(currentPath), swappedBasename);
+        const isCaseInsensitive =
+          fs.realpathSync.native(swappedPath) === fs.realpathSync.native(currentPath);
+        caseInsensitiveFileSystemCache.set(existingPath, isCaseInsensitive);
+        return isCaseInsensitive;
+      } catch {
+        caseInsensitiveFileSystemCache.set(existingPath, false);
+        return false;
+      }
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      caseInsensitiveFileSystemCache.set(existingPath, false);
+      return false;
+    }
+    currentPath = parentPath;
+  }
+}
+
 function getComparableDatabasePath(dbPath: string): string {
   const resolvedPath = path.resolve(dbPath);
+  const unresolvedParts: string[] = [];
+  let currentPath = resolvedPath;
 
-  try {
-    return fs.realpathSync.native(resolvedPath);
-  } catch {
+  // Resolve from the nearest existing ancestor so missing paths inherit the
+  // filesystem's actual casing behavior.
+  while (true) {
     try {
-      return path.join(
-        fs.realpathSync.native(path.dirname(resolvedPath)),
-        path.basename(resolvedPath),
-      );
+      const existingPath = fs.realpathSync.native(currentPath);
+      const comparablePath = path.join(existingPath, ...unresolvedParts);
+      return isCaseInsensitiveFileSystem(existingPath)
+        ? comparablePath.toLowerCase()
+        : comparablePath;
     } catch {
-      return resolvedPath;
+      const parentPath = path.dirname(currentPath);
+      if (parentPath === currentPath) {
+        return process.platform === 'win32' ? resolvedPath.toLowerCase() : resolvedPath;
+      }
+      unresolvedParts.unshift(path.basename(currentPath));
+      currentPath = parentPath;
     }
   }
 }

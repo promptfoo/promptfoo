@@ -110,6 +110,31 @@ describe('database', () => {
         'Refusing to open the default Promptfoo database while running tests',
       );
     });
+
+    it('should respect filesystem case sensitivity when default directories are absent', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'missing-home');
+      const caseProbeDir = path.join(fakeHomeDir, 'case-probe');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const differentlyCasedConfigDir = path.join(fakeHomeDir, '.PROMPTFOO');
+      fs.mkdirSync(caseProbeDir, { recursive: true });
+      const isCaseInsensitive = fs.existsSync(path.join(fakeHomeDir, 'CASE-PROBE'));
+      fs.rmSync(caseProbeDir, { recursive: true });
+
+      expect(fs.existsSync(defaultConfigDir)).toBe(false);
+      expect(fs.existsSync(differentlyCasedConfigDir)).toBe(false);
+
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(differentlyCasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      if (isCaseInsensitive) {
+        expect(() => getDbPath()).toThrow(
+          'Refusing to open the default Promptfoo database while running tests',
+        );
+      } else {
+        expect(getDbPath()).toBe(path.join(differentlyCasedConfigDir, 'promptfoo.db'));
+      }
+    });
   });
 
   describe('getDbSignalPath', () => {
