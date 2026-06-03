@@ -16,6 +16,7 @@ import {
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
+import { filterTests } from './commands/eval/filterTests';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
@@ -92,7 +93,11 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
+import {
+  analyzeTemplateReference,
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+} from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -2148,6 +2153,19 @@ function buildScenarioTests(
   return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
 }
 
+function renderScenarioDescription(description: AtomicTestCase['description'], vars: Vars) {
+  if (typeof description !== 'string') {
+    return description;
+  }
+
+  try {
+    return getNunjucksEngine().renderString(description, vars);
+  } catch (error) {
+    logger.debug(`Failed to template test description: ${error}`);
+    return description;
+  }
+}
+
 function mergeScenarioTest(
   testSuite: TestSuite,
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
@@ -2162,15 +2180,22 @@ function mergeScenarioTest(
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
+  const vars = {
+    ...(defaultTest?.vars || {}),
+    ...data.vars,
+    ...test.vars,
+  };
+  const dataDescription = (data as Pick<AtomicTestCase, 'description'>).description;
+  const defaultDescription = (defaultTest as Pick<AtomicTestCase, 'description'> | undefined)
+    ?.description;
+  const description = test.description ?? dataDescription ?? defaultDescription;
+
   return {
     ...(defaultTest || {}),
     ...data,
     ...test,
-    vars: {
-      ...(defaultTest?.vars || {}),
-      ...data.vars,
-      ...test.vars,
-    },
+    description: renderScenarioDescription(description, vars),
+    vars,
     options: {
       ...(defaultTest?.options || {}),
       ...test.options,
@@ -4540,6 +4565,12 @@ class Evaluator {
     await this.evalRecord.addPrompts(prompts);
 
     let tests = buildTestsFromSuite(testSuite);
+    if (options.filterPattern) {
+      tests = (await filterTests(
+        { tests, providers: [], prompts: [] },
+        { pattern: options.filterPattern },
+      )) as AtomicTestCase[];
+    }
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 

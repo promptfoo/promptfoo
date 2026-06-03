@@ -300,6 +300,11 @@ export const EvaluateOptionsSchema = z.object({
    */
   silent: z.boolean().optional(),
   /**
+   * Regular expression pattern to filter tests by description.
+   * Applied after scenario expansion so templated descriptions can be matched.
+   */
+  filterPattern: z.string().optional(),
+  /**
    * Zero-based test index range in start:end format (end exclusive).
    * Persisted on the eval record so resume runs reproduce the original slice.
    */
