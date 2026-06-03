@@ -82,6 +82,24 @@ The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
 relative import.
 
+## DAG Progress Ratchets
+
+The architecture check also measures the layer dependency graph so it can move
+toward a directed acyclic graph without regressing:
+
+- `maxStronglyConnectedComponentSize` limits the size of the largest remaining
+  layer cycle.
+- `architecture/edge-baseline.json` limits every existing cross-layer edge to
+  its reviewed import count and rejects new edges.
+- `forbiddenDependencies` permanently locks layer pairs whose direct or
+  transitive dependency has been removed.
+- `tierOrder` lists every layer in the intended bottom-to-top topology so the
+  checker can report the remaining back-edges.
+
+After intentionally reducing or otherwise reviewing cross-layer coupling, run
+`npm run architecture:baseline` and include the baseline change in review. Do
+not refresh the baseline merely to make a newly introduced dependency pass.
+
 ## Browser Import Ratchet
 
 The `app` layer has an additional internal-path allowlist. It pins the existing
