@@ -744,13 +744,29 @@ describe('setupReadiness', () => {
       );
     });
 
-    it('matches absolute path provider filters to relative configured provider references', () => {
+    it('does not match absolute path provider filters to relative configured provider references', () => {
       const readiness = getSetupReadiness({
         providers: ['./provider-a.js', './provider-b.js'],
         prompts: ['Write a reply'],
         tests: [
           {
             providers: ['file:///workspace/provider-a.js', 'file:///workspace/provider-b.js'],
+            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
+          },
+        ],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+      expect(readiness.isReadyToRun).toBe(false);
+    });
+
+    it('normalizes path separators when matching provider filters', () => {
+      const readiness = getSetupReadiness({
+        providers: ['./providers/provider-a.js', './providers/provider-b.js'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            providers: ['file://providers\\provider-a.js', 'file://providers\\provider-b.js'],
             assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
           },
         ],

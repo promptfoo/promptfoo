@@ -173,7 +173,6 @@ function promptMatchesReference(prompt: NormalizedPrompt, reference: string): bo
 interface PathProviderReference {
   kind: 'file' | 'exec' | 'python' | 'golang';
   path: string;
-  isAbsolute: boolean;
 }
 
 function getPathProviderReference(value: string): PathProviderReference | undefined {
@@ -187,31 +186,23 @@ function getPathProviderReference(value: string): PathProviderReference | undefi
     return undefined;
   }
 
-  const normalizedPath = providerPath.replaceAll('\\', '/').replace(/^\.\//, '');
+  const normalizedPath = providerPath.replace(/\\/g, '/').replace(/^\.\//, '');
   const kind = prefixedPath?.prefix.replace(/:\/\/|:$/, '') ?? 'file';
   return {
     kind: kind as PathProviderReference['kind'],
     path: normalizedPath,
-    isAbsolute: normalizedPath.startsWith('/') || /^[A-Za-z]:\//.test(normalizedPath),
   };
 }
 
 function pathProviderReferencesMatch(reference: string, providerId: string): boolean {
   const referencePath = getPathProviderReference(reference);
   const providerPath = getPathProviderReference(providerId);
-  if (!referencePath || !providerPath || referencePath.kind !== providerPath.kind) {
-    return false;
-  }
-  if (referencePath.path === providerPath.path) {
-    return true;
-  }
-  if (referencePath.isAbsolute === providerPath.isAbsolute) {
-    return false;
-  }
-
-  const absolutePath = referencePath.isAbsolute ? referencePath.path : providerPath.path;
-  const relativePath = referencePath.isAbsolute ? providerPath.path : referencePath.path;
-  return absolutePath.endsWith(`/${relativePath}`);
+  return (
+    referencePath !== undefined &&
+    providerPath !== undefined &&
+    referencePath.kind === providerPath.kind &&
+    referencePath.path === providerPath.path
+  );
 }
 
 function providerMatchesReference(provider: ProviderOptions, reference: string): boolean {
