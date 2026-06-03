@@ -1,3 +1,4 @@
+import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
 import { extractJsonObjects } from '../../util/json';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -33,6 +34,7 @@ export type AgentObservation = {
   actor?: string;
   command?: string;
   connector?: string;
+  endTimestamp?: number;
   evidence?: string;
   fieldLocations?: Partial<
     Record<'command' | 'evidence' | 'input' | 'output' | 'path' | 'text' | 'tool', string>
@@ -45,12 +47,14 @@ export type AgentObservation = {
   operation?: string;
   outcome?: string;
   output?: string;
+  parentSpanId?: string;
   path?: string;
   pluginId?: string;
   severity?: string;
   source: AgentObservationSource;
   spanId?: string;
   spanName?: string;
+  timestamp?: number;
   text?: string;
   to?: string;
   tool?: string;
@@ -120,12 +124,16 @@ const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS = [
 
 type TraceLikeSpan = {
   attributes?: Record<string, unknown>;
+  endTime?: number;
   events?: Array<{
     attributes?: Record<string, unknown>;
     name?: string;
+    timestamp?: number;
   }>;
   name?: string;
+  parentSpanId?: string;
   spanId?: string;
+  startTime?: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -339,13 +347,12 @@ function inferredToolFromSpanName(spanName?: string): string | undefined {
 
 function controlObservationFromSpan(
   span: TraceLikeSpan,
-  spanIndex: number,
+  location: string,
   source: AgentObservationSource,
 ): AgentObservation | undefined {
   const attributes = span.attributes || {};
   const name = span.name?.toLowerCase() || '';
   const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
-  const location = `trace span ${spanIndex + 1}`;
   const guardrailDecision = getAttribute(attributes, ['guardrails.decision', 'guardrail.decision']);
 
   if (
@@ -356,15 +363,18 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'guardrail',
+      endTimestamp: span.endTime,
       location,
       outcome: stringifyValue(
         guardrailDecision ??
           getAttribute(attributes, ['guardrail.outcome']) ??
           attributes['codex.status'],
       ),
+      parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
       spanName: span.name,
+      timestamp: span.startTime,
       text: span.name,
     };
   }
@@ -376,11 +386,14 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'approval',
+      endTimestamp: span.endTime,
       location,
       outcome: stringifyValue(attributes['approval.outcome'] ?? attributes['codex.status']),
+      parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
       spanName: span.name,
+      timestamp: span.startTime,
       text: span.name,
     };
   }
@@ -406,25 +419,24 @@ function findingObservationsFromAttributes(
           fieldLocations: { evidence: location },
           findingKind: stringifyValue(finding.kind),
           kind: 'finding',
-          location: `${location} finding ${index + 1}`,
+          location: stringifyValue(finding.location) || `${location} finding ${index + 1}`,
           pluginId:
             normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
+          parentSpanId: span?.parentSpanId,
           severity: stringifyValue(finding.severity),
           source,
           spanId: span?.spanId,
           spanName: span?.name,
+          timestamp: span?.startTime,
           text: stringifyValue(finding.evidence),
         });
       });
     });
-    if (observations.length > 0) {
-      return observations;
-    }
   }
 
   const pluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
   if (!pluginId) {
-    return observations;
+    return dedupeFindingObservations(observations);
   }
 
   const findingEvidence = stringifyValue(
@@ -438,7 +450,7 @@ function findingObservationsFromAttributes(
     getAttribute(attributes, AGENTIC_RUNTIME_FINDING_SEVERITY_ATTRS),
   );
   if (!findingEvidence && !findingKind && !findingLocation && !findingSeverity) {
-    return observations;
+    return dedupeFindingObservations(observations);
   }
 
   observations.push({
@@ -447,15 +459,110 @@ function findingObservationsFromAttributes(
     findingKind,
     kind: 'finding',
     location: findingLocation || location,
+    parentSpanId: span?.parentSpanId,
     pluginId,
     severity: findingSeverity,
     source,
     spanId: span?.spanId,
     spanName: span?.name,
+    timestamp: span?.startTime,
     text: findingEvidence,
   });
 
-  return observations;
+  return dedupeFindingObservations(observations);
+}
+
+function dedupeFindingObservations(observations: AgentObservation[]): AgentObservation[] {
+  const seen = new Set<string>();
+  return observations.filter((observation) => {
+    const key = JSON.stringify([
+      observation.pluginId,
+      observation.findingKind,
+      observation.location,
+      observation.evidence,
+      observation.severity,
+    ]);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizedToolObservationsFromAttributes(
+  attributes: Record<string, unknown> | undefined,
+  baseLocation: string,
+  source: AgentObservationSource,
+  span?: TraceLikeSpan,
+): AgentObservation[] {
+  const tool = getToolNameFromAttributes(attributes);
+  return tool
+    ? [
+        {
+          fieldLocations: { tool: baseLocation },
+          kind: 'tool_call',
+          location: baseLocation,
+          parentSpanId: span?.parentSpanId,
+          source,
+          spanId: span?.spanId,
+          spanName: span?.name,
+          timestamp: span?.startTime,
+          tool,
+        },
+      ]
+    : [];
+}
+
+function isDuplicateNormalizedToolObservation(
+  mapped: ReturnType<typeof traceAttributeField>,
+  value: string,
+  normalizedToolName?: string,
+): boolean {
+  return mapped?.kind === 'tool_call' && mapped.field === 'tool' && value === normalizedToolName;
+}
+
+function observationFromMappedTraceAttribute(
+  mapped: NonNullable<ReturnType<typeof traceAttributeField>>,
+  value: string,
+  location: string,
+  source: AgentObservationSource,
+  span?: TraceLikeSpan,
+): AgentObservation {
+  const baseObservation = {
+    fieldLocations: { [mapped.field]: location },
+    location,
+    parentSpanId: span?.parentSpanId,
+    source,
+    spanId: span?.spanId,
+    spanName: span?.name,
+    timestamp: span?.startTime,
+  } satisfies Partial<AgentObservation>;
+
+  if (mapped.kind === 'command') {
+    return {
+      ...baseObservation,
+      command: mapped.field === 'command' ? value : undefined,
+      kind: 'command',
+      output: mapped.field === 'output' ? value : undefined,
+      text: value,
+    };
+  }
+  if (mapped.kind === 'message') {
+    return {
+      ...baseObservation,
+      kind: 'message',
+      text: value,
+    };
+  }
+  return {
+    ...baseObservation,
+    input: mapped.field === 'input' ? value : undefined,
+    kind: 'tool_call',
+    output: mapped.field === 'output' ? value : undefined,
+    text: mapped.field === 'output' ? value : undefined,
+    tool: mapped.field === 'tool' ? value : undefined,
+  };
 }
 
 function observationsFromTraceAttributes(
@@ -470,6 +577,14 @@ function observationsFromTraceAttributes(
     source,
     span,
   );
+  const normalizedToolObservations = normalizedToolObservationsFromAttributes(
+    attributes,
+    baseLocation,
+    source,
+    span,
+  );
+  observations.push(...normalizedToolObservations);
+  const normalizedToolName = normalizedToolObservations[0]?.tool;
 
   for (const [attributeName, attributeValue] of Object.entries(attributes ?? {})) {
     const value = stringifyValue(attributeValue);
@@ -482,40 +597,12 @@ function observationsFromTraceAttributes(
     if (!mapped) {
       continue;
     }
+    if (isDuplicateNormalizedToolObservation(mapped, value, normalizedToolName)) {
+      continue;
+    }
 
     const location = `${baseLocation} attribute ${attributeName}`;
-    const baseObservation = {
-      fieldLocations: { [mapped.field]: location },
-      location,
-      source,
-      spanId: span?.spanId,
-      spanName: span?.name,
-    } satisfies Partial<AgentObservation>;
-
-    if (mapped.kind === 'command') {
-      observations.push({
-        ...baseObservation,
-        command: mapped.field === 'command' ? value : undefined,
-        kind: 'command',
-        output: mapped.field === 'output' ? value : undefined,
-        text: value,
-      });
-    } else if (mapped.kind === 'message') {
-      observations.push({
-        ...baseObservation,
-        kind: 'message',
-        text: value,
-      });
-    } else {
-      observations.push({
-        ...baseObservation,
-        input: mapped.field === 'input' ? value : undefined,
-        kind: 'tool_call',
-        output: mapped.field === 'output' ? value : undefined,
-        text: mapped.field === 'output' ? value : undefined,
-        tool: mapped.field === 'tool' ? value : undefined,
-      });
-    }
+    observations.push(observationFromMappedTraceAttribute(mapped, value, location, source, span));
   }
 
   const spanTool = inferredToolFromSpanName(span?.name);
@@ -524,9 +611,11 @@ function observationsFromTraceAttributes(
       fieldLocations: { tool: baseLocation },
       kind: 'tool_call',
       location: baseLocation,
+      parentSpanId: span?.parentSpanId,
       source,
       spanId: span?.spanId,
       spanName: span?.name,
+      timestamp: span?.startTime,
       tool: spanTool,
     });
   }
@@ -545,27 +634,39 @@ export function observationsFromTraceData(
   const observations: AgentObservation[] = [];
   traceData.spans.forEach((span, spanIndex) => {
     const traceSpan = span as TraceLikeSpan;
-    const controlObservation = controlObservationFromSpan(traceSpan, spanIndex, source);
+    const spanLocation = `trace span ${spanIndex + 1}`;
+    const controlObservation = controlObservationFromSpan(traceSpan, spanLocation, source);
     if (controlObservation) {
       observations.push(controlObservation);
     }
 
     observations.push(
-      ...observationsFromTraceAttributes(
-        traceSpan.attributes,
-        `trace span ${spanIndex + 1}`,
-        source,
-        traceSpan,
-      ),
+      ...observationsFromTraceAttributes(traceSpan.attributes, spanLocation, source, traceSpan),
     );
 
     traceSpan.events?.forEach((event) => {
+      const eventLocation = `${spanLocation} event ${event.name || 'event'}`;
+      const eventSpan = {
+        attributes: event.attributes,
+        name: event.name,
+        parentSpanId: traceSpan.parentSpanId,
+        spanId: traceSpan.spanId,
+        startTime: event.timestamp,
+      };
+      const eventControlObservation = controlObservationFromSpan(
+        eventSpan,
+        eventLocation,
+        'trace-event',
+      );
+      if (eventControlObservation) {
+        observations.push(eventControlObservation);
+      }
       observations.push(
         ...observationsFromTraceAttributes(
           event.attributes,
-          `trace span ${spanIndex + 1} event ${event.name || 'event'}`,
+          eventLocation,
           'trace-event',
-          traceSpan,
+          eventSpan,
         ),
       );
     });

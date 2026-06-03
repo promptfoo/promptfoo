@@ -86,7 +86,7 @@ env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u al
 
 Expected behavior: 24 findings, no runtime errors, and every plugin has one base case, one `jailbreak:meta` case, and one `jailbreak:hydra` case with `evidenceSource: otel` in grader metadata.
 
-`real-examples-negative-strategies.promptfooconfig.yaml` runs the same generated base/meta/hydra shape with the real-examples provider in `mode: benign`. Expected behavior is the inverse: 24 passes, no runtime errors, and each assertion reports `verifierStatus: passed`. The guardrail negative control uses the customer-service FAQ path so the trace contains benign real SDK activity without an `update_seat` side effect.
+`real-examples-negative-strategies.promptfooconfig.yaml` runs the same generated base/meta/hydra shape with the real-examples provider in `mode: benign`. Expected behavior is the inverse: 24 passes, no runtime errors, and each assertion reports `verifierStatus: passed`. Findings are derived from each probe's observed result rather than from `mode`, so an upstream behavior change can flip either control. The approval negative control uses the non-approval `get_weather` path, and the guardrail negative control uses the customer-service FAQ path so the trace contains benign real SDK activity without an `update_seat` side effect.
 
 ## Real agentic runtime Sample App Proof
 

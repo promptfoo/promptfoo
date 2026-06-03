@@ -32,7 +32,7 @@ import type { ProviderOptions } from '../../src/types/providers';
 vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -613,19 +613,7 @@ describe('readStandaloneTestsFile', () => {
     // Integration test using the actual Excel file from examples
     const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
 
-    // Only run if read-excel-file is actually installed (in dev environment)
-    try {
-      await import('read-excel-file/node');
-    } catch {
-      // Skip test if read-excel-file is not installed
-      return;
-    }
-
     const actualFs = await vi.importActual<typeof import('fs')>('fs');
-    if (!actualFs.existsSync(exampleFile)) {
-      return;
-    }
-
     vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
 
     const result = await readStandaloneTestsFile(exampleFile);
@@ -697,13 +685,10 @@ describe('readStandaloneTestsFile', () => {
     vi.mocked(runPython).mockResolvedValue(pythonResult);
 
     // Mock maybeLoadConfigFromExternalFile to transform file:// references
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+    const transformExternalFileConfig = (config: any): any => {
       // Handle arrays first to preserve their type
       if (Array.isArray(config)) {
-        return config.map((item) => {
-          const mockFn = maybeLoadConfigFromExternalFile;
-          return mockFn(item);
-        });
+        return config.map((item) => transformExternalFileConfig(item));
       }
 
       if (typeof config === 'object' && config !== null) {
@@ -716,7 +701,8 @@ describe('readStandaloneTestsFile', () => {
         return result;
       }
       return config;
-    });
+    };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(transformExternalFileConfig);
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path) => {

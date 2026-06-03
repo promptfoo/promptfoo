@@ -26,6 +26,7 @@ let TraceStore: typeof import('../../src/tracing/store').TraceStore;
 describe('TraceStore', () => {
   let traceStore: InstanceType<typeof TraceStore>;
   let mockDb: any;
+  let mockDeleteChain: any;
 
   beforeAll(async () => {
     const mod = await import('../../src/tracing/store');
@@ -39,21 +40,24 @@ describe('TraceStore', () => {
     // Create mock database methods that properly chain
     const mockInsertChain = {
       values: vi.fn().mockReturnThis(),
-      onConflictDoNothing: vi.fn(() => Promise.resolve(undefined)),
+      onConflictDoNothing: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue(undefined),
     };
     const mockSelectChain = {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       limit: vi.fn(() => Promise.resolve([])),
     };
-    const mockDeleteChain = {
-      where: vi.fn(() => Promise.resolve(undefined)),
+    mockDeleteChain = {
+      where: vi.fn().mockReturnThis(),
+      run: vi.fn().mockResolvedValue(undefined),
     };
 
     mockDb = {
       insert: vi.fn(() => mockInsertChain),
       select: vi.fn(() => mockSelectChain),
       delete: vi.fn(() => mockDeleteChain),
+      transaction: vi.fn(async (callback) => callback(mockDb)),
     };
 
     // Create trace store and inject mock DB
@@ -83,6 +87,7 @@ describe('TraceStore', () => {
         traceId: 'test-trace-id',
         evaluationId: 'test-eval-id',
         testCaseId: 'test-case-id',
+        createdAt: expect.any(Number),
         metadata: { test: 'data' },
       });
       expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
@@ -94,7 +99,7 @@ describe('TraceStore', () => {
 
     it('should handle errors when creating trace', async () => {
       const error = new Error('Database error');
-      mockDb.insert().values().onConflictDoNothing.mockRejectedValueOnce(error);
+      mockDb.insert().values().onConflictDoNothing().run.mockRejectedValueOnce(error);
 
       const traceData = {
         traceId: 'test-trace-id',
@@ -103,6 +108,41 @@ describe('TraceStore', () => {
       };
 
       await expect(traceStore.createTrace(traceData)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getTraceMetadata', () => {
+    // This three-way contract is the single source of truth for ingest-time redaction
+    // (otlpReceiver.getRedactAttributePatterns): object => use stored policy, {} => no
+    // policy (no redaction), undefined => no trace row (fall back to receiver default).
+    it('returns the stored metadata object when the trace row has metadata', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([
+          { metadata: { otlpHttpRedactAttributes: ['authorization'] } },
+        ]);
+
+      await expect(traceStore.getTraceMetadata('trace-1')).resolves.toEqual({
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+    });
+
+    it('returns an empty object (not undefined) when the row exists but metadata is null', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([{ metadata: null }]);
+
+      await expect(traceStore.getTraceMetadata('trace-2')).resolves.toEqual({});
+    });
+
+    it('returns undefined when no trace row exists', async () => {
+      mockDb.select().from().where().limit.mockResolvedValueOnce([]);
+
+      await expect(traceStore.getTraceMetadata('trace-3')).resolves.toBeUndefined();
     });
   });
 
@@ -122,6 +162,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
         },
         {
           spanId: 'span-2',
@@ -151,6 +198,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
           statusCode: undefined,
           statusMessage: undefined,
         },
@@ -200,7 +254,7 @@ describe('TraceStore', () => {
 
       // Mock insert error
       const error = new Error('Insert failed');
-      mockDb.insert().values.mockRejectedValueOnce(error);
+      mockDb.insert().values().run.mockRejectedValueOnce(error);
 
       const spans = [
         {
@@ -517,6 +571,16 @@ describe('TraceStore', () => {
               safe: 'ok',
             },
           },
+          events: [
+            {
+              name: 'tool error',
+              timestamp: 2250,
+              attributes: {
+                authorization: 'Bearer event-secret',
+                safe: 'ok',
+              },
+            },
+          ],
           statusCode: 1,
           statusMessage: 'ok',
         },
@@ -578,6 +642,16 @@ describe('TraceStore', () => {
                 safe: 'ok',
               },
             },
+            events: [
+              {
+                name: 'tool error',
+                timestamp: 2250,
+                attributes: {
+                  authorization: '<redacted>',
+                  safe: 'ok',
+                },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'ok',
           },
@@ -650,18 +724,20 @@ describe('TraceStore', () => {
   });
 
   describe('deleteOldTraces', () => {
-    it('should delete traces older than retention period', async () => {
+    it('should delete dependent spans before traces older than retention period', async () => {
       const retentionDays = 30;
 
       await traceStore.deleteOldTraces(retentionDays);
 
-      expect(mockDb.delete).toHaveBeenCalledWith(expect.anything());
-      expect(mockDb.delete().where).toHaveBeenCalledWith(expect.anything());
+      expect(mockDb.transaction).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockDb.delete).toHaveBeenCalledTimes(2);
+      expect(mockDeleteChain.where).toHaveBeenCalledTimes(2);
+      expect(mockDeleteChain.run).toHaveBeenCalledTimes(2);
     });
 
     it('should handle errors when deleting old traces', async () => {
       const error = new Error('Delete failed');
-      mockDb.delete().where.mockRejectedValueOnce(error);
+      mockDeleteChain.run.mockRejectedValueOnce(error);
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
     });

@@ -23,6 +23,7 @@ import {
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteHealthUrl,
   neverGenerateRemote,
@@ -392,9 +393,7 @@ async function fetchRemoteTestCases(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         body,
       },
       getRequestTimeoutMs(),

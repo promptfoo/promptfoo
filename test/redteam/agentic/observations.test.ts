@@ -179,6 +179,57 @@ describe('agentic run observations', () => {
     );
   });
 
+  it('classifies guardrail and approval evidence from span events', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-event-controls',
+          testCaseId: 'case-event-controls',
+          traceId: 'trace-event-controls',
+          spans: [
+            {
+              attributes: { 'tool.name': 'update_seat' },
+              events: [
+                {
+                  attributes: { 'guardrails.decision': 'blocked' },
+                  name: 'guardrail update_seat',
+                  timestamp: 2,
+                },
+                {
+                  attributes: { 'approval.required': true },
+                  name: 'approval update_seat',
+                  timestamp: 3,
+                },
+              ],
+              name: 'tool update_seat',
+              parentSpanId: 'span-route',
+              spanId: 'span-event-controls',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'blocked',
+          parentSpanId: 'span-route',
+          source: 'trace-event',
+          spanId: 'span-event-controls',
+        }),
+        expect.objectContaining({
+          kind: 'approval',
+          parentSpanId: 'span-route',
+          source: 'trace-event',
+          spanId: 'span-event-controls',
+        }),
+      ]),
+    );
+  });
+
   it('continues scanning embedded trace evidence blobs until it finds findings', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {
@@ -338,5 +389,57 @@ describe('agentic run observations', () => {
         pluginId: 'agentic:tool-error-feedback-injection',
       }),
     ]);
+  });
+
+  it('preserves flat finding attributes after unrelated evidence_json findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-flat-after-unrelated',
+          testCaseId: 'case-flat-after-unrelated',
+          traceId: 'trace-flat-after-unrelated',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [
+                    {
+                      evidence: 'approval was reused across calls',
+                      kind: 'approval-continuity',
+                      location: 'approval verifier',
+                      pluginId: 'agentic:approval-continuity',
+                    },
+                  ],
+                  pluginId: 'agentic:approval-continuity',
+                }),
+                'promptfoo.agentic.finding.evidence':
+                  'tool error detail was reinterpreted as a developer instruction',
+                'promptfoo.agentic.finding.kind': 'tool-error-feedback-injection',
+                'promptfoo.agentic.finding.location': 'tool error handler',
+                'promptfoo.agentic.plugin_id': 'agentic:tool-error-feedback-injection',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-flat-after-unrelated',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          evidence: 'approval was reused across calls',
+          kind: 'approval-continuity',
+          pluginId: 'agentic:approval-continuity',
+        }),
+        expect.objectContaining({
+          evidence: 'tool error detail was reinterpreted as a developer instruction',
+          kind: 'tool-error-feedback-injection',
+          pluginId: 'agentic:tool-error-feedback-injection',
+        }),
+      ]),
+    );
   });
 });
