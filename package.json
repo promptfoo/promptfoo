@@ -54,6 +54,7 @@
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
+    "architecture:baseline": "tsx scripts/regenerateEdgeBaseline.ts",
     "architecture:check": "tsx scripts/checkArchitectureBoundaries.ts",
     "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
