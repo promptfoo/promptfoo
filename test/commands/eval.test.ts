@@ -753,6 +753,29 @@ describe('evalCommand', () => {
     loadDefaultConfigSpy.mockRestore();
   });
 
+  it('should normalize a non-array config to an array before resolving a directory entry', async () => {
+    // Defensive: a non-Commander caller could pass config as a bare string. The directory
+    // resolution mutates the array in place, so a string must be normalized first (otherwise
+    // the in-place assignment throws in strict mode / corrupts the value).
+    const cmdObj = { config: '/suite' as unknown as string[], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: { prompts: ['from-dir'] },
+        defaultConfigPath: '/suite/promptfooconfig.yaml',
+      } as any);
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(cmdObj.config).toEqual(['/suite/promptfooconfig.yaml']);
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
   it('should warn when a directory config argument has no default config file', async () => {
     const cmdObj = { config: ['/empty-suite'], write: false };
     const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);

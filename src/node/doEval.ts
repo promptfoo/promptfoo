@@ -254,7 +254,11 @@ export async function doEval(
     }
 
     if (cmdObj.config !== undefined) {
+      // Normalize to an array up front (Commander's variadic --config already yields one) so
+      // the in-place directory resolution below — and the array operations on cmdObj.config
+      // later in this function — stay safe regardless of the caller's input shape.
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      cmdObj.config = configPaths;
       for (const configPath of configPaths) {
         const configStats = await fs.stat(configPath).catch(() => undefined);
         if (configStats?.isDirectory()) {
