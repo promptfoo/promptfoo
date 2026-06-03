@@ -28,7 +28,7 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
-  isClaudeOpus47Model,
+  isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -40,6 +40,31 @@ import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { AnthropicMessageOptions } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
+
+type AnthropicMessageStream = {
+  finalMessage(): Promise<Anthropic.Messages.Message>;
+  on?(
+    event: 'streamEvent',
+    listener: (event: Anthropic.Messages.MessageStreamEvent) => void,
+  ): unknown;
+};
+
+async function finalMessageWithStreamedStopDetails(
+  stream: AnthropicMessageStream,
+): Promise<Anthropic.Messages.Message> {
+  let streamedStopDetails: Anthropic.Messages.RefusalStopDetails | null | undefined;
+
+  stream.on?.('streamEvent', (event) => {
+    if (event.type === 'message_delta' && event.delta.stop_details != null) {
+      streamedStopDetails = event.delta.stop_details;
+    }
+  });
+
+  const finalMessage = await stream.finalMessage();
+  return finalMessage.stop_details == null && streamedStopDetails != null
+    ? { ...finalMessage, stop_details: streamedStopDetails }
+    : finalMessage;
+}
 
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -235,7 +260,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
-  private opus47TemperatureWarned = false;
+  private samplingParamsDeprecationWarned = false;
+  private manualThinkingConversionWarned = false;
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
@@ -357,7 +383,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         const stream = await this.anthropic.messages.stream(nextParams, {
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
         });
-        response = await stream.finalMessage();
+        response = await finalMessageWithStreamedStopDetails(stream);
       } else {
         response = (await this.anthropic.messages.create(nextParams, {
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
@@ -550,7 +576,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
-    const resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
+    // Opus 4.7/4.8 are adaptive-only — manual budget-based thinking
+    // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
+    // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
+    // controls reasoning depth on these models.
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
+    if (samplingParamsDeprecated && resolvedThinking?.type === 'enabled') {
+      if (!this.manualThinkingConversionWarned) {
+        logger.warn(
+          'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
+        );
+        this.manualThinkingConversionWarned = true;
+      }
+      resolvedThinking = { type: 'adaptive' };
+    }
     const thinkingEnabled = isThinkingEnabled(resolvedThinking);
 
     // Validate and warn about thinking-incompatible params
@@ -612,28 +652,34 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Opus 4.7 deprecated `temperature` at the model level — the API returns
-    // 400 `invalid_request_error` for any request that includes it, including
-    // promptfoo's built-in default of 0. Suppress the parameter entirely and
-    // warn once per provider instance when the user supplied an explicit
-    // temperature via config or the ANTHROPIC_TEMPERATURE env var (the
-    // built-in default stays silent to avoid spamming every request).
-    const isOpus47 = isClaudeOpus47Model(this.modelName);
-    const explicitTemperature =
+    // Opus 4.7 and 4.8 deprecate manual sampling controls at the model level —
+    // `temperature`, `top_p`, and `top_k` are adaptive, and pinning any of them
+    // returns 400 `invalid_request_error` (including promptfoo's built-in
+    // `temperature` default of 0). Suppress all three and warn once per provider
+    // instance when the user supplied any of them via config or the
+    // ANTHROPIC_TEMPERATURE env var (the built-in default stays silent to avoid
+    // spamming every request).
+    const explicitSamplingParam =
       config.temperature != null ||
+      config.top_p != null ||
+      config.top_k != null ||
       parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
       parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
-    if (isOpus47 && explicitTemperature && !this.opus47TemperatureWarned) {
+    if (
+      samplingParamsDeprecated &&
+      explicitSamplingParam &&
+      !this.samplingParamsDeprecationWarned
+    ) {
       logger.warn(
-        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+        'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
       );
-      this.opus47TemperatureWarned = true;
+      this.samplingParamsDeprecationWarned = true;
     }
 
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
-    // and on Opus 4.7 (deprecated at the model level). Collapse all three cases
-    // into one predicate so the params spread stays readable.
-    const omitTemperature = resolvedTopP != null || thinkingEnabled || isOpus47;
+    // and on Opus 4.7/4.8 (sampling controls deprecated at the model level).
+    // Collapse those cases into one predicate so the params spread stays readable.
+    const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
 
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
@@ -662,9 +708,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
               getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
           }),
-      ...(resolvedTopP == null ? {} : { top_p: resolvedTopP }),
-      // Anthropic docs: top_k is incompatible with extended thinking
-      ...(config.top_k == null || thinkingEnabled ? {} : { top_k: config.top_k }),
+      ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
+      // Anthropic docs: top_k is incompatible with extended thinking, and Opus
+      // 4.7/4.8 reject it entirely along with the other sampling controls.
+      ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
+        ? {}
+        : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),
@@ -797,7 +846,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       let initialMessage: Anthropic.Messages.Message;
       if (shouldStream) {
         const stream = await this.anthropic.messages.stream(params, requestOptions);
-        initialMessage = await stream.finalMessage();
+        initialMessage = await finalMessageWithStreamedStopDetails(stream);
         logger.debug(`Anthropic Messages API streaming complete`, {
           finalMessage: getMessagesResponseMetadata(initialMessage),
         });
