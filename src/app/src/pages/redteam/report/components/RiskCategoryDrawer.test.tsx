@@ -1,4 +1,4 @@
-import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
+import { mockCallApiResponse, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
@@ -273,11 +273,17 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       ...createMockEvaluateResult({ pluginId: 'bola' }),
       response: { output: 'Stale output', prompt: 'Stale prompt' },
     };
-    let resolveRequest: (response: Response) => void = () => {};
-    const pendingRequest = new Promise<Response>((resolve) => {
+    const staleBody = { data: { results: { results: [staleResult] } } };
+    let resolveRequest: (body: typeof staleBody) => void = () => {};
+    const pendingRequest = new Promise<typeof staleBody>((resolve) => {
       resolveRequest = resolve;
     });
-    vi.mocked(callApi).mockReturnValue(pendingRequest);
+    mockCallApiRoutes([
+      {
+        path: '/results/test-eval-123?includeTraces=false',
+        response: () => pendingRequest,
+      },
+    ]);
     const user = userEvent.setup();
     const { rerender } = renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
@@ -285,10 +291,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     rerender(<RiskCategoryDrawer {...defaultProps} evalId="next-eval" />);
 
     await act(async () => {
-      resolveRequest({
-        ok: true,
-        json: () => Promise.resolve({ data: { results: { results: [staleResult] } } }),
-      } as Response);
+      resolveRequest(staleBody);
       await pendingRequest;
     });
 
