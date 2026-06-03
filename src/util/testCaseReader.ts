@@ -22,13 +22,13 @@ import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
 
-import type { VarValue } from '../contracts/shared';
 import type {
   CsvRow,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
+  Vars,
 } from '../types/index';
 
 type StandaloneTestsFileMetadata = {
@@ -458,7 +458,7 @@ function agentSkillsEvalToTestCase(
     files.length > 0
       ? `${entry.prompt}\n\nFiles available for this eval:\n${files.map((file) => `- ${file}`).join('\n')}`
       : entry.prompt;
-  const vars: Record<string, VarValue> = { prompt };
+  const vars: Vars = { prompt };
   if (files.length > 0) {
     vars.files = files;
   }
