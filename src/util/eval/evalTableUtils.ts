@@ -50,16 +50,11 @@ export class ComparisonEvalNotFoundError extends Error {
 }
 
 /**
- *
- *
- *
  * Keep this in its current order, as it is used to map the columns in the CSV, so it needs to be static.
- *
  *
  * The keys are the names of the columns in the metadata object, and the values are the names of the columns in the CSV.
  *
  * This is imported by enterprise so it doesn't need to be copied.
- *
  */
 export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
   messages: 'Messages',
