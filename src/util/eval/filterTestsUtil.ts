@@ -175,9 +175,11 @@ export async function filterTestsByResults(
   const matchedResultKeys = new Set<string>();
 
   // Track which results matched config tests
+  const matchedTestsWithDefaults = matchedTests.map((test) =>
+    mergeDefaultVars(test, testSuite.defaultTest),
+  );
   for (const result of filteredResults) {
-    for (const test of matchedTests) {
-      const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
+    for (const testWithDefaults of matchedTestsWithDefaults) {
       if (resultIsForTestCase(result, testWithDefaults)) {
         matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
         break;

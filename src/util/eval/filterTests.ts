@@ -63,6 +63,13 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 
+function restrictToCurrentTests(currentTests: Tests, resultFilteredTests: Tests): Tests {
+  const currentTestKeys = new Set(currentTests.map(getTestCaseDeduplicationKey));
+  return resultFilteredTests.filter((test) =>
+    currentTestKeys.has(getTestCaseDeduplicationKey(test)),
+  );
+}
+
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
   let state = 2166136261;
@@ -199,6 +206,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
 
+  const testsBeforeResultFilters = tests;
+  // Preserve runtime-generated tests unless an earlier filter already narrowed the config tests.
+  const restrictResultFilter = (resultFilteredTests: Tests): Tests =>
+    testsBeforeResultFilters === testSuite.tests
+      ? resultFilteredTests
+      : restrictToCurrentTests(testsBeforeResultFilters, resultFilteredTests);
+
   // Handle failing, failingOnly, and errorsOnly filters
   // - failing: all non-successful results (failures + errors)
   // - failingOnly: assertion failures only (excludes errors)
@@ -214,14 +228,16 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     // Create a union of both sets, deduplicating by test identity
     const seen = new Set<string>();
 
-    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestCaseDeduplicationKey(test);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+    tests = restrictResultFilter(
+      [...failingOnlyTests, ...errorTests].filter((test) => {
+        const key = getTestCaseDeduplicationKey(test);
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      }),
+    );
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
@@ -234,13 +250,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     }
   } else if (options.failing) {
     // --filter-failing includes both failures and errors
-    tests = await filterFailingTests(testSuite, options.failing);
+    tests = restrictResultFilter(await filterFailingTests(testSuite, options.failing));
     if (tests.length === 0) {
       logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
     }
   } else if (options.failingOnly) {
     // --filter-failing-only includes only assertion failures (excludes errors)
-    tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
+    tests = restrictResultFilter(await filterFailingOnlyTests(testSuite, options.failingOnly));
     if (tests.length === 0) {
       logNoTestsWarning(
         'filter-failing-only',
@@ -249,7 +265,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       );
     }
   } else if (options.errorsOnly) {
-    tests = await filterErrorTests(testSuite, options.errorsOnly);
+    tests = restrictResultFilter(await filterErrorTests(testSuite, options.errorsOnly));
     if (tests.length === 0) {
       logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
     }

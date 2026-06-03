@@ -625,11 +625,34 @@ describe('filterTests', () => {
   });
 
   describe('multiple filters', () => {
-    it('should apply filters in correct order', async () => {
+    it('should compose metadata and failing filters', async () => {
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { var1: 'test1' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: mockTestSuite.tests![0],
+            },
+            {
+              vars: { var1: 'test2' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: mockTestSuite.tests![1],
+            },
+            {
+              vars: { var1: 'test3' },
+              success: true,
+              testCase: mockTestSuite.tests![2],
+            },
+          ],
+        }),
+      } as any);
+
       const result = await filterTests(mockTestSuite, {
         metadata: 'type=unit',
         failing: 'eval-123',
-        pattern: 'test1',
       });
 
       expect(result).toHaveLength(1);
