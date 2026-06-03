@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Microsoft MAI models on Azure AI Foundry (Foundry Models sold by Azure)
+
+# Microsoft's first-party "MAI" model family is served as Foundry Models sold by
+# Azure. Text/reasoning models (e.g. MAI-DS-R1, MAI-Thinking-1) use the standard
+# chat-completions API and run through `azure:chat:<deployment>`. Image models
+# (MAI-Image-2.5 and friends) use a Microsoft-managed `/mai/v1/images` route and
+# run through the dedicated `azure:image:<deployment>` provider.
+#
+# Setup:
+#   1. Deploy an MAI image model to a Microsoft Foundry (AIServices) resource:
+#        az cognitiveservices account deployment create \
+#          --name <RESOURCE> --resource-group <RG> \
+#          --deployment-name mai-image-2-5 \
+#          --model-name MAI-Image-2.5 --model-format Microsoft \
+#          --model-version 2026-06-02 --sku-name GlobalStandard --sku-capacity 1
+#   2. Point promptfoo at the resource's *.services.ai.azure.com endpoint:
+#        export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
+#        export AZURE_API_KEY=<key>            # or use `az login` (Entra ID)
+#   3. Run:  promptfoo eval --no-cache
+
+providers:
+  - id: azure:image:mai-image-2-5
+    label: MAI-Image-2.5
+    config:
+      # `model` is used only for cost reporting; Azure deployment names can't
+      # contain the dot in "MAI-Image-2.5", so name the model id explicitly.
+      model: MAI-Image-2.5
+      width: 1024
+      height: 1024
+
+  # Reasoning/chat MAI models use the standard chat provider. Uncomment once you
+  # have deployed one (e.g. MAI-Thinking-1, when available in your region):
+  # - id: azure:chat:mai-thinking-1
+  #   label: MAI-Thinking-1
+  #   config:
+  #     max_completion_tokens: 2048
+
+prompts:
+  - '{{prompt}}'
+
+tests:
+  - vars:
+      prompt: A photorealistic red cube on a clean white background, studio lighting
+    assert:
+      # The provider returns a base64 PNG. promptfoo stores large base64 media as
+      # a blob reference (promptfoo://blob/...) before assertions run, so accept
+      # either the blob ref or an inline data URL.
+      - type: javascript
+        value: |
+          return typeof output === 'string' &&
+            (output.startsWith('promptfoo://blob/') || output.startsWith('data:image/'));
+
+  - vars:
+      prompt: An isometric illustration of a cozy reading nook with warm lighting
+    assert:
+      - type: javascript
+        value: |
+          return typeof output === 'string' &&
+            (output.startsWith('promptfoo://blob/') || output.startsWith('data:image/'));

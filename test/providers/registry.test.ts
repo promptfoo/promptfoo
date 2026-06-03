@@ -436,6 +436,14 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
+      const imageProvider = await factory!.create(
+        'azure:image:mai-image-2-5',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(imageProvider).toBeDefined();
+      expect(imageProvider.toString()).toBe('[Azure Image Provider mai-image-2-5]');
+
       await expect(
         factory!.create('azure:invalid:model', mockProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Azure model type');
