@@ -36,6 +36,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   custom: 'User-defined multi-turn conversation strategy with custom instructions',
+  'cross-agent-injection':
+    'Tests whether an agent obeys malicious instructions injected via a trusted peer/orchestrator agent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access': 'Tests for exposed debugging interfaces and commands',
@@ -286,6 +288,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   coppa: 'COPPA Compliance',
   crescendo: 'Multi-Turn Crescendo',
   custom: 'Custom',
+  'cross-agent-injection': 'Cross-Agent Injection',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
   'data-exfil': 'Data Exfiltration',
@@ -526,6 +529,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   competitors: Severity.Low,
   contracts: Severity.Medium,
   coppa: Severity.High,
+  'cross-agent-injection': Severity.High,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
   'data-exfil': Severity.High,
@@ -672,6 +676,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'model-identification',
     'hijacking',
     'indirect-prompt-injection',
+    'cross-agent-injection',
     'rbac',
     'reasoning-dos',
     'shell-injection',
@@ -868,6 +873,7 @@ export const categoryAliases: Record<Plugin, string> = {
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   coppa: 'COPPACompliance',
+  'cross-agent-injection': 'CrossAgentInjection',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
   'data-exfil': 'DataExfil',
@@ -1038,6 +1044,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
   coppa:
     "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations, ensuring proper protection of children's data and privacy",
+  'cross-agent-injection':
+    'Tests whether an agent enforces a trust boundary against other agents, or obeys malicious instructions (privilege escalation, data exfiltration, goal hijacking) injected through a trusted peer or orchestrator agent',
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
