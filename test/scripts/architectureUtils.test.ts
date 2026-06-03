@@ -48,8 +48,10 @@ describe('extractRuntimeModuleSpecifiers', () => {
   it('excludes type-only module references from the runtime graph', () => {
     const source = `
       import runtimeDefault, { type ImportedType, runtimeValue } from 'runtime-import';
+      import {} from 'side-effect-empty-import';
       import type { OnlyType } from 'type-import';
       export { type ExportedType, runtimeExport } from 'runtime-export';
+      export {} from 'side-effect-empty-export';
       export type { OnlyExportedType } from 'type-export';
       import('dynamic-import');
       import('dynamic-import-with-options', { with: { type: 'json' } });
@@ -66,7 +68,9 @@ describe('extractRuntimeModuleSpecifiers', () => {
 
     expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
       'runtime-import',
+      'side-effect-empty-import',
       'runtime-export',
+      'side-effect-empty-export',
       'dynamic-import',
       'dynamic-import-with-options',
       'cjs-require',

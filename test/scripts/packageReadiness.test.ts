@@ -143,6 +143,21 @@ describe('package artifact readiness', () => {
     ]);
   });
 
+  it('requires exact relative paths for ESM but follows CommonJS extension resolution', () => {
+    write('dist/index.js', "void import('./chunk');");
+    write('dist/chunk.js', 'export const value = true;');
+    write('dist/index.cjs', "require('./chunk');");
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
+      files: ['dist/index.js'],
+      missingFiles: ['dist/chunk'],
+    });
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/chunk.js', 'dist/index.cjs'],
+      missingFiles: [],
+    });
+  });
+
   it('rejects format-specific dependency drift', () => {
     write('dist/index.js', "import 'zod';");
     write('dist/index.cjs', "require('yaml');");

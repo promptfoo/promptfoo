@@ -374,7 +374,10 @@ export function extractRuntimeModuleSpecifiers(sourceText: string, filePath: str
     if (!clause.namedBindings || ts.isNamespaceImport(clause.namedBindings)) {
       return true;
     }
-    return clause.namedBindings.elements.some((element) => !element.isTypeOnly);
+    return (
+      clause.namedBindings.elements.length === 0 ||
+      clause.namedBindings.elements.some((element) => !element.isTypeOnly)
+    );
   }
 
   function exportHasRuntimeValue(node: ts.ExportDeclaration): boolean {
@@ -384,7 +387,10 @@ export function extractRuntimeModuleSpecifiers(sourceText: string, filePath: str
     if (!node.exportClause || ts.isNamespaceExport(node.exportClause)) {
       return true;
     }
-    return node.exportClause.elements.some((element) => !element.isTypeOnly);
+    return (
+      node.exportClause.elements.length === 0 ||
+      node.exportClause.elements.some((element) => !element.isTypeOnly)
+    );
   }
 
   function visit(node: ts.Node): void {

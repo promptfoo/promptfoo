@@ -287,10 +287,14 @@ function resolveArtifactImport(
 
   const candidates = [
     unresolvedPath,
-    ...['.js', '.mjs', '.cjs', '.json'].map((extension) => `${unresolvedPath}${extension}`),
-    ...['index.js', 'index.mjs', 'index.cjs', 'index.json'].map((indexFile) =>
-      path.join(unresolvedPath, indexFile),
-    ),
+    ...(path.extname(importer) === '.cjs'
+      ? ['.js', '.json', '.node'].map((extension) => `${unresolvedPath}${extension}`)
+      : []),
+    ...(path.extname(importer) === '.cjs'
+      ? ['index.js', 'index.json', 'index.node'].map((indexFile) =>
+          path.join(unresolvedPath, indexFile),
+        )
+      : []),
   ];
   const existingPath = candidates.find(
     (candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
