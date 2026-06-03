@@ -1422,10 +1422,10 @@ describe('evalTableUtils', () => {
       expect(header).toContain('Metric: fluency');
     });
 
-    it('should skip discovery pass for modern evals with explicitly empty namedScoresCount', async () => {
+    it('should keep metric discovery focused for modern evals with empty namedScoresCount', async () => {
       // Modern eval where no test uses `metric:` — `namedScoresCount` is
-      // present-but-empty. We must NOT scan the database twice for a CSV that
-      // has no metric columns to discover.
+      // present-but-empty. The description discovery pass must not invent
+      // metric columns.
       const prompts = [
         createCompletedPrompt('Prompt 1', {
           metrics: createPromptMetrics({
@@ -1468,7 +1468,62 @@ describe('evalTableUtils', () => {
 
       const header = chunks.join('').split('\n')[0];
       expect(header).not.toContain('Metric:');
-      expect(fetchPasses).toBe(1);
+      expect(fetchPasses).toBe(2);
+    });
+
+    it('should include descriptions that first appear in a later batch', async () => {
+      const prompts = [
+        createCompletedPrompt('Prompt 1', {
+          metrics: createPromptMetrics({ namedScores: {}, namedScoresCount: {} }),
+        }),
+      ];
+      const chunks: string[] = [];
+      await streamEvalCsv(
+        {
+          vars: ['n'],
+          prompts,
+          fetchResultsBatched: async function* () {
+            yield [
+              {
+                testIdx: 0,
+                promptIdx: 0,
+                testCase: { vars: { n: 'a' } },
+                response: { output: 'a' },
+                success: true,
+                score: 1,
+                namedScores: {},
+                failureReason: ResultFailureReason.NONE,
+                gradingResult: null,
+                metadata: {},
+              },
+            ];
+            yield [
+              {
+                testIdx: 100,
+                promptIdx: 0,
+                testCase: { vars: { n: 'b' }, description: 'Later description' },
+                response: { output: 'b' },
+                success: true,
+                score: 1,
+                namedScores: {},
+                failureReason: ResultFailureReason.NONE,
+                gradingResult: null,
+                metadata: {},
+              },
+            ];
+          },
+        } as unknown as Eval,
+        {
+          isRedteam: false,
+          write: (data: string) => {
+            chunks.push(data);
+          },
+        },
+      );
+
+      const csv = chunks.join('');
+      expect(csv.split('\n')[0]).toContain('Description');
+      expect(csv).toContain('Later description');
     });
 
     it('should detect metric names that first appear in a later batch on legacy evals', async () => {
