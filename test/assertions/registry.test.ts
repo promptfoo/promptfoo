@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultAssertionRegistry } from '../../src/assertions/defaultRegistry';
 import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { runPureAssertion } from '../../src/assertions/pure';
@@ -27,6 +27,10 @@ vi.mock('libsql');
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
 
 const passingHandler: AssertionHandler<AssertionParams, GradingResult> = ({ assertion }) => ({
   pass: true,
