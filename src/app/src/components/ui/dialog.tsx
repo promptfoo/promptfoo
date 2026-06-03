@@ -152,15 +152,22 @@ function DialogDescription({
   const descriptionRef = React.useRef<HTMLParagraphElement>(null);
   React.useImperativeHandle(ref, () => descriptionRef.current!);
   const registration = React.useContext(DialogDescriptionRegistrationContext);
-  const unregisterRef = React.useRef<(() => void) | undefined>(undefined);
-  const setDescriptionRef = React.useCallback(
-    (node: HTMLParagraphElement | null) => {
-      unregisterRef.current?.();
-      unregisterRef.current = node?.id ? registration?.(node.id) : undefined;
-      descriptionRef.current = node;
-    },
-    [registration],
-  );
+  const [mountedDescriptionId, setMountedDescriptionId] = React.useState<string>();
+  const setDescriptionRef = React.useCallback((node: HTMLParagraphElement | null) => {
+    descriptionRef.current = node;
+    setMountedDescriptionId(node?.id || undefined);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    const currentId = descriptionRef.current?.id || undefined;
+    setMountedDescriptionId((registeredId) =>
+      registeredId === currentId ? registeredId : currentId,
+    );
+  });
+
+  React.useLayoutEffect(() => {
+    return mountedDescriptionId ? registration?.(mountedDescriptionId) : undefined;
+  }, [mountedDescriptionId, registration]);
 
   return (
     <DialogPrimitive.Description

@@ -113,6 +113,35 @@ describe('Dialog', () => {
     expect(warning).not.toHaveBeenCalled();
   });
 
+  it('updates the association when an asChild description id changes', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const renderDialog = (descriptionId: string) => (
+      <Dialog defaultOpen>
+        <DialogContent hideDescription={false}>
+          <DialogTitle>Dynamic description dialog</DialogTitle>
+          <DialogDescription asChild>
+            <div id={descriptionId}>Description with a changing id.</div>
+          </DialogDescription>
+        </DialogContent>
+      </Dialog>
+    );
+    const { rerender } = render(renderDialog('first-description-id'));
+
+    expect(screen.getByRole('dialog', { name: 'Dynamic description dialog' })).toHaveAttribute(
+      'aria-describedby',
+      'first-description-id',
+    );
+
+    rerender(renderDialog('second-description-id'));
+
+    expect(screen.getByRole('dialog', { name: 'Dynamic description dialog' })).toHaveAttribute(
+      'aria-describedby',
+      'second-description-id',
+    );
+    expect(document.getElementById('first-description-id')).not.toBeInTheDocument();
+    expect(warning).not.toHaveBeenCalled();
+  });
+
   it('keeps aria-describedby unset when visible descriptions are enabled but absent', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
