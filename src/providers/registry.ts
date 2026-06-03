@@ -18,6 +18,7 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
+import { AzureImageProvider } from './azure/image';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
@@ -315,6 +316,17 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'foundry-agent') {
         return new AzureFoundryAgentProvider(deploymentName, providerOptions);
       }
+      if (modelType === 'image') {
+        // MAI image models are Foundry-only (served from `/mai/v1/images` on a
+        // `*.services.ai.azure.com` endpoint), so the Azure OpenAI prefix must
+        // not silently route here. See providers/AGENTS.md "Provider Routing".
+        if (providerPath.startsWith('azureopenai:')) {
+          throw new Error(
+            'azureopenai:image is not supported. MAI image models are Microsoft Foundry models — use azure:image:<deployment> instead.',
+          );
+        }
+        return new AzureImageProvider(deploymentName, providerOptions);
+      }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AzureEmbeddingProvider(
           deploymentName || 'text-embedding-ada-002',
@@ -331,7 +343,7 @@ export const providerMap: ProviderFactory[] = [
         return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
       }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
