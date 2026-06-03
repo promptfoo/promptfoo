@@ -32,6 +32,16 @@ function getSafeProxyForConnectionLog(): string {
  * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
 
+/**
+ * Returns true when `url` targets the configured Promptfoo Cloud origin: the public
+ * cloud host by default, or the on-prem host when one is configured via
+ * `cloudConfig.getApiHost()`. Matching is scheme+host+port exact (`URL.origin`), so
+ * look-alike hosts, HTTP downgrades, and different ports never match. Matching is
+ * origin-wide — every path on the configured cloud origin is treated as cloud, so the
+ * saved token may also reach sibling services hosted on that same origin. Fails closed
+ * (returns false) when either URL is unparseable, so a misconfigured host never leaks
+ * the token.
+ */
 export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
   try {
     const targetUrl = url instanceof Request ? url.url : url.toString();
@@ -39,6 +49,38 @@ export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Resolves the `Authorization` header value for a request to the configured Promptfoo
+ * Cloud origin, or `undefined` when the request is not cloud-bound or no API key is
+ * saved. Centralizing this keeps the live request (`monkeyPatchFetch`) and the cache
+ * key (`getHeadersForCacheKey` in cache.ts) in lockstep.
+ */
+export function getCloudBearerToken(url: string | URL | Request): string | undefined {
+  if (!isPromptfooCloudApiHost(url)) {
+    return undefined;
+  }
+  const token = cloudConfig.getApiKey();
+  return token ? `Bearer ${token}` : undefined;
+}
+
+/**
+ * Case-insensitive check for a caller-supplied `Authorization` header across the
+ * shapes `HeadersInit` can take. Used to avoid overriding an explicit credential
+ * (e.g. the token being validated during cloud login/rotation).
+ */
+function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
+  if (!headers) {
+    return false;
+  }
+  if (headers instanceof Headers) {
+    return headers.has('Authorization');
+  }
+  if (Array.isArray(headers)) {
+    return headers.some(([name]) => name.toLowerCase() === 'authorization');
+  }
+  return Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
 }
 
 export async function monkeyPatchFetch(
@@ -70,11 +112,14 @@ export async function monkeyPatchFetch(
     }
   }
 
-  if (isPromptfooCloudApiHost(url)) {
-    const token = cloudConfig.getApiKey();
+  // Attach the saved cloud credential only for cloud-bound requests, and never
+  // override an Authorization header the caller set explicitly — token
+  // validation/rotation sends the token being validated, not the saved one.
+  const cloudAuth = getCloudBearerToken(url);
+  if (cloudAuth && !hasAuthorizationHeader(opts.headers)) {
     opts.headers = {
       ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Authorization: cloudAuth,
     };
   }
   try {

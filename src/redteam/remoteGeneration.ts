@@ -32,9 +32,11 @@ export function getRemoteGenerationUrl(): string {
 /**
  * Builds headers for a remote-generation request.
  *
- * Authentication is added centrally by fetchWithProxy only when the request targets
- * the configured Promptfoo Cloud origin. Keeping this helper auth-free prevents cloud
- * credentials from leaking to custom remote-generation endpoints.
+ * Authentication is injected centrally at the fetch layer (monkeyPatchFetch, mirrored
+ * in cache.ts for cache-key parity) and only when the request URL's origin matches the
+ * configured Promptfoo Cloud host (cloudConfig.getApiHost(), incl. on-prem). Keeping
+ * this helper auth-free prevents cloud credentials from leaking to custom
+ * remote-generation endpoints.
  */
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,

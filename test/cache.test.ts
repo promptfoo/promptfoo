@@ -29,7 +29,6 @@ vi.mock('../src/util/config/manage', () => ({
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
-  CLOUD_API_HOST: 'https://api.promptfoo.app',
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
@@ -983,6 +982,42 @@ describe('fetchWithCache', () => {
         for (const cacheKey of cacheKeys) {
           expect(cacheKey).not.toContain('secret-cloud-token-one');
           expect(cacheKey).not.toContain('secret-cloud-token-two');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should not let the cloud token override a caller-supplied Authorization in the cache key', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token-one' });
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer caller-token' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Rotate the SAVED cloud token. The caller-supplied Authorization is unchanged,
+        // so the request actually sent is identical and must hit the same cache key —
+        // mirrors monkeyPatchFetch not overriding a caller-supplied Authorization.
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token-two' });
+
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Single network call: the second request was served from cache because the
+        // cloud token never entered the key (the caller's Authorization took precedence).
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('saved-cloud-token-one');
+          expect(cacheKey).not.toContain('saved-cloud-token-two');
+          expect(cacheKey).not.toContain('caller-token');
         }
       } finally {
         restoreEnv();
