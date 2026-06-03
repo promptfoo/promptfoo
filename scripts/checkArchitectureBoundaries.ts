@@ -11,18 +11,20 @@ import {
   findViolations,
   readEdgeBaseline,
   readLayerConfig,
+  scanArchitectureSources,
 } from './architectureUtils';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = readLayerConfig(repoRoot);
-const violations = findViolations(repoRoot, config);
+const sourceScan = scanArchitectureSources(repoRoot, config);
+const violations = findViolations(repoRoot, config, sourceScan);
 
 const facadeViolations = violations.filter((v) => v.kind === 'facade');
 const leafViolations = violations.filter((v) => v.kind === 'leaf');
 const leafExternalViolations = violations.filter((v) => v.kind === 'leaf-external');
 const layerViolations = violations.filter((v) => v.kind === 'layer');
 const pathViolations = violations.filter((v) => v.kind === 'path');
-const unclassifiedFiles = findUnclassifiedFiles(repoRoot, config);
+const unclassifiedFiles = findUnclassifiedFiles(repoRoot, config, sourceScan.sourceFiles);
 
 if (facadeViolations.length > 0) {
   console.error('Architecture boundary violations found:');
@@ -87,7 +89,7 @@ if (unclassifiedFiles.length > 0) {
 }
 
 // ---- DAG progress checks (layer dependency graph) ----
-const edges = computeCrossLayerEdges(repoRoot, config);
+const edges = computeCrossLayerEdges(repoRoot, config, sourceScan);
 
 // 1. Strongly-connected-component ratchet: the largest dependency cycle may
 //    only shrink over time (toward a DAG, where every component has size 1).

@@ -15,6 +15,7 @@ import {
   type LayerConfig,
   readEdgeBaseline,
   readLayerConfig,
+  scanArchitectureSources,
 } from '../../scripts/architectureUtils';
 
 function edge(from: string, to: string, count: number): CrossLayerEdge {
@@ -66,8 +67,10 @@ describe('computeCrossLayerEdges', () => {
     write('src/app/a2.ts', "import { b } from '../core/b.js';"); // 2nd app->core importer
 
     const config = readLayerConfig(repoRoot);
-    const edges = computeCrossLayerEdges(repoRoot, config);
+    const sourceScan = scanArchitectureSources(repoRoot, config);
+    const edges = computeCrossLayerEdges(repoRoot, config, sourceScan);
 
+    expect(sourceScan.sourceFiles).toHaveLength(5);
     expect(edges).toEqual([
       { from: 'app', to: 'contracts', count: 1, files: ['src/app/a.ts'] },
       { from: 'app', to: 'core', count: 2, files: ['src/app/a.ts', 'src/app/a2.ts'] },
@@ -118,10 +121,30 @@ describe('findBackEdges', () => {
 
 describe('edge baseline', () => {
   it('builds a baseline keyed by edge with import counts', () => {
-    expect(buildEdgeBaseline([edge('a', 'b', 2), edge('a', 'c', 5)])).toEqual({
+    const config = configWith([
+      { name: 'a', roots: ['src/a'], allowedDependencies: [] },
+      { name: 'b', roots: ['src/b'], allowedDependencies: [] },
+      { name: 'c', roots: ['src/c'], allowedDependencies: [] },
+    ]);
+
+    expect(buildEdgeBaseline([edge('a', 'b', 2), edge('a', 'c', 5)], config)).toEqual({
       [edgeKey('a', 'b')]: 2,
       [edgeKey('a', 'c')]: 5,
     });
+  });
+
+  it('rejects edges that reference unclassified or unknown layers', () => {
+    const config = configWith([
+      { name: 'a', roots: ['src/a'], allowedDependencies: [] },
+      { name: 'b', roots: ['src/b'], allowedDependencies: [] },
+    ]);
+
+    expect(() => buildEdgeBaseline([edge('unclassified', 'a', 1)], config)).toThrow(
+      'references an unknown layer',
+    );
+    expect(() => buildEdgeBaseline([edge('a', 'ghost', 1)], config)).toThrow(
+      'references an unknown layer',
+    );
   });
 
   it('reports grown/new edges as regressions and shrunk/removed edges as improvements', () => {
