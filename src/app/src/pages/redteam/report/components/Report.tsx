@@ -48,23 +48,10 @@ import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import { getPluginIdFromResult, getReportPrompt, getStrategyIdFromTest } from './shared';
 import { useReportStore } from './store';
 import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
-
-/**
- * Layer-mode strategies (e.g. indirect-web-pwn) embed the attack payload at runtime and expose
- * it through `response.metadata.transformDisplayVars` rather than the test-case vars. Read it so
- * the report still shows the real injected input — this mirrors the table conversion that
- * previously merged these vars for display.
- */
-function getTransformDisplayVar(result: EvaluateResult, key: string): string | undefined {
-  const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
-    | Record<string, unknown>
-    | undefined;
-  return transformDisplayVars?.[key]?.toString();
-}
 
 interface ReportProps {
   /** When provided, uses this evalId instead of reading from URL search params. */
@@ -235,12 +222,8 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         }
         // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
         const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
-        const injectVarValue =
-          result.vars[injectVar]?.toString() ||
-          getTransformDisplayVar(result, injectVar) ||
-          result.vars['query']?.toString();
         failures[pluginId].push({
-          prompt: injectVarValue || result.prompt.raw,
+          prompt: getReportPrompt(result, injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -288,11 +271,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         }
         const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
         passes[pluginId].push({
-          prompt:
-            result.vars.query?.toString() ||
-            result.vars.prompt?.toString() ||
-            getTransformDisplayVar(result, injectVar) ||
-            result.prompt.raw,
+          prompt: getReportPrompt(result, injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,

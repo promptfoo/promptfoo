@@ -15,7 +15,11 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
-import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
+import {
+  getPluginIdFromResult,
+  getReportPrompt,
+  getStrategyIdFromTest,
+} from '../components/shared';
 import type { EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
@@ -33,6 +37,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
   const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
   function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
     const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
       let pluginDisplayName = null;
 
@@ -55,11 +60,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
         // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
-        Prompt:
-          result.vars.query?.toString() ||
-          result.vars.prompt?.toString() ||
-          result.prompt.raw ||
-          '',
+        Prompt: getReportPrompt(result, injectVar),
         Response: result.response?.output || '',
         Pass:
           result.gradingResult?.pass === true

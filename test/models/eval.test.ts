@@ -1233,6 +1233,7 @@ describe('evaluator', () => {
 
     it('should remove oversized fields from redteam report result projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
+      const oversizedText = 'x'.repeat(1_000_000);
       eval1.config = {
         description: 'Compact report',
         providers: [
@@ -1247,7 +1248,7 @@ describe('evaluator', () => {
         ],
         tests: [{ vars: { prompt: 'duplicate corpus entry' } }],
         redteam: {
-          injectVar: 'prompt',
+          injectVar: 'attackInput',
           frameworks: ['owasp:llm'],
           plugins: [{ id: 'coding-agent:network-egress-bypass' }],
           purpose: 'should not be projected',
@@ -1256,21 +1257,31 @@ describe('evaluator', () => {
       };
       await eval1.addResult(
         createEvaluateResult({
+          vars: {
+            attackInput: 'attack',
+            harmCategory: 'Violent Crimes',
+            unusedContext: oversizedText,
+          },
           metadata: {
             pluginId: 'coding-agent:network-egress-bypass',
-            storedGraderResult: { large: 'duplicate grader payload' },
+            storedGraderResult: { large: oversizedText },
             redteamHistory: [{ prompt: 'attack', output: 'response' }],
           },
           response: {
             output: 'response',
+            prompt: 'final prompt',
             metadata: {
               redteamFinalPrompt: 'final prompt',
               transformDisplayVars: { embeddedInjection: 'runtime payload' },
-              storedGraderResult: { large: 'duplicate grader payload' },
+              storedGraderResult: { large: oversizedText },
             },
           },
           testCase: {
-            vars: { prompt: 'attack' },
+            vars: {
+              attackInput: 'attack',
+              harmCategory: 'Violent Crimes',
+              unusedContext: oversizedText,
+            },
             assert: [{ type: 'contains', value: 'large duplicate assertion body' }],
             metadata: {
               pluginId: 'coding-agent:network-egress-bypass',
@@ -1294,7 +1305,9 @@ describe('evaluator', () => {
                 },
                 metadata: {
                   renderedGradingPrompt: 'large grading prompt',
-                  renderedAssertionValue: 'display assertion body',
+                  renderedAssertionValue: oversizedText,
+                  context: oversizedText,
+                  graderOutputs: { judge: oversizedText },
                 },
               },
             ],
@@ -1313,26 +1326,22 @@ describe('evaluator', () => {
         redteamHistory: [{ prompt: 'attack', output: 'response' }],
       });
       expect(result.metadata).not.toHaveProperty('storedGraderResult');
-      // The report renders `redteamFinalPrompt` and surfaces `transformDisplayVars` (layer-mode
-      // strategies like indirect-web-pwn) as the injected attack input, so both must survive
-      // while the heavy `storedGraderResult` is dropped.
-      expect(result.response?.metadata).toEqual({
-        redteamFinalPrompt: 'final prompt',
-        transformDisplayVars: { embeddedInjection: 'runtime payload' },
+      expect(result.vars).toEqual({
+        attackInput: 'attack',
+        harmCategory: 'Violent Crimes',
       });
+      expect(result.response).toEqual({ output: 'response', prompt: 'final prompt' });
       expect(result.testCase.metadata).toEqual({
         pluginId: 'coding-agent:network-egress-bypass',
         strategyId: 'jailbreak:meta',
       });
       expect(result.testCase).not.toHaveProperty('assert');
-      expect(result.gradingResult?.componentResults?.[0].metadata).toEqual({
-        renderedAssertionValue: 'display assertion body',
-      });
+      expect(result.gradingResult?.componentResults?.[0].metadata).toBeUndefined();
       expect(result.gradingResult?.componentResults?.[0].assertion).toEqual({
         type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
         metric: 'CodingAgentNetworkEgressBypass',
-        value: 'large assertion body',
       });
+      expect(JSON.stringify(projected).length).toBeLessThan(100_000);
       expect(projected.config).toEqual({
         description: 'Compact report',
         providers: [
@@ -1343,7 +1352,7 @@ describe('evaluator', () => {
           },
         ],
         redteam: {
-          injectVar: 'prompt',
+          injectVar: 'attackInput',
           frameworks: ['owasp:llm'],
           plugins: [{ id: 'coding-agent:network-egress-bypass' }],
         },
@@ -1373,13 +1382,14 @@ describe('evaluator', () => {
       expect('table' in projected.results && projected.results.table.body).toEqual([]);
     });
 
-    it('preserves transformDisplayVars when redteamFinalPrompt is absent', async () => {
+    it('preserves redteamFinalPrompt and drops display-only transform vars', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addResult(
         createEvaluateResult({
           response: {
             output: 'response',
             metadata: {
+              redteamFinalPrompt: 'runtime attack prompt',
               transformDisplayVars: { embeddedInjection: 'runtime payload' },
               storedGraderResult: { large: 'duplicate grader payload' },
             },
@@ -1390,8 +1400,42 @@ describe('evaluator', () => {
       const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
 
       expect(projected.results.results[0].response?.metadata).toEqual({
-        transformDisplayVars: { embeddedInjection: 'runtime payload' },
+        redteamFinalPrompt: 'runtime attack prompt',
       });
+    });
+
+    it('preserves an explicitly empty provider prompt instead of falling back', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'response',
+            prompt: '',
+            metadata: {
+              redteamFinalPrompt: 'legacy fallback prompt',
+            },
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].response).toEqual({
+        output: 'response',
+        prompt: '',
+      });
+    });
+
+    it('does not project inherited properties named by a dynamic inject variable', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      eval1.config = { redteam: { injectVar: 'toString' } };
+      await eval1.addResult(createEvaluateResult({ vars: {} }));
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const projectedVars = projected.results.results[0].vars;
+
+      expect(Object.prototype.hasOwnProperty.call(projectedVars, 'toString')).toBe(false);
+      expect(Object.getPrototypeOf(projectedVars)).toBe(Object.prototype);
     });
 
     it('drops response metadata entirely when no report-relevant fields remain', async () => {

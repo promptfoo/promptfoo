@@ -35,7 +35,6 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import { isProviderOptions } from '../types/providers';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -79,21 +78,46 @@ export type ResultsFileOptions = {
   resultProjection?: 'full' | 'redteamReport';
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
-  const metadata = gradingResult.metadata
-    ? (({ renderedGradingPrompt: _renderedGradingPrompt, ...displayMetadata }) => displayMetadata)(
-        gradingResult.metadata,
-      )
-    : gradingResult.metadata;
+  const assertion = gradingResult.assertion
+    ? {
+        type: gradingResult.assertion.type,
+        ...(gradingResult.assertion.metric !== undefined && {
+          metric: gradingResult.assertion.metric,
+        }),
+      }
+    : undefined;
 
   return {
-    ...gradingResult,
-    metadata,
-    componentResults: gradingResult.componentResults?.map(projectGradingResultForRedteamReport),
+    pass: gradingResult.pass,
+    score: gradingResult.score,
+    reason: gradingResult.reason,
+    ...(assertion && { assertion }),
+    ...(gradingResult.suggestions !== undefined && { suggestions: gradingResult.suggestions }),
+    ...(gradingResult.componentResults !== undefined && {
+      componentResults: gradingResult.componentResults.map(projectGradingResultForRedteamReport),
+    }),
   };
 }
 
-function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
+function projectVarsForRedteamReport(
+  vars: EvaluateResult['vars'],
+  injectVar: string,
+): EvaluateResult['vars'] {
+  const projectedVars: [string, EvaluateResult['vars'][string]][] = [];
+  for (const key of new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])) {
+    if (Object.prototype.hasOwnProperty.call(vars, key)) {
+      projectedVars.push([key, vars[key]]);
+    }
+  }
+  return Object.fromEntries(projectedVars);
+}
+
+function projectResultForRedteamReport(result: EvaluateResult, injectVar: string): EvaluateResult {
   const metadata = result.metadata;
   const projectedMetadata = metadata
     ? {
@@ -108,21 +132,17 @@ function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
 
   const redteamFinalPrompt =
     result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
-  // Layer-mode strategies (e.g. indirect-web-pwn) embed the attack payload at runtime and
-  // surface it through `transformDisplayVars` rather than the test-case vars. The report
-  // reads it to display the real injected input, so keep it in the compact projection.
-  const transformDisplayVars = result.response?.metadata?.transformDisplayVars;
-  const responseMetadata = {
-    ...(redteamFinalPrompt !== undefined && { redteamFinalPrompt }),
-    ...(transformDisplayVars !== undefined && { transformDisplayVars }),
-  };
-  const response = result.response
-    ? {
-        output: result.response.output,
-        ...(result.response.prompt !== undefined && { prompt: result.response.prompt }),
-        ...(Object.keys(responseMetadata).length > 0 && { metadata: responseMetadata }),
-      }
-    : result.response;
+  const responsePrompt = result.response?.prompt;
+  const hasResponsePrompt = responsePrompt !== undefined;
+  const response =
+    result.response || redteamFinalPrompt !== undefined
+      ? {
+          ...(result.response?.output !== undefined && { output: result.response.output }),
+          ...(hasResponsePrompt && { prompt: responsePrompt }),
+          ...(!hasResponsePrompt &&
+            redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
+        }
+      : result.response;
 
   const testCaseMetadata = result.testCase?.metadata;
   const testCase = result.testCase
@@ -151,7 +171,7 @@ function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
     promptId: result.promptId,
     provider: result.provider,
     prompt: result.prompt,
-    vars: result.vars,
+    vars: projectVarsForRedteamReport(result.vars, injectVar),
     response,
     error: result.error,
     failureReason: result.failureReason,
@@ -159,22 +179,24 @@ function projectResultForRedteamReport(result: EvaluateResult): EvaluateResult {
     score: result.score,
     latencyMs: result.latencyMs,
     gradingResult,
-    namedScores: result.namedScores,
+    namedScores: {},
     metadata: projectedMetadata,
   };
 }
 
 function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
   const firstProvider = Array.isArray(config.providers) ? config.providers[0] : undefined;
-  const provider = isProviderOptions(firstProvider)
-    ? {
-        id: firstProvider.id,
-        ...(firstProvider.label !== undefined && { label: firstProvider.label }),
-        ...(firstProvider.config?.tools !== undefined && {
-          config: { tools: firstProvider.config.tools },
-        }),
-      }
-    : undefined;
+  const provider =
+    isRecord(firstProvider) && typeof firstProvider.id === 'string'
+      ? {
+          id: firstProvider.id,
+          ...(typeof firstProvider.label === 'string' && { label: firstProvider.label }),
+          ...(isRecord(firstProvider.config) &&
+            firstProvider.config.tools !== undefined && {
+              config: { tools: firstProvider.config.tools },
+            }),
+        }
+      : undefined;
 
   return {
     ...(config.description !== undefined && { description: config.description }),
@@ -191,8 +213,11 @@ function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<
 
 function projectSummaryForRedteamReport(
   evaluateSummary: EvaluateSummaryV3 | EvaluateSummaryV2,
+  injectVar: string,
 ): EvaluateSummaryV3 | EvaluateSummaryV2 {
-  const results = evaluateSummary.results.map(projectResultForRedteamReport);
+  const results = evaluateSummary.results.map((result) =>
+    projectResultForRedteamReport(result, injectVar),
+  );
   if ('table' in evaluateSummary) {
     return {
       ...evaluateSummary,
@@ -1633,9 +1658,10 @@ export default class Eval {
   }: ResultsFileOptions = {}): Promise<ResultsFile> {
     const traces = includeTraces ? await this.getTraces() : [];
     const evaluateSummary = await this.toEvaluateSummary();
+    const injectVar = this.config.redteam?.injectVar ?? 'prompt';
     const results =
       resultProjection === 'redteamReport'
-        ? projectSummaryForRedteamReport(evaluateSummary)
+        ? projectSummaryForRedteamReport(evaluateSummary, injectVar)
         : evaluateSummary;
 
     const resultFile: ResultsFile = {

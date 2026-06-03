@@ -10,6 +10,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
+import { callApi } from '@app/utils/api';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
@@ -19,7 +20,7 @@ import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDia
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
-import type { GradingResult } from '@promptfoo/types';
+import type { GradingResult, SharedResults } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -151,6 +152,26 @@ const RiskCategoryDrawer = ({
   const [activeTab, setActiveTab] = React.useState(0);
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
+  const [loadingDetailsKey, setLoadingDetailsKey] = React.useState<string | null>(null);
+  const [detailsLoadError, setDetailsLoadError] = React.useState<string | null>(null);
+  const fullEvalDataRef = React.useRef<{ evalId: string; data: SharedResults['data'] } | null>(
+    null,
+  );
+  const detailsRequestRef = React.useRef(0);
+  const previousEvalIdRef = React.useRef(evalId);
+
+  React.useEffect(() => {
+    if (previousEvalIdRef.current === evalId) {
+      return;
+    }
+    previousEvalIdRef.current = evalId;
+    detailsRequestRef.current += 1;
+    fullEvalDataRef.current = null;
+    setLoadingDetailsKey(null);
+    setDetailsLoadError(null);
+    setSelectedTest(null);
+    setDetailsDialogOpen(false);
+  }, [evalId]);
 
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
@@ -167,6 +188,64 @@ const RiskCategoryDrawer = ({
 
   const totalTests = numPassed + numFailed;
   const passPercentage = totalTests > 0 ? Math.round((numPassed / totalTests) * 100) : 0;
+
+  const loadFullTestDetails = async (test: TestWithMetadata, detailsKey: string) => {
+    const compactResult = test.result;
+    setSelectedTest(test);
+    setDetailsDialogOpen(true);
+    setDetailsLoadError(null);
+
+    if (!compactResult) {
+      return;
+    }
+
+    const requestId = ++detailsRequestRef.current;
+    setLoadingDetailsKey(detailsKey);
+
+    try {
+      let fullEvalData =
+        fullEvalDataRef.current?.evalId === evalId ? fullEvalDataRef.current.data : null;
+      if (!fullEvalData) {
+        const response = await callApi(
+          `/results/${encodeURIComponent(evalId)}?includeTraces=false`,
+          { cache: 'no-store' },
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to load full evaluation data (${response.status})`);
+        }
+        const body = (await response.json()) as SharedResults;
+        fullEvalData = body.data;
+        fullEvalDataRef.current = { evalId, data: fullEvalData };
+      }
+
+      const fullResult = fullEvalData.results.results.find(
+        (result) =>
+          result.testIdx === compactResult.testIdx && result.promptIdx === compactResult.promptIdx,
+      );
+      if (!fullResult) {
+        throw new Error('Could not find the selected result in the full evaluation data');
+      }
+      if (requestId !== detailsRequestRef.current) {
+        return;
+      }
+
+      setSelectedTest({
+        ...test,
+        gradingResult: fullResult.gradingResult ?? undefined,
+        result: fullResult,
+      });
+    } catch (error) {
+      if (requestId !== detailsRequestRef.current) {
+        return;
+      }
+      console.error('[RiskCategoryDrawer] Failed to load full result details', error);
+      setDetailsLoadError('Some detailed evaluation data could not be loaded.');
+    } finally {
+      if (requestId === detailsRequestRef.current) {
+        setLoadingDetailsKey(null);
+      }
+    }
+  };
 
   if (totalTests === 0) {
     return (
@@ -188,6 +267,9 @@ const RiskCategoryDrawer = ({
 
   // Helper to render a test item (used for both failures and passes)
   const renderTestItem = (test: TestWithMetadata, index: number, isFailed: boolean) => {
+    const detailsKey = test.result
+      ? `${test.result.testIdx}:${test.result.promptIdx}`
+      : `${isFailed ? 'failure' : 'pass'}:${index}`;
     const strategyId = getStrategyIdFromTest(test);
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
@@ -250,11 +332,11 @@ const RiskCategoryDrawer = ({
                     className="h-6 px-2 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedTest(test);
-                      setDetailsDialogOpen(true);
+                      void loadFullTestDetails(test, detailsKey);
                     }}
+                    disabled={loadingDetailsKey !== null}
                   >
-                    Details
+                    {loadingDetailsKey === detailsKey ? 'Loading...' : 'Details'}
                   </Button>
                 </div>
               </div>
@@ -400,6 +482,11 @@ const RiskCategoryDrawer = ({
           onClose={() => setSuggestionsDialogOpen(false)}
           gradingResult={currentGradingResult}
         />
+        {detailsLoadError && (
+          <p role="alert" className="px-2 text-sm text-destructive">
+            {detailsLoadError}
+          </p>
+        )}
         <EvalOutputPromptDialog
           open={detailsDialogOpen}
           onClose={() => setDetailsDialogOpen(false)}

@@ -686,16 +686,16 @@ describe('App component target selection', () => {
     expect(await screen.findByText(/2 probes/)).toBeInTheDocument();
   });
 
-  it('surfaces transformDisplayVars as the attack prompt for layer-mode failures', async () => {
-    // Layer-mode strategies (e.g. indirect-web-pwn) embed the payload at runtime via
-    // response.metadata.transformDisplayVars rather than the test-case vars, so the report must
-    // fall back to it to display the real injected input.
+  it('surfaces the provider-reported final prompt for layer-mode failures', async () => {
+    // Runtime layer transforms exclude the inject variable from transformDisplayVars. Multi-turn
+    // attack providers expose the final attack through response.prompt/redteamFinalPrompt instead.
     const layerResult = {
       ...createComponentMockResult(0, 'plugin1', false),
-      vars: {},
+      vars: { prompt: 'original attack seed' },
       response: {
         output: 'test output',
-        metadata: { transformDisplayVars: { prompt: 'INJECTED_LAYER_PAYLOAD' } },
+        prompt: 'INJECTED_LAYER_PAYLOAD',
+        metadata: { transformDisplayVars: { embeddedInjection: 'display-only helper value' } },
       },
     } as unknown as EvaluateResult;
     const evalData = createComponentMockEvalData(1, [layerResult]);
@@ -708,6 +708,49 @@ describe('App component target selection', () => {
 
     const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
     expect(failurePrompts).toHaveTextContent('INJECTED_LAYER_PAYLOAD');
+  });
+
+  it('surfaces redteamFinalPrompt when a multi-turn provider does not report response.prompt', async () => {
+    const layerResult = {
+      ...createComponentMockResult(0, 'plugin1', false),
+      vars: { prompt: 'original attack seed' },
+      response: {
+        output: 'test output',
+        metadata: {
+          redteamFinalPrompt: 'FINAL_MULTI_TURN_ATTACK',
+          transformDisplayVars: { embeddedInjection: 'display-only helper value' },
+        },
+      },
+    } as unknown as EvaluateResult;
+    const evalData = createComponentMockEvalData(1, [layerResult]);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
+    expect(failurePrompts).toHaveTextContent('FINAL_MULTI_TURN_ATTACK');
+  });
+
+  it('does not read inherited object properties as dynamic inject variables', async () => {
+    const result = {
+      ...createComponentMockResult(0, 'plugin1', false),
+      vars: {},
+    } as EvaluateResult;
+    const evalData = createComponentMockEvalData(1, [result]);
+    evalData.config.redteam = { injectVar: 'toString' };
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
+    expect(failurePrompts).toHaveTextContent('test');
+    expect(failurePrompts).not.toHaveTextContent('function toString');
   });
 });
 
