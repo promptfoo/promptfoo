@@ -174,6 +174,38 @@ describe('doTargetPurposeDiscovery', () => {
     });
   });
 
+  it('delegates auth to the fetch layer and never sends an Authorization header itself', async () => {
+    // Single done=true turn so exactly one remote-generation request is made.
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: 'Test limitations',
+            tools: [],
+            user: 'Test user',
+          },
+          state: { currentQuestionIndex: 0, answers: [] },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const target = createMockProvider({ id: 'test', response: { output: 'ok' } });
+    await doTargetPurposeDiscovery(target);
+
+    // discover.ts must not attach the cloud token itself: the centralized fetch layer
+    // injects it only for the configured cloud origin, so a custom
+    // PROMPTFOO_REMOTE_GENERATION_URL can never receive the saved credential.
+    expect(mockedFetchWithProxy).toHaveBeenCalled();
+    for (const call of mockedFetchWithProxy.mock.calls) {
+      const headers = (call[1]?.headers ?? {}) as Record<string, string>;
+      const headerKeys = Object.keys(headers).map((key) => key.toLowerCase());
+      expect(headerKeys).not.toContain('authorization');
+    }
+  });
+
   it('should render the prompt if passed in', async () => {
     const mockResponses = [
       {
