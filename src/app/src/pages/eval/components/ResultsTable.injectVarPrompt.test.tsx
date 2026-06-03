@@ -248,7 +248,7 @@ describe('ResultsTable inject variable cell rendering', () => {
       expect(result).toBe('Valid red team prompt');
     });
 
-    it('should handle empty string provider prompt as no prompt', () => {
+    it('should continue searching when a provider prompt is empty', () => {
       const originalValue = '{{topic}}';
       const outputs = [
         {
@@ -266,7 +266,6 @@ describe('ResultsTable inject variable cell rendering', () => {
       ];
 
       const result = getCellValueForInjectVar(originalValue, outputs);
-      // Empty string prompt is treated as undefined by getActualPrompt
       expect(result).toBe('Fallback prompt');
     });
 

@@ -38,7 +38,7 @@ function stringifyReportValue(value: unknown): string | undefined {
 
 export function getReportPrompt(result: EvaluateResult, injectVar: string): string {
   const actualPrompt = getActualPrompt(result.response);
-  if (actualPrompt) {
+  if (actualPrompt !== undefined) {
     return actualPrompt;
   }
 

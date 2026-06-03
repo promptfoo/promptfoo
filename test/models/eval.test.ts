@@ -23,6 +23,7 @@ import {
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
 import {
+  createCompletedPrompt,
   createEvaluateResult,
   createEvaluateSummaryV2,
   createEvaluateTable,
@@ -1284,6 +1285,12 @@ describe('evaluator', () => {
           strategies: ['jailbreak:meta'],
         },
       };
+      await eval1.addPrompts([
+        createCompletedPrompt('target prompt', {
+          template: oversizedText,
+          config: { suffix: oversizedText },
+        }),
+      ]);
       await eval1.addResult(
         createEvaluateResult({
           vars: {
@@ -1370,6 +1377,14 @@ describe('evaluator', () => {
         type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
         metric: 'CodingAgentNetworkEgressBypass',
       });
+      expect(projected.prompts?.[0]).not.toHaveProperty('template');
+      expect(projected.prompts?.[0]).not.toHaveProperty('config');
+      expect('prompts' in projected.results && projected.results.prompts[0]).not.toHaveProperty(
+        'template',
+      );
+      expect('prompts' in projected.results && projected.results.prompts[0]).not.toHaveProperty(
+        'config',
+      );
       expect(JSON.stringify(projected).length).toBeLessThan(100_000);
       expect(loadResultsSpy).not.toHaveBeenCalled();
       expect(eval1.results).toEqual([]);
@@ -1495,9 +1510,23 @@ describe('evaluator', () => {
 
     it('honors output strip flags in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addPrompts([
+        createCompletedPrompt('sensitive top-level raw', {
+          label: 'sensitive top-level label',
+          display: 'sensitive top-level display',
+          template: 'sensitive top-level template',
+          config: { suffix: 'sensitive top-level config' },
+        }),
+      ]);
       await eval1.addResult(
         createEvaluateResult({
-          prompt: { raw: 'sensitive raw prompt', label: 'Prompt label' },
+          prompt: {
+            raw: 'sensitive raw prompt',
+            label: 'sensitive prompt label',
+            display: 'sensitive display prompt',
+            template: 'sensitive result template',
+            config: { suffix: 'sensitive result config' },
+          },
           vars: { prompt: 'sensitive test var' },
           testCase: {
             vars: { prompt: 'sensitive test var' },
@@ -1531,12 +1560,123 @@ describe('evaluator', () => {
         const result = projected.results.results[0];
 
         expect(result.prompt.raw).toBe('[prompt stripped]');
+        expect(result.prompt.label).toBe('[prompt stripped]');
+        expect(result.prompt.display).toBe('[prompt stripped]');
+        expect(result.prompt).not.toHaveProperty('template');
+        expect(result.prompt).not.toHaveProperty('config');
         expect(result.vars).toEqual({});
         expect(result.testCase).toEqual({});
         expect(result.response).toEqual({ output: '[output stripped]' });
         expect(result.gradingResult).toBeNull();
         expect(result.metadata).toEqual({});
+        expect(projected.prompts).toContainEqual(
+          expect.objectContaining({
+            raw: '[prompt stripped]',
+            label: '[prompt stripped]',
+            display: '[prompt stripped]',
+          }),
+        );
+        expect(projected.prompts?.[0]).not.toHaveProperty('template');
+        expect(projected.prompts?.[0]).not.toHaveProperty('config');
         expect(JSON.stringify(result)).not.toContain('sensitive');
+        expect(JSON.stringify(projected.prompts)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('honors output strip flags in legacy compact projections', async () => {
+      const eval1 = new Eval({});
+      const legacyPrompt = createCompletedPrompt('sensitive legacy table raw', {
+        label: 'sensitive legacy table label',
+        display: 'sensitive legacy table display',
+        template: 'sensitive legacy table template',
+        config: { suffix: 'sensitive legacy table config' },
+      });
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            prompt: {
+              raw: 'sensitive legacy raw prompt',
+              label: 'sensitive legacy prompt label',
+              display: 'sensitive legacy display prompt',
+              template: 'sensitive legacy result template',
+              config: { suffix: 'sensitive legacy result config' },
+            },
+            vars: { prompt: 'sensitive legacy test var' },
+            testCase: {
+              vars: { prompt: 'sensitive legacy test var' },
+              metadata: {
+                pluginId: 'sensitive-legacy-plugin',
+                strategyId: 'sensitive-legacy-strategy',
+              },
+            },
+            response: {
+              output: 'sensitive legacy provider output',
+              metadata: { redteamFinalPrompt: 'sensitive legacy final prompt' },
+            },
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'sensitive legacy grading reason',
+            },
+            metadata: {
+              pluginId: 'sensitive-legacy-plugin',
+              redteamHistory: [
+                { prompt: 'sensitive legacy history', output: 'sensitive legacy history output' },
+              ],
+            },
+          }),
+        ],
+        table: createEvaluateTable({
+          head: { prompts: [legacyPrompt], vars: ['prompt'] },
+        }),
+      });
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const result = projected.results.results[0];
+
+        expect(result.prompt).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(result.prompt).not.toHaveProperty('template');
+        expect(result.prompt).not.toHaveProperty('config');
+        expect(result.vars).toEqual({});
+        expect(result.testCase).toEqual({ metadata: undefined });
+        expect(result.response).toEqual({ output: '[output stripped]' });
+        expect(result.gradingResult).toBeNull();
+        expect(result.metadata).toEqual({});
+        expect(projected.prompts?.[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(projected.prompts?.[0]).not.toHaveProperty('template');
+        expect(projected.prompts?.[0]).not.toHaveProperty('config');
+        expect(
+          'table' in projected.results && projected.results.table.head.prompts[0],
+        ).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(
+          'table' in projected.results && projected.results.table.head.prompts[0],
+        ).not.toHaveProperty('template');
+        expect(
+          'table' in projected.results && projected.results.table.head.prompts[0],
+        ).not.toHaveProperty('config');
+        expect(JSON.stringify(projected)).not.toContain('sensitive');
       } finally {
         restoreEnv();
       }

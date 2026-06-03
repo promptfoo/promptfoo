@@ -117,6 +117,16 @@ interface RedteamReportStripFlags {
   shouldStripMetadata: boolean;
 }
 
+function getRedteamReportStripFlags(): RedteamReportStripFlags {
+  return {
+    shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
+    shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
+    shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
+    shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
+    shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
+  };
+}
+
 export type ResultsFileOptions = {
   includeTraces?: boolean;
   resultProjection?: 'full' | 'redteamReport';
@@ -174,6 +184,22 @@ function parseJsonFragment<T>(value: string | null): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+function projectPromptForRedteamReport<T extends Prompt>(
+  prompt: T,
+  shouldStripPromptText: boolean,
+): T {
+  const { config: _config, function: _function, template: _template, ...reportPrompt } = prompt;
+
+  return {
+    ...reportPrompt,
+    ...(shouldStripPromptText && {
+      raw: '[prompt stripped]',
+      label: '[prompt stripped]',
+      ...(prompt.display !== undefined && { display: '[prompt stripped]' }),
+    }),
+  } as T;
 }
 
 function createProjectedGradingResult(row: RedteamReportResultRow): GradingResult | undefined {
@@ -277,11 +303,12 @@ function createRedteamReportResult(
   const vars = shouldStripTestVars
     ? {}
     : (parseJsonFragment<EvaluateResult['vars']>(row.vars) ?? {});
-  const prompt = {
-    raw: shouldStripPromptText ? '[prompt stripped]' : (row.promptRaw ?? ''),
+  const storedPrompt = {
+    raw: row.promptRaw ?? '',
     label: row.promptLabel ?? row.promptRaw ?? '',
     ...(row.promptDisplay !== null && { display: row.promptDisplay }),
   };
+  const prompt = projectPromptForRedteamReport(storedPrompt, shouldStripPromptText);
   const response = createRedteamReportResponse(row, stripFlags);
   const metadata = createRedteamReportMetadata(row, shouldStripMetadata);
   const testCaseMetadata = shouldStripMetadata
@@ -297,7 +324,9 @@ function createRedteamReportResult(
     testCase: {
       ...(Object.keys(testCaseMetadata).length > 0 && { metadata: testCaseMetadata }),
     },
-    promptId: row.promptId ?? hashPrompt(prompt),
+    promptId: shouldStripPromptText
+      ? hashPrompt(storedPrompt)
+      : (row.promptId ?? hashPrompt(prompt)),
     provider: {
       id: row.providerId ?? '',
       ...(row.providerLabel !== null && { label: row.providerLabel }),
@@ -316,8 +345,12 @@ function createRedteamReportResult(
   };
 }
 
-function projectResultForRedteamReport(result: EvaluateResult, injectVar: string): EvaluateResult {
-  const metadata = result.metadata;
+function projectResultForRedteamReport(
+  result: EvaluateResult,
+  injectVar: string,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult {
+  const metadata = stripFlags.shouldStripMetadata ? undefined : result.metadata;
   const projectedMetadata = metadata
     ? {
         ...(metadata.pluginId !== undefined && { pluginId: metadata.pluginId }),
@@ -329,21 +362,24 @@ function projectResultForRedteamReport(result: EvaluateResult, injectVar: string
       }
     : undefined;
 
-  const redteamFinalPrompt =
-    result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
+  const redteamFinalPrompt = stripFlags.shouldStripMetadata
+    ? undefined
+    : (result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt);
   const responsePrompt = result.response?.prompt;
   const hasResponsePrompt = responsePrompt !== undefined;
   const response =
     result.response || redteamFinalPrompt !== undefined
       ? {
-          ...(result.response?.output !== undefined && { output: result.response.output }),
+          ...(result.response && stripFlags.shouldStripResponseOutput
+            ? { output: '[output stripped]' }
+            : result.response?.output !== undefined && { output: result.response.output }),
           ...(hasResponsePrompt && { prompt: responsePrompt }),
           ...(!hasResponsePrompt &&
             redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
         }
       : result.response;
 
-  const testCaseMetadata = result.testCase?.metadata;
+  const testCaseMetadata = stripFlags.shouldStripMetadata ? undefined : result.testCase?.metadata;
   const testCase = result.testCase
     ? {
         metadata: testCaseMetadata
@@ -359,18 +395,20 @@ function projectResultForRedteamReport(result: EvaluateResult, injectVar: string
       }
     : result.testCase;
 
-  const gradingResult = result.gradingResult
-    ? projectGradingResultForRedteamReport(result.gradingResult)
-    : result.gradingResult;
+  const gradingResult = stripFlags.shouldStripGradingResult
+    ? null
+    : result.gradingResult
+      ? projectGradingResultForRedteamReport(result.gradingResult)
+      : result.gradingResult;
 
   return {
     promptIdx: result.promptIdx,
     testIdx: result.testIdx,
     testCase,
-    promptId: result.promptId,
+    promptId: stripFlags.shouldStripPromptText ? hashPrompt(result.prompt) : result.promptId,
     provider: result.provider,
-    prompt: result.prompt,
-    vars: projectVarsForRedteamReport(result.vars, injectVar),
+    prompt: projectPromptForRedteamReport(result.prompt, stripFlags.shouldStripPromptText),
+    vars: stripFlags.shouldStripTestVars ? {} : projectVarsForRedteamReport(result.vars, injectVar),
     response,
     error: result.error,
     failureReason: result.failureReason,
@@ -379,7 +417,7 @@ function projectResultForRedteamReport(result: EvaluateResult, injectVar: string
     latencyMs: result.latencyMs,
     gradingResult,
     namedScores: {},
-    metadata: projectedMetadata,
+    metadata: stripFlags.shouldStripMetadata ? {} : projectedMetadata,
   };
 }
 
@@ -413,9 +451,10 @@ function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<
 function projectSummaryForRedteamReport(
   evaluateSummary: EvaluateSummaryV3 | EvaluateSummaryV2,
   injectVar: string,
+  stripFlags: RedteamReportStripFlags,
 ): EvaluateSummaryV3 | EvaluateSummaryV2 {
   const results = evaluateSummary.results.map((result) =>
-    projectResultForRedteamReport(result, injectVar),
+    projectResultForRedteamReport(result, injectVar, stripFlags),
   );
   if ('table' in evaluateSummary) {
     return {
@@ -423,12 +462,24 @@ function projectSummaryForRedteamReport(
       results,
       table: {
         ...evaluateSummary.table,
+        head: {
+          ...evaluateSummary.table.head,
+          prompts: evaluateSummary.table.head.prompts.map((prompt) =>
+            projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+          ),
+        },
         body: [],
       },
     };
   }
 
-  return { ...evaluateSummary, results };
+  return {
+    ...evaluateSummary,
+    prompts: evaluateSummary.prompts.map((prompt) =>
+      projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+    ),
+    results,
+  };
 }
 
 /** Result from queries selecting test_idx column */
@@ -1824,6 +1875,7 @@ export default class Eval {
 
   private async toRedteamReportSummary(
     injectVar: string,
+    stripFlags: RedteamReportStripFlags,
   ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
@@ -1836,20 +1888,14 @@ export default class Eval {
           stats: this.oldResults.stats,
         },
         injectVar,
+        stripFlags,
       );
     }
 
     if (!this.persisted) {
-      return projectSummaryForRedteamReport(await this.toEvaluateSummary(), injectVar);
+      return projectSummaryForRedteamReport(await this.toEvaluateSummary(), injectVar, stripFlags);
     }
 
-    const stripFlags: RedteamReportStripFlags = {
-      shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
-      shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
-      shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
-      shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
-      shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
-    };
     const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
     const db = await getDb();
     const rows = await db
@@ -1973,9 +2019,9 @@ export default class Eval {
       .where(eq(evalResultsTable.evalId, this.id))
       .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx)
       .all();
-    const prompts = stripFlags.shouldStripPromptText
-      ? this.prompts.map((prompt) => ({ ...prompt, raw: '[prompt stripped]' }))
-      : this.prompts;
+    const prompts = this.prompts.map((prompt) =>
+      projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+    );
 
     return {
       version: 3,
@@ -2037,10 +2083,12 @@ export default class Eval {
   }: ResultsFileOptions = {}): Promise<ResultsFile> {
     const traces = includeTraces ? await this.getTraces() : [];
     const injectVar = this.config.redteam?.injectVar ?? 'prompt';
-    const results =
-      resultProjection === 'redteamReport'
-        ? await this.toRedteamReportSummary(injectVar)
-        : await this.toEvaluateSummary();
+    const stripFlags =
+      resultProjection === 'redteamReport' ? getRedteamReportStripFlags() : undefined;
+    const results = stripFlags
+      ? await this.toRedteamReportSummary(injectVar, stripFlags)
+      : await this.toEvaluateSummary();
+    const prompts = this.getPrompts();
 
     const resultFile: ResultsFile = {
       version: this.version(),
@@ -2051,7 +2099,12 @@ export default class Eval {
           ? projectConfigForRedteamReport(this.config)
           : this.config,
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts:
+        stripFlags === undefined
+          ? prompts
+          : prompts.map((prompt) =>
+              projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+            ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces }),

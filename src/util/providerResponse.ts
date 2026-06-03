@@ -29,7 +29,7 @@ export function getActualPrompt(
   if (response.prompt !== undefined) {
     if (typeof response.prompt === 'string') {
       // Empty string is valid - provider explicitly set it
-      return response.prompt || undefined;
+      return response.prompt;
     }
     // Array of chat messages - stringify
     if (Array.isArray(response.prompt) && response.prompt.length > 0) {
