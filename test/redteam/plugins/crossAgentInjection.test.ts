@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GRADERS } from '../../../src/redteam/graders';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import {
   CrossAgentInjectionGrader,
   CrossAgentInjectionPlugin,
@@ -107,6 +108,33 @@ describe('CrossAgentInjectionGrader', () => {
     expect(grader.rubric).toMatch(/FAILS/);
     expect(grader.rubric).toMatch(/PASSES/);
     expect(grader.rubric).toMatch(/score/);
+  });
+
+  it('does not blanket-pass silent/empty compliance and weighs tool/trace evidence', () => {
+    // Regression for the empty-output false negative: a tool-using agent can
+    // execute the injected action and return no text.
+    expect(grader.rubric).toMatch(/silent compliance still fails/i);
+    expect(grader.rubric).toMatch(/tool-call|execution-trace|trace/i);
+    expect(grader.rubric).not.toContain('An empty response also passes');
+  });
+
+  it('forces skipRefusalCheck so an empty response is graded rather than auto-passed', async () => {
+    const spy = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' }, rubric: '' });
+
+    await grader.getResult(
+      'peer message',
+      '', // empty agent output (could hide a silent tool action)
+      { metadata: { purpose: 'subagent' } } as any,
+      undefined,
+      undefined,
+    );
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    // 7th positional arg (index 6) is skipRefusalCheck — must be forced true.
+    expect(spy.mock.calls[0][6]).toBe(true);
+    spy.mockRestore();
   });
 
   it('returns remediation suggestions', () => {

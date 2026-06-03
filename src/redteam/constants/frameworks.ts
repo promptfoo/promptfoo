@@ -284,7 +284,7 @@ export const OWASP_AGENTIC_TOP_10_MAPPING: Record<
   'owasp:agentic:asi07': {
     // ASI07: Insecure Inter-Agent Communication
     // Multi-agent systems face spoofed identities, replayed messages, tampering
-    plugins: ['indirect-prompt-injection', 'hijacking', 'imitation'],
+    plugins: ['cross-agent-injection', 'indirect-prompt-injection', 'hijacking', 'imitation'],
     strategies: ['jailbreak-templates'],
   },
   'owasp:agentic:asi08': {
