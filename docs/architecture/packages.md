@@ -116,6 +116,30 @@ types still use transitional provider contracts from `src/types/providers.ts`.
 Those contracts must move to a narrower portable surface before extracting a real
 `@promptfoo/provider-*` package.
 
+`architecture/package-candidates.json` defines the package surfaces being prepared
+before any new package is published. Each candidate declares its source entrypoint,
+optional existing public subpath, allowed runtime npm dependencies, allowed Node
+builtins, and maximum runtime source closure. Public candidates also declare their
+emitted ESM/CommonJS entrypoints plus installed artifact file and byte budgets.
+`npm run package:check` enforces the source budgets and prints the current closure for
+every candidate. `npm run architecture:report` emits the same package data plus
+source-file, cross-layer-edge, back-edge, and strongly-connected-component totals as
+JSON.
+
+The package artifact harness reads the same candidate manifest and verifies every
+existing public candidate through clean ESM, CommonJS, and TypeScript consumers. It
+also follows each installed candidate entrypoint's emitted runtime chunks and enforces
+its dependency, Node builtin, file count, and byte budgets. Public ESM and CommonJS
+entrypoints must expose the same external dependency and builtin closure. This
+installed-artifact view is authoritative because bundling and tree-shaking can make it
+differ from the source ownership closure. Non-literal dynamic imports remain a
+residual risk and need semantic clean-consumer coverage.
+
+The harness accepts `--tarball <path>` so CI and every npm release path can build once,
+pack once, test that exact tarball, and publish the already-verified artifact.
+Candidate entries without a public subpath, such as the pure assertion runtime, are
+measured but remain unpublished.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a

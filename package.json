@@ -56,7 +56,8 @@
     "dist",
     "!dist/test",
     "!dist/src/__mocks__",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/tsconfig.tsbuildinfo"
   ],
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
@@ -69,6 +70,7 @@
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "architecture:baseline": "tsx scripts/regenerateEdgeBaseline.ts",
     "architecture:check": "tsx scripts/checkArchitectureBoundaries.ts",
+    "architecture:report": "tsx scripts/checkPackageReadiness.ts --json",
     "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
@@ -104,6 +106,8 @@
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
+    "package:check": "tsx scripts/checkPackageReadiness.ts",
+    "package:pack": "tsx scripts/packPackageArtifact.ts",
     "test:app": "npm --prefix src/app run test --",
     "test:app:browser": "npm --prefix src/app run test:browser --",
     "test:package-artifact": "tsx scripts/testPackageArtifact.ts",

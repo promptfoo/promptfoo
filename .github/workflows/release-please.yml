@@ -67,7 +67,7 @@ jobs:
         )
       }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: release-please
     permissions:
       contents: read
@@ -81,6 +81,31 @@ jobs:
       - run: npm install -g npm@11.11.0
       - run: npm ci
       - run: npm test
+      - name: Build package
+        if: needs.release-please.outputs.release_created == 'true'
+        run: npm run build
+        env:
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      - name: Pack package
+        if: needs.release-please.outputs.release_created == 'true'
+        id: package-artifact
+        run: |
+          tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - name: Test package artifact
+        if: needs.release-please.outputs.release_created == 'true'
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
+      - name: Upload package artifact
+        if: needs.release-please.outputs.release_created == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
 
   publish-npm:
     if: >-
@@ -97,31 +122,40 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+          node-version: '24.16.0'
           registry-url: 'https://registry.npmjs.org'
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@11.11.0
-      - run: npm ci
+      - name: Download verified package artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: promptfoo-npm-package
+          path: ${{ runner.temp }}/promptfoo-package
       # Empty NODE_AUTH_TOKEN so npm uses OIDC trusted publishing instead of the
       # placeholder token actions/setup-node writes into .npmrc (actions/setup-node#1440).
-      - run: npm publish --provenance --access public
+      - name: Publish verified package artifact
         env:
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.tag_name }}
           NODE_AUTH_TOKEN: ''
-          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+          PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
+          REGISTRY_URL: https://registry.npmjs.org/
+        run: |
+          mapfile -t tarballs < <(find "$PACKAGE_DIR" -maxdepth 1 -type f -name '*.tgz')
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "::error::expected exactly one package tarball, found ${#tarballs[@]}"
+            exit 1
+          fi
+          manifest_path="$RUNNER_TEMP/promptfoo-package-manifest.json"
+          tar -xOf "${tarballs[0]}" package/package.json > "$manifest_path"
+          node -e "const fs = require('node:fs'); const [manifestPath, expectedVersion] = process.argv.slice(1); const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); if (manifest.name !== 'promptfoo' || manifest.version !== expectedVersion || manifest.publishConfig !== undefined) { throw new Error('Downloaded artifact has unexpected publish metadata'); }" "$manifest_path" "$EXPECTED_VERSION"
+          npm publish "${tarballs[0]}" --provenance --access public --registry="$REGISTRY_URL"
 
-  publish-npm-backfill:
-    # npm trusted publishing is bound to this workflow filename on npmjs.com,
-    # so manual backfills must stay inside release-please.yml.
+  build-npm-backfill:
     if: github.event_name == 'workflow_dispatch' && inputs.tag_name != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
-      id-token: write
     env:
       TAG_NAME: ${{ inputs.tag_name }}
     steps:
@@ -148,16 +182,94 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0
       - run: npm ci
-      - name: Publish package
-        run: npm publish --provenance --access public
+      - run: npm test
+      - name: Build package
+        run: npm run build
         env:
-          NODE_AUTH_TOKEN: ''
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      - name: Pack package
+        id: package-artifact
+        run: |
+          artifact_dir="$RUNNER_TEMP/promptfoo-package"
+          mkdir -p "$artifact_dir"
+          pack_json="$(npm pack --ignore-scripts --json --pack-destination "$artifact_dir")"
+          filename="$(printf '%s' "$pack_json" | EXPECTED_VERSION="$TAG_NAME" node -e "const results = JSON.parse(require('node:fs').readFileSync(0, 'utf8')); if (!Array.isArray(results) || results.length !== 1) { throw new Error('Expected exactly one package artifact'); } const [result] = results; if (result.name !== 'promptfoo' || result.version !== process.env.EXPECTED_VERSION || typeof result.filename !== 'string') { throw new Error('Packed artifact metadata does not match the requested release'); } process.stdout.write(result.filename);")"
+          echo "tarball=$artifact_dir/$filename" >> "$GITHUB_OUTPUT"
+      - name: Test package artifact
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: |
+          if [[ -f scripts/testPackageArtifact.ts ]] && grep -q -- '--tarball' scripts/testPackageArtifact.ts; then
+            npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
+          else
+            consumer_dir="$RUNNER_TEMP/promptfoo-backfill-consumer"
+            mkdir -p "$consumer_dir"
+            printf '{"private":true}' > "$consumer_dir/package.json"
+            npm install --prefix "$consumer_dir" --ignore-scripts --no-audit --no-fund --no-package-lock --registry=https://registry.npmjs.org/ "$PACKAGE_TARBALL"
+            package_json="$consumer_dir/node_modules/promptfoo/package.json"
+            installed_version="$(PACKAGE_JSON="$package_json" node -p "require(process.env.PACKAGE_JSON).version")"
+            if [[ "$installed_version" != "$TAG_NAME" ]]; then
+              echo "::error::installed artifact version '$installed_version' does not match tag '$TAG_NAME'"
+              exit 1
+            fi
+            PROMPTFOO_CONFIG_DIR="$RUNNER_TEMP/promptfoo-backfill-config" PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=true node "$consumer_dir/node_modules/promptfoo/dist/src/entrypoint.js" --version
+          fi
+      - name: Upload package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-npm-backfill:
+    # npm trusted publishing is bound to this workflow filename on npmjs.com,
+    # so manual backfills must stay inside release-please.yml.
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        github.event_name == 'workflow_dispatch' &&
+        inputs.tag_name != '' &&
+        needs.build-npm-backfill.result == 'success'
+      }}
+    needs: build-npm-backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24.16.0'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Download verified package artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ runner.temp }}/promptfoo-package
+      - name: Publish verified package artifact
+        env:
+          EXPECTED_VERSION: ${{ inputs.tag_name }}
+          NODE_AUTH_TOKEN: ''
+          PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
+          REGISTRY_URL: https://registry.npmjs.org/
+        run: |
+          mapfile -t tarballs < <(find "$PACKAGE_DIR" -maxdepth 1 -type f -name '*.tgz')
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "::error::expected exactly one package tarball, found ${#tarballs[@]}"
+            exit 1
+          fi
+          manifest_path="$RUNNER_TEMP/promptfoo-package-manifest.json"
+          tar -xOf "${tarballs[0]}" package/package.json > "$manifest_path"
+          node -e "const fs = require('node:fs'); const [manifestPath, expectedVersion] = process.argv.slice(1); const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); if (manifest.name !== 'promptfoo' || manifest.version !== expectedVersion || manifest.publishConfig !== undefined) { throw new Error('Downloaded artifact has unexpected publish metadata'); }" "$manifest_path" "$EXPECTED_VERSION"
+          npm publish "${tarballs[0]}" --provenance --access public --registry="$REGISTRY_URL"
 
   docker:
     if: >-

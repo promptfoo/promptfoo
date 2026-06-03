@@ -203,11 +203,19 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Pack Package Artifact
+        if: matrix.node == '20.20'
+        id: package-artifact
+        run: |
+          tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/package-artifact")"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
       - name: Test Package Artifact
         if: matrix.node == '20.20'
         env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
 
   style-check:
     name: Style Check
@@ -251,6 +259,10 @@ jobs:
       - name: Check architecture boundaries
         run: |
           npm run architecture:check
+
+      - name: Check package readiness budgets
+        run: |
+          npm run package:check
 
       - name: Check for missing dependencies
         run: |
