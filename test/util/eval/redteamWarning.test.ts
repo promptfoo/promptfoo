@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { warnIfRedteamConfigHasNoTests } from '../../../src/commands/eval/redteamWarning';
 import logger from '../../../src/logger';
+import { warnIfRedteamConfigHasNoTests } from '../../../src/util/eval/redteamWarning';
 
 import type { TestSuite, UnifiedConfig } from '../../../src/types/index';
 

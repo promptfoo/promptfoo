@@ -1,6 +1,6 @@
 import { InvalidArgumentError } from 'commander';
 import { describe, expect, it } from 'vitest';
-import { collectKeyValueOption, normalizeTagOption } from '../../src/commands/options';
+import { collectKeyValueOption, normalizeTagOption } from '../../src/util/cliOptions';
 
 describe('collectKeyValueOption', () => {
   it('parses a key=value pair into a record', () => {
