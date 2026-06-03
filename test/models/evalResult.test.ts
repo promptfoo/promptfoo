@@ -1232,6 +1232,61 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().response).toBe(response);
     });
 
+    it('should strip prompt-bearing fields when prompt-text stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: mockTestCase,
+          prompt: {
+            raw: 'sensitive raw prompt',
+            label: 'sensitive prompt label',
+            display: 'sensitive display prompt',
+            template: 'sensitive prompt template',
+            config: { suffix: 'sensitive prompt config' },
+          },
+          success: true,
+          score: 1,
+          response: {
+            output: 'visible output',
+            prompt: 'sensitive provider prompt',
+            metadata: {
+              redteamFinalPrompt: 'sensitive final prompt',
+              keep: 'visible metadata',
+            },
+          },
+          gradingResult: null,
+          provider: mockProvider,
+          metadata: {
+            redteamFinalPrompt: 'sensitive top-level final prompt',
+            keep: 'visible result metadata',
+          },
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        });
+
+        const evaluateResult = result.toEvaluateResult();
+
+        expect(evaluateResult.prompt).toEqual({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(evaluateResult.response).toEqual({
+          output: 'visible output',
+          metadata: { keep: 'visible metadata' },
+        });
+        expect(evaluateResult.metadata).toEqual({ keep: 'visible result metadata' });
+        expect(JSON.stringify(evaluateResult)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should count assertion requests when the grading provider omits token usage', () => {
       const result = new EvalResult({
         id: 'test-id',

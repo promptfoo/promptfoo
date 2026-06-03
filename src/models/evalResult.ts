@@ -40,19 +40,31 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
 
 function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean },
+  options: { stripMetadata: boolean; stripOutput: boolean; stripPrompt: boolean },
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  if (!options.stripMetadata && !options.stripOutput && !options.stripPrompt) {
     return response;
   }
 
-  const projectedResponse = options.stripMetadata
+  const projectedResponse: ProviderResponse = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
+
+  if (options.stripPrompt) {
+    delete projectedResponse.prompt;
+    if (projectedResponse.metadata?.redteamFinalPrompt !== undefined) {
+      const { redteamFinalPrompt: _redteamFinalPrompt, ...metadata } = projectedResponse.metadata;
+      if (Object.keys(metadata).length > 0) {
+        projectedResponse.metadata = metadata;
+      } else {
+        delete projectedResponse.metadata;
+      }
+    }
+  }
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
@@ -62,12 +74,17 @@ function projectProviderResponse(
 }
 
 function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
-  return stripPromptText
-    ? {
-        ...prompt,
-        raw: '[prompt stripped]',
-      }
-    : prompt;
+  if (!stripPromptText) {
+    return prompt;
+  }
+
+  const { config: _config, function: _function, template: _template, ...projectedPrompt } = prompt;
+  return {
+    ...projectedPrompt,
+    raw: '[prompt stripped]',
+    label: '[prompt stripped]',
+    ...(prompt.display !== undefined && { display: '[prompt stripped]' }),
+  };
 }
 
 function projectTestCase(
@@ -87,6 +104,63 @@ function projectTestCase(
   }
 
   return projectedTestCase;
+}
+
+function projectResultMetadata(
+  metadata: EvaluateResult['metadata'],
+  options: { stripMetadata: boolean; stripPrompt: boolean },
+): EvaluateResult['metadata'] {
+  if (options.stripMetadata) {
+    return {};
+  }
+
+  if (!options.stripPrompt || metadata?.redteamFinalPrompt === undefined) {
+    return metadata;
+  }
+
+  const { redteamFinalPrompt: _redteamFinalPrompt, ...projectedMetadata } = metadata;
+  return projectedMetadata;
+}
+
+export function projectEvaluateResultForOutput(result: EvaluateResult): EvaluateResult {
+  const {
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  } = getStripFlags();
+
+  if (
+    !shouldStripPromptText &&
+    !shouldStripResponseOutput &&
+    !shouldStripTestVars &&
+    !shouldStripGradingResult &&
+    !shouldStripMetadata
+  ) {
+    return result;
+  }
+
+  return {
+    ...result,
+    prompt: projectPrompt(result.prompt, shouldStripPromptText),
+    promptId: shouldStripPromptText ? hashPrompt(result.prompt) : result.promptId,
+    response: projectProviderResponse(result.response, {
+      stripMetadata: shouldStripMetadata,
+      stripOutput: shouldStripResponseOutput,
+      stripPrompt: shouldStripPromptText,
+    }),
+    testCase: projectTestCase(result.testCase, {
+      stripMetadata: shouldStripMetadata,
+      stripVars: shouldStripTestVars,
+    }),
+    gradingResult: shouldStripGradingResult ? null : result.gradingResult,
+    vars: shouldStripTestVars ? {} : result.vars,
+    metadata: projectResultMetadata(result.metadata, {
+      stripMetadata: shouldStripMetadata,
+      stripPrompt: shouldStripPromptText,
+    }),
+  };
 }
 
 // Removes circular references from the provider object and ensures consistent format
@@ -567,6 +641,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
+    stripPrompt: shouldStripPromptText,
   });
 
   return {
@@ -981,25 +1056,6 @@ export default class EvalResult {
   }
 
   toEvaluateResult(): EvaluateResult {
-    const {
-      shouldStripPromptText,
-      shouldStripResponseOutput,
-      shouldStripTestVars,
-      shouldStripGradingResult,
-      shouldStripMetadata,
-    } = getStripFlags();
-
-    const response = projectProviderResponse(this.response, {
-      stripMetadata: shouldStripMetadata,
-      stripOutput: shouldStripResponseOutput,
-    });
-
-    const prompt = projectPrompt(this.prompt, shouldStripPromptText);
-
-    const testCase = projectTestCase(this.testCase, {
-      stripMetadata: shouldStripMetadata,
-      stripVars: shouldStripTestVars,
-    });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
     // assertion request (with its tokens folded in when present).
@@ -1011,30 +1067,30 @@ export default class EvalResult {
       accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed);
     }
 
-    return {
+    return projectEvaluateResultForOutput({
       cost: this.cost,
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: this.gradingResult,
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
-      prompt,
+      prompt: this.prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
       ...(this.traceId ? { traceId: this.traceId } : {}),
       ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
-      response,
+      response: this.response,
       score: this.score,
       success: this.success,
-      testCase,
+      testCase: this.testCase,
       testIdx: this.testIdx,
       tokenUsage,
-      vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      vars: this.testCase.vars || {},
+      metadata: this.metadata,
       failureReason: this.failureReason,
-    };
+    });
   }
 }
 

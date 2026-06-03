@@ -58,6 +58,7 @@ import EvalResult, {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectEvaluateResultForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -246,9 +247,10 @@ function createRedteamReportResponse(
   row: RedteamReportResultRow,
   stripFlags: RedteamReportStripFlags,
 ): EvaluateResult['response'] {
-  const redteamFinalPrompt = stripFlags.shouldStripMetadata
-    ? null
-    : (row.responseRedteamFinalPrompt ?? row.metadataRedteamFinalPrompt);
+  const redteamFinalPrompt =
+    stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+      ? null
+      : (row.responseRedteamFinalPrompt ?? row.metadataRedteamFinalPrompt);
   if (!row.responseExists && redteamFinalPrompt === null) {
     return undefined;
   }
@@ -259,11 +261,12 @@ function createRedteamReportResponse(
       : row.responseOutput !== null && {
           output: parseJsonFragment(row.responseOutput),
         }),
-    ...(row.responsePrompt !== null && {
-      prompt: parseJsonFragment<NonNullable<EvaluateResult['response']>['prompt']>(
-        row.responsePrompt,
-      ),
-    }),
+    ...(!stripFlags.shouldStripPromptText &&
+      row.responsePrompt !== null && {
+        prompt: parseJsonFragment<NonNullable<EvaluateResult['response']>['prompt']>(
+          row.responsePrompt,
+        ),
+      }),
     ...(row.responsePrompt === null &&
       redteamFinalPrompt !== null && { metadata: { redteamFinalPrompt } }),
   };
@@ -362,11 +365,12 @@ function projectResultForRedteamReport(
       }
     : undefined;
 
-  const redteamFinalPrompt = stripFlags.shouldStripMetadata
-    ? undefined
-    : (result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt);
+  const redteamFinalPrompt =
+    stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+      ? undefined
+      : (result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt);
   const responsePrompt = result.response?.prompt;
-  const hasResponsePrompt = responsePrompt !== undefined;
+  const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
   const response =
     result.response || redteamFinalPrompt !== undefined
       ? {
@@ -1798,9 +1802,10 @@ export default class Eval {
 
   async getResult(testIdx: number, promptIdx: number): Promise<EvaluateResult | undefined> {
     if (this.useOldResults()) {
-      return this.oldResults?.results.find(
+      const result = this.oldResults?.results.find(
         (result) => result.testIdx === testIdx && result.promptIdx === promptIdx,
       );
+      return result ? projectEvaluateResultForOutput(result) : undefined;
     }
     if (!this.persisted) {
       return this.results
@@ -1898,16 +1903,22 @@ export default class Eval {
 
     const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
     const db = await getDb();
+    const validProviderJson = sql`CASE WHEN json_valid(${evalResultsTable.provider}) THEN ${evalResultsTable.provider} ELSE json('{}') END`;
+    const validPromptJson = sql`CASE WHEN json_valid(${evalResultsTable.prompt}) THEN ${evalResultsTable.prompt} ELSE json('{}') END`;
+    const validTestCaseJson = sql`CASE WHEN json_valid(${evalResultsTable.testCase}) THEN ${evalResultsTable.testCase} ELSE json('{}') END`;
+    const validResponseJson = sql`CASE WHEN json_valid(${evalResultsTable.response}) THEN ${evalResultsTable.response} ELSE json('{}') END`;
+    const validGradingResultJson = sql`CASE WHEN json_valid(${evalResultsTable.gradingResult}) THEN ${evalResultsTable.gradingResult} ELSE json('{}') END`;
+    const validMetadataJson = sql`CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE json('{}') END`;
     const rows = await db
       .select({
         promptIdx: evalResultsTable.promptIdx,
         testIdx: evalResultsTable.testIdx,
         promptId: evalResultsTable.promptId,
-        providerId: sql<string | null>`json_extract(${evalResultsTable.provider}, '$.id')`,
-        providerLabel: sql<string | null>`json_extract(${evalResultsTable.provider}, '$.label')`,
-        promptRaw: sql<string | null>`json_extract(${evalResultsTable.prompt}, '$.raw')`,
-        promptLabel: sql<string | null>`json_extract(${evalResultsTable.prompt}, '$.label')`,
-        promptDisplay: sql<string | null>`json_extract(${evalResultsTable.prompt}, '$.display')`,
+        providerId: sql<string | null>`json_extract(${validProviderJson}, '$.id')`,
+        providerLabel: sql<string | null>`json_extract(${validProviderJson}, '$.label')`,
+        promptRaw: sql<string | null>`json_extract(${validPromptJson}, '$.raw')`,
+        promptLabel: sql<string | null>`json_extract(${validPromptJson}, '$.label')`,
+        promptDisplay: sql<string | null>`json_extract(${validPromptJson}, '$.display')`,
         vars: sql<string | null>`(
           SELECT json_group_object(
             report_vars.key,
@@ -1920,42 +1931,36 @@ export default class Eval {
               ELSE report_vars.value
             END
           )
-          FROM json_each(json_extract(${evalResultsTable.testCase}, '$.vars')) AS report_vars
+          FROM json_each(json_extract(${validTestCaseJson}, '$.vars')) AS report_vars
           WHERE report_vars.key IN (${sql.join(
             reportVarKeys.map((key) => sql`${key}`),
             sql`, `,
           )})
         )`,
-        responseExists: sql<number>`CASE WHEN ${evalResultsTable.response} IS NULL THEN 0 ELSE 1 END`,
-        responseOutput: sql<string | null>`${evalResultsTable.response} -> '$.output'`,
-        responsePrompt: sql<string | null>`${evalResultsTable.response} -> '$.prompt'`,
+        responseExists: sql<number>`CASE WHEN json_valid(${evalResultsTable.response}) THEN 1 ELSE 0 END`,
+        responseOutput: sql<string | null>`${validResponseJson} -> '$.output'`,
+        responsePrompt: sql<string | null>`${validResponseJson} -> '$.prompt'`,
         responseRedteamFinalPrompt: sql<
           string | null
-        >`json_extract(${evalResultsTable.response}, '$.metadata.redteamFinalPrompt')`,
+        >`json_extract(${validResponseJson}, '$.metadata.redteamFinalPrompt')`,
         error: evalResultsTable.error,
         failureReason: evalResultsTable.failureReason,
         success: evalResultsTable.success,
         score: evalResultsTable.score,
         latencyMs: evalResultsTable.latencyMs,
-        gradingResultExists: sql<number>`CASE WHEN ${evalResultsTable.gradingResult} IS NULL THEN 0 ELSE 1 END`,
-        gradingPass: sql<number | null>`json_extract(${evalResultsTable.gradingResult}, '$.pass')`,
-        gradingScore: sql<
-          number | null
-        >`json_extract(${evalResultsTable.gradingResult}, '$.score')`,
-        gradingReason: sql<
-          string | null
-        >`json_extract(${evalResultsTable.gradingResult}, '$.reason')`,
+        gradingResultExists: sql<number>`CASE WHEN json_valid(${evalResultsTable.gradingResult}) THEN 1 ELSE 0 END`,
+        gradingPass: sql<number | null>`json_extract(${validGradingResultJson}, '$.pass')`,
+        gradingScore: sql<number | null>`json_extract(${validGradingResultJson}, '$.score')`,
+        gradingReason: sql<string | null>`json_extract(${validGradingResultJson}, '$.reason')`,
         gradingAssertionType: sql<
           string | null
-        >`json_extract(${evalResultsTable.gradingResult}, '$.assertion.type')`,
+        >`json_extract(${validGradingResultJson}, '$.assertion.type')`,
         gradingAssertionMetric: sql<
           string | null
-        >`json_extract(${evalResultsTable.gradingResult}, '$.assertion.metric')`,
-        gradingSuggestions: sql<
-          string | null
-        >`${evalResultsTable.gradingResult} -> '$.suggestions'`,
+        >`json_extract(${validGradingResultJson}, '$.assertion.metric')`,
+        gradingSuggestions: sql<string | null>`${validGradingResultJson} -> '$.suggestions'`,
         gradingComponentResults: sql<string | null>`CASE
-          WHEN json_type(${evalResultsTable.gradingResult}, '$.componentResults') = 'array'
+          WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
           THEN (
             SELECT json_group_array(
               json_patch(
@@ -1988,32 +1993,28 @@ export default class Eval {
               )
             )
             FROM json_each(
-              json_extract(${evalResultsTable.gradingResult}, '$.componentResults')
+              json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
           )
           ELSE NULL
         END`,
-        metadataPluginId: sql<
-          string | null
-        >`json_extract(${evalResultsTable.metadata}, '$.pluginId')`,
+        metadataPluginId: sql<string | null>`json_extract(${validMetadataJson}, '$.pluginId')`,
         metadataHarmCategory: sql<
           string | null
-        >`json_extract(${evalResultsTable.metadata}, '$.harmCategory')`,
+        >`json_extract(${validMetadataJson}, '$.harmCategory')`,
         metadataRedteamFinalPrompt: sql<
           string | null
-        >`json_extract(${evalResultsTable.metadata}, '$.redteamFinalPrompt')`,
-        metadataRedteamHistory: sql<
-          string | null
-        >`${evalResultsTable.metadata} -> '$.redteamHistory'`,
+        >`json_extract(${validMetadataJson}, '$.redteamFinalPrompt')`,
+        metadataRedteamHistory: sql<string | null>`${validMetadataJson} -> '$.redteamHistory'`,
         metadataRedteamTreeHistory: sql<
           string | null
-        >`${evalResultsTable.metadata} -> '$.redteamTreeHistory'`,
+        >`${validMetadataJson} -> '$.redteamTreeHistory'`,
         testCasePluginId: sql<
           string | null
-        >`json_extract(${evalResultsTable.testCase}, '$.metadata.pluginId')`,
+        >`json_extract(${validTestCaseJson}, '$.metadata.pluginId')`,
         testCaseStrategyId: sql<
           string | null
-        >`json_extract(${evalResultsTable.testCase}, '$.metadata.strategyId')`,
+        >`json_extract(${validTestCaseJson}, '$.metadata.strategyId')`,
       })
       .from(evalResultsTable)
       .where(eq(evalResultsTable.evalId, this.id))

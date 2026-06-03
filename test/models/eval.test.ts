@@ -1196,6 +1196,72 @@ describe('evaluator', () => {
       expect(await eval1.getResult(4, 2)).toMatchObject({ testIdx: 4, promptIdx: 2 });
       expect(await eval1.getResult(5, 2)).toBeUndefined();
     });
+
+    it('applies output strip flags to selected legacy result rows', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            testIdx: 4,
+            promptIdx: 2,
+            prompt: {
+              raw: 'sensitive legacy detail raw',
+              label: 'sensitive legacy detail label',
+              display: 'sensitive legacy detail display',
+              template: 'sensitive legacy detail template',
+              config: { suffix: 'sensitive legacy detail config' },
+            },
+            vars: { prompt: 'sensitive legacy detail var' },
+            testCase: {
+              vars: { prompt: 'sensitive legacy detail var' },
+              metadata: { purpose: 'sensitive legacy detail metadata' },
+            },
+            response: {
+              output: 'sensitive legacy detail output',
+              prompt: 'sensitive legacy provider prompt',
+              metadata: { redteamFinalPrompt: 'sensitive legacy final prompt' },
+            },
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'sensitive legacy grading reason',
+            },
+            metadata: {
+              debug: 'sensitive legacy result metadata',
+              redteamFinalPrompt: 'sensitive legacy top-level final prompt',
+            },
+          }),
+        ],
+      });
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const result = await eval1.getResult(4, 2);
+
+        expect(result?.prompt).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(result?.prompt).not.toHaveProperty('template');
+        expect(result?.prompt).not.toHaveProperty('config');
+        expect(result?.response).toEqual({ output: '[output stripped]' });
+        expect(result?.vars).toEqual({});
+        expect(result?.testCase.vars).toBeUndefined();
+        expect(result?.testCase).not.toHaveProperty('metadata');
+        expect(result?.gradingResult).toBeNull();
+        expect(result?.metadata).toEqual({});
+        expect(JSON.stringify(result)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('toResultsFile', () => {
@@ -1534,6 +1600,7 @@ describe('evaluator', () => {
           },
           response: {
             output: 'sensitive provider output',
+            prompt: 'sensitive provider prompt',
             metadata: { redteamFinalPrompt: 'sensitive final prompt' },
           },
           gradingResult: {
@@ -1613,6 +1680,7 @@ describe('evaluator', () => {
             },
             response: {
               output: 'sensitive legacy provider output',
+              prompt: 'sensitive legacy provider prompt',
               metadata: { redteamFinalPrompt: 'sensitive legacy final prompt' },
             },
             gradingResult: {
@@ -1697,6 +1765,26 @@ describe('evaluator', () => {
       expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
     });
 
+    it('degrades malformed persisted JSON fields in compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET
+          provider = ${'malformed-provider'},
+          prompt = ${'malformed-prompt'},
+          response = ${'malformed-response'}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const result = projected.results.results[0];
+
+      expect(result.provider).toEqual({ id: '' });
+      expect(result.prompt).toEqual({ raw: '', label: '' });
+      expect(result.response).toBeUndefined();
+    });
+
     it('preserves redteamFinalPrompt and drops display-only transform vars', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addResult(
@@ -1717,6 +1805,32 @@ describe('evaluator', () => {
       expect(projected.results.results[0].response?.metadata).toEqual({
         redteamFinalPrompt: 'runtime attack prompt',
       });
+    });
+
+    it('strips provider and final prompts when prompt-text stripping is enabled', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'visible response',
+            prompt: 'sensitive provider prompt',
+            metadata: {
+              redteamFinalPrompt: 'sensitive final prompt',
+            },
+          },
+        }),
+      );
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const result = projected.results.results[0];
+
+        expect(result.response).toEqual({ output: 'visible response' });
+        expect(JSON.stringify(result.response)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('preserves an explicitly empty provider prompt instead of falling back', async () => {
