@@ -248,6 +248,58 @@ describe('monkeyPatchFetch', () => {
     expect(headers.get('x-custom-header')).toBe('custom-value');
   });
 
+  it('should preserve Headers-instance headers when compressing', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    // Non-cloud host so no auth injection — isolates the compression header merge.
+    const headers = new Headers({ 'X-Custom-Header': 'custom-value' });
+    await monkeyPatchFetch('https://example.com/api', {
+      method: 'POST',
+      body: JSON.stringify({ test: 'data' }),
+      headers,
+      compress: true,
+    });
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    const sentHeaders = new Headers(requestInit.headers);
+    expect(sentHeaders.get('content-encoding')).toBe('gzip');
+    expect(sentHeaders.get('x-custom-header')).toBe('custom-value');
+  });
+
+  it('should preserve array-tuple headers when adding Authorization', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+
+    const url = CLOUD_API_HOST + '/api/test';
+    await monkeyPatchFetch(url, { headers: [['X-Custom-Header', 'custom-value']] });
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    const headers = new Headers(requestInit.headers);
+    expect(headers.get('authorization')).toBe('Bearer saved-token');
+    expect(headers.get('x-custom-header')).toBe('custom-value');
+  });
+
+  it('should suppress logging for a Request to an excluded endpoint', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    await monkeyPatchFetch(new Request(R_ENDPOINT + '/test'));
+
+    expect(logRequestResponse).not.toHaveBeenCalled();
+  });
+
+  it('should log the resolved URL (not "[object Request]") for Request inputs', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    const url = 'https://example.com/api';
+    await monkeyPatchFetch(new Request(url));
+
+    expect(logRequestResponse).toHaveBeenCalledWith(expect.objectContaining({ url }));
+  });
+
   it('should not add Authorization header for cloud API requests when no token available', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
