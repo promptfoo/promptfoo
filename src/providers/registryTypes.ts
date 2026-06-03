@@ -3,6 +3,31 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 export const PROVIDER_PLUGIN_API_VERSION = 1 as const;
 
+export const REDTEAM_PROVIDER_PATHS = {
+  authoritativeMarkupInjection: 'promptfoo:redteam:authoritative-markup-injection',
+  bestOfN: 'promptfoo:redteam:best-of-n',
+  crescendo: 'promptfoo:redteam:crescendo',
+  custom: 'promptfoo:redteam:custom',
+  goat: 'promptfoo:redteam:goat',
+  hydra: 'promptfoo:redteam:hydra',
+  indirectWebPwn: 'promptfoo:redteam:indirect-web-pwn',
+  iterative: 'promptfoo:redteam:iterative',
+  iterativeImage: 'promptfoo:redteam:iterative:image',
+  iterativeMeta: 'promptfoo:redteam:iterative:meta',
+  iterativeTree: 'promptfoo:redteam:iterative:tree',
+  memoryPoisoning: 'agentic:memory-poisoning',
+  mischievousUser: 'promptfoo:redteam:mischievous-user',
+} as const;
+
+const EXACT_REDTEAM_PROVIDER_PATHS = new Set<string>(Object.values(REDTEAM_PROVIDER_PATHS));
+
+export function isRedteamProviderPath(providerPath: string): boolean {
+  return (
+    EXACT_REDTEAM_PROVIDER_PATHS.has(providerPath) ||
+    providerPath.startsWith(`${REDTEAM_PROVIDER_PATHS.custom}:`)
+  );
+}
+
 /**
  * Host-owned context passed to provider factories. Keeping this contract here
  * lets a provider plugin implement factories without importing the CLI,

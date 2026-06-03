@@ -1,29 +1,6 @@
-import { PROVIDER_PLUGIN_API_VERSION } from './registryTypes';
+import { isRedteamProviderPath, PROVIDER_PLUGIN_API_VERSION } from './registryTypes';
 
 import type { ProviderPluginManifest } from './registryTypes';
-
-const REDTEAM_PROVIDER_PATHS = new Set([
-  'agentic:memory-poisoning',
-  'promptfoo:redteam:authoritative-markup-injection',
-  'promptfoo:redteam:best-of-n',
-  'promptfoo:redteam:crescendo',
-  'promptfoo:redteam:goat',
-  'promptfoo:redteam:hydra',
-  'promptfoo:redteam:indirect-web-pwn',
-  'promptfoo:redteam:iterative',
-  'promptfoo:redteam:iterative:image',
-  'promptfoo:redteam:iterative:meta',
-  'promptfoo:redteam:iterative:tree',
-  'promptfoo:redteam:mischievous-user',
-]);
-
-export function isRedteamProviderPath(providerPath: string): boolean {
-  return (
-    REDTEAM_PROVIDER_PATHS.has(providerPath) ||
-    providerPath === 'promptfoo:redteam:custom' ||
-    providerPath.startsWith('promptfoo:redteam:custom:')
-  );
-}
 
 export const awsProviderPlugin: ProviderPluginManifest = {
   apiVersion: PROVIDER_PLUGIN_API_VERSION,

@@ -97,17 +97,26 @@ export class ProviderRegistry {
       this.providers.delete(provider);
     }
 
+    const previousShutdown = this.shutdownPromise;
     const cleanupBatch = async () => {
       await Promise.all(providers.map((provider) => this.cleanupResource(provider)));
     };
-    const shutdownBatch =
-      this.shutdownPromise === undefined ? cleanupBatch() : this.shutdownPromise.then(cleanupBatch);
+    let resolveBatch: (() => void) | undefined;
+    let rejectBatch: ((error: unknown) => void) | undefined;
+    const shutdownBatch = new Promise<void>((resolve, reject) => {
+      resolveBatch = resolve;
+      rejectBatch = reject;
+    });
     const trackedShutdown = shutdownBatch.finally(() => {
       if (this.shutdownPromise === trackedShutdown) {
         this.shutdownPromise = undefined;
       }
     });
     this.shutdownPromise = trackedShutdown;
+
+    const runBatch =
+      previousShutdown === undefined ? cleanupBatch() : previousShutdown.then(cleanupBatch);
+    void runBatch.then(resolveBatch, rejectBatch);
     return trackedShutdown;
   }
 }

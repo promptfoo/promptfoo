@@ -6,11 +6,9 @@ import {
   ProviderPluginRegistry,
   registerProviderPlugin,
 } from '../../src/provider-plugin';
-import {
-  builtinProviderPlugins,
-  isRedteamProviderPath,
-} from '../../src/providers/builtinProviderPlugins';
+import { builtinProviderPlugins } from '../../src/providers/builtinProviderPlugins';
 import { loadApiProvider } from '../../src/providers/index';
+import { isRedteamProviderPath } from '../../src/providers/registryTypes';
 
 import type { ProviderFactory, ProviderPluginManifest } from '../../src/provider-plugin';
 
