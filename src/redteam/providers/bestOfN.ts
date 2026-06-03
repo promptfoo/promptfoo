@@ -82,7 +82,7 @@ export default class BestOfNProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
             prompt: context.vars[this.config.injectVar],

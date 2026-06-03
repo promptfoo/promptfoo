@@ -267,7 +267,7 @@ async function handleGoatStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(),
+      headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
       body: JSON.stringify(goatBody),
     },
     getRequestTimeoutMs(),
@@ -321,7 +321,7 @@ async function handleMischievousUserStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(),
+      headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
       body: JSON.stringify(mischievousBody),
     },
     getRequestTimeoutMs(),
@@ -433,7 +433,7 @@ async function handleHydraStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(),
+      headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
       body: JSON.stringify(hydraBody),
     },
     getRequestTimeoutMs(),
@@ -518,7 +518,7 @@ async function handleCrescendoLikeStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(),
+      headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
       body: JSON.stringify(providerRequest),
     },
     getRequestTimeoutMs(),

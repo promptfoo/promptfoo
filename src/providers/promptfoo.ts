@@ -94,7 +94,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: getRemoteGenerationHeaders(getRemoteGenerationUrlForUnaligned()),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -211,7 +211,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -327,7 +327,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },

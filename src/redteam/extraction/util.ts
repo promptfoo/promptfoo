@@ -52,7 +52,7 @@ export async function fetchRemoteGeneration(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(),
+        headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
         body: JSON.stringify(body),
       },
       getRequestTimeoutMs(),

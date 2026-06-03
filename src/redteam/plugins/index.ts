@@ -386,7 +386,7 @@ async function fetchRemoteTestCases(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(),
+        headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
         body,
       },
       getRequestTimeoutMs(),

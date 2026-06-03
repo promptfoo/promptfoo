@@ -37,11 +37,12 @@ export function getRemoteGenerationUrl(): string {
  * auth-injection only attaches the token for the public cloud origin, so on-prem
  * deployments need the header set explicitly (mirrors src/util/cloud.ts / share.ts).
  *
- * The token is intentionally NOT added when `PROMPTFOO_REMOTE_GENERATION_URL` is set,
- * since that env var redirects remote generation to a (possibly third-party)
- * self-hosted endpoint that must not receive the Promptfoo Cloud credential.
+ * The token is intentionally NOT added when the request targets a different origin,
+ * since custom remote-generation and unaligned-inference endpoints must not receive
+ * the Promptfoo Cloud credential.
  */
 export function getRemoteGenerationHeaders(
+  requestUrl: string | URL,
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
   const headers: Record<string, string> = {
@@ -49,13 +50,17 @@ export function getRemoteGenerationHeaders(
     ...extraHeaders,
   };
 
-  if (!getEnvString('PROMPTFOO_REMOTE_GENERATION_URL')) {
-    const cloudConfig = new CloudConfig();
-    if (cloudConfig.isEnabled()) {
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    try {
+      const requestOrigin = new URL(requestUrl).origin;
+      const cloudOrigin = new URL(cloudConfig.getApiHost()).origin;
       const apiKey = cloudConfig.getApiKey();
-      if (apiKey) {
+      if (requestOrigin === cloudOrigin && apiKey) {
         headers.Authorization = `Bearer ${apiKey}`;
       }
+    } catch {
+      // Never send cloud credentials when the destination cannot be verified.
     }
   }
 

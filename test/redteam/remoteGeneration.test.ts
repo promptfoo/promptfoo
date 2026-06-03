@@ -508,18 +508,18 @@ describe('getRemoteGenerationHeaders', () => {
     vi.unstubAllEnvs();
   });
 
-  it('adds a bearer token when cloud is enabled and there is no remote-generation override', () => {
+  it('adds a bearer token when the request targets the configured cloud host', () => {
     vi.mocked(readGlobalConfig).mockReturnValue({
       cloud: { apiKey: 'test-cloud-key', apiHost: 'https://onprem.example.com' },
     } as any);
 
-    expect(getRemoteGenerationHeaders()).toMatchObject({
+    expect(getRemoteGenerationHeaders('https://onprem.example.com/api/v1/task')).toMatchObject({
       'Content-Type': 'application/json',
       Authorization: 'Bearer test-cloud-key',
     });
   });
 
-  it('does NOT add a token when PROMPTFOO_REMOTE_GENERATION_URL is set (self-hosted override)', () => {
+  it('does NOT add a token when the request targets a self-hosted override', () => {
     vi.mocked(readGlobalConfig).mockReturnValue({
       cloud: { apiKey: 'test-cloud-key' },
     } as any);
@@ -527,17 +527,37 @@ describe('getRemoteGenerationHeaders', () => {
       key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://self-hosted.example.com/task' : '',
     );
 
-    const headers = getRemoteGenerationHeaders();
+    const headers = getRemoteGenerationHeaders(getRemoteGenerationUrl());
     expect(headers['Content-Type']).toBe('application/json');
     expect(headers.Authorization).toBeUndefined();
   });
 
+  it('does NOT forward the cloud token to a custom unaligned-inference endpoint', () => {
+    vi.mocked(readGlobalConfig).mockReturnValue({
+      cloud: { apiKey: 'test-cloud-key', apiHost: 'https://onprem.example.com' },
+    } as any);
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT' ? 'https://custom.example.com/harmful' : '',
+    );
+
+    const endpoint = getRemoteGenerationUrlForUnaligned();
+
+    expect(endpoint).toBe('https://custom.example.com/harmful');
+    expect(getRemoteGenerationHeaders(endpoint).Authorization).toBeUndefined();
+  });
+
   it('does NOT add a token when cloud is not enabled', () => {
-    expect(getRemoteGenerationHeaders().Authorization).toBeUndefined();
+    expect(
+      getRemoteGenerationHeaders('https://api.promptfoo.app/api/v1/task').Authorization,
+    ).toBeUndefined();
   });
 
   it('preserves caller-supplied extra headers', () => {
-    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toMatchObject({
+    expect(
+      getRemoteGenerationHeaders('https://api.promptfoo.app/api/v1/task', {
+        'X-Custom': 'value',
+      }),
+    ).toMatchObject({
       'Content-Type': 'application/json',
       'X-Custom': 'value',
     });

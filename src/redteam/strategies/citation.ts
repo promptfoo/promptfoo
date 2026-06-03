@@ -66,7 +66,7 @@ async function generateCitations(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
           body: JSON.stringify(payload),
         },
         getRequestTimeoutMs(),

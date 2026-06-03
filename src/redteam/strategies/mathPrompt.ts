@@ -71,7 +71,7 @@ export async function generateMathPrompt(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
           body: JSON.stringify(payload),
         },
         getRequestTimeoutMs(),

@@ -46,7 +46,7 @@ describe('likert strategy', () => {
     vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'http://test.com';
     });
-    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((_url, extra) => ({
       'Content-Type': 'application/json',
       ...extra,
     }));
