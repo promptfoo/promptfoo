@@ -43,6 +43,11 @@ const ResultParamsSchema = z.object({
   id: z.string().min(1),
 });
 
+const ResultRowParamsSchema = ResultParamsSchema.extend({
+  testIdx: z.coerce.number().int().nonnegative(),
+  promptIdx: z.coerce.number().int().nonnegative(),
+});
+
 const ResultQuerySchema = z.object({
   includeTraces: z
     .union([z.boolean(), z.enum(['true', 'false'])])
@@ -129,6 +134,10 @@ export const ServerSchemas = {
     Params: ResultParamsSchema,
     Query: ResultQuerySchema,
     Response: ResultResponseSchema,
+  },
+  ResultRow: {
+    Params: ResultRowParamsSchema,
+    Response: DataResponseSchema,
   },
   Prompts: {
     Response: PromptsResponseSchema,

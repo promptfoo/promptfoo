@@ -185,6 +185,44 @@ describe('inline server API DTO validation', () => {
     expect(mockedGetEvalSummaries).not.toHaveBeenCalled();
   });
 
+  it('loads one bounded result row by test and prompt index', async () => {
+    const getResult = vi.fn().mockResolvedValue({
+      testIdx: 2,
+      promptIdx: 3,
+      response: { output: 'Selected output' },
+    });
+    mockedEval.findById.mockResolvedValue({ getResult } as never);
+
+    const response = await api.get('/api/results/eval-1/rows/2/3');
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      testIdx: 2,
+      promptIdx: 3,
+      response: { output: 'Selected output' },
+    });
+    expect(getResult).toHaveBeenCalledWith(2, 3);
+    expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid result row indices before loading an eval', async () => {
+    const response = await api.get('/api/results/eval-1/rows/not-a-number/3');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('testIdx');
+    expect(mockedEval.findById).not.toHaveBeenCalled();
+  });
+
+  it('returns a JSON error DTO when a selected result row is missing', async () => {
+    const getResult = vi.fn().mockResolvedValue(undefined);
+    mockedEval.findById.mockResolvedValue({ getResult } as never);
+
+    const response = await api.get('/api/results/eval-1/rows/2/3');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Result row not found' });
+  });
+
   it('returns JSON error DTOs for missing result files', async () => {
     mockedReadResult.mockResolvedValue(undefined);
 

@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -238,6 +238,22 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ListResultsResponse', ServerSchemas.ResultList.Response),
       400: validationError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/results/{id}/rows/{testIdx}/{promptIdx}',
+    operationId: 'getResultRow',
+    tags: ['Results'],
+    summary: 'Get one evaluation result row',
+    request: {
+      params: params('ResultRowParams', ServerSchemas.ResultRow.Params),
+    },
+    responses: {
+      200: jsonResponse('ResultRowResponse', ServerSchemas.ResultRow.Response),
+      400: validationError(),
+      404: notFound('Result row not found'),
     },
   });
 

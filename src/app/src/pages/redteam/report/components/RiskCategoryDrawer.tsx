@@ -20,7 +20,7 @@ import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDia
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
-import type { GradingResult, SharedResults } from '@promptfoo/types';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -154,9 +154,10 @@ const RiskCategoryDrawer = ({
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
   const [loadingDetailsKey, setLoadingDetailsKey] = React.useState<string | null>(null);
   const [detailsLoadError, setDetailsLoadError] = React.useState<string | null>(null);
-  const fullEvalDataRef = React.useRef<{ evalId: string; data: SharedResults['data'] } | null>(
-    null,
-  );
+  const detailsCacheRef = React.useRef<{ evalId: string; results: Map<string, EvaluateResult> }>({
+    evalId,
+    results: new Map(),
+  });
   const detailsRequestRef = React.useRef(0);
   const previousEvalIdRef = React.useRef(evalId);
 
@@ -166,7 +167,7 @@ const RiskCategoryDrawer = ({
     }
     previousEvalIdRef.current = evalId;
     detailsRequestRef.current += 1;
-    fullEvalDataRef.current = null;
+    detailsCacheRef.current = { evalId, results: new Map() };
     setLoadingDetailsKey(null);
     setDetailsLoadError(null);
     setSelectedTest(null);
@@ -203,27 +204,24 @@ const RiskCategoryDrawer = ({
     setLoadingDetailsKey(detailsKey);
 
     try {
-      let fullEvalData =
-        fullEvalDataRef.current?.evalId === evalId ? fullEvalDataRef.current.data : null;
-      if (!fullEvalData) {
+      if (detailsCacheRef.current.evalId !== evalId) {
+        detailsCacheRef.current = { evalId, results: new Map() };
+      }
+      let fullResult = detailsCacheRef.current.results.get(detailsKey);
+      if (!fullResult) {
         const response = await callApi(
-          `/results/${encodeURIComponent(evalId)}?includeTraces=false`,
+          `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}`,
           { cache: 'no-store' },
         );
         if (!response.ok) {
-          throw new Error(`Failed to load full evaluation data (${response.status})`);
+          throw new Error(`Failed to load full result details (${response.status})`);
         }
-        const body = (await response.json()) as SharedResults;
-        fullEvalData = body.data;
-        fullEvalDataRef.current = { evalId, data: fullEvalData };
-      }
-
-      const fullResult = fullEvalData.results.results.find(
-        (result) =>
-          result.testIdx === compactResult.testIdx && result.promptIdx === compactResult.promptIdx,
-      );
-      if (!fullResult) {
-        throw new Error('Could not find the selected result in the full evaluation data');
+        const body = (await response.json()) as { data: EvaluateResult };
+        fullResult = body.data;
+        if (requestId !== detailsRequestRef.current || detailsCacheRef.current.evalId !== evalId) {
+          return;
+        }
+        detailsCacheRef.current.results.set(detailsKey, fullResult);
       }
       if (requestId !== detailsRequestRef.current) {
         return;

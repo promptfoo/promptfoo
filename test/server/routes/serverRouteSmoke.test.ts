@@ -378,6 +378,12 @@ const smokeCases: SmokeCase[] = [
     path: '/api/results/missing-eval',
     expectedStatus: 404,
   },
+  {
+    method: 'get',
+    openApiPath: '/api/results/{id}/rows/{testIdx}/{promptIdx}',
+    path: '/api/results/missing-eval/rows/0/0',
+    expectedStatus: 404,
+  },
   { method: 'get', openApiPath: '/api/prompts', path: '/api/prompts', expectedStatus: 200 },
   { method: 'get', openApiPath: '/api/history', path: '/api/history', expectedStatus: 200 },
   {

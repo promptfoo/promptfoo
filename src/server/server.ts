@@ -179,6 +179,31 @@ export function createApp() {
     },
   );
 
+  app.get('/api/results/:id/rows/:testIdx/:promptIdx', async (req: Request, res: Response) => {
+    const paramsResult = ServerSchemas.ResultRow.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      replyValidationError(res, paramsResult.error);
+      return;
+    }
+    const { id, testIdx, promptIdx } = paramsResult.data;
+
+    try {
+      const eval_ = await Eval.findById(id);
+      if (!eval_) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+      const result = await eval_.getResult(testIdx, promptIdx);
+      if (!result) {
+        res.status(404).json({ error: 'Result row not found' });
+        return;
+      }
+      res.json(ServerSchemas.ResultRow.Response.parse({ data: result }));
+    } catch (error) {
+      sendError(res, 500, 'Failed to load result row', error);
+    }
+  });
+
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ServerSchemas.Result.Params.safeParse(req.params);
     if (!paramsResult.success) {

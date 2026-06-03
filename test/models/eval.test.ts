@@ -28,6 +28,7 @@ import {
   createEvaluateTable,
 } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -1169,6 +1170,33 @@ describe('evaluator', () => {
     });
   });
 
+  describe('getResult', () => {
+    it('loads only the selected persisted result row', async () => {
+      const eval1 = await EvalFactory.create();
+      const loadResultsSpy = vi.spyOn(eval1, 'loadResults');
+
+      const result = await eval1.getResult(1, 0);
+
+      expect(result).toMatchObject({
+        testIdx: 1,
+        promptIdx: 0,
+        response: { output: 'san francisco' },
+      });
+      expect(loadResultsSpy).not.toHaveBeenCalled();
+      expect(eval1.results).toEqual([]);
+    });
+
+    it('loads selected legacy result rows', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [createEvaluateResult({ testIdx: 4, promptIdx: 2 })],
+      });
+
+      expect(await eval1.getResult(4, 2)).toMatchObject({ testIdx: 4, promptIdx: 2 });
+      expect(await eval1.getResult(5, 2)).toBeUndefined();
+    });
+  });
+
   describe('toResultsFile', () => {
     it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
@@ -1233,6 +1261,7 @@ describe('evaluator', () => {
 
     it('should remove oversized fields from redteam report result projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
+      const loadResultsSpy = vi.spyOn(eval1, 'loadResults');
       const oversizedText = 'x'.repeat(1_000_000);
       eval1.config = {
         description: 'Compact report',
@@ -1342,6 +1371,8 @@ describe('evaluator', () => {
         metric: 'CodingAgentNetworkEgressBypass',
       });
       expect(JSON.stringify(projected).length).toBeLessThan(100_000);
+      expect(loadResultsSpy).not.toHaveBeenCalled();
+      expect(eval1.results).toEqual([]);
       expect(projected.config).toEqual({
         description: 'Compact report',
         providers: [
@@ -1380,6 +1411,150 @@ describe('evaluator', () => {
       });
 
       expect('table' in projected.results && projected.results.table.body).toEqual([]);
+    });
+
+    it('defaults missing legacy result vars before redteam report projection', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          {
+            ...createEvaluateResult(),
+            vars: undefined,
+          } as unknown as EvaluateResult,
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].vars).toEqual({});
+    });
+
+    it('preserves report-relevant JSON types in persisted compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          vars: {
+            prompt: false,
+            question: { nested: true },
+          },
+          testCase: {
+            vars: {
+              prompt: false,
+              question: { nested: true },
+            },
+          },
+          response: {
+            output: { accepted: false },
+            prompt: [{ role: 'user', content: 'Full provider prompt' }],
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Failed',
+            suggestions: [{ type: 'note', action: 'note', value: 'Top-level suggestion' }],
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'Component failed',
+                assertion: {
+                  type: 'promptfoo:redteam:harmful',
+                  metric: 'Harmful',
+                  value: 'must not be projected',
+                },
+                suggestions: [{ type: 'note', action: 'note', value: 'Component suggestion' }],
+                metadata: { arbitrary: 'must not be projected' },
+              },
+            ],
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const result = projected.results.results[0];
+
+      expect(result.vars).toEqual({ prompt: false, question: { nested: true } });
+      expect(result.response).toEqual({
+        output: { accepted: false },
+        prompt: [{ role: 'user', content: 'Full provider prompt' }],
+      });
+      expect(result.gradingResult).toMatchObject({
+        pass: false,
+        suggestions: [{ type: 'note', action: 'note', value: 'Top-level suggestion' }],
+        componentResults: [
+          {
+            pass: false,
+            suggestions: [{ type: 'note', action: 'note', value: 'Component suggestion' }],
+            assertion: { type: 'promptfoo:redteam:harmful', metric: 'Harmful' },
+          },
+        ],
+      });
+      expect(result.gradingResult?.componentResults?.[0]).not.toHaveProperty('metadata');
+      expect(result.gradingResult?.componentResults?.[0].assertion).not.toHaveProperty('value');
+    });
+
+    it('honors output strip flags in persisted compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          prompt: { raw: 'sensitive raw prompt', label: 'Prompt label' },
+          vars: { prompt: 'sensitive test var' },
+          testCase: {
+            vars: { prompt: 'sensitive test var' },
+            metadata: { pluginId: 'sensitive-plugin', strategyId: 'sensitive-strategy' },
+          },
+          response: {
+            output: 'sensitive provider output',
+            metadata: { redteamFinalPrompt: 'sensitive final prompt' },
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'sensitive grading reason',
+          },
+          metadata: {
+            pluginId: 'sensitive-plugin',
+            redteamHistory: [{ prompt: 'sensitive history', output: 'sensitive history output' }],
+          },
+        }),
+      );
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const result = projected.results.results[0];
+
+        expect(result.prompt.raw).toBe('[prompt stripped]');
+        expect(result.vars).toEqual({});
+        expect(result.testCase).toEqual({});
+        expect(result.response).toEqual({ output: '[output stripped]' });
+        expect(result.gradingResult).toBeNull();
+        expect(result.metadata).toEqual({});
+        expect(JSON.stringify(result)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('defaults missing persisted test-case vars before compact projection', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db
+        .update(evalResultsTable)
+        .set({ testCase: { metadata: { pluginId: 'harmful' } } })
+        .where(eq(evalResultsTable.evalId, eval1.id))
+        .run();
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].vars).toEqual({});
+      expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
     });
 
     it('preserves redteamFinalPrompt and drops display-only transform vars', async () => {

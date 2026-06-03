@@ -73,6 +73,50 @@ interface FilteredCountRow {
   count: number | null;
 }
 
+interface RedteamReportResultRow {
+  promptIdx: number;
+  testIdx: number;
+  promptId: string | null;
+  providerId: string | null;
+  providerLabel: string | null;
+  promptRaw: string | null;
+  promptLabel: string | null;
+  promptDisplay: string | null;
+  vars: string | null;
+  responseExists: number;
+  responseOutput: string | null;
+  responsePrompt: string | null;
+  responseRedteamFinalPrompt: string | null;
+  error: string | null;
+  failureReason: number;
+  success: boolean;
+  score: number;
+  latencyMs: number | null;
+  gradingResultExists: number;
+  gradingPass: number | null;
+  gradingScore: number | null;
+  gradingReason: string | null;
+  gradingAssertionType: string | null;
+  gradingAssertionMetric: string | null;
+  gradingSuggestions: string | null;
+  gradingComponentResults: string | null;
+  metadataPluginId: string | null;
+  metadataHarmCategory: string | null;
+  metadataRedteamFinalPrompt: string | null;
+  metadataRedteamHistory: string | null;
+  metadataRedteamTreeHistory: string | null;
+  testCasePluginId: string | null;
+  testCaseStrategyId: string | null;
+}
+
+interface RedteamReportStripFlags {
+  shouldStripPromptText: boolean;
+  shouldStripResponseOutput: boolean;
+  shouldStripTestVars: boolean;
+  shouldStripGradingResult: boolean;
+  shouldStripMetadata: boolean;
+}
+
 export type ResultsFileOptions = {
   includeTraces?: boolean;
   resultProjection?: 'full' | 'redteamReport';
@@ -105,9 +149,13 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
 }
 
 function projectVarsForRedteamReport(
-  vars: EvaluateResult['vars'],
+  vars: EvaluateResult['vars'] | undefined,
   injectVar: string,
 ): EvaluateResult['vars'] {
+  if (!isRecord(vars)) {
+    return {};
+  }
+
   const projectedVars: [string, EvaluateResult['vars'][string]][] = [];
   for (const key of new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])) {
     if (Object.prototype.hasOwnProperty.call(vars, key)) {
@@ -115,6 +163,157 @@ function projectVarsForRedteamReport(
     }
   }
   return Object.fromEntries(projectedVars);
+}
+
+function parseJsonFragment<T>(value: string | null): T | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function createProjectedGradingResult(row: RedteamReportResultRow): GradingResult | undefined {
+  if (!row.gradingResultExists) {
+    return undefined;
+  }
+
+  const assertion: GradingResult['assertion'] =
+    row.gradingAssertionType === null
+      ? undefined
+      : {
+          type: row.gradingAssertionType as NonNullable<GradingResult['assertion']>['type'],
+          ...(row.gradingAssertionMetric !== null && { metric: row.gradingAssertionMetric }),
+        };
+  const componentResults = parseJsonFragment<GradingResult[]>(row.gradingComponentResults)?.map(
+    (componentResult) => ({
+      ...componentResult,
+      pass: Boolean(componentResult.pass),
+      ...(componentResult.assertion && {
+        assertion: {
+          type: componentResult.assertion.type,
+          ...(componentResult.assertion.metric !== null &&
+            componentResult.assertion.metric !== undefined && {
+              metric: componentResult.assertion.metric,
+            }),
+        },
+      }),
+    }),
+  );
+
+  return {
+    pass: Boolean(row.gradingPass),
+    score: row.gradingScore ?? 0,
+    reason: row.gradingReason ?? '',
+    ...(assertion && { assertion }),
+    ...(row.gradingSuggestions !== null && {
+      suggestions: parseJsonFragment<GradingResult['suggestions']>(row.gradingSuggestions),
+    }),
+    ...(componentResults && { componentResults }),
+  };
+}
+
+function createRedteamReportResponse(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult['response'] {
+  const redteamFinalPrompt = stripFlags.shouldStripMetadata
+    ? null
+    : (row.responseRedteamFinalPrompt ?? row.metadataRedteamFinalPrompt);
+  if (!row.responseExists && redteamFinalPrompt === null) {
+    return undefined;
+  }
+
+  return {
+    ...(row.responseExists && stripFlags.shouldStripResponseOutput
+      ? { output: '[output stripped]' }
+      : row.responseOutput !== null && {
+          output: parseJsonFragment(row.responseOutput),
+        }),
+    ...(row.responsePrompt !== null && {
+      prompt: parseJsonFragment<NonNullable<EvaluateResult['response']>['prompt']>(
+        row.responsePrompt,
+      ),
+    }),
+    ...(row.responsePrompt === null &&
+      redteamFinalPrompt !== null && { metadata: { redteamFinalPrompt } }),
+  };
+}
+
+function createRedteamReportMetadata(
+  row: RedteamReportResultRow,
+  shouldStripMetadata: boolean,
+): EvaluateResult['metadata'] {
+  if (shouldStripMetadata) {
+    return {};
+  }
+
+  const metadata = {
+    ...(row.metadataPluginId !== null && { pluginId: row.metadataPluginId }),
+    ...(row.metadataHarmCategory !== null && { harmCategory: row.metadataHarmCategory }),
+    ...(row.metadataRedteamHistory !== null && {
+      redteamHistory: parseJsonFragment(row.metadataRedteamHistory),
+    }),
+    ...(row.metadataRedteamTreeHistory !== null && {
+      redteamTreeHistory: parseJsonFragment(row.metadataRedteamTreeHistory),
+    }),
+  };
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function createRedteamReportResult(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult {
+  const {
+    shouldStripPromptText,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  } = stripFlags;
+  const vars = shouldStripTestVars
+    ? {}
+    : (parseJsonFragment<EvaluateResult['vars']>(row.vars) ?? {});
+  const prompt = {
+    raw: shouldStripPromptText ? '[prompt stripped]' : (row.promptRaw ?? ''),
+    label: row.promptLabel ?? row.promptRaw ?? '',
+    ...(row.promptDisplay !== null && { display: row.promptDisplay }),
+  };
+  const response = createRedteamReportResponse(row, stripFlags);
+  const metadata = createRedteamReportMetadata(row, shouldStripMetadata);
+  const testCaseMetadata = shouldStripMetadata
+    ? {}
+    : {
+        ...(row.testCasePluginId !== null && { pluginId: row.testCasePluginId }),
+        ...(row.testCaseStrategyId !== null && { strategyId: row.testCaseStrategyId }),
+      };
+
+  return {
+    promptIdx: row.promptIdx,
+    testIdx: row.testIdx,
+    testCase: {
+      ...(Object.keys(testCaseMetadata).length > 0 && { metadata: testCaseMetadata }),
+    },
+    promptId: row.promptId ?? hashPrompt(prompt),
+    provider: {
+      id: row.providerId ?? '',
+      ...(row.providerLabel !== null && { label: row.providerLabel }),
+    },
+    prompt,
+    vars,
+    response,
+    error: row.error,
+    failureReason: row.failureReason as ResultFailureReason,
+    success: row.success,
+    score: row.score,
+    latencyMs: row.latencyMs ?? 0,
+    gradingResult: shouldStripGradingResult ? null : createProjectedGradingResult(row),
+    namedScores: {},
+    ...(metadata !== undefined && { metadata }),
+  };
 }
 
 function projectResultForRedteamReport(result: EvaluateResult, injectVar: string): EvaluateResult {
@@ -1546,6 +1745,22 @@ export default class Eval {
     return this.results;
   }
 
+  async getResult(testIdx: number, promptIdx: number): Promise<EvaluateResult | undefined> {
+    if (this.useOldResults()) {
+      return this.oldResults?.results.find(
+        (result) => result.testIdx === testIdx && result.promptIdx === promptIdx,
+      );
+    }
+    if (!this.persisted) {
+      return this.results
+        .find((result) => result.testIdx === testIdx && result.promptIdx === promptIdx)
+        ?.toEvaluateResult();
+    }
+    return (
+      await EvalResult.findByEvalIdAndIndices(this.id, testIdx, promptIdx)
+    )?.toEvaluateResult();
+  }
+
   clearResults() {
     this.results = [];
     this._resultsLoaded = false;
@@ -1607,6 +1822,170 @@ export default class Eval {
     };
   }
 
+  private async toRedteamReportSummary(
+    injectVar: string,
+  ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      return projectSummaryForRedteamReport(
+        {
+          version: 2,
+          timestamp: new Date(this.createdAt).toISOString(),
+          results: this.oldResults.results,
+          table: this.oldResults.table,
+          stats: this.oldResults.stats,
+        },
+        injectVar,
+      );
+    }
+
+    if (!this.persisted) {
+      return projectSummaryForRedteamReport(await this.toEvaluateSummary(), injectVar);
+    }
+
+    const stripFlags: RedteamReportStripFlags = {
+      shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
+      shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
+      shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
+      shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
+      shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
+    };
+    const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
+    const db = await getDb();
+    const rows = await db
+      .select({
+        promptIdx: evalResultsTable.promptIdx,
+        testIdx: evalResultsTable.testIdx,
+        promptId: evalResultsTable.promptId,
+        providerId: sql<string | null>`json_extract(${evalResultsTable.provider}, '$.id')`,
+        providerLabel: sql<string | null>`json_extract(${evalResultsTable.provider}, '$.label')`,
+        promptRaw: sql<string | null>`json_extract(${evalResultsTable.prompt}, '$.raw')`,
+        promptLabel: sql<string | null>`json_extract(${evalResultsTable.prompt}, '$.label')`,
+        promptDisplay: sql<string | null>`json_extract(${evalResultsTable.prompt}, '$.display')`,
+        vars: sql<string | null>`(
+          SELECT json_group_object(
+            report_vars.key,
+            CASE report_vars.type
+              WHEN 'true' THEN json('true')
+              WHEN 'false' THEN json('false')
+              WHEN 'null' THEN json('null')
+              WHEN 'array' THEN json(report_vars.value)
+              WHEN 'object' THEN json(report_vars.value)
+              ELSE report_vars.value
+            END
+          )
+          FROM json_each(json_extract(${evalResultsTable.testCase}, '$.vars')) AS report_vars
+          WHERE report_vars.key IN (${sql.join(
+            reportVarKeys.map((key) => sql`${key}`),
+            sql`, `,
+          )})
+        )`,
+        responseExists: sql<number>`CASE WHEN ${evalResultsTable.response} IS NULL THEN 0 ELSE 1 END`,
+        responseOutput: sql<string | null>`${evalResultsTable.response} -> '$.output'`,
+        responsePrompt: sql<string | null>`${evalResultsTable.response} -> '$.prompt'`,
+        responseRedteamFinalPrompt: sql<
+          string | null
+        >`json_extract(${evalResultsTable.response}, '$.metadata.redteamFinalPrompt')`,
+        error: evalResultsTable.error,
+        failureReason: evalResultsTable.failureReason,
+        success: evalResultsTable.success,
+        score: evalResultsTable.score,
+        latencyMs: evalResultsTable.latencyMs,
+        gradingResultExists: sql<number>`CASE WHEN ${evalResultsTable.gradingResult} IS NULL THEN 0 ELSE 1 END`,
+        gradingPass: sql<number | null>`json_extract(${evalResultsTable.gradingResult}, '$.pass')`,
+        gradingScore: sql<
+          number | null
+        >`json_extract(${evalResultsTable.gradingResult}, '$.score')`,
+        gradingReason: sql<
+          string | null
+        >`json_extract(${evalResultsTable.gradingResult}, '$.reason')`,
+        gradingAssertionType: sql<
+          string | null
+        >`json_extract(${evalResultsTable.gradingResult}, '$.assertion.type')`,
+        gradingAssertionMetric: sql<
+          string | null
+        >`json_extract(${evalResultsTable.gradingResult}, '$.assertion.metric')`,
+        gradingSuggestions: sql<
+          string | null
+        >`${evalResultsTable.gradingResult} -> '$.suggestions'`,
+        gradingComponentResults: sql<string | null>`CASE
+          WHEN json_type(${evalResultsTable.gradingResult}, '$.componentResults') = 'array'
+          THEN (
+            SELECT json_group_array(
+              json_patch(
+                json_patch(
+                  json_object(
+                    'pass', json_extract(report_component.value, '$.pass'),
+                    'score', json_extract(report_component.value, '$.score'),
+                    'reason', json_extract(report_component.value, '$.reason')
+                  ),
+                  CASE
+                    WHEN json_type(report_component.value, '$.assertion') = 'object'
+                    THEN json_object(
+                      'assertion',
+                      json_object(
+                        'type', json_extract(report_component.value, '$.assertion.type'),
+                        'metric', json_extract(report_component.value, '$.assertion.metric')
+                      )
+                    )
+                    ELSE json('{}')
+                  END
+                ),
+                CASE
+                  WHEN json_type(report_component.value, '$.suggestions') = 'array'
+                  THEN json_object(
+                    'suggestions',
+                    json_extract(report_component.value, '$.suggestions')
+                  )
+                  ELSE json('{}')
+                END
+              )
+            )
+            FROM json_each(
+              json_extract(${evalResultsTable.gradingResult}, '$.componentResults')
+            ) AS report_component
+          )
+          ELSE NULL
+        END`,
+        metadataPluginId: sql<
+          string | null
+        >`json_extract(${evalResultsTable.metadata}, '$.pluginId')`,
+        metadataHarmCategory: sql<
+          string | null
+        >`json_extract(${evalResultsTable.metadata}, '$.harmCategory')`,
+        metadataRedteamFinalPrompt: sql<
+          string | null
+        >`json_extract(${evalResultsTable.metadata}, '$.redteamFinalPrompt')`,
+        metadataRedteamHistory: sql<
+          string | null
+        >`${evalResultsTable.metadata} -> '$.redteamHistory'`,
+        metadataRedteamTreeHistory: sql<
+          string | null
+        >`${evalResultsTable.metadata} -> '$.redteamTreeHistory'`,
+        testCasePluginId: sql<
+          string | null
+        >`json_extract(${evalResultsTable.testCase}, '$.metadata.pluginId')`,
+        testCaseStrategyId: sql<
+          string | null
+        >`json_extract(${evalResultsTable.testCase}, '$.metadata.strategyId')`,
+      })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx)
+      .all();
+    const prompts = stripFlags.shouldStripPromptText
+      ? this.prompts.map((prompt) => ({ ...prompt, raw: '[prompt stripped]' }))
+      : this.prompts;
+
+    return {
+      version: 3,
+      timestamp: new Date(this.createdAt).toISOString(),
+      prompts,
+      results: rows.map((row) => createRedteamReportResult(row, stripFlags)),
+      stats: this.getStats(),
+    };
+  }
+
   async getTraces(): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
@@ -1657,12 +2036,11 @@ export default class Eval {
     resultProjection = 'full',
   }: ResultsFileOptions = {}): Promise<ResultsFile> {
     const traces = includeTraces ? await this.getTraces() : [];
-    const evaluateSummary = await this.toEvaluateSummary();
     const injectVar = this.config.redteam?.injectVar ?? 'prompt';
     const results =
       resultProjection === 'redteamReport'
-        ? projectSummaryForRedteamReport(evaluateSummary, injectVar)
-        : evaluateSummary;
+        ? await this.toRedteamReportSummary(injectVar)
+        : await this.toEvaluateSummary();
 
     const resultFile: ResultsFile = {
       version: this.version(),

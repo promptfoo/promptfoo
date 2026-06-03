@@ -765,6 +765,23 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
+  static async findByEvalIdAndIndices(evalId: string, testIdx: number, promptIdx: number) {
+    const db = await getDb();
+    const result = await db
+      .select()
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          eq(evalResultsTable.testIdx, testIdx),
+          eq(evalResultsTable.promptIdx, promptIdx),
+        ),
+      )
+      .limit(1)
+      .get();
+    return result ? new EvalResult({ ...result, persisted: true }) : null;
+  }
+
   static async findManyByEvalIdAndTestIndices(evalId: string, testIndices: number[]) {
     if (!testIndices.length) {
       return [];

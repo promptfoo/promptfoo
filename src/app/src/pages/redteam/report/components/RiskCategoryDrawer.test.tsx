@@ -242,9 +242,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       },
     };
     mockCallApiResponse({
-      data: {
-        results: { results: [fullResult] },
-      },
+      data: fullResult,
     });
     const user = userEvent.setup();
 
@@ -253,7 +251,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Details' }));
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/results/test-eval-123?includeTraces=false', {
+      expect(callApi).toHaveBeenCalledWith('/results/test-eval-123/rows/0/0', {
         cache: 'no-store',
       });
       expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
@@ -268,19 +266,39 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     });
   });
 
+  it('caches selected full result details without loading other rows', async () => {
+    const fullResult = {
+      ...createMockEvaluateResult({ pluginId: 'bola' }),
+      response: { output: 'Full output', prompt: 'Full provider prompt' },
+    };
+    mockCallApiResponse({ data: fullResult });
+    const user = userEvent.setup();
+
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: 'Details' })).toBeEnabled();
+    });
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores stale detail responses after switching evaluations', async () => {
     const staleResult = {
       ...createMockEvaluateResult({ pluginId: 'bola' }),
       response: { output: 'Stale output', prompt: 'Stale prompt' },
     };
-    const staleBody = { data: { results: { results: [staleResult] } } };
+    const staleBody = { data: staleResult };
     let resolveRequest: (body: typeof staleBody) => void = () => {};
     const pendingRequest = new Promise<typeof staleBody>((resolve) => {
       resolveRequest = resolve;
     });
     mockCallApiRoutes([
       {
-        path: '/results/test-eval-123?includeTraces=false',
+        path: '/results/test-eval-123/rows/0/0',
         response: () => pendingRequest,
       },
     ]);
