@@ -62,18 +62,12 @@ function createInitialGradingContext({
   return gradingContext;
 }
 
-function shouldRegradeStoredMissingEvidenceResult({
+function shouldRegradeStoredAgenticResult({
   assertionValueContext,
   baseType,
-  storedResult,
-}: Pick<AssertionParams, 'assertionValueContext' | 'baseType'> & {
-  storedResult: GradingResult;
-}): boolean {
+}: Pick<AssertionParams, 'assertionValueContext' | 'baseType'>): boolean {
   return Boolean(
-    baseType.startsWith('promptfoo:redteam:agentic:') &&
-      (storedResult.metadata?.agenticEvidenceStatus === 'missing-evidence' ||
-        storedResult.metadata?.verifierStatus === 'missing-evidence') &&
-      assertionValueContext.trace?.spans?.length,
+    baseType.startsWith('promptfoo:redteam:agentic:') && assertionValueContext.trace?.spans?.length,
   );
 }
 
@@ -99,13 +93,7 @@ export const handleRedteam = async ({
     assertion.type.includes(test.metadata.pluginId)
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
-    if (
-      shouldRegradeStoredMissingEvidenceResult({
-        assertionValueContext,
-        baseType,
-        storedResult,
-      })
-    ) {
+    if (shouldRegradeStoredAgenticResult({ assertionValueContext, baseType })) {
       logger.debug(
         '[Redteam] Regrading stored agentic result because final trace evidence is now available',
         {

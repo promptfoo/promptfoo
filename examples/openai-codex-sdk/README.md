@@ -107,6 +107,8 @@ If your network requires proxy or custom certificate environment variables such 
 
 This example runs the verifier-backed `agentic:*` red-team plugins against a read-only Codex CLI target with streamed OTEL traces. It keeps evaluation concurrency at one so a local run does not start several Codex processes at once.
 
+Agent command output and provider-raw command items are intentionally not verifier evidence. A deterministic finding must come from structured, plugin-scoped verifier evidence.
+
 **Location**: `./agentic-runtime/`
 
 **Usage**:

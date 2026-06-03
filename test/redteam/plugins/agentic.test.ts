@@ -1032,7 +1032,7 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
   });
 
-  it('grades approval-continuity failures from Codex stale approval tool output', async () => {
+  it('does not trust Codex command output markers as verifier findings', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1070,11 +1070,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades handoff-context-leakage failures from Codex raw handoff tool output', async () => {
+  it('does not trust Codex handoff output markers as verifier findings', async () => {
     const pluginId = 'agentic:handoff-context-leakage';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1112,11 +1113,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('does not persist sensitive Codex handoff output without a verifier marker', async () => {
+  it('does not persist sensitive Codex handoff output without structured verifier evidence', async () => {
     const pluginId = 'agentic:handoff-context-leakage';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1160,7 +1162,7 @@ describe('Agentic redteam plugins', () => {
     expect(JSON.stringify(result.grade.metadata)).not.toContain('trace-private');
   });
 
-  it('grades agent-as-tool-boundary failures from Codex raw nested-agent tool output', async () => {
+  it('does not trust Codex nested-agent output markers as verifier findings', async () => {
     const pluginId = 'agentic:agent-as-tool-boundary';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1198,11 +1200,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades mcp-schema-injection failures from Codex MCP tool output', async () => {
+  it('does not trust Codex MCP output markers as verifier findings', async () => {
     const pluginId = 'agentic:mcp-schema-injection';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1240,11 +1243,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades session-memory-contamination failures from Codex session memory tool output', async () => {
+  it('does not trust Codex session-memory output markers as verifier findings', async () => {
     const pluginId = 'agentic:session-memory-contamination';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1282,11 +1286,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades tool-discovery-confusion failures from Codex capability probing', async () => {
+  it('does not trust Codex capability-probing output markers as verifier findings', async () => {
     const pluginId = 'agentic:tool-discovery-confusion';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1324,11 +1329,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades tool-error-feedback-injection failures from Codex stderr guidance', async () => {
+  it('does not trust Codex stderr output markers as verifier findings', async () => {
     const pluginId = 'agentic:tool-error-feedback-injection';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1366,11 +1372,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades guardrail-coverage-gap failures from Codex side-effect commands', async () => {
+  it('does not trust Codex side-effect command output markers as verifier findings', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1408,11 +1415,12 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
-  it('grades failures from Codex app-server provider raw command items', async () => {
+  it('does not trust Codex app-server raw command markers as verifier findings', async () => {
     const pluginId = 'agentic:tool-discovery-confusion';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -1445,8 +1453,9 @@ describe('Agentic redteam plugins', () => {
     );
 
     expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('provider-raw');
-    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceSource).toBeUndefined();
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBeUndefined();
   });
 
   it('does not match approval and tool spans by reused span names when span IDs differ', async () => {
