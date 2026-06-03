@@ -8,10 +8,9 @@ import type { ProviderOptions } from '../../types';
 
 // Mock the editor component to avoid prism.js issues and to enable label association via htmlFor
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ id, value, onValueChange, ...rest }: any) => (
+  default: ({ textareaId, value, onValueChange }: any) => (
     <textarea
-      id={id}
-      aria-describedby={(rest as any)['aria-describedby']}
+      id={textareaId}
       value={value}
       onChange={(e) => onValueChange((e.target as HTMLTextAreaElement).value)}
     />
@@ -43,12 +42,34 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
 
-    const urlField = screen.getByLabelText('WebSocket URL');
+    const urlField = screen.getByRole('textbox', { name: 'WebSocket URL' });
+    expect(urlField).toBeRequired();
+    expect(urlField).toHaveAccessibleDescription(/wss:\/\/.*encrypted connections/i);
     await user.click(urlField);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('wss://foo.bar');
 
     expect(update).toHaveBeenCalledWith('url', 'wss://foo.bar');
+  });
+
+  it('connects URL validation feedback to the URL field', () => {
+    renderWithProviders(
+      <WebSocketEndpointConfiguration
+        selectedTarget={baseProvider}
+        updateWebSocketTarget={vi.fn()}
+        urlError="Please enter a valid WebSocket URL (ws:// or wss://)"
+      />,
+    );
+
+    const urlField = screen.getByRole('textbox', { name: 'WebSocket URL' });
+    expect(urlField).toBeRequired();
+    expect(urlField).toHaveAttribute('aria-invalid', 'true');
+    expect(urlField).toHaveAccessibleDescription(
+      /Please enter a valid WebSocket URL.*Use wss:\/\/ for encrypted connections/i,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Please enter a valid WebSocket URL (ws:// or wss://)',
+    );
   });
 
   it('calls updateWebSocketTarget on Message Template change', async () => {
@@ -64,6 +85,9 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const msgField = screen.getByLabelText('Message Template');
+    expect(msgField).toHaveAccessibleDescription(
+      'Include {{prompt}} where Promptfoo should insert each test input.',
+    );
     await user.click(msgField);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('Hey {{name}}');
@@ -89,6 +113,7 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const transformField = screen.getByLabelText('Response Transform');
+    expect(transformField).toHaveAccessibleDescription(/Extract a value from the single response/i);
     await user.click(transformField);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('json.data.result');
@@ -166,7 +191,9 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Stream Response Transform')).toBeInTheDocument();
+    expect(screen.getByLabelText('Stream Response Transform')).toHaveAccessibleDescription(
+      /Extract specific data from the WebSocket messages/,
+    );
     expect(screen.queryByLabelText('Response Transform')).not.toBeInTheDocument();
   });
 
@@ -192,6 +219,9 @@ describe('WebSocketEndpointConfiguration', () => {
 
     // Toggle on
     const switchEl = screen.getByRole('switch');
+    expect(switchEl).toHaveAccessibleDescription(
+      /stream responses instead of returning a single response/i,
+    );
     await user.click(switchEl);
 
     expect(update).toHaveBeenCalledWith('streamResponse', expect.any(String));

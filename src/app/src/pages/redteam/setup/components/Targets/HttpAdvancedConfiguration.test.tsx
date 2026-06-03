@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -51,7 +51,14 @@ describe('HttpAdvancedConfiguration', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
-  it('adapts advanced tabs across narrow and wide layouts', () => {
+  const revealAdvancedConfiguration = async (user: ReturnType<typeof userEvent.setup>) => {
+    if (!screen.queryByRole('tablist')) {
+      await user.click(screen.getByRole('button', { name: /Advanced HTTP settings/i }));
+    }
+  };
+
+  it('discloses advanced tabs on request for a new HTTP provider', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={{ id: 'http-provider', config: {} }}
@@ -59,12 +66,32 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    await revealAdvancedConfiguration(user);
+
     expect(screen.getByRole('tablist')).toHaveClass(
       'grid-cols-2',
       'md:grid-cols-3',
       'xl:inline-flex',
       'xl:!h-10',
     );
+  });
+
+  it('labels advanced request transform and status validation editors', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{ id: 'http-provider', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await revealAdvancedConfiguration(user);
+    await user.click(screen.getByRole('tab', { name: 'Request Transform' }));
+    expect(screen.getByLabelText('Request Transform Function')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'HTTP Status Code' }));
+    expect(screen.getByLabelText('Status Validation Expression')).toBeInTheDocument();
   });
 
   describe('Token Estimation Accordion Initial State', () => {
@@ -113,6 +140,7 @@ describe('HttpAdvancedConfiguration', () => {
         />,
       );
 
+      await revealAdvancedConfiguration(user);
       // Click on Token Estimation tab
       const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
       await user.click(tokenEstimationTab);
@@ -138,6 +166,7 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    await revealAdvancedConfiguration(user);
     // Click on Token Estimation tab
     const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
     await user.click(tokenEstimationTab);
@@ -233,6 +262,46 @@ describe('HttpAdvancedConfiguration', () => {
     expect(pemTrigger).toHaveTextContent('PEM');
   });
 
+  it('discloses and associates required digital signature key paths', async () => {
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: {
+            signatureAuth: {
+              enabled: true,
+              certificateType: 'pem',
+              keyInputType: 'path',
+              privateKeyPath: '',
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        authorizationFieldErrors={{
+          privateKeyPath: 'Private Key File Path is required for digital signature authentication',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Authorization' })).toHaveAttribute(
+        'data-state',
+        'active',
+      );
+    });
+    expect(
+      screen.getByText(/Values pasted or uploaded here, including private keys and passwords/i),
+    ).toBeVisible();
+    const privateKeyPath = document.getElementById('private-key-path');
+    expect(privateKeyPath).not.toBeNull();
+    expect(privateKeyPath).toHaveAccessibleName('Private Key File Path');
+    expect(privateKeyPath).toBeRequired();
+    expect(privateKeyPath).toHaveAttribute('aria-invalid', 'true');
+    expect(privateKeyPath).toHaveAccessibleDescription(
+      'Private Key File Path is required for digital signature authentication',
+    );
+  });
+
   describe('JKS Keystore Configuration', () => {
     it('should render fields for JKS keystore file upload, keystore path, password, and key alias when JKS certificateType is selected', async () => {
       const user = userEvent.setup();
@@ -257,8 +326,9 @@ describe('HttpAdvancedConfiguration', () => {
       const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
       await user.click(authorizationTab);
 
-      // Check for Keystore fields - uses actual label text from the component
-      expect(screen.getByLabelText('Keystore Path')).toBeInTheDocument();
+      const keystorePath = document.getElementById('keystore-path');
+      expect(keystorePath).toHaveAccessibleName('Keystore Path');
+      expect(keystorePath).toBeRequired();
       expect(screen.getByLabelText('Keystore Password')).toBeInTheDocument();
       expect(screen.getByLabelText('Key Alias')).toBeInTheDocument();
     });
@@ -287,8 +357,9 @@ describe('HttpAdvancedConfiguration', () => {
     const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
     await user.click(authorizationTab);
 
-    // Check for PFX File Path label and input - uses the actual label text from the component
-    expect(screen.getByLabelText('PFX File Path')).toBeInTheDocument();
+    const pfxPath = document.getElementById('pfx-path');
+    expect(pfxPath).toHaveAccessibleName('PFX File Path');
+    expect(pfxPath).toBeRequired();
     expect(screen.getByLabelText('PFX Password')).toBeVisible();
   });
 
@@ -539,6 +610,7 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    await revealAdvancedConfiguration(user);
     const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
     await user.click(authorizationTab);
 
@@ -584,5 +656,192 @@ describe('HttpAdvancedConfiguration', () => {
       type: 'file',
       path: './auth/next.ts',
     });
+  });
+
+  it('exposes OAuth client credential requirements with clean accessible names', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: {
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              tokenUrl: '',
+              clientId: '',
+              clientSecret: '',
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    expect(
+      screen.getByText(
+        /included in this provider configuration and any copied or downloaded YAML/i,
+      ),
+    ).toBeVisible();
+    for (const name of ['Token URL', 'Client ID', 'Client Secret']) {
+      const input = screen.getByLabelText(new RegExp(name));
+      expect(input).toHaveAccessibleName(name);
+      expect(input).toBeRequired();
+    }
+  });
+
+  it('makes OAuth client credentials optional only in password grant mode', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: {
+            auth: {
+              type: 'oauth',
+              grantType: 'password',
+              tokenUrl: '',
+              username: '',
+              password: '',
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    expect(screen.getByLabelText(/Token URL/)).toBeRequired();
+    expect(screen.getByLabelText('Client ID')).not.toBeRequired();
+    for (const name of ['Username', 'Password']) {
+      const input = screen.getByLabelText(new RegExp(name));
+      expect(input).toHaveAccessibleName(name);
+      expect(input).toBeRequired();
+    }
+  });
+
+  it.each([
+    {
+      label: 'Basic',
+      auth: { type: 'basic', username: '', password: '' },
+      fields: [
+        { id: 'basic-username', name: 'Username' },
+        { id: 'basic-password', name: 'Password' },
+      ],
+    },
+    {
+      label: 'Bearer',
+      auth: { type: 'bearer', token: '' },
+      fields: [{ id: 'bearer-token', name: 'Token' }],
+    },
+    {
+      label: 'API key',
+      auth: { type: 'api_key', keyName: '', value: '', placement: 'header' },
+      fields: [
+        { id: 'key-name', name: 'Key Name' },
+        { id: 'api-key-value', name: 'API Key Value' },
+      ],
+    },
+    {
+      label: 'File',
+      auth: { type: 'file', path: '' },
+      fields: [{ id: 'file-auth-path', name: 'Auth File Path' }],
+    },
+  ])('marks $label authorization fields as required', async ({ auth, fields }) => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: { auth } as ProviderOptions['config'],
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    for (const { id, name } of fields) {
+      const input = document.getElementById(id);
+      expect(input).not.toBeNull();
+      expect(input).toHaveAccessibleName(name);
+      expect(input).toBeRequired();
+    }
+  });
+
+  it('opts protected authorization values out of browser and password-manager autofill', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: { auth: { type: 'bearer', token: '' } },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    const token = document.getElementById('bearer-token');
+    expect(token).not.toBeNull();
+    expect(token).toHaveAttribute('autocomplete', 'new-password');
+    expect(token).toHaveAttribute('spellcheck', 'false');
+    expect(token).toHaveAttribute('data-1p-ignore');
+    expect(token).toHaveAttribute('data-lpignore', 'true');
+    expect(token).toHaveAttribute('data-form-type', 'other');
+  });
+
+  it('reveals and preserves blocking authorization field feedback', async () => {
+    const user = userEvent.setup();
+    const selectedTarget: ProviderOptions = {
+      id: 'http-provider',
+      config: { auth: { type: 'api_key', keyName: '', value: '', placement: 'header' } },
+    };
+    const { rerender } = renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced HTTP settings/i }));
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+
+    rerender(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        authorizationFieldErrors={{
+          keyName: 'Key Name is required for API key authentication',
+          value: 'API Key Value is required for API key authentication',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Authorization' })).toHaveAttribute(
+        'data-state',
+        'active',
+      );
+    });
+    const keyName = document.getElementById('key-name');
+    const keyValue = document.getElementById('api-key-value');
+    expect(keyName).not.toBeNull();
+    expect(keyValue).not.toBeNull();
+    expect(keyName).toHaveValue('');
+    expect(keyName).toHaveAttribute('placeholder', 'X-API-Key');
+    expect(keyName).toHaveAttribute('aria-invalid', 'true');
+    expect(keyName).toHaveAccessibleDescription('Key Name is required for API key authentication');
+    expect(keyValue).toHaveAttribute('aria-invalid', 'true');
+    expect(keyValue).toHaveAccessibleDescription(
+      'API Key Value is required for API key authentication',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced HTTP settings/i }));
+    expect(screen.getByRole('tablist')).toBeInTheDocument();
   });
 });

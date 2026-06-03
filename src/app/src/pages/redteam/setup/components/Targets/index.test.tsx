@@ -13,8 +13,9 @@ import Targets from './index';
 import type { ProviderOptions } from '../../types';
 
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange }: any) => (
+  default: ({ textareaId, value, onValueChange }: any) => (
     <textarea
+      id={textareaId}
       data-testid="code-editor"
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
@@ -192,6 +193,7 @@ const renderWithProviders = (ui: React.ReactElement) => {
 describe('CustomTargetConfiguration - Config Field Handling', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;
   let mockSetRawConfigJson: (value: string) => void;
+  let mockSetBodyError: (error: string | React.ReactNode | null) => void;
 
   const defaultProps = {
     selectedTarget: {
@@ -206,6 +208,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
     mockSetRawConfigJson = vi.fn();
+    mockSetBodyError = vi.fn();
   });
 
   it('should use custom target copy for the generic configuration screen', () => {
@@ -214,6 +217,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        setBodyError={mockSetBodyError}
       />,
     );
 
@@ -231,6 +235,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        setBodyError={mockSetBodyError}
       />,
     );
 
@@ -262,6 +267,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        setBodyError={mockSetBodyError}
       />,
     );
 
@@ -282,6 +288,9 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
 
     // Should NOT call updateCustomTarget since JSON parsing failed
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+    expect(mockSetBodyError).toHaveBeenCalledWith(
+      'Configuration must be valid JSON before this provider can be saved.',
+    );
   });
 
   it('should show error state when bodyError is provided', () => {
@@ -290,12 +299,16 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        setBodyError={mockSetBodyError}
         bodyError="Invalid JSON format"
       />,
     );
 
     // Error message should be displayed in an Alert
     expect(screen.getByText('Invalid JSON format')).toBeInTheDocument();
+    const configEditor = screen.getByLabelText('Configuration (JSON)');
+    expect(configEditor).toHaveAttribute('aria-invalid', 'true');
+    expect(configEditor).toHaveAccessibleDescription('Invalid JSON format');
 
     // The editor container should have destructive border styling
     const configLabel = screen.getByText('Configuration (JSON)');
@@ -311,6 +324,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
         {...defaultProps}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        setBodyError={mockSetBodyError}
       />,
     );
 
@@ -581,7 +595,7 @@ Content-Type: application/json
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Provider list is always expanded - select WebSocket
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       await user.click(websocketProviderCard!);
 
       const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
@@ -703,7 +717,7 @@ Content-Type: application/json
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Provider list is always expanded - select WebSocket
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       await user.click(websocketProviderCard!);
 
       await waitFor(() => {
@@ -744,7 +758,7 @@ Content-Type: application/json
       });
 
       // Provider list is always expanded - switch to HTTP provider
-      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
       await user.click(httpProviderCard!);
 
       // For HTTP, Next button should be disabled until tests pass

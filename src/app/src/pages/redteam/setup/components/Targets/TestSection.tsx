@@ -7,7 +7,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
-import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -65,6 +64,49 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ label, children, maxHeight = '200
   </div>
 );
 
+const TestResultAlert = ({ testResult }: { testResult: TestResult }) => {
+  const resultTitle = testResult.changes_needed
+    ? 'Configuration Changes Needed'
+    : testResult.success
+      ? 'Test Passed'
+      : 'Test Failed';
+  const variant = testResult.changes_needed
+    ? 'warning'
+    : testResult.success
+      ? 'success'
+      : 'destructive';
+
+  return (
+    <Alert variant={variant}>
+      {testResult.success && !testResult.changes_needed ? (
+        <CheckCircle className="size-4" />
+      ) : (
+        <AlertCircle className="size-4" />
+      )}
+      <AlertContent>
+        <AlertDescription className="text-sm">
+          <p className="font-medium">{resultTitle}</p>
+          <p className="mt-1">{testResult.message}</p>
+
+          {testResult.changes_needed_suggestions &&
+            testResult.changes_needed_suggestions.length > 0 && (
+              <div className="mt-2 rounded-md bg-background/50 p-2">
+                <p className="mb-1.5 font-medium">Suggested Changes</p>
+                <ul className="m-0 list-disc space-y-0.5 pl-4">
+                  {testResult.changes_needed_suggestions.map(
+                    (suggestion: string, index: number) => (
+                      <li key={index}>{suggestion}</li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            )}
+        </AlertDescription>
+      </AlertContent>
+    </Alert>
+  );
+};
+
 const TestSection: React.FC<TestSectionProps> = ({
   selectedTarget,
   isTestRunning,
@@ -75,6 +117,9 @@ const TestSection: React.FC<TestSectionProps> = ({
   onDetailsExpandedChange,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
+  const testProgressId = React.useId();
+  const missingTargetMessageId = React.useId();
+  const missingTargetConfiguration = !selectedTarget.config.url && !selectedTarget.config.request;
 
   return (
     <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
@@ -97,6 +142,13 @@ const TestSection: React.FC<TestSectionProps> = ({
         <Button
           onClick={handleTestTarget}
           disabled={isTestRunning || disabled}
+          aria-describedby={
+            isTestRunning
+              ? testProgressId
+              : missingTargetConfiguration
+                ? missingTargetMessageId
+                : undefined
+          }
           size="sm"
           className="mb-3"
         >
@@ -108,8 +160,14 @@ const TestSection: React.FC<TestSectionProps> = ({
           {isTestRunning ? 'Testing...' : 'Test Target'}
         </Button>
 
-        {!selectedTarget.config.url && !selectedTarget.config.request && (
-          <Alert variant="warning" className="mb-3">
+        {isTestRunning && (
+          <p id={testProgressId} role="status" aria-live="polite" className="sr-only">
+            Sending a test request to this endpoint.
+          </p>
+        )}
+
+        {missingTargetConfiguration && (
+          <Alert id={missingTargetMessageId} variant="warning" className="mb-3">
             <AlertCircle className="size-4" />
             <AlertContent>
               <AlertDescription className="text-sm">
@@ -122,51 +180,7 @@ const TestSection: React.FC<TestSectionProps> = ({
         {testResult && (
           <div className="space-y-3">
             {/* Result Alert */}
-            {(testResult.success || testResult.changes_needed) && (
-              <Alert
-                variant={
-                  testResult.changes_needed
-                    ? 'warning'
-                    : testResult.success
-                      ? 'success'
-                      : 'destructive'
-                }
-              >
-                {testResult.changes_needed ? (
-                  <AlertCircle className="size-4" />
-                ) : testResult.success ? (
-                  <CheckCircle className="size-4" />
-                ) : (
-                  <AlertCircle className="size-4" />
-                )}
-                <AlertContent>
-                  <AlertDescription className="text-sm">
-                    <p className="font-medium">
-                      {testResult.changes_needed
-                        ? 'Configuration Changes Needed'
-                        : testResult.success
-                          ? 'Test Passed'
-                          : 'Test Failed'}
-                    </p>
-                    <p className="mt-1">{testResult.message}</p>
-
-                    {testResult.changes_needed_suggestions &&
-                      testResult.changes_needed_suggestions.length > 0 && (
-                        <div className="mt-2 rounded-md bg-background/50 p-2">
-                          <p className="mb-1.5 font-medium">Suggested Changes</p>
-                          <ul className="m-0 list-disc space-y-0.5 pl-4">
-                            {testResult.changes_needed_suggestions.map(
-                              (suggestion: string, index: number) => (
-                                <li key={index}>{suggestion}</li>
-                              ),
-                            )}
-                          </ul>
-                        </div>
-                      )}
-                  </AlertDescription>
-                </AlertContent>
-              </Alert>
-            )}
+            <TestResultAlert testResult={testResult} />
 
             {/* Request and Response Details */}
             <Collapsible
@@ -189,7 +203,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                   <div className="flex flex-col gap-3 md:flex-row md:items-stretch">
                     {/* Request Details */}
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
-                      <Label className="text-sm font-medium">Request</Label>
+                      <h4 className="text-sm font-medium">Request</h4>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
                         {selectedTarget.config.url && (
                           <>
@@ -242,7 +256,7 @@ const TestSection: React.FC<TestSectionProps> = ({
 
                     {/* Response Details */}
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
-                      <Label className="text-sm font-medium">Response</Label>
+                      <h4 className="text-sm font-medium">Response</h4>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
                         {testResult.providerResponse?.raw === undefined ? (
                           <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
@@ -290,7 +304,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                   {testResult.providerResponse && testResult.providerResponse.raw !== undefined && (
                     <div className="mt-3 space-y-1.5">
                       <div className="flex items-center gap-1.5">
-                        <Label className="text-sm font-medium">Final Response</Label>
+                        <h4 className="text-sm font-medium">Final Response</h4>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="size-3.5 cursor-help text-muted-foreground" />

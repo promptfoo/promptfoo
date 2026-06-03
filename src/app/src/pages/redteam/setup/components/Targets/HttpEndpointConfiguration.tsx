@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -50,6 +50,7 @@ import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
+import type { AuthorizationFieldErrors } from './tabs/AuthorizationTab';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -60,6 +61,7 @@ interface HttpEndpointConfigurationProps {
   setUrlError: (error: string | null) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  authorizationFieldErrors?: AuthorizationFieldErrors;
 }
 
 interface GeneratedConfig {
@@ -76,6 +78,53 @@ interface GeneratedConfig {
   };
 }
 
+const getGeneratedCommonConfig = (config: GeneratedConfig['config']) => ({
+  transformRequest: config.transformRequest,
+  transformResponse: config.transformResponse,
+  sessionParser: config.sessionParser,
+});
+
+function applyTextAreaErrorAttributes(
+  textarea: HTMLTextAreaElement | null,
+  error: React.ReactNode | null,
+  errorId: string,
+): void {
+  if (!textarea) {
+    return;
+  }
+
+  textarea.setAttribute('aria-invalid', String(Boolean(error)));
+  if (error) {
+    textarea.setAttribute('aria-describedby', errorId);
+  } else {
+    textarea.removeAttribute('aria-describedby');
+  }
+}
+
+function useEditorErrorAttributes(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  error: React.ReactNode | null,
+  errorId: string,
+): void {
+  useEffect(() => {
+    applyTextAreaErrorAttributes(
+      containerRef.current?.querySelector('textarea') ?? null,
+      error,
+      errorId,
+    );
+  }, [containerRef, error, errorId]);
+}
+
+function useTextAreaErrorAttributes(
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>,
+  error: React.ReactNode | null,
+  errorId: string,
+): void {
+  useEffect(() => {
+    applyTextAreaErrorAttributes(textareaRef.current, error, errorId);
+  }, [textareaRef, error, errorId]);
+}
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -88,6 +137,128 @@ const highlightJS = (code: string): string => {
   }
 };
 
+const MISSING_HTTP_URL_MESSAGE =
+  'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).';
+const INVALID_HTTP_URL_MESSAGE =
+  'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+
+function hasMissingStructuredUrl(selectedTarget: ProviderOptions): boolean {
+  if (selectedTarget.config?.request) {
+    return false;
+  }
+
+  const targetUrl = selectedTarget.config?.url;
+  return !targetUrl || targetUrl.trim() === '' || targetUrl === 'http';
+}
+
+function getTargetTestErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Failed to test target configuration';
+  }
+
+  if (error.message.includes('Failed to parse URL') || error.message.includes('Invalid URL')) {
+    return INVALID_HTTP_URL_MESSAGE;
+  }
+
+  return error.message;
+}
+
+function isTargetTestDisabled(selectedTarget: ProviderOptions): boolean {
+  return selectedTarget.config.request
+    ? !selectedTarget.config.request
+    : !selectedTarget.config.url;
+}
+
+function formatJsonError(error: unknown): string {
+  if (!(error instanceof SyntaxError)) {
+    return 'Invalid JSON';
+  }
+  const message = error.message;
+  // Extract position info from various browser formats:
+  // Chrome: "Unexpected token x in JSON at position 123"
+  // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
+  // Safari: "JSON Parse error: Unexpected identifier"
+  const positionMatch = message.match(/position\s+(\d+)/i);
+  const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+
+  if (lineColMatch) {
+    return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+  }
+  if (positionMatch) {
+    const position = parseInt(positionMatch[1], 10);
+    return `Invalid JSON at position ${position}`;
+  }
+  return 'Invalid JSON syntax';
+}
+
+interface RequestBodyFormatToggleProps {
+  requestBody: string;
+  requestBodyType: 'json' | 'text';
+  setBodyError: (error: string | React.ReactNode | null) => void;
+  setRequestBodyType: (type: 'json' | 'text') => void;
+}
+
+function RequestBodyFormatToggle({
+  requestBody,
+  requestBodyType,
+  setBodyError,
+  setRequestBodyType,
+}: RequestBodyFormatToggleProps): React.ReactElement {
+  const handleSelectJson = () => {
+    setRequestBodyType('json');
+    if (!requestBody.trim()) {
+      return;
+    }
+
+    try {
+      JSON.parse(requestBody);
+      setBodyError(null);
+    } catch (error) {
+      setBodyError(formatJsonError(error));
+    }
+  };
+
+  const handleSelectText = () => {
+    setRequestBodyType('text');
+    setBodyError(null);
+  };
+
+  return (
+    <div
+      role="group"
+      aria-label="Request body format"
+      className="flex items-center rounded-md border border-border bg-muted/30 p-0.5"
+    >
+      <button
+        type="button"
+        aria-pressed={requestBodyType === 'json'}
+        onClick={handleSelectJson}
+        className={cn(
+          'rounded px-2 py-1 text-xs font-medium transition-colors',
+          requestBodyType === 'json'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        JSON
+      </button>
+      <button
+        type="button"
+        aria-pressed={requestBodyType === 'text'}
+        onClick={handleSelectText}
+        className={cn(
+          'rounded px-2 py-1 text-xs font-medium transition-colors',
+          requestBodyType === 'text'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        Text
+      </button>
+    </div>
+  );
+}
+
 const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -97,7 +268,12 @@ const HttpEndpointConfiguration = ({
   setUrlError,
   onTargetTested,
   onSessionTested,
+  authorizationFieldErrors,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
+  const urlErrorId = useId();
+  const bodyErrorId = useId();
+  const requestBodyEditorContainerRef = useRef<HTMLDivElement>(null);
+  const rawRequestRef = useRef<HTMLTextAreaElement>(null);
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
       ? selectedTarget.config.body
@@ -153,25 +329,23 @@ Content-Type: application/json
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
 
+  useEditorErrorAttributes(requestBodyEditorContainerRef, bodyError, bodyErrorId);
+  useTextAreaErrorAttributes(rawRequestRef, bodyError, bodyErrorId);
+
   // Handle test target
   const handleTestTarget = useCallback(async () => {
     setIsTestRunning(true);
     setTestResult(null);
 
-    // Validate URL before testing (skip validation for raw request mode)
-    if (!selectedTarget.config?.request) {
-      const targetUrl = selectedTarget.config?.url;
-      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
-        setTestResult({
-          success: false,
-          message:
-            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
-        });
-        setTestDetailsExpanded(true);
-        setIsTestRunning(false);
-        onTargetTested?.(false);
-        return;
-      }
+    if (hasMissingStructuredUrl(selectedTarget)) {
+      setTestResult({
+        success: false,
+        message: MISSING_HTTP_URL_MESSAGE,
+      });
+      setTestDetailsExpanded(true);
+      setIsTestRunning(false);
+      onTargetTested?.(false);
+      return;
     }
 
     try {
@@ -217,21 +391,9 @@ Content-Type: application/json
       }
     } catch (error) {
       console.error('Error testing target:', error);
-      let errorMessage = 'Failed to test target configuration';
-      if (error instanceof Error) {
-        if (
-          error.message.includes('Failed to parse URL') ||
-          error.message.includes('Invalid URL')
-        ) {
-          errorMessage =
-            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
-        } else {
-          errorMessage = error.message;
-        }
-      }
       setTestResult({
         success: false,
-        message: errorMessage,
+        message: getTargetTestErrorMessage(error),
       });
       setTestDetailsExpanded(true);
       onTargetTested?.(false);
@@ -251,36 +413,33 @@ Content-Type: application/json
   }, []);
 
   const resetState = useCallback(
-    (isRawMode: boolean) => {
+    (isRawMode: boolean, configOverrides: Partial<ProviderOptions['config']> = {}) => {
       setBodyError(null);
       setUrlError(null);
+      const nextConfig = { ...selectedTarget.config };
 
       if (isRawMode) {
-        // Reset to empty raw request
-        updateCustomTarget('request', '');
-
-        // Clear structured mode fields
-        updateCustomTarget('url', undefined);
-        updateCustomTarget('method', undefined);
-        updateCustomTarget('headers', undefined);
-        updateCustomTarget('body', undefined);
+        delete nextConfig.url;
+        delete nextConfig.method;
+        delete nextConfig.headers;
+        delete nextConfig.body;
+        updateCustomTarget('config', { ...nextConfig, request: '', ...configOverrides });
       } else {
-        // Reset to empty structured fields
         setHeaders([]);
         setRequestBody('');
-
-        // Clear raw request
-        updateCustomTarget('request', undefined);
-
-        // Reset structured fields
-        updateCustomTarget('url', '');
-        updateCustomTarget('method', 'POST');
-        updateCustomTarget('headers', {});
-        updateCustomTarget('body', '');
-        updateCustomTarget('useHttps', false);
+        delete nextConfig.request;
+        updateCustomTarget('config', {
+          ...nextConfig,
+          url: '',
+          method: 'POST',
+          headers: {},
+          body: '',
+          useHttps: false,
+          ...configOverrides,
+        });
       }
     },
-    [updateCustomTarget, setBodyError, setUrlError],
+    [selectedTarget.config, updateCustomTarget, setBodyError, setUrlError],
   );
 
   // Header management
@@ -350,28 +509,6 @@ Content-Type: application/json
     },
     [updateCustomTarget],
   );
-
-  const formatJsonError = (error: unknown): string => {
-    if (!(error instanceof SyntaxError)) {
-      return 'Invalid JSON';
-    }
-    const message = error.message;
-    // Extract position info from various browser formats:
-    // Chrome: "Unexpected token x in JSON at position 123"
-    // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
-    // Safari: "JSON Parse error: Unexpected identifier"
-    const positionMatch = message.match(/position\s+(\d+)/i);
-    const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
-
-    if (lineColMatch) {
-      return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
-    }
-    if (positionMatch) {
-      const position = parseInt(positionMatch[1], 10);
-      return `Invalid JSON at position ${position}`;
-    }
-    return 'Invalid JSON syntax';
-  };
 
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
@@ -462,45 +599,36 @@ ${exampleRequest}`;
     }
   };
 
-  const handleApply = () => {
-    if (generatedConfig) {
-      if (generatedConfig.config.request) {
-        resetState(true);
-        updateCustomTarget('request', generatedConfig.config.request);
-      } else {
-        resetState(false);
-        if (generatedConfig.config.url) {
-          updateCustomTarget('url', generatedConfig.config.url);
-        }
-        if (generatedConfig.config.method) {
-          updateCustomTarget('method', generatedConfig.config.method);
-        }
-        if (generatedConfig.config.headers) {
-          updateCustomTarget('headers', generatedConfig.config.headers);
-          setHeaders(
-            Object.entries(generatedConfig.config.headers).map(([key, value]) => ({
-              key,
-              value: String(value),
-            })),
-          );
-        }
-        if (generatedConfig.config.body) {
-          // First update the internal state
-          const formattedBody =
-            typeof generatedConfig.config.body === 'string'
-              ? generatedConfig.config.body
-              : JSON.stringify(generatedConfig.config.body, null, 2);
-          setRequestBody(formattedBody);
+  const applyGeneratedStructuredConfig = (config: GeneratedConfig['config']) => {
+    const body = config.body ?? '';
+    resetState(false, {
+      ...getGeneratedCommonConfig(config),
+      url: config.url ?? '',
+      method: config.method ?? 'POST',
+      headers: config.headers ?? {},
+      body,
+    });
+    setHeaders(
+      Object.entries(config.headers ?? {}).map(([key, value]) => ({
+        key,
+        value: String(value),
+      })),
+    );
+    setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+  };
 
-          // Then update the target config with the original value
-          updateCustomTarget('body', generatedConfig.config.body);
-        }
-      }
-      updateCustomTarget('transformRequest', generatedConfig.config.transformRequest);
-      updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
-      updateCustomTarget('sessionParser', generatedConfig.config.sessionParser);
-      setConfigDialogOpen(false);
+  const handleApply = () => {
+    if (!generatedConfig) {
+      return;
     }
+
+    const { config } = generatedConfig;
+    if (config.request) {
+      resetState(true, { ...getGeneratedCommonConfig(config), request: config.request });
+    } else {
+      applyGeneratedStructuredConfig(config);
+    }
+    setConfigDialogOpen(false);
   };
 
   const handlePostmanImport = (config: {
@@ -509,11 +637,12 @@ ${exampleRequest}`;
     headers: Record<string, string>;
     body: string;
   }) => {
-    // Apply the configuration
-    resetState(false);
-    updateCustomTarget('url', config.url);
-    updateCustomTarget('method', config.method);
-    updateCustomTarget('headers', config.headers);
+    resetState(false, {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      body: config.body || '',
+    });
     setHeaders(
       Object.entries(config.headers).map(([key, value]) => ({
         key,
@@ -523,7 +652,6 @@ ${exampleRequest}`;
 
     if (config.body) {
       setRequestBody(config.body);
-      updateCustomTarget('body', config.body);
     }
   };
 
@@ -535,10 +663,7 @@ ${exampleRequest}`;
             id="use-raw-request"
             checked={Boolean(selectedTarget.config.request)}
             onCheckedChange={(checked) => {
-              resetState(checked);
-              if (checked) {
-                updateCustomTarget('request', exampleRequest);
-              }
+              resetState(checked, checked ? { request: exampleRequest } : {});
             }}
           />
           <Label htmlFor="use-raw-request">Use Raw HTTP Request</Label>
@@ -577,7 +702,16 @@ ${exampleRequest}`;
               />
               <Label htmlFor="use-https">Use HTTPS</Label>
             </div>
+            <Label htmlFor="raw-http-request" className="mb-2 block">
+              Raw HTTP request
+              <span aria-hidden="true" className="ml-1 text-destructive">
+                *
+              </span>
+            </Label>
             <textarea
+              ref={rawRequestRef}
+              id="raw-http-request"
+              required
               value={selectedTarget.config.request || ''}
               onChange={(e) => handleRawRequestChange(e.target.value)}
               placeholder={placeholderText}
@@ -588,13 +722,20 @@ ${exampleRequest}`;
                 maxHeight: '40rem',
               }}
             />
-            {bodyError && <HelperText error>{bodyError}</HelperText>}
+            {bodyError && (
+              <HelperText id={bodyErrorId} error>
+                {bodyError}
+              </HelperText>
+            )}
           </>
         ) : (
           <>
             <div className="space-y-2">
               <Label htmlFor="url">
-                URL <span className="text-destructive">*</span>
+                URL
+                <span aria-hidden="true" className="ml-1 text-destructive">
+                  *
+                </span>
               </Label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Select
@@ -614,13 +755,20 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
+                  required
                   value={selectedTarget.config.url}
                   onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  aria-invalid={Boolean(urlError)}
+                  aria-describedby={urlError ? urlErrorId : undefined}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />
               </div>
-              {urlError && <HelperText error>{urlError}</HelperText>}
+              {urlError && (
+                <HelperText id={urlErrorId} error>
+                  {urlError}
+                </HelperText>
+              )}
             </div>
 
             <p className="mb-2 mt-6 font-medium">Headers</p>
@@ -632,12 +780,14 @@ ${exampleRequest}`;
                 <Input
                   value={key}
                   onChange={(e) => updateHeaderKey(index, e.target.value)}
+                  aria-label={`Header ${index + 1} name`}
                   placeholder="Name"
                   className="flex-1"
                 />
                 <Input
                   value={value}
                   onChange={(e) => updateHeaderValue(index, e.target.value)}
+                  aria-label={`Header ${index + 1} value`}
                   placeholder="Value"
                   className="flex-1"
                 />
@@ -660,47 +810,15 @@ ${exampleRequest}`;
 
             <div className="mb-2 mt-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <p className="font-medium">Request Body</p>
-                <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestBodyType('json');
-                      // Re-validate content as JSON
-                      if (requestBody.trim()) {
-                        try {
-                          JSON.parse(requestBody);
-                          setBodyError(null);
-                        } catch (e) {
-                          setBodyError(formatJsonError(e));
-                        }
-                      }
-                    }}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      requestBodyType === 'json'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestBodyType('text');
-                      setBodyError(null); // Clear any JSON errors when switching to text
-                    }}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      requestBodyType === 'text'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    Text
-                  </button>
-                </div>
+                <Label htmlFor="http-request-body" className="font-medium">
+                  Request Body
+                </Label>
+                <RequestBodyFormatToggle
+                  requestBody={requestBody}
+                  requestBodyType={requestBodyType}
+                  setBodyError={setBodyError}
+                  setRequestBodyType={setRequestBodyType}
+                />
               </div>
               {requestBodyType === 'json' && (
                 <Button
@@ -717,6 +835,7 @@ ${exampleRequest}`;
               )}
             </div>
             <div
+              ref={requestBodyEditorContainerRef}
               className={cn(
                 'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
                 bodyError ? 'border-destructive' : 'border-border',
@@ -724,6 +843,7 @@ ${exampleRequest}`;
               style={{ contain: 'inline-size' }}
             >
               <Editor
+                textareaId="http-request-body"
                 value={
                   typeof requestBody === 'object'
                     ? JSON.stringify(requestBody, null, 2)
@@ -743,12 +863,18 @@ ${exampleRequest}`;
                 textareaClassName="!whitespace-pre"
               />
             </div>
-            {bodyError && <HelperText error>{bodyError}</HelperText>}
+            {bodyError && (
+              <HelperText id={bodyErrorId} error>
+                {bodyError}
+              </HelperText>
+            )}
           </>
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <Label htmlFor="http-response-parser" className="mb-2 mt-6 block font-medium">
+          Response Parser
+        </Label>
         <div className="mb-4 text-sm text-muted-foreground">
           <p>
             This tells promptfoo how to extract the AI's response from your API. Most APIs return
@@ -785,6 +911,7 @@ ${exampleRequest}`;
           style={{ contain: 'inline-size' }}
         >
           <Editor
+            textareaId="http-response-parser"
             value={selectedTarget.config.transformResponse || ''}
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
             highlight={highlightJS}
@@ -817,11 +944,7 @@ ${exampleRequest}`;
           isTestRunning={isTestRunning}
           testResult={testResult}
           handleTestTarget={handleTestTarget}
-          disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
-          }
+          disabled={isTargetTestDisabled(selectedTarget)}
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
         />
@@ -839,11 +962,15 @@ ${exampleRequest}`;
             </p>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
-                <p className="mb-2 text-lg font-semibold">
+                <Label
+                  htmlFor="http-config-example-request"
+                  className="mb-2 block text-lg font-semibold"
+                >
                   Example Request (paste your HTTP request here)
-                </p>
+                </Label>
                 <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
+                    textareaId="http-config-example-request"
                     value={request}
                     onValueChange={(val) => setRequest(val)}
                     highlight={(code) => code}
@@ -857,11 +984,15 @@ ${exampleRequest}`;
                 </div>
               </div>
               <div>
-                <p className="mb-2 text-lg font-semibold">
+                <Label
+                  htmlFor="http-config-example-response"
+                  className="mb-2 block text-lg font-semibold"
+                >
                   Example Response (optional, improves accuracy)
-                </p>
+                </Label>
                 <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
+                    textareaId="http-config-example-response"
                     value={response}
                     onValueChange={(val) => setResponse(val)}
                     highlight={(code) => code}
@@ -876,13 +1007,20 @@ ${exampleRequest}`;
               </div>
               {error && (
                 <div className="col-span-2">
-                  <p className="text-destructive">Error: {error}</p>
+                  <p role="alert" className="text-destructive">
+                    Error: {error}
+                  </p>
                 </div>
               )}
               {generatedConfig && (
                 <div className="col-span-2">
                   <div className="mb-2 mt-4 flex items-center">
-                    <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
+                    <Label
+                      htmlFor="http-generated-configuration"
+                      className="flex-1 text-lg font-semibold"
+                    >
+                      Generated Configuration
+                    </Label>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -899,6 +1037,7 @@ ${exampleRequest}`;
                   </div>
                   <div className="h-80 overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                     <Editor
+                      textareaId="http-generated-configuration"
                       value={yaml.dump(generatedConfig.config)}
                       onValueChange={() => {}} // Read-only
                       highlight={(code) => code}
@@ -943,6 +1082,7 @@ ${exampleRequest}`;
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
         onSessionTested={onSessionTested}
+        authorizationFieldErrors={authorizationFieldErrors}
       />
 
       {/* Response Transform Test Dialog */}

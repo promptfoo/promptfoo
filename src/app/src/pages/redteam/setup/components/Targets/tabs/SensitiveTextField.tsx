@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -34,18 +34,26 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
   required,
 }) => {
   const [showValue, setShowValue] = useState(false);
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const helperTextId = helperText ? `${inputId}-help` : undefined;
+  const toggleLabel = `${showValue ? 'Hide' : 'Show'} ${label ?? 'sensitive value'}`;
 
   return (
     <div className={cn('space-y-2', className)}>
       {label && (
-        <Label htmlFor={id}>
+        <Label htmlFor={inputId}>
           {label}
-          {required && <span className="text-destructive ml-1">*</span>}
+          {required && (
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
+          )}
         </Label>
       )}
       <div className="relative">
         <Input
-          id={id}
+          id={inputId}
           type={showValue ? 'text' : 'password'}
           value={value}
           onChange={onChange}
@@ -53,6 +61,15 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
           className="pr-10"
           disabled={disabled}
           required={required}
+          aria-describedby={helperTextId}
+          // Block browser/password-manager autofill for TLS passphrases, API
+          // secrets, and similar. These are not login passwords; saving them
+          // as such leaks them outside the app.
+          autoComplete="new-password"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
         />
         <Button
           type="button"
@@ -61,13 +78,17 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
           className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
           onClick={() => setShowValue(!showValue)}
           onMouseDown={(e) => e.preventDefault()}
-          aria-label="toggle password visibility"
+          aria-label={toggleLabel}
           disabled={disabled}
         >
           {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </Button>
       </div>
-      {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}
+      {helperText && (
+        <p id={helperTextId} className="text-sm text-muted-foreground">
+          {helperText}
+        </p>
+      )}
     </div>
   );
 };

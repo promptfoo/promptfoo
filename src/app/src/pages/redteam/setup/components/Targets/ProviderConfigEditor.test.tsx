@@ -2,6 +2,7 @@ import React from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
@@ -12,13 +13,117 @@ const mockA2AConfigState = vi.hoisted(() => ({
 }));
 
 vi.mock('./HttpEndpointConfiguration', () => ({
-  default: () => <div data-testid="http-config" />,
+  default: ({
+    bodyError,
+    urlError,
+    updateCustomTarget,
+    authorizationFieldErrors,
+  }: {
+    bodyError?: React.ReactNode;
+    urlError?: string | null;
+    updateCustomTarget?: (field: string, value: unknown) => void;
+    authorizationFieldErrors?: Record<string, string>;
+  }) => (
+    <div data-testid="http-config">
+      <button
+        type="button"
+        data-testid="set-http-body-without-prompt"
+        onClick={() => updateCustomTarget?.('body', { message: 'hello' })}
+      >
+        Set body without prompt
+      </button>
+      <button
+        type="button"
+        data-testid="replace-http-structured-config-without-prompt"
+        onClick={() =>
+          updateCustomTarget?.('config', {
+            url: 'https://api.example.com/chat',
+            method: 'POST',
+            body: { message: 'hello' },
+          })
+        }
+      >
+        Replace structured config without prompt
+      </button>
+      <button
+        type="button"
+        data-testid="replace-http-raw-config-without-prompt"
+        onClick={() =>
+          updateCustomTarget?.('config', {
+            request: 'POST /chat HTTP/1.1\nHost: api.example.com\n\n{"message":"hello"}',
+          })
+        }
+      >
+        Replace raw config without prompt
+      </button>
+      <button
+        type="button"
+        data-testid="switch-signature-auth-to-basic"
+        onClick={() => {
+          updateCustomTarget?.('signatureAuth', undefined);
+          updateCustomTarget?.('auth', { type: 'basic', username: '', password: '' });
+        }}
+      >
+        Switch signature auth to basic
+      </button>
+      {bodyError && <div data-testid="http-body-error">{bodyError}</div>}
+      {urlError && <div data-testid="http-url-error">{urlError}</div>}
+      {authorizationFieldErrors && Object.keys(authorizationFieldErrors).length > 0 && (
+        <div data-testid="http-auth-field-errors">
+          {Object.values(authorizationFieldErrors).join(', ')}
+        </div>
+      )}
+    </div>
+  ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
-  default: () => <div data-testid="ws-config" />,
+  default: ({
+    urlError,
+    updateWebSocketTarget,
+  }: {
+    urlError?: string | null;
+    updateWebSocketTarget?: (field: string, value: unknown) => void;
+  }) => (
+    <div data-testid="ws-config">
+      <button
+        type="button"
+        data-testid="enable-websocket-streaming"
+        onClick={() => {
+          updateWebSocketTarget?.('streamResponse', 'return [accumulator + event.data, true];');
+          updateWebSocketTarget?.('transformResponse', undefined);
+        }}
+      >
+        Enable streaming
+      </button>
+      {urlError && <div data-testid="ws-url-error">{urlError}</div>}
+    </div>
+  ),
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
-  default: () => <div data-testid="custom-config" />,
+  default: ({
+    setBodyError,
+    idError,
+    mode,
+    rawConfigJson,
+  }: {
+    setBodyError?: (error: string | null) => void;
+    idError?: string | null;
+    mode?: 'eval' | 'redteam';
+    rawConfigJson?: string;
+  }) => (
+    <div data-testid="custom-config" data-mode={mode} data-raw-config-json={rawConfigJson}>
+      {idError}
+      <button
+        type="button"
+        data-testid="set-invalid-custom-config"
+        onClick={() =>
+          setBodyError?.('Configuration must be valid JSON before this provider can be saved.')
+        }
+      >
+        Set invalid custom config
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./A2AEndpointConfiguration', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
@@ -36,17 +141,26 @@ vi.mock('./A2AEndpointConfiguration', async () => {
   };
 });
 vi.mock('./BrowserAutomationConfiguration', () => ({
-  default: () => <div data-testid="browser-config" />,
+  default: ({
+    fieldErrors,
+  }: {
+    fieldErrors?: { stepErrors?: Record<number, { url?: string }> };
+  }) => <div data-testid="browser-config">{fieldErrors?.stepErrors?.[0]?.url}</div>,
 }));
 vi.mock('./FoundationModelConfiguration', () => ({
   default: ({
     providerType,
     updateCustomTarget,
+    fieldErrors,
   }: {
     providerType: string;
     updateCustomTarget: (field: string, value: unknown) => void;
+    fieldErrors?: Record<string, string>;
   }) => (
     <div data-testid="fm-config">
+      {Object.values(fieldErrors || {}).map((error) => (
+        <p key={error}>{error}</p>
+      ))}
       {providerType === 'bedrock' && (
         <button
           data-testid="switch-bedrock-invoke"
@@ -59,16 +173,32 @@ vi.mock('./FoundationModelConfiguration', () => ({
   ),
 }));
 vi.mock('./AgentFrameworkConfiguration', () => ({
-  default: () => <div data-testid="agent-config" />,
+  default: ({
+    providerIdError,
+    mode,
+  }: {
+    providerIdError?: string | null;
+    mode?: 'eval' | 'redteam';
+  }) => (
+    <div data-testid="agent-config" data-mode={mode}>
+      {providerIdError}
+    </div>
+  ),
 }));
 vi.mock('./CommonConfigurationOptions', () => ({
-  default: ({ onValidationChange }: { onValidationChange?: (hasErrors: boolean) => void }) => {
+  default: ({
+    onValidationChange,
+    hideExtensions,
+  }: {
+    onValidationChange?: (hasErrors: boolean) => void;
+    hideExtensions?: boolean;
+  }) => {
     React.useEffect(() => {
       if (onValidationChange) {
         onValidationChange(false);
       }
     }, [onValidationChange]);
-    return <div data-testid="common-config" />;
+    return <div data-testid="common-config" data-hide-extensions={String(hideExtensions)} />;
   },
 }));
 
@@ -112,6 +242,599 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('blocks saving an HTTP provider with incomplete configured authentication', async () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              auth: { type: 'api_key', placement: 'header', keyName: '', value: '' },
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await act(async () => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Key Name is required for API key authentication, API Key Value is required for API key authentication',
+      );
+      expect(screen.getByTestId('http-auth-field-errors')).toHaveTextContent(
+        'Key Name is required for API key authentication, API Key Value is required for API key authentication',
+      );
+    });
+
+    it.each([
+      {
+        mode: 'PEM upload',
+        signatureAuth: { enabled: true, certificateType: 'pem', keyInputType: 'upload' },
+        expected: 'A PEM private key is required for digital signature authentication',
+      },
+      {
+        mode: 'PEM path',
+        signatureAuth: { enabled: true, certificateType: 'pem', keyInputType: 'path' },
+        expected: 'Private Key File Path is required for digital signature authentication',
+      },
+      {
+        mode: 'JKS',
+        signatureAuth: { enabled: true, certificateType: 'jks' },
+        expected: 'Keystore Path is required for digital signature authentication',
+      },
+      {
+        mode: 'PFX bundle',
+        signatureAuth: { enabled: true, certificateType: 'pfx' },
+        expected: 'PFX File Path is required for digital signature authentication',
+      },
+      {
+        mode: 'PFX separate files',
+        signatureAuth: { enabled: true, certificateType: 'pfx', pfxMode: 'separate' },
+        expected:
+          'Certificate File Path is required for digital signature authentication, Private Key File Path is required for digital signature authentication',
+      },
+    ])('blocks saving incomplete digital signature $mode setup', async ({
+      signatureAuth,
+      expected,
+    }) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              signatureAuth,
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await act(async () => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expected);
+      expect(screen.getByTestId('http-auth-field-errors')).toHaveTextContent(expected);
+    });
+
+    it.each([
+      {
+        mode: 'PEM path missing keyPath',
+        tls: {
+          enabled: true,
+          certificateType: 'pem',
+          certInputType: 'path',
+          certPath: '/etc/ssl/client.crt',
+          keyInputType: 'path',
+        },
+        expected: 'TLS private-key file path is required',
+      },
+      {
+        mode: 'PEM upload missing cert content',
+        tls: {
+          enabled: true,
+          certificateType: 'pem',
+          certInputType: 'upload',
+          keyInputType: 'upload',
+          key: '-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----',
+        },
+        expected: 'TLS certificate content is required',
+      },
+      {
+        mode: 'JKS path missing keystore path',
+        tls: {
+          enabled: true,
+          certificateType: 'jks',
+          jksInputType: 'path',
+        },
+        expected: 'JKS keystore path is required',
+      },
+      {
+        mode: 'PFX bundle missing pfx path',
+        tls: {
+          enabled: true,
+          certificateType: 'pfx',
+          pfxInputType: 'path',
+        },
+        expected: 'PFX file path is required',
+      },
+    ])('blocks saving incomplete TLS $mode', async ({ tls, expected }) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              tls,
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await act(async () => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expect.stringContaining(expected));
+    });
+
+    it.each([
+      {
+        mode: 'password grants without optional client credentials',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+        },
+        expected: null,
+      },
+      {
+        mode: 'password grants with blank optional client credentials',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientId: '',
+          clientSecret: '',
+        },
+        expected: null,
+      },
+      {
+        mode: 'password grants with a complete optional client credential pair',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientId: 'client-id',
+          clientSecret: 'client-secret',
+        },
+        expected: null,
+      },
+      {
+        mode: 'password grants with only a client ID',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientId: 'client-id',
+        },
+        expected: 'Client Secret is required for OAuth client credentials',
+      },
+      {
+        mode: 'password grants with only a client secret',
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl: 'https://auth.example.com/token',
+          username: 'operator',
+          password: 'secret',
+          clientSecret: 'client-secret',
+        },
+        expected: 'Client ID is required for OAuth client credentials',
+      },
+      {
+        mode: 'client credentials grants without credentials',
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl: 'https://auth.example.com/token',
+        },
+        expected:
+          'Client ID is required for OAuth client credentials, Client Secret is required for OAuth client credentials',
+      },
+    ])('validates OAuth $mode', async ({ auth, expected }) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              auth,
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await act(async () => {
+        expect(validateFn!()).toBe(expected === null);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expected);
+      if (expected) {
+        expect(screen.getByTestId('http-auth-field-errors')).toHaveTextContent(expected);
+      }
+    });
+
+    it('explains missing HTTP placeholders as test inputs in eval mode', async () => {
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+            },
+          }}
+          setProvider={vi.fn()}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await user.click(screen.getByTestId('set-http-body-without-prompt'));
+
+      const message = await screen.findByTestId('http-body-error');
+      expect(message).toHaveTextContent(/replaces with each test input at run time/i);
+      expect(message).not.toHaveTextContent(/attack payload/i);
+    });
+
+    it.each([
+      {
+        name: 'structured configs from raw-to-structured transitions, generators, or Postman imports',
+        initialConfig: { request: 'POST /chat HTTP/1.1\n\n{"message":"{{prompt}}"}' },
+        button: 'replace-http-structured-config-without-prompt',
+        expected: 'Request body must contain {{prompt}}',
+        expectedSetError: 'Validation failed',
+      },
+      {
+        name: 'raw configs from generators',
+        initialConfig: {
+          url: 'https://api.example.com/chat',
+          body: { message: '{{prompt}}' },
+        },
+        button: 'replace-http-raw-config-without-prompt',
+        expected: 'Raw request must contain {{prompt}} template variable',
+        expectedSetError: 'Raw request must contain {{prompt}} template variable',
+      },
+    ])('validates atomic HTTP $name', async ({
+      initialConfig,
+      button,
+      expected,
+      expectedSetError,
+    }) => {
+      const user = userEvent.setup();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'http', config: initialConfig }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="redteam"
+        />,
+      );
+
+      await user.click(screen.getByTestId(button));
+
+      await waitFor(() => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expectedSetError);
+      expect(screen.getByTestId('http-body-error')).toHaveTextContent(expected);
+    });
+
+    it('allows atomic HTTP config replacements without {{prompt}} in multi-input mode', async () => {
+      const user = userEvent.setup();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: { request: 'POST /chat HTTP/1.1\n\n{"message":"{{prompt}}"}' },
+            inputs: { userId: 'User ID' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="redteam"
+        />,
+      );
+
+      await user.click(screen.getByTestId('replace-http-structured-config-without-prompt'));
+
+      await waitFor(() => {
+        expect(validateFn!()).toBe(true);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(screen.queryByTestId('http-body-error')).not.toBeInTheDocument();
+    });
+
+    it('preserves cleared signature auth across sequential HTTP configuration updates', async () => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              signatureAuth: { enabled: true, certificateType: 'pem', keyInputType: 'upload' },
+            },
+          }}
+          setProvider={setProvider}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await user.click(screen.getByTestId('switch-signature-auth-to-basic'));
+
+      expect(setProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            signatureAuth: undefined,
+            auth: { type: 'basic', username: '', password: '' },
+          }),
+        }),
+      );
+    });
+
+    it('places required raw HTTP request feedback at the active request field', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'http', config: { request: '' } }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(screen.getByTestId('http-body-error')).toHaveTextContent(
+        'HTTP request content is required',
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenLastCalledWith('HTTP request content is required');
+    });
+
+    it('places required WebSocket URL feedback at the active URL field', () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'websocket', config: { url: '' } }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="websocket"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(screen.getByTestId('ws-url-error')).toHaveTextContent(
+        'Valid WebSocket URL is required',
+      );
+    });
+
+    it('preserves sequential WebSocket updates without mutating the provider prop', async () => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+      const provider: ProviderOptions = {
+        id: 'websocket',
+        config: {
+          url: 'wss://example.com/socket',
+          transformResponse: 'json.message',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={provider}
+          setProvider={setProvider}
+          providerType="websocket"
+          mode="eval"
+        />,
+      );
+
+      await user.click(screen.getByTestId('enable-websocket-streaming'));
+
+      expect(setProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            streamResponse: 'return [accumulator + event.data, true];',
+            transformResponse: undefined,
+          }),
+        }),
+      );
+      expect(provider.config).toEqual({
+        url: 'wss://example.com/socket',
+        transformResponse: 'json.message',
+      });
+    });
+
+    it('requires browser users to replace the starter application URL before saving', async () => {
+      const setError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'browser',
+            config: {
+              steps: [{ action: 'navigate', args: { url: 'https://example.com' } }],
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="browser"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(setError).toHaveBeenCalledWith(
+        'Step 1: replace example.com with your application URL.',
+      );
+      expect(
+        await screen.findByText('Step 1: replace example.com with your application URL.'),
+      ).toBeInTheDocument();
+    });
+
+    it('allows edited browser URLs that happen to mention example.com', () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'browser',
+            config: {
+              steps: [
+                {
+                  action: 'navigate',
+                  args: { url: 'https://myapp.test/redirect?source=example.com' },
+                },
+              ],
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="browser"
+          mode="eval"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+    });
+
+    it('requires an explicit duration for browser wait steps before saving', () => {
+      const setError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'browser',
+            config: { steps: [{ action: 'wait', args: {} }] },
+          }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="browser"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(setError).toHaveBeenCalledWith(
+        'Step 1: enter a wait duration of 0 milliseconds or greater.',
+      );
     });
 
     it('should return false from validate() when provider ID contains only whitespace characters for foundation model providers', () => {
@@ -483,14 +1206,14 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(false);
     });
 
-    it("should return true from validate() for a valid agent framework provider (e.g., providerType is 'langchain', provider.id is 'file://path/to/agent.py')", () => {
+    it('should return true from validate() for a valid agent framework provider with a concrete file path', () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();
       const mockOnValidate = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
       const validAgentProvider: ProviderOptions = {
-        id: 'file://path/to/agent.py',
+        id: 'file:///workspace/agents/customer_support.py',
         config: {},
       };
 
@@ -512,6 +1235,162 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('surfaces agent provider validation at its required file path field', async () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: '', config: {} }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="langchain"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(await screen.findByText('Python agent file path is required')).toBeInTheDocument();
+      expect(screen.getByTestId('agent-config')).toHaveAttribute('data-mode', 'eval');
+    });
+
+    it('should reject example paths that have not been replaced for script providers', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'file:///path/to/custom_provider.py', config: {} }}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="python"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Replace the example path with your provider file path',
+      );
+    });
+
+    it.each([
+      ['langchain', 'file:///workspace/path/to/customer_support.py'],
+      ['python', 'file:///workspace/path/to/custom_provider.py'],
+    ])('accepts a real %s path whose parent folders contain path/to', (providerType, id) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id, config: {} }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType={providerType}
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+    });
+
+    it('surfaces custom provider ID validation in the eval configuration form', async () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: '', config: {} }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="custom"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(await screen.findByText('Provider ID is required')).toBeInTheDocument();
+      expect(screen.getByTestId('custom-config')).toHaveAttribute('data-mode', 'eval');
+    });
+
+    it('should reject the example Azure deployment name', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'azure:chat:your-deployment-name', config: {} }}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="azure"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Replace the example value with your Azure deployment name',
+      );
+    });
+
+    it('should reject zero max tokens instead of treating it as an empty value', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:gpt-5.5', config: { max_tokens: 0 } }}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="openai"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith('Max tokens must be greater than 0');
+    });
+
+    it('should expose foundation validation errors to the corresponding field UI', async () => {
+      const mockSetProvider = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:gpt-5.5', config: { temperature: 3, top_p: 2 } }}
+          setProvider={mockSetProvider}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="openai"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(await screen.findByText('Temperature must be between 0 and 2')).toBeInTheDocument();
+      expect(screen.getByText('Top P must be between 0 and 1')).toBeInTheDocument();
     });
   });
 
@@ -538,6 +1417,41 @@ describe('ProviderConfigEditor', () => {
 
     expect(container).toBeInTheDocument();
     expect(mockSetError).toHaveBeenCalledWith('Provider ID is required');
+    expect(mockOnValidate).toHaveBeenCalledWith(false);
+  });
+
+  it.each([
+    ['custom', 'custom-provider'],
+    ['fireworks', 'fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct'],
+  ])('should block saving %s providers while their JSON configuration is invalid', async (providerType, providerId) => {
+    const mockSetProvider = vi.fn();
+    const mockSetError = vi.fn();
+    const mockOnValidate = vi.fn();
+    const captureValidator = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: providerId, config: {} }}
+        setProvider={mockSetProvider}
+        setError={mockSetError}
+        onValidate={mockOnValidate}
+        onValidationRequest={captureValidator}
+        providerType={providerType}
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('set-invalid-custom-config').click();
+    });
+
+    await waitFor(() => expect(captureValidator).toHaveBeenCalledTimes(2));
+    const validateFn = captureValidator.mock.calls[
+      captureValidator.mock.calls.length - 1
+    ][0] as () => boolean;
+    expect(validateFn()).toBe(false);
+    expect(mockSetError).toHaveBeenCalledWith(
+      'Configuration must be valid JSON before this provider can be saved.',
+    );
     expect(mockOnValidate).toHaveBeenCalledWith(false);
   });
 
@@ -570,6 +1484,7 @@ describe('ProviderConfigEditor', () => {
     expect(mockSetError).toHaveBeenCalledWith('Valid URL is required');
     expect(mockOnValidate).toHaveBeenCalledTimes(1);
     expect(mockOnValidate).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId('http-url-error')).toHaveTextContent('Valid URL is required');
   });
 
   it("should set error and render CustomTargetConfiguration when validateAll is true and a 'go' provider has an empty ID", () => {
@@ -644,6 +1559,46 @@ describe('ProviderConfigEditor', () => {
     expect(mockOnValidate).toHaveBeenCalledWith(true);
   });
 
+  it('should reset the custom configuration JSON draft when providerType changes', async () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'fireworks:model',
+      config: { apiKey: 'fireworks-key' },
+    };
+    const nextProvider: ProviderOptions = {
+      id: 'together:model',
+      config: { apiKey: 'together-key' },
+    };
+
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="fireworks"
+      />,
+    );
+
+    expect(screen.getByTestId('custom-config')).toHaveAttribute(
+      'data-raw-config-json',
+      JSON.stringify(initialProvider.config, null, 2),
+    );
+
+    rerender(
+      <ProviderConfigEditor
+        provider={nextProvider}
+        setProvider={mockSetProvider}
+        providerType="together"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-config')).toHaveAttribute(
+        'data-raw-config-json',
+        JSON.stringify(nextProvider.config, null, 2),
+      );
+    });
+  });
+
   it('should update the rendered configuration component when providerType prop changes', async () => {
     const mockSetProvider = vi.fn();
     const mockSetError = vi.fn();
@@ -677,6 +1632,10 @@ describe('ProviderConfigEditor', () => {
 
     expect(screen.getByTestId('custom-config')).toBeInTheDocument();
 
+    act(() => {
+      screen.getByTestId('set-invalid-custom-config').click();
+    });
+
     const changeProviderTypeButton = screen.getByTestId('change-provider-type');
     act(() => {
       changeProviderTypeButton.click();
@@ -684,6 +1643,7 @@ describe('ProviderConfigEditor', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('http-config')).toBeInTheDocument();
+      expect(screen.queryByTestId('http-body-error')).not.toBeInTheDocument();
     });
   });
 
@@ -793,6 +1753,19 @@ describe('ProviderConfigEditor', () => {
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);
     expect(mockOnValidate).toHaveBeenCalledWith(true);
+  });
+
+  it('hides unsupported global extension hooks in eval mode', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:gpt-5.5', config: {} }}
+        setProvider={vi.fn()}
+        providerType="openai"
+        mode="eval"
+      />,
+    );
+
+    expect(screen.getByTestId('common-config')).toHaveAttribute('data-hide-extensions', 'true');
   });
 
   it('should render Bedrock with the foundation model configuration', () => {

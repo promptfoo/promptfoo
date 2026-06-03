@@ -419,21 +419,138 @@ const allProviderOptions = [
   return a.label.localeCompare(b.label);
 });
 
+const evalProviderOptions = allProviderOptions.map((option) =>
+  option.value === 'custom'
+    ? {
+        ...option,
+        label: 'Custom Provider',
+        description: 'Configure another model, endpoint, or script',
+      }
+    : option,
+);
+
 interface ProviderTypeSelectorProps {
   provider: ProviderOptions | undefined;
   setProvider: (provider: ProviderOptions, providerType: string) => void;
   availableProviderIds?: string[];
   disableModelSelection?: boolean;
   providerType?: string;
+  mode?: 'eval' | 'redteam';
 }
+
+const SIMPLE_PROVIDER_IDS: Record<string, string> = {
+  javascript: 'file:///path/to/custom_provider.js',
+  python: 'file:///path/to/custom_provider.py',
+  openai: DEFAULT_OPENAI_TARGET_ID,
+  anthropic: 'anthropic:messages:claude-sonnet-4-5-20250929',
+  azure: 'azure:chat:your-deployment-name',
+  google: 'google:gemini-2.5-pro',
+  vertex: 'vertex:gemini-2.5-pro',
+  mistral: 'mistral:mistral-large-latest',
+  cohere: 'cohere:command-a-03-2025',
+  groq: 'groq:llama-3.1-70b-versatile',
+  deepseek: 'deepseek:deepseek-chat',
+  openrouter: 'openrouter:openai/gpt-5.4',
+  bedrock: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+  'bedrock-agent': 'bedrock:agent:your-agent-id',
+  sagemaker: 'sagemaker:your-endpoint-name',
+  huggingface: 'huggingface:meta-llama/Meta-Llama-3-70B-Instruct',
+  ollama: 'ollama:llama3',
+  'llama.cpp': 'llama.cpp:http://localhost:8080/completion',
+  llamafile: 'llamafile:http://localhost:8080/v1/chat/completions',
+  localai: 'localai:gpt-4',
+  vllm: 'vllm:http://localhost:8000/v1',
+  'text-generation-webui': 'text-generation-webui:http://localhost:5000',
+  perplexity: 'perplexity:sonar',
+  xai: 'xai:grok-4.20-reasoning',
+  ai21: 'ai21:jamba-large',
+  voyage: 'voyage:voyage-3',
+  'cloudflare-ai': 'cloudflare-ai:@cf/meta/llama-3-8b-instruct',
+  databricks: 'databricks:databricks-meta-llama-3-1-70b-instruct',
+  fal: 'fal:fal-ai/flux/dev',
+  github: 'github:gpt-4o',
+  hyperbolic: 'hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct',
+  aimlapi: 'aimlapi:gpt-4o',
+  exec: 'exec:/path/to/script.sh',
+  helicone: 'helicone:openai/gpt-4.1',
+  jfrog: 'jfrog:llama_3_8b_instruct',
+  go: 'file:///path/to/your/script.go',
+  langchain: 'file:///path/to/langchain_agent.py',
+  autogen: 'file:///path/to/autogen_agent.py',
+  crewai: 'file:///path/to/crewai_agent.py',
+  llamaindex: 'file:///path/to/llamaindex_agent.py',
+  langgraph: 'file:///path/to/langgraph_agent.py',
+  'openai-agents-sdk': 'file:///path/to/openai_agents.py',
+  'pydantic-ai': 'file:///path/to/pydantic_ai_agent.py',
+  'google-adk': 'file:///path/to/google_adk_agent.py',
+  'claude-agent-sdk': 'file:///path/to/claude_agent.py',
+  fireworks: 'fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct',
+  together: 'together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+  cerebras: 'cerebras:llama3.1-70b',
+  replicate: 'replicate:meta/meta-llama-3-70b-instruct',
+  'generic-agent': 'file:///path/to/custom_agent.py',
+};
+
+const CONFIGURED_PROVIDER_DRAFTS: Record<string, (label: string | undefined) => ProviderOptions> = {
+  http: (label) => ({
+    id: 'http',
+    label,
+    config: {
+      url: '',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '{{prompt}}' }),
+      stateful: true,
+    },
+  }),
+  websocket: (label) => ({
+    id: 'websocket',
+    label,
+    config: {
+      type: 'websocket',
+      url: 'wss://example.com/ws',
+      messageTemplate: '{"message": {{prompt | dump}}}',
+      transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
+      timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
+      stateful: true,
+    },
+  }),
+  a2a: (label) => ({
+    id: 'a2a',
+    label,
+    config: { url: '' },
+  }),
+  browser: (label) => ({
+    id: 'browser',
+    label,
+    config: {
+      steps: [{ action: 'navigate', args: { url: 'https://example.com' } }],
+    },
+  }),
+  mcp: (label) => ({
+    id: 'mcp',
+    label,
+    config: { enabled: true, verbose: false },
+  }),
+  custom: (label) => ({ id: '', label, config: {} }),
+};
+
+const createProviderDraft = (providerType: string, label: string | undefined): ProviderOptions =>
+  CONFIGURED_PROVIDER_DRAFTS[providerType]?.(label) ?? {
+    id: SIMPLE_PROVIDER_IDS[providerType] ?? providerType,
+    config: {},
+    label,
+  };
 
 export default function ProviderTypeSelector({
   provider,
   providerType,
   setProvider,
   availableProviderIds,
+  mode = 'redteam',
 }: ProviderTypeSelectorProps) {
   const { recordEvent } = useTelemetry();
+  const providerOptions = mode === 'eval' ? evalProviderOptions : allProviderOptions;
 
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
     providerType,
@@ -473,7 +590,7 @@ export default function ProviderTypeSelector({
     const currentLabel = provider?.label;
 
     // Find the selected option to get its details
-    const selectedOption = allProviderOptions.find((option) => option.value === value);
+    const selectedOption = providerOptions.find((option) => option.value === value);
 
     // Track provider type selection
     recordEvent('feature_used', {
@@ -483,547 +600,7 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    if (value === 'javascript') {
-      setProvider(
-        {
-          id: 'file:///path/to/custom_provider.js',
-          config: {},
-          label: currentLabel,
-        },
-        'javascript',
-      );
-    } else if (value === 'python') {
-      setProvider(
-        {
-          id: 'file:///path/to/custom_provider.py',
-          config: {},
-          label: currentLabel,
-        },
-        'python',
-      );
-    } else if (value === 'http') {
-      setProvider(
-        {
-          id: 'http',
-          label: currentLabel,
-          config: {
-            url: '',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: '{{prompt}}',
-            }),
-            stateful: true,
-          },
-        },
-        'http',
-      );
-    } else if (value === 'websocket') {
-      setProvider(
-        {
-          id: 'websocket',
-          label: currentLabel,
-          config: {
-            type: 'websocket',
-            url: 'wss://example.com/ws',
-            messageTemplate: '{"message": {{prompt | dump}}}',
-            transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
-            timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
-            stateful: true,
-          },
-        },
-        'websocket',
-      );
-    } else if (value === 'a2a') {
-      setProvider(
-        {
-          id: 'a2a',
-          label: currentLabel,
-          config: {
-            url: '',
-          },
-        },
-        'a2a',
-      );
-    } else if (value === 'browser') {
-      setProvider(
-        {
-          id: 'browser',
-          label: currentLabel,
-          config: {
-            steps: [
-              {
-                action: 'navigate',
-                args: { url: 'https://example.com' },
-              },
-            ],
-          },
-        },
-        'browser',
-      );
-    } else if (value === 'openai') {
-      setProvider(
-        {
-          id: DEFAULT_OPENAI_TARGET_ID,
-          config: {},
-          label: currentLabel,
-        },
-        'openai',
-      );
-    } else if (value === 'anthropic') {
-      setProvider(
-        {
-          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
-          config: {},
-          label: currentLabel,
-        },
-        'anthropic',
-      );
-    } else if (value === 'azure') {
-      setProvider(
-        {
-          id: 'azure:chat:your-deployment-name',
-          config: {},
-          label: currentLabel,
-        },
-        'azure',
-      );
-    } else if (value === 'google') {
-      setProvider(
-        {
-          id: 'google:gemini-2.5-pro',
-          config: {},
-          label: currentLabel,
-        },
-        'google',
-      );
-    } else if (value === 'vertex') {
-      setProvider(
-        {
-          id: 'vertex:gemini-2.5-pro',
-          config: {},
-          label: currentLabel,
-        },
-        'vertex',
-      );
-    } else if (value === 'mistral') {
-      setProvider(
-        {
-          id: 'mistral:mistral-large-latest',
-          config: {},
-          label: currentLabel,
-        },
-        'mistral',
-      );
-    } else if (value === 'cohere') {
-      setProvider(
-        {
-          id: 'cohere:command-a-03-2025',
-          config: {},
-          label: currentLabel,
-        },
-        'cohere',
-      );
-    } else if (value === 'groq') {
-      setProvider(
-        {
-          id: 'groq:llama-3.1-70b-versatile',
-          config: {},
-          label: currentLabel,
-        },
-        'groq',
-      );
-    } else if (value === 'deepseek') {
-      setProvider(
-        {
-          id: 'deepseek:deepseek-chat',
-          config: {},
-          label: currentLabel,
-        },
-        'deepseek',
-      );
-    } else if (value === 'openrouter') {
-      setProvider(
-        {
-          id: 'openrouter:openai/gpt-5.4',
-          config: {},
-          label: currentLabel,
-        },
-        'openrouter',
-      );
-    } else if (value === 'bedrock') {
-      setProvider(
-        {
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-          label: currentLabel,
-        },
-        'bedrock',
-      );
-    } else if (value === 'bedrock-agent') {
-      setProvider(
-        {
-          id: 'bedrock:agent:your-agent-id',
-          config: {},
-          label: currentLabel,
-        },
-        'bedrock-agent',
-      );
-    } else if (value === 'sagemaker') {
-      setProvider(
-        {
-          id: 'sagemaker:your-endpoint-name',
-          config: {},
-          label: currentLabel,
-        },
-        'sagemaker',
-      );
-    } else if (value === 'huggingface') {
-      setProvider(
-        {
-          id: 'huggingface:meta-llama/Meta-Llama-3-70B-Instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'huggingface',
-      );
-    } else if (value === 'ollama') {
-      setProvider(
-        {
-          id: 'ollama:llama3',
-          config: {},
-          label: currentLabel,
-        },
-        'ollama',
-      );
-    } else if (value === 'llama.cpp') {
-      setProvider(
-        {
-          id: 'llama.cpp:http://localhost:8080/completion',
-          config: {},
-          label: currentLabel,
-        },
-        'llama.cpp',
-      );
-    } else if (value === 'llamafile') {
-      setProvider(
-        {
-          id: 'llamafile:http://localhost:8080/v1/chat/completions',
-          config: {},
-          label: currentLabel,
-        },
-        'llamafile',
-      );
-    } else if (value === 'localai') {
-      setProvider(
-        {
-          id: 'localai:gpt-4',
-          config: {},
-          label: currentLabel,
-        },
-        'localai',
-      );
-    } else if (value === 'vllm') {
-      setProvider(
-        {
-          id: 'vllm:http://localhost:8000/v1',
-          config: {},
-          label: currentLabel,
-        },
-        'vllm',
-      );
-    } else if (value === 'text-generation-webui') {
-      setProvider(
-        {
-          id: 'text-generation-webui:http://localhost:5000',
-          config: {},
-          label: currentLabel,
-        },
-        'text-generation-webui',
-      );
-    } else if (value === 'perplexity') {
-      setProvider(
-        {
-          id: 'perplexity:sonar',
-          config: {},
-          label: currentLabel,
-        },
-        'perplexity',
-      );
-    } else if (value === 'xai') {
-      setProvider(
-        {
-          id: 'xai:grok-4.20-reasoning',
-          config: {},
-          label: currentLabel,
-        },
-        'xai',
-      );
-    } else if (value === 'ai21') {
-      setProvider(
-        {
-          id: 'ai21:jamba-large',
-          config: {},
-          label: currentLabel,
-        },
-        'ai21',
-      );
-    } else if (value === 'voyage') {
-      setProvider(
-        {
-          id: 'voyage:voyage-3',
-          config: {},
-          label: currentLabel,
-        },
-        'voyage',
-      );
-    } else if (value === 'cloudflare-ai') {
-      setProvider(
-        {
-          id: 'cloudflare-ai:@cf/meta/llama-3-8b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'cloudflare-ai',
-      );
-    } else if (value === 'databricks') {
-      setProvider(
-        {
-          id: 'databricks:databricks-meta-llama-3-1-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'databricks',
-      );
-    } else if (value === 'fal') {
-      setProvider(
-        {
-          id: 'fal:fal-ai/flux/dev',
-          config: {},
-          label: currentLabel,
-        },
-        'fal',
-      );
-    } else if (value === 'github') {
-      setProvider(
-        {
-          id: 'github:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'github',
-      );
-    } else if (value === 'hyperbolic') {
-      setProvider(
-        {
-          id: 'hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'hyperbolic',
-      );
-    } else if (value === 'mcp') {
-      setProvider(
-        {
-          id: 'mcp',
-          label: currentLabel,
-          config: {
-            enabled: true,
-            verbose: false,
-          },
-        },
-        'mcp',
-      );
-    } else if (value === 'aimlapi') {
-      setProvider(
-        {
-          id: 'aimlapi:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'aimlapi',
-      );
-    } else if (value === 'exec') {
-      setProvider(
-        {
-          id: 'exec:/path/to/script.sh',
-          config: {},
-          label: currentLabel,
-        },
-        'exec',
-      );
-    } else if (value === 'helicone') {
-      setProvider(
-        {
-          id: 'helicone:openai/gpt-4.1',
-          config: {},
-          label: currentLabel,
-        },
-        'helicone',
-      );
-    } else if (value === 'jfrog') {
-      setProvider(
-        {
-          id: 'jfrog:llama_3_8b_instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'jfrog',
-      );
-    } else if (value === 'go') {
-      setProvider(
-        {
-          id: 'file:///path/to/your/script.go',
-          config: {},
-          label: currentLabel,
-        },
-        'go',
-      );
-    } else if (value === 'langchain') {
-      setProvider(
-        {
-          id: 'file:///path/to/langchain_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'langchain',
-      );
-    } else if (value === 'autogen') {
-      setProvider(
-        {
-          id: 'file:///path/to/autogen_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'autogen',
-      );
-    } else if (value === 'crewai') {
-      setProvider(
-        {
-          id: 'file:///path/to/crewai_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'crewai',
-      );
-    } else if (value === 'llamaindex') {
-      setProvider(
-        {
-          id: 'file:///path/to/llamaindex_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'llamaindex',
-      );
-    } else if (value === 'langgraph') {
-      setProvider(
-        {
-          id: 'file:///path/to/langgraph_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'langgraph',
-      );
-    } else if (value === 'openai-agents-sdk') {
-      setProvider(
-        {
-          id: 'file:///path/to/openai_agents.py',
-          config: {},
-          label: currentLabel,
-        },
-        'openai-agents-sdk',
-      );
-    } else if (value === 'pydantic-ai') {
-      setProvider(
-        {
-          id: 'file:///path/to/pydantic_ai_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'pydantic-ai',
-      );
-    } else if (value === 'google-adk') {
-      setProvider(
-        {
-          id: 'file:///path/to/google_adk_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'google-adk',
-      );
-    } else if (value === 'claude-agent-sdk') {
-      setProvider(
-        {
-          id: 'file:///path/to/claude_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'claude-agent-sdk',
-      );
-    } else if (value === 'fireworks') {
-      setProvider(
-        {
-          id: 'fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'fireworks',
-      );
-    } else if (value === 'together') {
-      setProvider(
-        {
-          id: 'together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-          config: {},
-          label: currentLabel,
-        },
-        'together',
-      );
-    } else if (value === 'cerebras') {
-      setProvider(
-        {
-          id: 'cerebras:llama3.1-70b',
-          config: {},
-          label: currentLabel,
-        },
-        'cerebras',
-      );
-    } else if (value === 'replicate') {
-      setProvider(
-        {
-          id: 'replicate:meta/meta-llama-3-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'replicate',
-      );
-    } else if (value === 'generic-agent') {
-      setProvider(
-        {
-          id: 'file:///path/to/custom_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'generic-agent',
-      );
-    } else if (value === 'custom') {
-      setProvider(
-        {
-          id: '',
-          label: currentLabel,
-          config: {},
-        },
-        'custom',
-      );
-    } else {
-      setProvider(
-        {
-          id: value,
-          config: {},
-          label: currentLabel,
-        },
-        value,
-      );
-    }
+    setProvider(createProviderDraft(value, currentLabel), value);
   };
 
   // Handle edit/change button click
@@ -1040,7 +617,7 @@ export default function ProviderTypeSelector({
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
-  const filteredProviderOptions = allProviderOptions.filter((option) => {
+  const filteredProviderOptions = providerOptions.filter((option) => {
     // Filter by availableProviderIds if provided
     const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
 
@@ -1058,7 +635,7 @@ export default function ProviderTypeSelector({
 
   // Get the selected provider option for collapsed view
   const selectedOption = selectedProviderType
-    ? allProviderOptions.find((option) => option.value === selectedProviderType)
+    ? providerOptions.find((option) => option.value === selectedProviderType)
     : undefined;
 
   // Show collapsed view when a provider is selected and not in expanded mode
@@ -1113,11 +690,11 @@ export default function ProviderTypeSelector({
   // Calculate counts for each tag
   const getTagCount = (tagKey: TagKey | undefined) => {
     if (tagKey === undefined) {
-      return allProviderOptions.filter(
+      return providerOptions.filter(
         (opt) => !availableProviderIds || availableProviderIds.includes(opt.value),
       ).length;
     }
-    return allProviderOptions.filter(
+    return providerOptions.filter(
       (opt) =>
         opt.tag === tagKey && (!availableProviderIds || availableProviderIds.includes(opt.value)),
     ).length;
@@ -1132,6 +709,7 @@ export default function ProviderTypeSelector({
           <button
             type="button"
             onClick={() => setSelectedTag(undefined)}
+            aria-pressed={selectedTag === undefined}
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -1147,6 +725,7 @@ export default function ProviderTypeSelector({
               key={filter.key}
               type="button"
               onClick={() => handleTagToggle(filter.key)}
+              aria-pressed={selectedTag === filter.key}
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -1188,7 +767,7 @@ export default function ProviderTypeSelector({
       <div className="space-y-2">
         {filteredProviderOptions.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
               No providers found matching your search.
             </p>
           </div>
@@ -1209,46 +788,43 @@ export default function ProviderTypeSelector({
                     <div className="h-px w-full bg-border" />
                   </div>
                 )}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleProviderTypeSelect(option.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleProviderTypeSelect(option.value);
-                    }
-                  }}
-                  className={cn(
-                    'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                    isSelected
-                      ? 'border-2 border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50',
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center gap-2">
-                      <p
-                        className={cn(
-                          isSelected ? 'font-semibold text-primary' : 'font-medium text-foreground',
-                        )}
-                      >
-                        {option.label}
-                      </p>
-                      {option.recommended && (
-                        <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
-                          Popular
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleProviderTypeSelect(option.value)}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center rounded-lg border p-4 pr-20 text-left transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                      isSelected
+                        ? 'border-2 border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted/50',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="mb-1 flex items-center gap-2">
+                        <span
+                          className={cn(
+                            isSelected
+                              ? 'font-semibold text-primary'
+                              : 'font-medium text-foreground',
+                          )}
+                        >
+                          {option.label}
                         </span>
-                      )}
-                    </div>
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
-                      {option.description}
-                    </p>
-                  </div>
+                        {option.recommended && (
+                          <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
+                            Popular
+                          </span>
+                        )}
+                      </span>
+                      <span className="block line-clamp-2 text-sm text-muted-foreground">
+                        {option.description}
+                      </span>
+                    </span>
+                  </button>
 
-                  <div className="ml-4 flex shrink-0 items-center gap-2">
-                    {/* Documentation link */}
+                  <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
                     {hasSpecificDocumentation(option.value) && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1256,7 +832,7 @@ export default function ProviderTypeSelector({
                             href={getProviderDocumentationUrl(option.value)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`View ${option.label} documentation`}
                             className="text-muted-foreground hover:text-foreground"
                           >
                             <HelpCircle className="size-4" />

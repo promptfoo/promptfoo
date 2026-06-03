@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
@@ -12,6 +13,14 @@ interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   providerType: string;
+  fieldErrors?: FoundationModelFieldErrors;
+}
+
+export interface FoundationModelFieldErrors {
+  maxTokens?: string;
+  modelId?: string;
+  temperature?: string;
+  topP?: string;
 }
 
 type BedrockApiMode = 'invoke' | 'converse';
@@ -51,10 +60,29 @@ const createDefaultMCPServer = (index: number): MCPServerConfig => ({
   args: [],
 });
 
+const parseOptionalNumber = (value: string): number | undefined => {
+  if (value.trim() === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const parseOptionalInteger = (value: string): number | undefined => {
+  if (value.trim() === '') {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
 const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
+  fieldErrors = {},
 }: FoundationModelConfigurationProps) => {
   const isBedrock = providerType === 'bedrock';
   const bedrockApiMode = getBedrockApiModeFromId(selectedTarget.id);
@@ -66,10 +94,26 @@ const FoundationModelConfiguration = ({
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
     isBedrock && Boolean(selectedTarget.config?.region || selectedTarget.config?.profile),
   );
+  const [showApiKey, setShowApiKey] = useState(false);
+  const fieldErrorIdPrefix = React.useId();
+  const hasAdvancedFieldErrors = Boolean(
+    fieldErrors.temperature || fieldErrors.maxTokens || fieldErrors.topP,
+  );
+  const getDescriptionIds = (field: string, hasError = false) =>
+    hasError
+      ? `${fieldErrorIdPrefix}-${field}-error ${fieldErrorIdPrefix}-${field}-help`
+      : `${fieldErrorIdPrefix}-${field}-help`;
 
   useEffect(() => {
     setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
+    setShowApiKey(false);
   }, [isBedrock, selectedTarget.id]);
+
+  useEffect(() => {
+    if (hasAdvancedFieldErrors) {
+      setIsAdvancedOpen(true);
+    }
+  }, [hasAdvancedFieldErrors]);
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
@@ -236,18 +280,26 @@ const FoundationModelConfiguration = ({
           {isBedrock && (
             <div className="mb-4 space-y-2">
               <Label htmlFor="bedrock-api-mode">
-                Bedrock API <span className="text-destructive">*</span>
+                Bedrock API
+                <span aria-hidden="true" className="ml-1 text-destructive">
+                  *
+                </span>
               </Label>
               <select
                 id="bedrock-api-mode"
+                required
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={bedrockApiMode}
                 onChange={(e) => updateBedrockApiMode(e.target.value as BedrockApiMode)}
+                aria-describedby={`${fieldErrorIdPrefix}-bedrock-api-help`}
               >
                 <option value="invoke">InvokeModel</option>
                 <option value="converse">Converse</option>
               </select>
-              <p className="text-sm text-muted-foreground">
+              <p
+                id={`${fieldErrorIdPrefix}-bedrock-api-help`}
+                className="text-sm text-muted-foreground"
+              >
                 Use Converse for Bedrock-native tool calling and MCP servers. InvokeModel keeps the
                 legacy direct model API.
               </p>
@@ -255,15 +307,26 @@ const FoundationModelConfiguration = ({
           )}
 
           <Label htmlFor="model-id">
-            Model ID <span className="text-destructive">*</span>
+            Model ID
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
           </Label>
           <Input
             id="model-id"
+            required
             value={modelId}
             onChange={handleModelIdChange}
             placeholder={providerInfo.placeholder}
+            aria-invalid={Boolean(fieldErrors.modelId)}
+            aria-describedby={getDescriptionIds('model-id', Boolean(fieldErrors.modelId))}
           />
-          <p className="text-sm text-muted-foreground">
+          {fieldErrors.modelId && (
+            <HelperText id={`${fieldErrorIdPrefix}-model-id-error`} error>
+              {fieldErrors.modelId}
+            </HelperText>
+          )}
+          <HelperText id={`${fieldErrorIdPrefix}-model-id-help`} className="text-sm">
             {isBedrock
               ? `Saved as ${buildBedrockProviderId(bedrockApiMode, modelId || '<model>')}. `
               : 'Specify the model to use. '}
@@ -277,7 +340,7 @@ const FoundationModelConfiguration = ({
               {providerInfo.name} documentation
             </a>{' '}
             for available models.
-          </p>
+          </HelperText>
         </div>
 
         {isBedrock && bedrockApiMode === 'converse' && (
@@ -290,8 +353,9 @@ const FoundationModelConfiguration = ({
           >
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Servers are saved under <code>config.mcp</code> and enabled when at least one server
-                is configured.
+                Each server becomes active after you enter a Command, Path, or URL. Active servers
+                are saved under <code>config.mcp</code> and available during Bedrock Converse
+                evaluations.
               </p>
               <Button type="button" variant="outline" onClick={addMCPServer}>
                 Add MCP Server
@@ -307,10 +371,22 @@ const FoundationModelConfiguration = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => removeMCPServer(index)}
+                        aria-label={`Remove MCP server ${index + 1}`}
                       >
                         Remove
                       </Button>
                     </div>
+
+                    <HelperText
+                      id={`mcp-server-${index}-status`}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {isServerConfigured(server)
+                        ? 'Active. This server will be available during Bedrock Converse evaluations.'
+                        : 'Not active. Enter a command, path, or URL to enable this server.'}
+                    </HelperText>
 
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="space-y-2">
@@ -331,6 +407,7 @@ const FoundationModelConfiguration = ({
                             updateMCPServer(index, 'command', e.target.value || undefined)
                           }
                           placeholder="npx"
+                          aria-describedby={`mcp-server-${index}-status`}
                         />
                       </div>
 
@@ -362,6 +439,7 @@ const FoundationModelConfiguration = ({
                             updateMCPServer(index, 'url', e.target.value || undefined)
                           }
                           placeholder="https://example.com/mcp"
+                          aria-describedby={`mcp-server-${index}-status`}
                         />
                       </div>
 
@@ -374,6 +452,7 @@ const FoundationModelConfiguration = ({
                             updateMCPServer(index, 'path', e.target.value || undefined)
                           }
                           placeholder="./mcp-server.js"
+                          aria-describedby={`mcp-server-${index}-status`}
                         />
                       </div>
                     </div>
@@ -400,8 +479,12 @@ const FoundationModelConfiguration = ({
                   value={selectedTarget.config?.region ?? ''}
                   onChange={(e) => updateCustomTarget('region', e.target.value || undefined)}
                   placeholder="us-east-1"
+                  aria-describedby={`${fieldErrorIdPrefix}-bedrock-region-help`}
                 />
-                <p className="text-sm text-muted-foreground">
+                <p
+                  id={`${fieldErrorIdPrefix}-bedrock-region-help`}
+                  className="text-sm text-muted-foreground"
+                >
                   Defaults to <code>us-east-1</code> if unset. Set this when using inference
                   profiles or models pinned to a specific region.
                 </p>
@@ -414,8 +497,12 @@ const FoundationModelConfiguration = ({
                   value={selectedTarget.config?.profile ?? ''}
                   onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
                   placeholder="default"
+                  aria-describedby={`${fieldErrorIdPrefix}-bedrock-profile-help`}
                 />
-                <p className="text-sm text-muted-foreground">
+                <p
+                  id={`${fieldErrorIdPrefix}-bedrock-profile-help`}
+                  className="text-sm text-muted-foreground"
+                >
                   Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
                   default credential chain when unset.
                 </p>
@@ -430,8 +517,12 @@ const FoundationModelConfiguration = ({
                     updateCustomTarget('inferenceModelType', e.target.value || undefined)
                   }
                   placeholder="claude, nova, llama, mistral, ..."
+                  aria-describedby={`${fieldErrorIdPrefix}-bedrock-inference-model-type-help`}
                 />
-                <p className="text-sm text-muted-foreground">
+                <p
+                  id={`${fieldErrorIdPrefix}-bedrock-inference-model-type-help`}
+                  className="text-sm text-muted-foreground"
+                >
                   Required when the model ID is an Application Inference Profile ARN. Otherwise
                   inferred from the model ID.
                 </p>
@@ -458,10 +549,22 @@ const FoundationModelConfiguration = ({
                 step={0.1}
                 value={selectedTarget.config?.temperature ?? ''}
                 onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
+                  updateCustomTarget('temperature', parseOptionalNumber(e.target.value))
                 }
+                aria-invalid={Boolean(fieldErrors.temperature)}
+                aria-describedby={getDescriptionIds(
+                  'temperature',
+                  Boolean(fieldErrors.temperature),
+                )}
               />
-              <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
+              {fieldErrors.temperature && (
+                <HelperText id={`${fieldErrorIdPrefix}-temperature-error`} error>
+                  {fieldErrors.temperature}
+                </HelperText>
+              )}
+              <HelperText id={`${fieldErrorIdPrefix}-temperature-help`} className="text-sm">
+                Controls randomness (0.0 to 2.0)
+              </HelperText>
             </div>
 
             <div className="space-y-2">
@@ -472,10 +575,19 @@ const FoundationModelConfiguration = ({
                 min={1}
                 value={selectedTarget.config?.max_tokens ?? ''}
                 onChange={(e) =>
-                  updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
+                  updateCustomTarget('max_tokens', parseOptionalInteger(e.target.value))
                 }
+                aria-invalid={Boolean(fieldErrors.maxTokens)}
+                aria-describedby={getDescriptionIds('max-tokens', Boolean(fieldErrors.maxTokens))}
               />
-              <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
+              {fieldErrors.maxTokens && (
+                <HelperText id={`${fieldErrorIdPrefix}-max-tokens-error`} error>
+                  {fieldErrors.maxTokens}
+                </HelperText>
+              )}
+              <HelperText id={`${fieldErrorIdPrefix}-max-tokens-help`} className="text-sm">
+                Maximum number of tokens to generate
+              </HelperText>
             </div>
 
             <div className="space-y-2">
@@ -487,26 +599,50 @@ const FoundationModelConfiguration = ({
                 max={1}
                 step={0.01}
                 value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                onChange={(e) => updateCustomTarget('top_p', parseOptionalNumber(e.target.value))}
+                aria-invalid={Boolean(fieldErrors.topP)}
+                aria-describedby={getDescriptionIds('top-p', Boolean(fieldErrors.topP))}
               />
-              <p className="text-sm text-muted-foreground">
+              {fieldErrors.topP && (
+                <HelperText id={`${fieldErrorIdPrefix}-top-p-error`} error>
+                  {fieldErrors.topP}
+                </HelperText>
+              )}
+              <HelperText id={`${fieldErrorIdPrefix}-top-p-help`} className="text-sm">
                 Nucleus sampling parameter (0.0 to 1.0)
-              </p>
+              </HelperText>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="api-key">API Key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                value={selectedTarget.config?.apiKey ?? ''}
-                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-              />
-              <p className="text-sm text-muted-foreground">
-                Optional - defaults to {providerInfo.envVar} environment variable
-              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="api-key"
+                  type={showApiKey ? 'text' : 'password'}
+                  value={selectedTarget.config?.apiKey ?? ''}
+                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
+                  aria-describedby={`${fieldErrorIdPrefix}-api-key-help`}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowApiKey((shown) => !shown)}
+                  aria-label={`${showApiKey ? 'Hide' : 'Show'} API Key`}
+                >
+                  {showApiKey ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+              <HelperText id={`${fieldErrorIdPrefix}-api-key-help`} className="text-sm">
+                Optional. Prefer the {providerInfo.envVar} environment variable. A key entered here
+                is included in this provider configuration and any copied or downloaded YAML, and is
+                not restored after a page reload.
+              </HelperText>
             </div>
 
             <div className="space-y-2">
@@ -517,10 +653,11 @@ const FoundationModelConfiguration = ({
                 value={selectedTarget.config?.apiBaseUrl ?? ''}
                 onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
                 placeholder="https://api.openai.com/v1"
+                aria-describedby={`${fieldErrorIdPrefix}-api-base-url-help`}
               />
-              <p className="text-sm text-muted-foreground">
+              <HelperText id={`${fieldErrorIdPrefix}-api-base-url-help`} className="text-sm">
                 For proxies, local models (Ollama, LMStudio), or custom API endpoints
-              </p>
+              </HelperText>
             </div>
           </div>
         </SetupSection>
