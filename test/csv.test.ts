@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
+import {
+  assertionFromString,
+  escapeCsvFormula,
+  serializeObjectArrayAsCSV,
+  testCaseFromCsvRow,
+} from '../src/csv';
 import logger from '../src/logger';
 
 vi.mock('../src/logger', () => ({
@@ -757,5 +762,46 @@ describe('serializeObjectArrayAsCSV', () => {
     // Note: The actual implementation includes quotes around values and a trailing newline
     const expected = 'name,age\n"John","30"\n"Jane","25","NY"\n';
     expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+});
+
+describe('escapeCsvFormula', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+    ['@SUM(A1:A9)', "'@SUM(A1:A9)"],
+    ['+1+1', "'+1+1"],
+    ['-1+1', "'-1+1"],
+    ['-2+cmd', "'-2+cmd"],
+  ])('prefixes formula trigger %p -> %p', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\t=danger', "'\t=danger"],
+    ['\r=danger', "'\r=danger"],
+    ['  =danger', "'  =danger"],
+  ])('treats leading whitespace/control before a trigger as a formula (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-5', '-5'],
+    ['-5.25', '-5.25'],
+    ['-1e3', '-1e3'],
+    ['+5', '+5'],
+    ['+3.14', '+3.14'],
+  ])('leaves legitimate numbers untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['hello world', 'hello world'],
+    ['5-3', '5-3'],
+    ['a=b', 'a=b'],
+    ['user@example.com', 'user@example.com'],
+    ['', ''],
+  ])('leaves non-formula values untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
   });
 });

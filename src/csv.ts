@@ -310,6 +310,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 export function serializeObjectArrayAsCSV(vars: object[]): string {
   invariant(vars.length > 0, 'No variables to serialize');
   const columnNames = Object.keys(vars[0]).join(',');
+  // NOTE: values here are intentionally NOT formula-escaped (see escapeCsvFormula).
+  // This output is a generated test-case dataset meant to be re-imported via the
+  // CSV test loader, and prefixing a cell would corrupt vars on round-trip.
   const rows = vars
     .map(
       (result) =>
@@ -319,4 +322,46 @@ export function serializeObjectArrayAsCSV(vars: object[]): string {
     )
     .join('\n');
   return [columnNames, rows].join('\n') + '\n';
+}
+
+function isNumericCell(value: string): boolean {
+  return value.trim() !== '' && !Number.isNaN(Number(value));
+}
+
+/**
+ * Neutralize spreadsheet formula (CSV) injection — CWE-1236, OWASP "CSV Injection".
+ *
+ * Excel, Google Sheets and LibreOffice execute a cell as a formula when its text
+ * begins with `=`, `+`, `-`, `@`, a TAB or a carriage return. promptfoo's exported
+ * eval/redteam results contain model output, test vars and grader comments —
+ * attacker-influenced, especially under red teaming — so an exported CSV opened in
+ * a spreadsheet could run code, exfiltrate data, or phish via a hyperlink.
+ * csv-stringify's quoting does NOT prevent this; the cell value itself must be
+ * prefixed.
+ *
+ * We prepend a single apostrophe, the spreadsheet-native "treat the rest as text"
+ * marker (it is not shown in the cell). To stay minimally disruptive we only touch
+ * genuinely dangerous values: a leading `-`/`+` on an otherwise-numeric value
+ * (e.g. "-5", "+3.14", a score) is left alone because spreadsheets read those as
+ * numbers, not formulas. Empty strings are returned unchanged.
+ *
+ * Apply this only at export time. promptfoo's CSV import path and any user-authored
+ * CSVs must never be mutated, so round-trips stay lossless.
+ */
+export function escapeCsvFormula(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  // Spreadsheets strip leading whitespace before parsing, so inspect the first
+  // non-whitespace character. This also covers leading TAB / CR obfuscation.
+  const unpadded = value.replace(/^\s+/, '');
+  const firstChar = unpadded[0];
+  if (firstChar === undefined) {
+    return value;
+  }
+  const isFormulaTrigger =
+    firstChar === '=' ||
+    firstChar === '@' ||
+    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
+  return isFormulaTrigger ? `'${value}` : value;
 }

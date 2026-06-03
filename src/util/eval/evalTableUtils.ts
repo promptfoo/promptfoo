@@ -1,4 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
+import { escapeCsvFormula } from '../../csv';
+import { getEnvBool } from '../../envars';
 import { ResultFailureReason } from '../../types/index';
 
 import type Eval from '../../models/eval';
@@ -440,6 +442,25 @@ export function tableRowToCsvValues(
 }
 
 /**
+ * Escape every cell of a CSV row matrix (headers + body) against spreadsheet
+ * formula injection (CWE-1236), unless disabled via
+ * `PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING`. Numbers and booleans pass through
+ * untouched; only string cells are inspected. Applied at the `csvStringify`
+ * boundary so `buildCsvHeaders`/`tableRowToCsvValues` stay pure and re-importable
+ * CSVs are never produced from un-escaped data.
+ */
+function escapeCsvRowsForFormulaInjection(
+  rows: (string | number | boolean)[][],
+): (string | number | boolean)[][] {
+  if (getEnvBool('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING')) {
+    return rows;
+  }
+  return rows.map((row) =>
+    row.map((cell) => (typeof cell === 'string' ? escapeCsvFormula(cell) : cell)),
+  );
+}
+
+/**
  * Generates CSV data from evaluation table data.
  *
  * Column structure per prompt:
@@ -482,7 +503,7 @@ export function evalTableToCsv(
     ),
   ];
 
-  return csvStringify(csvRows);
+  return csvStringify(escapeCsvRowsForFormulaInjection(csvRows));
 }
 
 /**
@@ -739,7 +760,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     isRedteam,
     namedScoreNamesByPrompt,
   });
-  await write(csvStringify([headers]));
+  await write(csvStringify(escapeCsvRowsForFormulaInjection([headers])));
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
@@ -752,7 +773,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     );
 
     if (csvRows.length > 0) {
-      await write(csvStringify(csvRows));
+      await write(csvStringify(escapeCsvRowsForFormulaInjection(csvRows)));
     }
   }
 }
