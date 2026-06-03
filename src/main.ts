@@ -6,7 +6,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { EvalRunError, evalCommand } from './commands/eval';
+import { evalCommand } from './commands/eval';
 import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
@@ -37,6 +37,7 @@ import {
   shutdownGracefully,
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
+import { EvalRunError } from './node/doEval';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
