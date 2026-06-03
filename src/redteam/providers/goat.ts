@@ -16,7 +16,11 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -352,9 +356,7 @@ export default class GoatProvider implements ApiProvider {
             getRemoteGenerationUrl(),
             {
               body,
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers: getRemoteGenerationHeaders(),
               method: 'POST',
             },
             options?.abortSignal,
@@ -394,9 +396,7 @@ export default class GoatProvider implements ApiProvider {
           getRemoteGenerationUrl(),
           {
             body,
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: getRemoteGenerationHeaders(),
             method: 'POST',
           },
           options?.abortSignal,

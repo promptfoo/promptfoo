@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -14,6 +15,11 @@ import {
   REPEAT_PASS_RATE_GROUP_METADATA_KEY,
   tagRepeatPassRateResult,
 } from '../../src/util/repeatPassRateMetadata';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
@@ -166,6 +172,136 @@ describe('EvalResult', () => {
       expect(result.response?.metadata?.http?.headers).toEqual({
         'content-type': 'application/json',
         'x-request-id': 'req_in_memory',
+      });
+    });
+
+    it('preserves trace linkage across single-row persistence', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-trace-linkage', {
+        ...mockEvaluateResult,
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: { source: 'single' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: { source: 'single' },
+      });
+    });
+
+    it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const result = await EvalResult.createFromEvaluateResult('test-eval-non-object-promptfoo', {
+        ...mockEvaluateResult,
+        traceId: 'wins-over-user',
+        evaluationId: 'wins-over-user',
+        metadata: { userKey: 'kept', __promptfoo: 'unexpected-string' as any },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('non-object metadata.__promptfoo'),
+      );
+      // Trace linkage takes precedence; non-object value is overwritten (not preserved).
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'wins-over-user',
+        evaluationId: 'wins-over-user',
+        metadata: { userKey: 'kept' },
+      });
+      // The read-side strip happens on findById, not just construction.
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+      expect(retrieved?.toEvaluateResult().metadata).toEqual({ userKey: 'kept' });
+    });
+
+    it('warns before replacing an existing reserved traceLinkage property', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const result = await EvalResult.createFromEvaluateResult('test-eval-existing-linkage', {
+        ...mockEvaluateResult,
+        traceId: 'internal-trace',
+        evaluationId: 'internal-evaluation',
+        metadata: {
+          __promptfoo: {
+            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+            retained: 'user-metadata',
+          },
+        },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('metadata.__promptfoo.traceLinkage'),
+      );
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'internal-trace',
+        evaluationId: 'internal-evaluation',
+        metadata: { __promptfoo: { retained: 'user-metadata' } },
+      });
+    });
+
+    it('strips user-supplied reserved trace linkage from untraced rows', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
+        ...mockEvaluateResult,
+        metadata: {
+          __promptfoo: {
+            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+            retained: 'user-metadata',
+          },
+        },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        metadata: { __promptfoo: { retained: 'user-metadata' } },
+      });
+      expect(retrieved?.traceId).toBeUndefined();
+      expect(retrieved?.evaluationId).toBeUndefined();
+    });
+
+    it('round-trips evaluationId without traceId (malformed traceparent path)', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-only-id', {
+        ...mockEvaluateResult,
+        evaluationId: 'eval-only',
+        metadata: { source: 'eval-only-test' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        evaluationId: 'eval-only',
+        metadata: { source: 'eval-only-test' },
+      });
+      expect(retrieved?.toEvaluateResult().traceId).toBeUndefined();
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
+    it('preserves user metadata alongside persisted trace linkage', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-user-metadata', {
+        ...mockEvaluateResult,
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: {
+          __traceId: 'user-trace-id',
+          __evaluationId: 'user-evaluation-id',
+          __promptfoo: { source: 'user' },
+        },
+      });
+
+      expect(result.metadata).toEqual({
+        __traceId: 'user-trace-id',
+        __evaluationId: 'user-evaluation-id',
+        __promptfoo: { source: 'user' },
+      });
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: {
+          __traceId: 'user-trace-id',
+          __evaluationId: 'user-evaluation-id',
+          __promptfoo: { source: 'user' },
+        },
       });
     });
 
@@ -415,6 +551,8 @@ describe('EvalResult', () => {
                   },
                   requestHeaders: {
                     authorization: 'Bearer sk-should-not-persist',
+                    'api-key': 'azure-api-key-should-not-persist',
+                    'X-API-Key': 'custom-api-key-should-not-persist',
                     'x-safe-debug': 'keep-me',
                   },
                 },
@@ -434,6 +572,8 @@ describe('EvalResult', () => {
         });
         expect(result.response?.metadata?.http?.requestHeaders).toEqual({
           authorization: '[REDACTED]',
+          'api-key': '[REDACTED]',
+          'X-API-Key': '[REDACTED]',
           'x-safe-debug': 'keep-me',
         });
         expect(result.metadata?.http?.headers).toEqual({
@@ -452,6 +592,12 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
         expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
         expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'azure-api-key-should-not-persist',
+        );
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'custom-api-key-should-not-persist',
+        );
         expect(JSON.stringify(retrieved?.metadata)).not.toContain(
           'metadata_proj_should_not_persist',
         );
@@ -460,6 +606,57 @@ describe('EvalResult', () => {
           'grading_proj_should_not_persist',
         );
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
+      });
+
+      it('preserves arbitrary legacy headers in grading metadata', async () => {
+        const evalId = 'test-eval-preserve-grading-metadata-headers';
+        const gradingMetadataHeaders = {
+          'set-cookie': ['user-authored-grading-cookie'],
+          'x-request-id': {
+            value: 'user-authored-grading-request-id',
+          },
+        };
+        const componentMetadataHeaders = {
+          'x-request-id': 'user-authored-component-request-id',
+        };
+
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              metadata: {
+                headers: gradingMetadataHeaders,
+              },
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: {
+                    headers: componentMetadataHeaders,
+                  },
+                },
+              ],
+            },
+          },
+          { persist: true },
+        );
+
+        // Grading metadata has no transport provenance, so its arbitrary `headers` must be kept.
+        expect(result.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
+        expect(result.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
+          componentMetadataHeaders,
+        );
+
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved?.gradingResult?.metadata?.headers).toEqual(gradingMetadataHeaders);
+        expect(retrieved?.gradingResult?.componentResults?.[0].metadata?.headers).toEqual(
+          componentMetadataHeaders,
+        );
       });
 
       it('preserves user-controlled `http` keys nested inside response.output, response.metadata, and gradingResult', async () => {
@@ -814,6 +1011,28 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('createManyFromEvaluateResult', () => {
+    it('preserves trace linkage across bulk persistence', async () => {
+      const [result] = await EvalResult.createManyFromEvaluateResult(
+        [
+          {
+            ...mockEvaluateResult,
+            traceId: 'bulk-trace-id',
+            evaluationId: 'bulk-evaluation-id',
+            metadata: { source: 'import' },
+          },
+        ],
+        'test-eval-bulk-trace-linkage',
+      );
+
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'bulk-trace-id',
+        evaluationId: 'bulk-evaluation-id',
+        metadata: { source: 'import' },
+      });
+    });
+  });
+
   describe('save', () => {
     it('should save new results', async () => {
       const result = new EvalResult({
@@ -841,12 +1060,151 @@ describe('EvalResult', () => {
 
     it('should update existing results', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       result.score = 0.5;
       await result.save();
 
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+    });
+
+    it('clears the standalone cache when a new result is inserted via save()', async () => {
+      // persist:false yields an in-memory result, so save() takes the INSERT branch. This pins
+      // the PR's headline behavior — incrementally-added results invalidate the standalone cache.
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult, {
+        persist: false,
+      });
+      expect(result.persisted).toBe(false);
+
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
+
+      await result.save();
+
+      expect(result.persisted).toBe(true);
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+    });
+
+    it('preserves trace linkage when save() updates an existing row', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-save-trace', {
+        ...mockEvaluateResult,
+        traceId: 'persisted-trace-id',
+        evaluationId: 'persisted-evaluation-id',
+        metadata: { source: 'pre-save' },
+      });
+
+      result.score = 0.42;
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        score: 0.42,
+        traceId: 'persisted-trace-id',
+        evaluationId: 'persisted-evaluation-id',
+        metadata: { source: 'pre-save' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
+    it('persists trace linkage on the save() INSERT branch', async () => {
+      // persist:false yields an in-memory result, so the first save() takes the INSERT branch
+      // (the UPDATE branch is covered above). This pins trace-linkage persistence on insert.
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-save-insert-trace',
+        {
+          ...mockEvaluateResult,
+          traceId: 'insert-trace-id',
+          evaluationId: 'insert-evaluation-id',
+          metadata: { source: 'insert' },
+        },
+        { persist: false },
+      );
+      expect(result.persisted).toBe(false);
+
+      await result.save();
+      expect(result.persisted).toBe(true);
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'insert-trace-id',
+        evaluationId: 'insert-evaluation-id',
+        metadata: { source: 'insert' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
+    it('strips the reserved namespace even when stored trace ids are malformed (non-string)', async () => {
+      // Guards against a corrupted/hand-written row: malformed ids don't surface, but the
+      // internal `__promptfoo` namespace must never leak back into user-visible metadata.
+      const result = await EvalResult.createFromEvaluateResult('test-eval-malformed-linkage', {
+        ...mockEvaluateResult,
+        traceId: 123 as unknown as string,
+        evaluationId: null as unknown as string,
+        metadata: { source: 'malformed' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult().traceId).toBeUndefined();
+      expect(retrieved?.toEvaluateResult().evaluationId).toBeUndefined();
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+      expect(retrieved?.metadata).toEqual({ source: 'malformed' });
+    });
+
+    it('persists trace linkage mutated after construction', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-mutate-trace', {
+        ...mockEvaluateResult,
+        traceId: 'initial-trace',
+        evaluationId: 'initial-evaluation',
+      });
+
+      result.traceId = 'updated-trace';
+      result.evaluationId = 'updated-evaluation';
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.traceId).toBe('updated-trace');
+      expect(retrieved?.evaluationId).toBe('updated-evaluation');
+    });
+
+    it('clears trace linkage when both fields are unset before save()', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-clear-trace', {
+        ...mockEvaluateResult,
+        traceId: 'about-to-clear',
+        evaluationId: 'about-to-clear',
+        metadata: { source: 'clear-test' },
+      });
+
+      result.traceId = undefined;
+      result.evaluationId = undefined;
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.traceId).toBeUndefined();
+      expect(retrieved?.evaluationId).toBeUndefined();
+      expect(retrieved?.metadata).toEqual({ source: 'clear-test' });
+    });
+
+    it('save() is idempotent when called multiple times without changes', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-idempotent', {
+        ...mockEvaluateResult,
+        traceId: 'idempotent-trace',
+        evaluationId: 'idempotent-evaluation',
+        metadata: { source: 'idempotent' },
+      });
+
+      await result.save();
+      await result.save();
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'idempotent-trace',
+        evaluationId: 'idempotent-evaluation',
+        metadata: { source: 'idempotent' },
+      });
     });
   });
 
@@ -917,6 +1275,52 @@ describe('EvalResult', () => {
       });
 
       expect(result.toEvaluateResult().response).toBe(response);
+    });
+
+    it('should count assertion requests when the grading provider omits token usage', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
+        numRequests: 1,
+      });
+    });
+
+    it('counts a provider request for a response that reports no token usage', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: { output: 'hello' },
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.numRequests).toBe(1);
     });
 
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {
