@@ -91,6 +91,7 @@ const mocks = vi.hoisted(() => {
   const actionGithub = {
     getGitHubContext: vi.fn(),
     getPRFiles: vi.fn(),
+    partitionReviewCommentsByDiff: vi.fn(),
   };
 
   const config = {
@@ -243,6 +244,13 @@ function setupMocks() {
     sha: 'abc123',
   });
   mocks.actionGithub.getPRFiles.mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]);
+  mocks.actionGithub.partitionReviewCommentsByDiff.mockImplementation(
+    async (_token: string, _context: unknown, comments: unknown[]) => ({
+      lineComments: comments,
+      generalComments: [],
+      invalidLineComments: [],
+    }),
+  );
   mocks.config.generateConfigFile.mockReturnValue('/tmp/test-config.yaml');
 }
 
@@ -609,6 +617,40 @@ describe('code-scan-action main', () => {
   });
 
   describe('SARIF output', () => {
+    function mockFallbackPosting() {
+      const createReview = vi.fn().mockResolvedValue({});
+      const createComment = vi.fn().mockResolvedValue({});
+      mocks.github.getOctokit.mockReturnValue({
+        rest: {
+          pulls: {
+            createReview,
+            get: vi.fn().mockResolvedValue({
+              data: { base: { ref: 'main' } },
+            }),
+          },
+          issues: {
+            createComment,
+          },
+        },
+      });
+      return { createComment, createReview };
+    }
+
+    function mockPromptfooScanResponse(response: unknown) {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(Buffer.from(JSON.stringify(response)));
+          }
+          return 0;
+        },
+      );
+    }
+
     async function triggerSarifAction(rawPath: string) {
       mocks.core.getInput.mockImplementation((name: string) => {
         if (name === 'github-token') {
@@ -692,6 +734,182 @@ describe('code-scan-action main', () => {
         );
       });
 
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
+    it('posts line-level mixed-skip findings as fallback comments and writes SARIF', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'User input reaches the model prompt without sanitization.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createReview).toHaveBeenCalled();
+      });
+
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        'Scan response included findings alongside a skipReason ("Unexpected mixed response."); processing findings.',
+      );
+      expect(createReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comments: [
+            expect.objectContaining({
+              path: 'src/handler.ts',
+              line: 12,
+            }),
+          ],
+        }),
+      );
+      expect(createComment).not.toHaveBeenCalled();
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+    });
+
+    it('routes mixed-skip findings that cannot be placed in the diff to general comments', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mocks.actionGithub.partitionReviewCommentsByDiff.mockImplementation(
+        async (_token: string, _context: unknown, comments: unknown[]) => ({
+          lineComments: [],
+          generalComments: [],
+          invalidLineComments: comments,
+        }),
+      );
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/outside-diff.ts',
+            line: 500,
+            finding: 'This finding cannot be placed on the visible PR diff.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/outside-diff.ts:500**'),
+        }),
+      );
+    });
+
+    it('posts file-only mixed-skip findings as general fallback comments and writes SARIF', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/file-only.ts',
+            line: null,
+            finding: 'This file configures an unsafe model tool.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/file-only.ts**'),
+        }),
+      );
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toHaveLength(1);
+    });
+
+    it('posts fileless mixed-skip findings as general fallback comments without empty SARIF', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: null,
+            line: null,
+            finding: 'The scan found a PR-wide unsafe agent behavior.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+        skipReason: 'Unexpected mixed response.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('The scan found a PR-wide unsafe agent behavior.'),
+        }),
+      );
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
+    it('does not process mixed skips with findings that are neither SARIF-reportable nor PR-postable', async () => {
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/handler.ts',
+            line: 12,
+            finding: 'No issue found on this line.',
+            severity: 'none',
+          },
+          {
+            file: null,
+            line: null,
+            finding: 'General advisory not pinned to a file.',
+            severity: 'none',
+          },
+        ],
+        skipReason: 'Fork PR scanning requires maintainer approval.',
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Scan skipped: Fork PR scanning requires maintainer approval.',
+        );
+      });
+
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(
+        expect.stringContaining('processing findings'),
+      );
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });

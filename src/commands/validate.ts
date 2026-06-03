@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
+import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
@@ -15,7 +16,6 @@ import {
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { isUuid } from '../util/uuid';
-import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';

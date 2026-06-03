@@ -3,7 +3,6 @@ import { evaluate } from '../evaluator';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { HttpProviderConfig } from '../providers/http';
 import { createPlaceholderInputValue } from '../redteam/inputVariables';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
@@ -14,15 +13,27 @@ import {
   formatConfigBody,
   formatConfigHeaders,
   validateSessionConfig,
-} from './util';
+} from '../validators/util';
 
-import type { EvaluateOptions, TestSuite } from '../types/index';
 import type { ApiProvider, ProviderResponse } from '../types/providers';
 import type { Inputs } from '../types/shared';
 
 interface Result {
   response?: ProviderResponse;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Minimal view of the session-relevant fields read off `provider.config` when
+ * building troubleshooting advice. Intentionally local and not derived from
+ * `HttpProviderConfig`: importing that would re-add a `node -> providers`
+ * dependency this module was moved here to avoid. Keep it to the fields this
+ * file actually reads.
+ */
+interface ProviderSessionConfig {
+  body?: unknown;
+  headers?: Record<string, unknown>;
+  sessionParser?: string;
 }
 
 export interface ProviderTestResult {
@@ -90,7 +101,7 @@ export async function testProviderConnectivity({
   }
 
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
-  const testSuite: TestSuite = {
+  const testSuite = {
     providers: [provider],
     prompts: [{ raw: prompt, label: 'Connectivity Test' }],
     tests: [{ vars }],
@@ -109,7 +120,7 @@ export async function testProviderConnectivity({
       maxConcurrency: 1,
       showProgressBar: false,
       silent: true,
-    } as EvaluateOptions);
+    });
 
     // Get results
     const summary = await evalRecord.toEvaluateSummary();
@@ -342,7 +353,7 @@ function buildServerSessionTroubleshootingAdvice({
   secondResult,
 }: {
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: HttpProviderConfig;
+  providerConfig: ProviderSessionConfig;
   firstResult: Result;
   secondResult: Result;
 }): string {
@@ -355,7 +366,7 @@ function buildServerSessionTroubleshootingAdvice({
     - SessionParser: ${sessionConfig?.sessionParser || providerConfig?.sessionParser || 'Not configured'}
     - First request parsed session ID: ${firstSessionId || 'None extracted'}
     - Second request parsed session ID: ${secondSessionId || 'None extracted'}
-    
+
     Common issues:
     1. Verify your sessionParser expression correctly extracts the session ID from the response
     2. Check that your server is actually returning a session ID in the expected location
@@ -379,7 +390,7 @@ function buildTroubleshootingAdvice({
   sessionWorking: boolean;
   sessionSource: string;
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: HttpProviderConfig;
+  providerConfig: ProviderSessionConfig;
   initialSessionId: string | undefined;
   firstResult: Result;
   secondResult: Result;
@@ -407,11 +418,11 @@ function buildTroubleshootingAdvice({
     Troubleshooting tips for client-side sessions:
     - Session ID sent: ${initialSessionId}
     - {{sessionId}} variable used in config: ${usesSessionId ? 'Yes' : 'No ⚠️'}
-    
+
     Your configured headers:${configuredHeaders}
-    
+
     Your configured body:${configuredBody}
-    
+
     Common issues:
     1. Ensure {{sessionId}} is in the correct location for your API
     2. Verify your server accepts and maintains sessions using the session ID you send
