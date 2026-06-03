@@ -2,11 +2,11 @@ import { afterAll, beforeEach, describe, expect, it, Mock, Mocked, MockedClass, 
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
-import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 import { mockGlobal } from '../util/utils';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';

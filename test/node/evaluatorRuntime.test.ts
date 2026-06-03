@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import Eval from '../../src/models/eval';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 
 import type { EvaluateResult } from '../../src/types/index';
@@ -55,12 +56,15 @@ describe('nodeEvaluatorRuntime', () => {
     expect(fs.readFileSync(jsonlPath, 'utf8')).toBe('{"output":"fresh"}\n{"output":"resumed"}\n');
   });
 
-  it('delegates result persistence', async () => {
+  it('creates an Eval-backed evaluation store', async () => {
     const result = { success: true } as EvaluateResult;
-    const addResult = vi.fn().mockResolvedValue(undefined);
+    const evaluation = new Eval({});
+    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue(undefined);
+    const store = nodeEvaluatorRuntime.createEvaluationStore(evaluation);
 
-    await nodeEvaluatorRuntime.persistResult({ addResult }, result);
+    await store.appendResult(result);
 
+    expect(store.evaluation).toBe(evaluation);
     expect(addResult).toHaveBeenCalledWith(result);
   });
 });

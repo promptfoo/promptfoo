@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { redteamReportCommand } from '../../../src/redteam/commands/report';
+import { redteamReportCommand } from '../../../src/commands/redteam/report';
 import { startServer } from '../../../src/server/server';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { setupEnv } from '../../../src/util/index';

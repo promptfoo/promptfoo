@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
+import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
 
 import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';

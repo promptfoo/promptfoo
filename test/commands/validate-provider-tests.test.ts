@@ -2,10 +2,10 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
+import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
-import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';
@@ -16,7 +16,7 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
   resolveConfigs: vi.fn(),
 }));
 vi.mock('../../src/providers/index');
-vi.mock('../../src/validators/testProvider');
+vi.mock('../../src/node/testProvider');
 vi.mock('../../src/util/cloud');
 vi.mock('../../src/telemetry', () => ({
   default: {
