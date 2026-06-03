@@ -53,7 +53,7 @@ export class ComparisonEvalNotFoundError extends Error {
  *
  *
  *
- * Keep this in it's current order, as it is used to map the columns in the CSV, so it needs to be static.
+ * Keep this in its current order, as it is used to map the columns in the CSV, so it needs to be static.
  *
  *
  * The keys are the names of the columns in the metadata object, and the values are the names of the columns in the CSV.
@@ -701,20 +701,13 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // Derive metric column names from `namedScoresCount` so derived/aggregate-only
   // metrics don't introduce columns that the WebUI path would omit.
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPromptFromAggregate(prompts);
-  // Legacy evals and external imports may persist `metrics.namedScores` without
-  // a matching `namedScoresCount`, so the aggregate read can't tell row-level
-  // metrics from derived ones. We can't trust the first batch alone because
-  // `EvalResult` batches slice `testIdx` ranges (default 100), so a metric that
-  // only appears past testIdx 99 would be missed. For those prompts we run a
-  // bounded-memory discovery pass over every batch first — it only inspects
-  // `namedScores` keys and `testCase.description`, never the full row, so
-  // memory stays O(prompts × distinct metric names). Streaming is preserved in
-  // the main pass below.
-  //
-  // Only prompts where `metrics.namedScoresCount` is *missing* trigger this
-  // pass — a present-but-empty count (modern eval with no named-metric
-  // assertions) is authoritative and means "no metric columns," so we avoid the
-  // extra DB round trip for the common no-metrics case.
+  // Run a bounded-memory discovery pass before writing headers so descriptions
+  // and legacy row-level metrics that first appear in later batches still get
+  // dedicated columns. The pass only inspects `namedScores` keys and
+  // `testCase.description`, never the full row, so memory stays
+  // O(prompts × distinct metric names). Metric discovery remains limited to
+  // prompts whose aggregate `namedScoresCount` is missing; a present-but-empty
+  // count is authoritative and means "no metric columns."
   //
   // Note: in the rare case of concurrent writes between the two passes (e.g. a
   // CLI export run while results are still being persisted), a metric that
@@ -725,87 +718,31 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const fallbackPromptIndices = prompts.flatMap((prompt, promptIndex) =>
     promptNeedsDiscoveryFallback(prompt) ? [promptIndex] : [],
   );
-  const needsRowScanFallback = fallbackPromptIndices.length > 0;
-
-  // Track whether we've written headers yet
-  let headersWritten = false;
-  let hasDescriptions = false;
-
-  // Buffer to accumulate the first batch while we determine hasDescriptions.
-  let firstBatchBuffer: StreamRow[] | null = null;
-
-  if (needsRowScanFallback) {
-    const fallbackPromptIndexSet = new Set(fallbackPromptIndices);
-    const accumulator: DiscoveryAccumulator = {
-      metricNamesByPrompt: new Map(),
-      hasDescriptions: false,
-    };
-    for await (const batchResults of eval_.fetchResultsBatched()) {
-      scanBatchForDiscovery(batchResults, accumulator, fallbackPromptIndexSet);
-    }
-    hasDescriptions = accumulator.hasDescriptions;
-    for (const promptIndex of fallbackPromptIndices) {
-      const names = accumulator.metricNamesByPrompt.get(promptIndex);
-      namedScoreNamesByPrompt[promptIndex] = names
-        ? [...names].sort((a, b) => a.localeCompare(b))
-        : [];
-    }
-
-    const headers = buildCsvHeaders(varNames, prompts, {
-      hasDescriptions,
-      isRedteam,
-      namedScoreNamesByPrompt,
-    });
-    await write(csvStringify([headers]));
-    headersWritten = true;
+  const fallbackPromptIndexSet = new Set(fallbackPromptIndices);
+  const accumulator: DiscoveryAccumulator = {
+    metricNamesByPrompt: new Map(),
+    hasDescriptions: false,
+  };
+  for await (const batchResults of eval_.fetchResultsBatched()) {
+    scanBatchForDiscovery(batchResults, accumulator, fallbackPromptIndexSet);
   }
+  const hasDescriptions = accumulator.hasDescriptions;
+  for (const promptIndex of fallbackPromptIndices) {
+    const names = accumulator.metricNamesByPrompt.get(promptIndex);
+    namedScoreNamesByPrompt[promptIndex] = names
+      ? [...names].sort((a, b) => a.localeCompare(b))
+      : [];
+  }
+
+  const headers = buildCsvHeaders(varNames, prompts, {
+    hasDescriptions,
+    isRedteam,
+    namedScoreNamesByPrompt,
+  });
+  await write(csvStringify([headers]));
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
-
-    // On first batch, determine hasDescriptions and write headers
-    if (!headersWritten) {
-      hasDescriptions = rows.some((r) => r.test.description);
-      const headers = buildCsvHeaders(varNames, prompts, {
-        hasDescriptions,
-        isRedteam,
-        namedScoreNamesByPrompt,
-      });
-      await write(csvStringify([headers]));
-      headersWritten = true;
-
-      // Check if we need to scan more batches for descriptions
-      // If first batch has no descriptions, buffer it and check subsequent batches
-      if (!hasDescriptions) {
-        firstBatchBuffer = rows;
-        continue;
-      }
-    }
-
-    // If we had buffered the first batch (because it had no descriptions),
-    // check if this batch has descriptions. If so, we need to restart with correct headers.
-    if (firstBatchBuffer !== null) {
-      const thisHasDescriptions = rows.some((r) => r.test.description);
-      if (thisHasDescriptions && !hasDescriptions) {
-        // We found descriptions in a later batch but already wrote headers without Description column.
-        // This is an edge case - for streaming we accept this limitation and continue without Description.
-        // A warning could be logged here if desired.
-      }
-      // Write the buffered first batch
-      const bufferedCsvRows = firstBatchBuffer.map((row) =>
-        tableRowToCsvValues(row as unknown as EvaluateTableRow, {
-          hasDescriptions,
-          isRedteam,
-          namedScoreNamesByPrompt,
-        }),
-      );
-      if (bufferedCsvRows.length > 0) {
-        await write(csvStringify(bufferedCsvRows));
-      }
-      firstBatchBuffer = null;
-    }
-
-    // Convert to CSV rows and write
     const csvRows = rows.map((row) =>
       tableRowToCsvValues(row as unknown as EvaluateTableRow, {
         hasDescriptions,
@@ -817,29 +754,5 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     if (csvRows.length > 0) {
       await write(csvStringify(csvRows));
     }
-  }
-
-  // Handle case where we only had one batch and it was buffered
-  if (firstBatchBuffer !== null) {
-    const bufferedCsvRows = firstBatchBuffer.map((row) =>
-      tableRowToCsvValues(row as unknown as EvaluateTableRow, {
-        hasDescriptions,
-        isRedteam,
-        namedScoreNamesByPrompt,
-      }),
-    );
-    if (bufferedCsvRows.length > 0) {
-      await write(csvStringify(bufferedCsvRows));
-    }
-  }
-
-  // Handle case where there were no results at all - still write headers
-  if (!headersWritten) {
-    const headers = buildCsvHeaders(varNames, prompts, {
-      hasDescriptions: false,
-      isRedteam,
-      namedScoreNamesByPrompt,
-    });
-    await write(csvStringify([headers]));
   }
 }

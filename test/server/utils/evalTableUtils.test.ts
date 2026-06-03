@@ -4,6 +4,8 @@ import * as evalTableUtils from '../../../src/util/eval/evalTableUtils';
 
 describe('legacy evalTableUtils import', () => {
   it('re-exports the node-layer implementation for enterprise compatibility', () => {
-    expect(legacyEvalTableUtils).toEqual(evalTableUtils);
+    expect(legacyEvalTableUtils.evalTableToCsv).toBe(evalTableUtils.evalTableToCsv);
+    expect(legacyEvalTableUtils.streamEvalCsv).toBe(evalTableUtils.streamEvalCsv);
+    expect(legacyEvalTableUtils.mergeComparisonTables).toBe(evalTableUtils.mergeComparisonTables);
   });
 });
