@@ -89,15 +89,23 @@ function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
 
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean },
+  options: { stripMetadata: boolean; stripPrompt: boolean; stripVars: boolean },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars) {
+  if (!options.stripMetadata && !options.stripPrompt && !options.stripVars) {
     return testCase;
   }
 
   const projectedTestCase = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
     : { ...testCase };
+
+  if (options.stripPrompt && 'metadata' in projectedTestCase) {
+    const testCaseMetadata = projectedTestCase.metadata as Record<string, unknown> | undefined;
+    if (testCaseMetadata?.redteamFinalPrompt !== undefined) {
+      const { redteamFinalPrompt: _redteamFinalPrompt, ...metadata } = testCaseMetadata;
+      projectedTestCase.metadata = Object.keys(metadata).length > 0 ? metadata : undefined;
+    }
+  }
 
   if (options.stripVars) {
     projectedTestCase.vars = undefined;
@@ -152,6 +160,7 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
     }),
     testCase: projectTestCase(result.testCase, {
       stripMetadata: shouldStripMetadata,
+      stripPrompt: shouldStripPromptText,
       stripVars: shouldStripTestVars,
     }),
     gradingResult: shouldStripGradingResult ? null : result.gradingResult,
@@ -643,6 +652,10 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     stripOutput: shouldStripResponseOutput,
     stripPrompt: shouldStripPromptText,
   });
+  const metadata = projectResultMetadata(redacted.metadata as EvaluateResult['metadata'], {
+    stripMetadata: shouldStripMetadata,
+    stripPrompt: shouldStripPromptText,
+  });
 
   return {
     ...result,
@@ -652,6 +665,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
             sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
             {
               stripMetadata: shouldStripMetadata,
+              stripPrompt: shouldStripPromptText,
               stripVars: shouldStripTestVars,
             },
           ),
@@ -680,7 +694,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     response,
     gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: shouldStripMetadata ? {} : redacted.metadata,
+    metadata,
   } as T;
 }
 

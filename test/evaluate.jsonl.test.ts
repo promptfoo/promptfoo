@@ -591,6 +591,11 @@ describe('programmatic JSONL output', () => {
       id: () => 'strip-prompt-grading-provider',
       callApi: vi.fn().mockResolvedValue({
         output: 'hello world',
+        prompt: 'sensitive provider prompt',
+        metadata: {
+          redteamFinalPrompt: 'sensitive response final prompt',
+          keep: 'visible response metadata',
+        },
         tokenUsage: createEmptyTokenUsage(),
       }),
     };
@@ -600,12 +605,30 @@ describe('programmatic JSONL output', () => {
         outputPath,
         prompts: ['Prompt {{topic}}'],
         providers: [provider],
-        tests: [{ vars: { topic: 'alpha' }, assert: [{ type: 'contains', value: 'hello' }] }],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            assert: [{ type: 'contains', value: 'hello' }],
+            metadata: {
+              redteamFinalPrompt: 'sensitive top-level final prompt',
+              keep: 'visible result metadata',
+            },
+          },
+        ],
       });
 
       const [result] = readJsonl(outputPath);
       expect(result.prompt.raw).toBe('[prompt stripped]');
+      expect(result.response).toEqual({
+        output: 'hello world',
+        metadata: { keep: 'visible response metadata' },
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      expect(result.metadata).toMatchObject({ keep: 'visible response metadata' });
+      expect(result.metadata).not.toHaveProperty('redteamFinalPrompt');
+      expect(result.testCase.metadata).toEqual({ keep: 'visible result metadata' });
       expect(result.gradingResult).toBeNull();
+      expect(JSON.stringify(result)).not.toContain('sensitive');
     } finally {
       restoreEnv();
     }

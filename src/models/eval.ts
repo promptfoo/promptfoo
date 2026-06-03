@@ -1909,6 +1909,8 @@ export default class Eval {
     const validResponseJson = sql`CASE WHEN json_valid(${evalResultsTable.response}) THEN ${evalResultsTable.response} ELSE json('{}') END`;
     const validGradingResultJson = sql`CASE WHEN json_valid(${evalResultsTable.gradingResult}) THEN ${evalResultsTable.gradingResult} ELSE json('{}') END`;
     const validMetadataJson = sql`CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE json('{}') END`;
+    const validTestCaseVarsJson = sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
+    const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
     const rows = await db
       .select({
         promptIdx: evalResultsTable.promptIdx,
@@ -1931,7 +1933,7 @@ export default class Eval {
               ELSE report_vars.value
             END
           )
-          FROM json_each(json_extract(${validTestCaseJson}, '$.vars')) AS report_vars
+          FROM json_each(${validTestCaseVarsJson}) AS report_vars
           WHERE report_vars.key IN (${sql.join(
             reportVarKeys.map((key) => sql`${key}`),
             sql`, `,
@@ -1966,27 +1968,27 @@ export default class Eval {
               json_patch(
                 json_patch(
                   json_object(
-                    'pass', json_extract(report_component.value, '$.pass'),
-                    'score', json_extract(report_component.value, '$.score'),
-                    'reason', json_extract(report_component.value, '$.reason')
+                    'pass', json_extract(${validReportComponentJson}, '$.pass'),
+                    'score', json_extract(${validReportComponentJson}, '$.score'),
+                    'reason', json_extract(${validReportComponentJson}, '$.reason')
                   ),
                   CASE
-                    WHEN json_type(report_component.value, '$.assertion') = 'object'
+                    WHEN json_type(${validReportComponentJson}, '$.assertion') = 'object'
                     THEN json_object(
                       'assertion',
                       json_object(
-                        'type', json_extract(report_component.value, '$.assertion.type'),
-                        'metric', json_extract(report_component.value, '$.assertion.metric')
+                        'type', json_extract(${validReportComponentJson}, '$.assertion.type'),
+                        'metric', json_extract(${validReportComponentJson}, '$.assertion.metric')
                       )
                     )
                     ELSE json('{}')
                   END
                 ),
                 CASE
-                  WHEN json_type(report_component.value, '$.suggestions') = 'array'
+                  WHEN json_type(${validReportComponentJson}, '$.suggestions') = 'array'
                   THEN json_object(
                     'suggestions',
-                    json_extract(report_component.value, '$.suggestions')
+                    json_extract(${validReportComponentJson}, '$.suggestions')
                   )
                   ELSE json('{}')
                 END
@@ -1995,6 +1997,7 @@ export default class Eval {
             FROM json_each(
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
+            WHERE report_component.type = 'object'
           )
           ELSE NULL
         END`,

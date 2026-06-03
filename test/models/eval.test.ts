@@ -1765,6 +1765,58 @@ describe('evaluator', () => {
       expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
     });
 
+    it('degrades scalar persisted test-case vars before compact projection', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET test_case = ${JSON.stringify({
+          vars: 'malformed-vars-shape',
+          metadata: { pluginId: 'harmful' },
+        })}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].vars).toEqual({});
+      expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
+    });
+
+    it('skips scalar persisted grading components in compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET grading_result = ${JSON.stringify({
+          pass: false,
+          score: 0,
+          reason: 'top-level reason',
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'valid component',
+              assertion: { type: 'contains', metric: 'valid metric' },
+            },
+            'malformed-component-shape',
+          ],
+        })}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult?.componentResults).toEqual([
+        {
+          pass: false,
+          score: 0,
+          reason: 'valid component',
+          assertion: { type: 'contains', metric: 'valid metric' },
+        },
+      ]);
+    });
+
     it('degrades malformed persisted JSON fields in compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 1 });
       const db = await getDb();
