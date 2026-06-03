@@ -399,16 +399,18 @@ function toReviewComment(comment: Comment) {
   // GitHub's createReview API requires start_line < line for multi-line comments and
   // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
   // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
-  // caller having run that clamp.
-  const isMultiLine = Boolean(
-    comment.startLine && comment.line && comment.startLine < comment.line,
-  );
+  // caller having run that clamp. The ternary also narrows startLine to `number`,
+  // dropping the null/undefined the API type rejects.
+  const startLine =
+    comment.startLine && comment.line && comment.startLine < comment.line
+      ? comment.startLine
+      : undefined;
   return {
     path: comment.file!,
     line: comment.line || undefined,
-    start_line: isMultiLine ? comment.startLine : undefined,
+    start_line: startLine,
     side: 'RIGHT' as const,
-    start_side: isMultiLine ? ('RIGHT' as const) : undefined,
+    start_side: startLine ? ('RIGHT' as const) : undefined,
     body: buildCommentBody(comment),
   };
 }
