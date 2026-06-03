@@ -7,7 +7,7 @@ npx promptfoo@latest init --example azure-mai
 cd azure-mai
 ```
 
-Evaluate Microsoft's first-party **MAI** models — offered as [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure) — with promptfoo. This example focuses on **image generation** with `MAI-Image-2.5` via the dedicated `azure:image` provider, and shows how to add reasoning/chat MAI models via `azure:chat`.
+Evaluate Microsoft's first-party **MAI** models with promptfoo. This example focuses on **image generation** with `MAI-Image-2.5` (a Preview [Foundry Model sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)) via the dedicated `azure:image` provider, and shows how to wire reasoning/chat MAI models via `azure:chat` — though those have limited availability today (see [Notes](#notes)).
 
 ## Environment Variables
 
@@ -39,9 +39,9 @@ promptfoo view
 
 ## What's in this Example
 
-- `promptfooconfig.yaml` — generates images with `MAI-Image-2.5` through the Microsoft `azure:image` provider, reporting per-image token usage and cost from the API's `usage` response
+- `promptfooconfig.yaml` — generates images with `MAI-Image-2.5` (Preview) through the Microsoft `azure:image` provider, reporting per-image token usage and cost from the API's token counts
 - `promptfooconfig.vision-judge.yaml` — uses a vision LLM as a judge on the generated images (see below)
-- Shows how to wire reasoning/chat MAI models (`MAI-Thinking-1`, `MAI-DS-R1`) via `azure:chat`
+- Shows how to wire reasoning/chat MAI models via `azure:chat` (these are deprecated/private-preview today — see [Notes](#notes))
 
 ## Providers
 
@@ -60,13 +60,14 @@ The image is returned as a base64 PNG. promptfoo stores large base64 media as a 
 
 ### Reasoning chat (`azure:chat`)
 
-`MAI-Thinking-1` and `MAI-DS-R1` are reasoning models (auto-detected by name). Uncomment the chat provider in `promptfooconfig.yaml` once one is deployed in your region:
+`MAI-Thinking-1` and `MAI-DS-R1` are reasoning models (auto-detected by name — promptfoo sends `max_completion_tokens` and drops `temperature`). **They aren't deployable on most subscriptions today** (`MAI-DS-R1` is deprecated; `MAI-Thinking-1` / `MAI-Code-1-Flash` are private preview and not in the public CLI catalog), so the chat provider in `promptfooconfig.yaml` is commented out. Uncomment it once your subscription can deploy one:
 
 ```yaml
 providers:
   - id: azure:chat:mai-thinking-1
     config:
       max_completion_tokens: 2048
+      # omitDefaults: true   # if the deployment rejects top_p / penalties
 ```
 
 ## LLM-as-judge on images (vision grading)
@@ -83,4 +84,4 @@ PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.vision-judge.yaml 
 
 ## Notes
 
-The newest MAI text models roll out region-by-region and may be in private preview. Run `az cognitiveservices model list --location <region>` to see what your subscription can deploy. See the [Azure provider docs](https://www.promptfoo.dev/docs/providers/azure/#using-microsoft-mai-models) for details.
+The MAI image models are currently **Preview**. The MAI text models have limited availability: `MAI-DS-R1` is **deprecated** in the Azure catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and aren't yet in the public CLI catalog. Run `az cognitiveservices model list --location <region>` to see what your subscription can actually deploy. See the [Azure provider docs](https://www.promptfoo.dev/docs/providers/azure/#using-microsoft-mai-models) for details.

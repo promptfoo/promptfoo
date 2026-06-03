@@ -129,7 +129,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                   |
 | **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                        |
 | **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                   |
-| **Microsoft MAI**    | `MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash` (chat); `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` (image) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                                                     |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                          |
 | **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                   |
 | **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                  |
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                               |
@@ -1069,10 +1069,10 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 ## Using Microsoft MAI Models
 
-Microsoft's first-party **MAI** model family is offered as [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure). They split across two promptfoo provider types:
+Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
-- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**.
-- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`) are served from a Microsoft-managed `/mai/v1/images/generations` route and use the dedicated **`azure:image`** provider.
+- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
+- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
 
 Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
 
@@ -1111,13 +1111,15 @@ tests:
         value: output.startsWith('promptfoo://blob/') || output.startsWith('data:image/')
 ```
 
-The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage and per-image cost from the API's `usage` (output image tokens plus input text/image tokens). The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage and per-image cost from the API's token counts. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
 
 To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. See the [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) for a complete vision-grading config.
 
 ### Reasoning chat (`azure:chat`)
 
-`MAI-Thinking-1` and `MAI-DS-R1` are reasoning models and are auto-detected by name (they use `max_completion_tokens` and omit `temperature`). `MAI-Code-1-Flash` is a fast coding model on the standard chat surface.
+MAI text models run through the standard `azure:chat` provider. **Availability is limited today:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and aren't yet in the public CLI catalog (checked via `az cognitiveservices model list` in eastus, westus, swedencentral, and eastus2 — as of this writing). promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` as soon as your subscription can deploy them. The example below is forward-looking.
+
+promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1125,11 +1127,12 @@ providers:
     config:
       apiHost: 'your-resource.services.ai.azure.com'
       max_completion_tokens: 2048
-      reasoning_effort: 'medium' # low | medium | high
+      reasoning_effort: 'medium' # forwarded as-is; honored only if the deployment supports it
+      # omitDefaults: true       # uncomment if the deployment rejects top_p / penalties
 ```
 
 :::note
-The newest MAI text models roll out region-by-region and may be in private preview. Check the [Foundry model catalog](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure) or run `az cognitiveservices model list --location <region>` to see what your subscription can deploy.
+The MAI image models are in **Preview**, and the MAI text models roll out region-by-region (`MAI-DS-R1` deprecated; `MAI-Thinking-1` / `MAI-Code-1-Flash` private preview). Run `az cognitiveservices model list --location <region>` to see what your subscription can actually deploy.
 :::
 
 ## Assistants

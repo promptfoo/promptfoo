@@ -1,11 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Microsoft MAI models on Azure AI Foundry (Foundry Models sold by Azure)
 
-# Microsoft's first-party "MAI" model family is served as Foundry Models sold by
-# Azure. Text/reasoning models (e.g. MAI-DS-R1, MAI-Thinking-1) use the standard
-# chat-completions API and run through `azure:chat:<deployment>`. Image models
-# (MAI-Image-2.5 and friends) use a Microsoft-managed `/mai/v1/images` route and
-# run through the dedicated `azure:image:<deployment>` provider.
+# Microsoft's first-party "MAI" model family. Image models (MAI-Image-2.5 and
+# friends, currently Preview) use a Microsoft-managed `/mai/v1/images` route and
+# run through the dedicated `azure:image:<deployment>` provider — that's what this
+# example uses. Text/reasoning models (MAI-DS-R1, MAI-Thinking-1, MAI-Code-1-Flash)
+# use the standard chat-completions API via `azure:chat:<deployment>`, but have
+# limited availability today (see the commented chat provider below).
 #
 # Setup:
 #   1. Deploy an MAI image model to a Microsoft Foundry (AIServices) resource:
@@ -32,8 +33,10 @@ providers:
       width: 1024
       height: 1024
 
-  # Reasoning/chat MAI models use the standard chat provider. Uncomment once you
-  # have deployed one (e.g. MAI-Thinking-1, when available in your region):
+  # Reasoning/chat MAI models use the standard chat provider, but aren't deployable
+  # on most subscriptions yet (MAI-DS-R1 is deprecated; MAI-Thinking-1 and
+  # MAI-Code-1-Flash are private preview). Uncomment once your subscription can
+  # deploy one:
   # - id: azure:chat:mai-thinking-1
   #   label: MAI-Thinking-1
   #   config:

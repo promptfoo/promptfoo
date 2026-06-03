@@ -862,12 +862,14 @@ export const AZURE_MODELS: AzureModelCost[] = [
 
   // =============================================================================
   // Microsoft MAI Models (Foundry Models sold by Azure)
-  // Microsoft's first-party model family. Image models are billed per token of
-  // image *output*; the `/mai/v1/images` route returns `num_output_tokens`,
-  // which AzureImageProvider passes as completion tokens. Cost lookup is keyed by
-  // the model id, so set `model` in the provider config (deployment names can't
-  // contain the dots in ids like `MAI-Image-2.5`) to enable cost reporting.
-  // Rates marked "provisional" are estimates pending published pricing.
+  // Microsoft's first-party model family. Image models are billed per token; the
+  // `/mai/v1/images` route reports token counts either under a `usage` object
+  // (num_output_tokens / num_input_text_tokens / num_input_image_tokens) or, in
+  // an older shape, as a top-level `num_output_tokens`. AzureImageProvider reads
+  // both and prices input + output. Cost lookup is keyed by the model id, so set
+  // `model` in the provider config (deployment names can't contain the dots in
+  // ids like `MAI-Image-2.5`) to enable cost reporting. Rates marked
+  // "provisional" are estimates pending published pricing.
   // =============================================================================
   {
     // Reasoning chat model (DeepSeek-R1 lineage). Provisional pricing mirrors
