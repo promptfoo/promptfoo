@@ -67,6 +67,30 @@ export function validateMaiImageDimensions(
   return { valid: true };
 }
 
+/**
+ * Extract token counts from a MAI image response, tolerating both response
+ * shapes the API has shipped: a legacy top-level `num_output_tokens`, and the
+ * newer `usage` object (`num_output_tokens`, `num_input_text_tokens`,
+ * `num_input_image_tokens`). Returns undefined when no output-token count is
+ * present so callers can omit cost/usage rather than report zeros.
+ */
+export function extractMaiImageTokenUsage(
+  data: any,
+): { prompt: number; completion: number; total: number } | undefined {
+  const num = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+  const usage = data?.usage;
+  const completion = num(usage?.num_output_tokens) ?? num(data?.num_output_tokens);
+  if (completion === undefined) {
+    return undefined;
+  }
+
+  const prompt =
+    (num(usage?.num_input_text_tokens) ?? 0) + (num(usage?.num_input_image_tokens) ?? 0);
+  return { prompt, completion, total: prompt + completion };
+}
+
 export class AzureImageProvider extends AzureGenericProvider {
   declare config: AzureImageOptions;
 
@@ -121,6 +145,9 @@ export class AzureImageProvider extends AzureGenericProvider {
     let data: any;
     let cached = false;
     let latencyMs: number | undefined;
+    // `fetchWithCache` returns the eviction handle alongside `data` (not on it),
+    // so capture it here to evict malformed-but-2xx responses from the cache.
+    let evictFromCache: (() => Promise<void>) | undefined;
 
     try {
       const {
@@ -129,6 +156,7 @@ export class AzureImageProvider extends AzureGenericProvider {
         status,
         statusText,
         latencyMs: fetchLatencyMs,
+        deleteFromCache,
       } = await fetchWithCache(
         url,
         {
@@ -136,7 +164,7 @@ export class AzureImageProvider extends AzureGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
-            ...this.config.headers,
+            ...config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -147,6 +175,7 @@ export class AzureImageProvider extends AzureGenericProvider {
 
       cached = isCached;
       latencyMs = fetchLatencyMs;
+      evictFromCache = deleteFromCache;
 
       // The response is usually parsed JSON, but a string can come back for
       // non-JSON error bodies. Parse defensively so a bad gateway etc. surfaces
@@ -183,45 +212,53 @@ export class AzureImageProvider extends AzureGenericProvider {
     try {
       if (data?.error) {
         // Don't persist an error response in the cache.
-        await data?.deleteFromCache?.();
+        await evictFromCache?.();
         const { code, message } = data.error;
-        return { error: `API response error: ${code ? `${code} ` : ''}${message ?? JSON.stringify(data.error)}` };
+        return {
+          error: `API response error: ${code ? `${code} ` : ''}${message ?? JSON.stringify(data.error)}`,
+        };
       }
 
       const item = data?.data?.[0];
       const b64 = item?.b64_json;
       if (!b64) {
-        await data?.deleteFromCache?.();
+        // A 2xx response without image data still gets cached by fetchWithCache;
+        // evict it so a transient bad payload isn't served on every rerun.
+        await evictFromCache?.();
         return { error: `No image data found in response: ${JSON.stringify(data)}` };
       }
 
       const dataUrl = `data:image/png;base64,${b64}`;
       const images: ImageOutput[] = [{ data: dataUrl, mimeType: 'image/png' }];
 
-      // The MAI image API bills per token of image output and returns
-      // `num_output_tokens`; treat it as completion tokens for cost + usage.
-      const outputTokens: number | undefined =
-        typeof data.num_output_tokens === 'number' ? data.num_output_tokens : undefined;
+      // The MAI image API bills per token. Token accounting tolerates both the
+      // legacy top-level `num_output_tokens` and the newer `usage` object, and
+      // prices input (text + image) tokens when the response reports them.
+      const usage = extractMaiImageTokenUsage(data);
 
-      const costModelId = config.model || this.deploymentName;
-      const cost =
-        cached || outputTokens === undefined
-          ? cached
-            ? 0
-            : undefined
-          : calculateAzureCost(costModelId, config, 0, outputTokens);
+      let cost: number | undefined;
+      if (cached) {
+        cost = 0;
+      } else if (usage) {
+        const costModelId = config.model || this.deploymentName;
+        cost = calculateAzureCost(costModelId, config, usage.prompt, usage.completion);
+      }
 
-      const tokenUsage =
-        outputTokens === undefined
-          ? undefined
-          : cached
-            ? { cached: outputTokens, total: outputTokens }
-            : { completion: outputTokens, total: outputTokens, numRequests: 1 };
+      const tokenUsage = usage
+        ? cached
+          ? { cached: usage.total, total: usage.total }
+          : {
+              prompt: usage.prompt,
+              completion: usage.completion,
+              total: usage.total,
+              numRequests: 1,
+            }
+        : undefined;
 
       logger.debug(`[Azure Image] Generated image`, {
         deployment: this.deploymentName,
         size: data.size,
-        outputTokens,
+        usage,
         cached,
       });
 

@@ -444,6 +444,11 @@ describe('Provider Registry', () => {
       expect(imageProvider).toBeDefined();
       expect(imageProvider.toString()).toBe('[Azure Image Provider mai-image-2-5]');
 
+      // MAI image models are Foundry-only; the Azure OpenAI prefix must reject them.
+      await expect(
+        factory!.create('azureopenai:image:mai-image-2-5', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/azureopenai:image is not supported/);
+
       await expect(
         factory!.create('azure:invalid:model', mockProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Azure model type');

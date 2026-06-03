@@ -1111,7 +1111,9 @@ tests:
         value: output.startsWith('promptfoo://blob/') || output.startsWith('data:image/')
 ```
 
-The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports `tokenUsage.completion` from the API's `num_output_tokens`. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage and per-image cost from the API's `usage` (output image tokens plus input text/image tokens). The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+
+To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. See the [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) for a complete vision-grading config.
 
 ### Reasoning chat (`azure:chat`)
 

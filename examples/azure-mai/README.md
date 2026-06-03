@@ -39,8 +39,8 @@ promptfoo view
 
 ## What's in this Example
 
-- Generates images with `MAI-Image-2.5` through the Microsoft `azure:image` provider
-- Reports per-image cost from the API's `num_output_tokens`
+- `promptfooconfig.yaml` — generates images with `MAI-Image-2.5` through the Microsoft `azure:image` provider, reporting per-image cost from the API's `num_output_tokens`
+- `promptfooconfig.vision-judge.yaml` — uses a vision LLM as a judge on the generated images (see below)
 - Shows how to wire reasoning/chat MAI models (`MAI-Thinking-1`, `MAI-DS-R1`) via `azure:chat`
 
 ## Providers
@@ -68,6 +68,18 @@ providers:
     config:
       max_completion_tokens: 2048
 ```
+
+## LLM-as-judge on images (vision grading)
+
+`promptfooconfig.vision-judge.yaml` grades each generated image with a vision-capable LLM. It uses a custom `rubricPrompt` that passes the image to the grader as an `image_url` block, so the judge evaluates the actual picture rather than a text description.
+
+Run it with inline media so `{{output}}` is a base64 data URL the grader can read:
+
+```bash
+PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.vision-judge.yaml --no-cache
+```
+
+> **Why inline media?** With promptfoo's default media handling, an image output is stored as a `promptfoo://blob/...` reference, which a hosted grader's API can't fetch. `PROMPTFOO_INLINE_MEDIA=true` keeps the output as an inline data URL the vision model can read directly.
 
 ## Notes
 

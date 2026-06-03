@@ -28,8 +28,8 @@ function mockSuccess(overrides: Record<string, any> = {}) {
       data: [{ b64_json: FAKE_B64, revised_prompt: 'a revised prompt' }],
       model: 'mai-image-2-5',
       size: '1024x1024',
-      inference_time_sec: 5.5,
-      num_output_tokens: 1024,
+      // Current API shape: token counts live under `usage`.
+      usage: { num_output_tokens: 1024, num_input_text_tokens: 0, num_input_image_tokens: 0 },
       ...overrides,
     },
     cached: false,
@@ -85,12 +85,16 @@ describe('AzureImageProvider', () => {
       { data: `data:image/png;base64,${FAKE_B64}`, mimeType: 'image/png' },
     ]);
     expect(result.isBase64).toBe(true);
-    expect(result.tokenUsage).toEqual({ completion: 1024, total: 1024, numRequests: 1 });
+    expect(result.tokenUsage).toEqual({
+      prompt: 0,
+      completion: 1024,
+      total: 1024,
+      numRequests: 1,
+    });
     expect(result.metadata).toMatchObject({
       revisedPrompt: 'a revised prompt',
       size: '1024x1024',
       model: 'mai-image-2-5',
-      inferenceTimeSec: 5.5,
     });
   });
 
@@ -115,6 +119,24 @@ describe('AzureImageProvider', () => {
     });
   });
 
+  it('sends per-prompt config headers (uses merged config, not just provider headers)', async () => {
+    mockSuccess();
+    const provider = makeProvider({ headers: { 'x-custom': 'base' } });
+    await provider.callApi('hi', {
+      prompt: {
+        raw: 'hi',
+        label: 'hi',
+        config: { headers: { 'x-custom': 'override', 'x-extra': 'yes' } },
+      },
+    } as any);
+    const headers = (vi.mocked(fetchWithCache).mock.calls[0][1] as any).headers;
+    expect(headers).toMatchObject({
+      'api-key': 'test-key',
+      'x-custom': 'override',
+      'x-extra': 'yes',
+    });
+  });
+
   it('computes cost from num_output_tokens when model is mapped', async () => {
     mockSuccess();
     const provider = makeProvider({ model: 'MAI-Image-2.5' });
@@ -129,7 +151,42 @@ describe('AzureImageProvider', () => {
     const result = await provider.callApi('a red cube');
     expect(result.cost).toBeUndefined();
     // Token usage is still reported even without a cost rate.
-    expect(result.tokenUsage).toEqual({ completion: 1024, total: 1024, numRequests: 1 });
+    expect(result.tokenUsage).toEqual({
+      prompt: 0,
+      completion: 1024,
+      total: 1024,
+      numRequests: 1,
+    });
+  });
+
+  it('prices input (text + image) tokens from the usage object', async () => {
+    mockSuccess({
+      usage: { num_output_tokens: 1024, num_input_text_tokens: 100, num_input_image_tokens: 0 },
+    });
+    const provider = makeProvider({ model: 'MAI-Image-2.5' });
+    const result = await provider.callApi('a red cube');
+    // 100 input * $5/1M + 1024 output * $33/1M
+    expect(result.cost).toBeCloseTo(100 * (5 / 1e6) + 1024 * (33 / 1e6), 9);
+    expect(result.tokenUsage).toEqual({
+      prompt: 100,
+      completion: 1024,
+      total: 1124,
+      numRequests: 1,
+    });
+  });
+
+  it('supports the legacy top-level num_output_tokens shape', async () => {
+    // Older API responses reported tokens at the top level without a usage object.
+    mockSuccess({ usage: undefined, num_output_tokens: 512 });
+    const provider = makeProvider({ model: 'MAI-Image-2.5' });
+    const result = await provider.callApi('a red cube');
+    expect(result.cost).toBeCloseTo(512 * (33 / 1e6), 9);
+    expect(result.tokenUsage).toEqual({
+      prompt: 0,
+      completion: 512,
+      total: 512,
+      numRequests: 1,
+    });
   });
 
   it('passes through extra body params and custom dimensions', async () => {
@@ -148,6 +205,8 @@ describe('AzureImageProvider', () => {
   });
 
   it('surfaces a structured API error and evicts it from the cache', async () => {
+    // `deleteFromCache` is returned as a sibling of `data` by fetchWithCache,
+    // not on the parsed body — the provider must call the captured handle.
     const deleteFromCache = vi.fn();
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
@@ -155,8 +214,8 @@ describe('AzureImageProvider', () => {
           code: 'unsupported_request_value',
           message: "'width' must be at least 768 pixels.",
         },
-        deleteFromCache,
       },
+      deleteFromCache,
       cached: false,
       status: 400,
       statusText: 'Bad Request',
@@ -169,9 +228,11 @@ describe('AzureImageProvider', () => {
     expect(deleteFromCache).toHaveBeenCalledTimes(1);
   });
 
-  it('returns an error when the response has no image data', async () => {
+  it('evicts malformed 2xx responses (missing image data) from the cache', async () => {
+    const deleteFromCache = vi.fn();
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: { data: [{}], num_output_tokens: 0 },
+      deleteFromCache,
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -180,6 +241,7 @@ describe('AzureImageProvider', () => {
     const provider = makeProvider();
     const result = await provider.callApi('no image');
     expect(result.error).toMatch(/No image data found/);
+    expect(deleteFromCache).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces non-2xx responses without a structured error body', async () => {
