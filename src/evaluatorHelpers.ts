@@ -238,6 +238,33 @@ function detectMimeFromBase64(base64Data: string): string | null {
  *                         evaluated by Promptfoo before reaching the target.
  * @returns The rendered prompt string
  */
+
+/**
+ * Recursively walks a value tree and replaces plain-text `file://` strings with the
+ * content of the referenced file. JS/Python/package paths are intentionally NOT handled
+ * here — those require the calling context (varName, prompt, provider) and are processed
+ * by the top-level var handler in `renderPrompt`.
+ */
+async function resolveFileRefsInObject(value: unknown, basePath: string): Promise<unknown> {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+    return (await fs.readFile(filePath, 'utf8')).trim();
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((item) => resolveFileRefsInObject(item, basePath)));
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = await Promise.all(
+      Object.entries(value as Record<string, unknown>).map(async ([k, v]) => [
+        k,
+        await resolveFileRefsInObject(v, basePath),
+      ]),
+    );
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, VarValue>,
@@ -359,6 +386,15 @@ export async function renderPrompt(
       } else {
         vars[varName] = (await fs.readFile(filePath, 'utf8')).trim();
       }
+    } else if (typeof value === 'object' && value !== null) {
+      // Recursively resolve file:// references nested within object or array vars.
+      // Top-level string vars with file:// are handled by the branch above; this
+      // covers the case where the var is a nested structure like:
+      //   vars:
+      //     report:
+      //       text: file://data/report.txt
+      const basePath = cliState.basePath || '';
+      vars[varName] = await resolveFileRefsInObject(value, basePath);
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
       const requiredModule = await loadFromPackage(value, basePath);
