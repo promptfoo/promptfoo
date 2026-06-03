@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { generateEvalSummary } from '../../../src/commands/eval/summary';
+import { generateEvalSummary } from '../../../src/util/eval/summary';
 import { stripAnsi } from '../../util/utils';
 
-import type { EvalSummaryParams } from '../../../src/commands/eval/summary';
+import type { EvalSummaryParams } from '../../../src/util/eval/summary';
 import type { TokenUsageTracker } from '../../../src/util/tokenUsage';
 
 type MockTracker = {
