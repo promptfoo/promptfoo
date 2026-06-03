@@ -87,27 +87,28 @@ export class ProviderRegistry {
     process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
-  async shutdownAll(): Promise<void> {
-    if (this.shutdownPromise !== undefined) {
+  shutdownAll(): Promise<void> {
+    if (this.shutdownPromise !== undefined && this.providers.size === 0) {
       return this.shutdownPromise;
     }
 
-    const shutdownPromise = (async () => {
-      const providers = Array.from(this.providers);
-      for (const provider of providers) {
-        this.providers.delete(provider);
-      }
-      await Promise.all(providers.map((provider) => this.cleanupResource(provider)));
-    })();
-    this.shutdownPromise = shutdownPromise;
+    const providers = Array.from(this.providers);
+    for (const provider of providers) {
+      this.providers.delete(provider);
+    }
 
-    try {
-      await shutdownPromise;
-    } finally {
-      if (this.shutdownPromise === shutdownPromise) {
+    const cleanupBatch = async () => {
+      await Promise.all(providers.map((provider) => this.cleanupResource(provider)));
+    };
+    const shutdownBatch =
+      this.shutdownPromise === undefined ? cleanupBatch() : this.shutdownPromise.then(cleanupBatch);
+    const trackedShutdown = shutdownBatch.finally(() => {
+      if (this.shutdownPromise === trackedShutdown) {
         this.shutdownPromise = undefined;
       }
-    }
+    });
+    this.shutdownPromise = trackedShutdown;
+    return trackedShutdown;
   }
 }
 

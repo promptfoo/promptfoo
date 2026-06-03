@@ -6,7 +6,10 @@ import {
   ProviderPluginRegistry,
   registerProviderPlugin,
 } from '../../src/provider-plugin';
-import { builtinProviderPlugins } from '../../src/providers/builtinProviderPlugins';
+import {
+  builtinProviderPlugins,
+  isRedteamProviderPath,
+} from '../../src/providers/builtinProviderPlugins';
 import { loadApiProvider } from '../../src/providers/index';
 
 import type { ProviderFactory, ProviderPluginManifest } from '../../src/provider-plugin';
@@ -272,6 +275,7 @@ describe('ProviderPluginRegistry', () => {
     expect(
       builtinProviderPlugins.map((plugin) => plugin.canHandle('promptfoo:redteam:crescendo')),
     ).toEqual([false, false, true]);
+    expect(isRedteamProviderPath('promptfoo:redteam:does-not-exist')).toBe(false);
   });
 
   it('rejects duplicate names and unsupported manifest versions', () => {

@@ -83,6 +83,7 @@ import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
+import { ProviderPluginRegistry } from './pluginRegistry';
 import { providerPluginRegistry } from './plugins';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
@@ -115,11 +116,9 @@ import { createXAIVoiceProvider } from './xai/voice';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderLoadContext } from './registryTypes';
 
-// The process-wide registry can already contain these manifests when both the
-// ESM and CommonJS full-package entrypoints load in one process.
-for (const manifest of [...builtinProviderPlugins].reverse()) {
-  providerPluginRegistry.register(manifest, { position: 'first', replaceExisting: true });
-}
+// Built-ins stay local to the active host bundle so their lazy imports and
+// lifecycle registrations cannot cross ESM/CommonJS host boundaries.
+const builtinProviderPluginRegistry = new ProviderPluginRegistry(builtinProviderPlugins);
 
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
@@ -1607,5 +1606,9 @@ export const providerMap: ProviderFactory[] = [
 export async function getProviderFactories(
   providerPath: string,
 ): Promise<readonly ProviderFactory[]> {
+  const builtinFactories = await builtinProviderPluginRegistry.getFactories(providerPath, []);
+  if (builtinFactories.length > 0) {
+    return [...builtinFactories, ...providerMap];
+  }
   return providerPluginRegistry.getFactories(providerPath, providerMap);
 }

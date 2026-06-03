@@ -100,12 +100,15 @@ packages. The `promptfoo/provider-plugin` subpath is the package-neutral consume
 surface for the versioned manifest, registry, registration, and typed load-error
 contracts. `src/providers/pluginRegistry.ts` owns deterministic first-match
 registration, lazy loading, disposal, and typed load errors. The full Promptfoo
-composition root registers the built-in AWS, Google, and redteam manifests ahead of
-external registrations, while `src/providers/registry.ts` remains the legacy fallback
-map. A claiming manifest must return a factory that matches the requested provider ID;
-matching plugin factories then run ahead of the fallback so broad file-provider
-matching cannot intercept that ID. Provider plugins may depend on provider contracts,
-but not the CLI, server, root facade, or full-package built-in composition.
+composition root keeps the built-in AWS, Google, and redteam manifests host-local and
+ahead of process-wide external registrations, while `src/providers/registry.ts` remains
+the legacy fallback map. This prevents an ESM host from loading a built-in family through
+the CommonJS host bundle, or vice versa. Plugin load-error constructors are process-shared
+so typed errors remain recognizable when both package formats are loaded. A claiming
+manifest must return a factory that matches the requested provider ID; matching plugin
+factories then run ahead of the fallback so broad file-provider matching cannot intercept
+that ID. Provider plugins may depend on provider contracts, but not the CLI, server, root
+facade, or full-package built-in composition.
 
 This V1 surface makes provider composition and artifact testing possible, but it is
 not yet the final ABI for independently published provider packages. Its factory

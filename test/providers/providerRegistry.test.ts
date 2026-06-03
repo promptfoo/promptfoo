@@ -181,4 +181,26 @@ describe('ProviderRegistry', () => {
     expect(secondResolved).toBe(true);
     expect(cleanup).toHaveBeenCalledOnce();
   });
+
+  it('queues newly registered resources for a concurrent shutdown request', async () => {
+    const registry = createRegistry();
+    let releaseFirstCleanup: (() => void) | undefined;
+    const firstCleanup = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirstCleanup = resolve;
+        }),
+    );
+    const laterCleanup = vi.fn();
+    registry.register({ cleanup: firstCleanup });
+
+    const firstShutdown = registry.shutdownAll();
+    registry.register({ cleanup: laterCleanup });
+    const secondShutdown = registry.shutdownAll();
+    releaseFirstCleanup?.();
+    await Promise.all([firstShutdown, secondShutdown]);
+
+    expect(firstCleanup).toHaveBeenCalledOnce();
+    expect(laterCleanup).toHaveBeenCalledOnce();
+  });
 });

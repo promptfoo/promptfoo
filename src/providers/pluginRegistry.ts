@@ -43,7 +43,7 @@ export interface ProviderPluginRegistrationOptions {
   replaceExisting?: boolean;
 }
 
-export class ProviderPluginLoadError extends Error {
+class ProviderPluginLoadErrorImpl extends Error {
   readonly code: string = 'PROMPTFOO_PROVIDER_PLUGIN_LOAD_ERROR';
   readonly pluginName: string;
   readonly providerPath: string;
@@ -60,7 +60,7 @@ export class ProviderPluginLoadError extends Error {
   }
 }
 
-export class MissingProviderPackageError extends ProviderPluginLoadError {
+class MissingProviderPackageErrorImpl extends ProviderPluginLoadErrorImpl {
   override readonly code: string = 'PROMPTFOO_MISSING_PROVIDER_PACKAGE';
   readonly packageName: string;
 
@@ -74,6 +74,34 @@ export class MissingProviderPackageError extends ProviderPluginLoadError {
     }
   }
 }
+
+const PROVIDER_PLUGIN_ERROR_CONSTRUCTORS_KEY =
+  '__PROMPTFOO_PROVIDER_PLUGIN_ERROR_CONSTRUCTORS_V1__' as const;
+
+type ProviderPluginErrorConstructors = {
+  ProviderPluginLoadError: typeof ProviderPluginLoadErrorImpl;
+  MissingProviderPackageError: typeof MissingProviderPackageErrorImpl;
+};
+
+type ProviderPluginErrorGlobal = typeof globalThis & {
+  [PROVIDER_PLUGIN_ERROR_CONSTRUCTORS_KEY]?: ProviderPluginErrorConstructors;
+};
+
+const errorGlobal = globalThis as ProviderPluginErrorGlobal;
+const errorConstructors = (errorGlobal[PROVIDER_PLUGIN_ERROR_CONSTRUCTORS_KEY] ??= {
+  ProviderPluginLoadError: ProviderPluginLoadErrorImpl,
+  MissingProviderPackageError: MissingProviderPackageErrorImpl,
+});
+
+/**
+ * Process-shared constructors keep typed plugin errors recognizable when a
+ * consumer loads both the ESM and CommonJS package entrypoints.
+ */
+export const ProviderPluginLoadError = errorConstructors.ProviderPluginLoadError;
+export type ProviderPluginLoadError = InstanceType<typeof ProviderPluginLoadError>;
+
+export const MissingProviderPackageError = errorConstructors.MissingProviderPackageError;
+export type MissingProviderPackageError = InstanceType<typeof MissingProviderPackageError>;
 
 /**
  * Ordered registry for lazy provider-family plugins.
