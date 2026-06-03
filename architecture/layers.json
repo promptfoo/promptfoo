@@ -97,14 +97,7 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "node",
-        "providers"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
