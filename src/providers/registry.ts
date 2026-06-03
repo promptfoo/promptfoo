@@ -325,6 +325,11 @@ export const providerMap: ProviderFactory[] = [
             'azureopenai:image is not supported. MAI image models are Microsoft Foundry models — use azure:image:<deployment> instead.',
           );
         }
+        if (!deploymentName) {
+          throw new Error(
+            'Azure image provider requires a deployment name. Use azure:image:<deployment>.',
+          );
+        }
         return new AzureImageProvider(deploymentName, providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
