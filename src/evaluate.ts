@@ -291,7 +291,7 @@ async function resolveNestedProviders(
 
 async function maybeShareEval(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
-  evalResult: Awaited<ReturnType<typeof doEvaluate>>,
+  evalResult: Eval,
 ): Promise<void> {
   if (!testSuiteConfig.writeLatestResults || !testSuiteConfig.sharing) {
     return;
