@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -12,6 +13,11 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import {
+  asEvaluateResult,
+  getResultIndexKey,
+  sanitizeResultForJsonlArtifact,
+} from '../models/evalResult';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -27,10 +33,237 @@ import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateTableOutput } from '../types';
+import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
+}
+
+// Every output path is always finalized post-run now (JSONL included), so nothing is
+// filtered. This only emits a heads-up when a row failed to persist, so operators know the
+// JSONL artifact was reconciled from the streamed rows and the eval record (the degraded
+// recovery path in `writeOutput`) rather than rebuilt cleanly from the database.
+export function warnOnDegradedJsonlRecovery(evalRecord: Eval, outputPaths: string[]): void {
+  if (!evalRecord.resultPersistenceFailed) {
+    return;
+  }
+
+  if (outputPaths.some((outputPath) => getOutputFileFormat(outputPath) === 'jsonl')) {
+    logger.warn(
+      '[Output] Reconciling JSONL from streamed rows and the eval record because one or more rows failed to persist',
+    );
+  }
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error.code === 'EACCES' || error.code === 'EPERM')
+  );
+}
+
+async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
+  try {
+    const stats = await fsPromises.lstat(outputPath);
+    if (!stats.isSymbolicLink()) {
+      return outputPath;
+    }
+
+    try {
+      return await fsPromises.realpath(outputPath);
+    } catch (error) {
+      if (isFileNotFoundError(error)) {
+        return path.resolve(path.dirname(outputPath), await fsPromises.readlink(outputPath));
+      }
+      throw error;
+    }
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return outputPath;
+    }
+    throw error;
+  }
+}
+
+async function appendJsonlResultBatch(outputPath: string, results: EvaluateResult[]) {
+  if (results.length === 0) {
+    return;
+  }
+
+  const text =
+    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
+    os.EOL;
+  await fsPromises.appendFile(outputPath, text);
+}
+
+async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateResult[]> {
+  let contents: string;
+  try {
+    contents = await fsPromises.readFile(outputPath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+
+  // Parse each line defensively. This recovery path exists precisely for runs that were
+  // interrupted (crash / kill / partial flush), so the streamed file may end in a
+  // truncated row. Skipping a malformed line — rather than aborting the whole
+  // finalization — keeps the recoverable rows; the eval record and `getFinalJsonlResults()`
+  // backfill the rest in `collectJsonlResultsAfterPersistenceFailure`.
+  const results: EvaluateResult[] = [];
+  const lines = contents.split(/\r?\n/).filter(Boolean);
+  for (const [index, line] of lines.entries()) {
+    try {
+      results.push(JSON.parse(line) as EvaluateResult);
+    } catch (error) {
+      logger.warn(
+        `[Output] Skipping malformed streamed JSONL row at ${outputPath}:${index + 1} during recovery: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return results;
+}
+
+// Rebuild the JSONL rows after a mid-run persistence failure by merging three sources,
+// keyed by `testIdx:promptIdx` with later sources winning:
+//   1. the rows already streamed to disk (the base, including any that failed to persist),
+//   2. the canonical database rows (skipping keys that failed to persist — the DB copy is
+//      missing or stale for those), then
+//   3. the in-memory final rows captured after the failure (timeout / deferred-grading
+//      updates that never streamed), which are authoritative.
+async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
+  const finalResults = new Map<string, EvaluateResult>();
+  const put = (result: EvaluateResult) => finalResults.set(getResultIndexKey(result), result);
+
+  for (const result of await readStreamedJsonlResults(outputPath)) {
+    put(result);
+  }
+  for await (const batchResults of evalRecord.fetchResultsBatched()) {
+    for (const result of batchResults) {
+      const evaluateResult = asEvaluateResult(result);
+      if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
+        put(evaluateResult);
+      }
+    }
+  }
+  for (const result of evalRecord.getFinalJsonlResults()) {
+    put(result);
+  }
+  return Array.from(finalResults.values());
+}
+
+async function getExistingFileMode(outputPath: string): Promise<number | undefined> {
+  try {
+    return (await fsPromises.stat(outputPath)).mode & 0o7777;
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function appendJsonlResults(
+  outputPath: string,
+  evalRecord: Eval,
+  recoveredResults?: EvaluateResult[],
+): Promise<void> {
+  if (recoveredResults) {
+    await appendJsonlResultBatch(outputPath, recoveredResults);
+    return;
+  }
+
+  for await (const batchResults of evalRecord.fetchResultsBatched()) {
+    await appendJsonlResultBatch(outputPath, batchResults.map(asEvaluateResult));
+  }
+}
+
+async function rewriteJsonlWithExternalBackup(
+  outputPath: string,
+  outputMode: number | undefined,
+  evalRecord: Eval,
+  preparedReplacementPath?: string,
+  recoveredResults?: EvaluateResult[],
+): Promise<void> {
+  const tempDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'promptfoo-jsonl-'));
+  const backupPath = path.join(tempDirectory, 'backup.jsonl');
+  const replacementPath = path.join(tempDirectory, 'replacement.jsonl');
+  let overwriteAttempted = false;
+  let preserveTempDirectory = false;
+  let hasBackup = false;
+
+  try {
+    try {
+      await fsPromises.copyFile(outputPath, backupPath);
+      hasBackup = true;
+    } catch (error) {
+      // First-time write (no existing artifact): there is nothing to back up. Proceed so the
+      // replacement copy below surfaces the real permission error (EACCES/EPERM) from the
+      // unwritable destination directory, rather than masking it with this secondary ENOENT.
+      if (!isFileNotFoundError(error)) {
+        throw error;
+      }
+    }
+    if (preparedReplacementPath) {
+      await fsPromises.copyFile(preparedReplacementPath, replacementPath);
+    } else {
+      if (outputMode === undefined) {
+        await fsPromises.writeFile(replacementPath, '');
+      } else {
+        await fsPromises.writeFile(replacementPath, '', { mode: outputMode });
+      }
+      await appendJsonlResults(replacementPath, evalRecord, recoveredResults);
+    }
+    overwriteAttempted = true;
+    await fsPromises.copyFile(replacementPath, outputPath);
+    if (outputMode !== undefined) {
+      await fsPromises.chmod(outputPath, outputMode);
+    }
+  } catch (error) {
+    if (overwriteAttempted && hasBackup) {
+      try {
+        await fsPromises.copyFile(backupPath, outputPath);
+      } catch (restoreError) {
+        preserveTempDirectory = true;
+        logger.error('[Output] Failed to restore JSONL output after rewrite failure', {
+          backupPath,
+          error: restoreError,
+        });
+        throw new Error(
+          `Failed to rewrite JSONL output (${error instanceof Error ? error.message : String(error)}) and restore backup (${restoreError instanceof Error ? restoreError.message : String(restoreError)}). Backup retained at ${backupPath}`,
+        );
+      }
+    }
+    throw error;
+  } finally {
+    if (!preserveTempDirectory) {
+      await fsPromises.rm(tempDirectory, { recursive: true, force: true }).catch((error) => {
+        logger.warn('[Output] Failed to remove temporary JSONL backup directory', {
+          error,
+          tempDirectory,
+        });
+      });
+    }
+  }
+}
+
+async function removeTemporaryJsonlOutput(tempOutputPath: string): Promise<void> {
+  await fsPromises.rm(tempOutputPath, { force: true }).catch((error) => {
+    logger.warn('[Output] Failed to remove temporary JSONL output', {
+      error,
+      tempOutputPath,
+    });
+  });
 }
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -405,7 +638,7 @@ export async function writeOutput(
           kind: 'output',
           detailId: `result-detail-${rowIndex}-${outputIndex}`,
           detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || '',
+          description: row.description || row.test?.description || '',
           ...outputToHtmlReportCell(output),
         })),
       ]),
@@ -436,11 +669,65 @@ export async function writeOutput(
     });
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
-    // Truncate file first for consistent behavior with other formats
-    await fsPromises.writeFile(outputPath, '');
-    for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
-      await fsPromises.appendFile(outputPath, text);
+    const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
+    if (jsonlOutputPath !== outputPath) {
+      // For a symlink, the mkdir above only ensured the link's own directory. Ensure the
+      // resolved target's directory exists too, so the sibling temp-file rewrite can land
+      // next to it (a symlink may point at a target in a not-yet-created directory).
+      await fsPromises.mkdir(path.dirname(jsonlOutputPath), { recursive: true });
+    }
+    const outputMode = await getExistingFileMode(jsonlOutputPath);
+    const recoveredResults = evalRecord.resultPersistenceFailed
+      ? await collectJsonlResultsAfterPersistenceFailure(jsonlOutputPath, evalRecord)
+      : undefined;
+    const tempOutputPath = path.join(
+      path.dirname(jsonlOutputPath),
+      `.promptfoo-${randomUUID()}.tmp`,
+    );
+    try {
+      try {
+        await fsPromises.writeFile(tempOutputPath, '');
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          logger.warn(
+            '[Output] Falling back to JSONL rewrite with external backup because the output directory is not writable',
+          );
+          await rewriteJsonlWithExternalBackup(
+            jsonlOutputPath,
+            outputMode,
+            evalRecord,
+            undefined,
+            recoveredResults,
+          );
+          return;
+        }
+        throw error;
+      }
+      await appendJsonlResults(tempOutputPath, evalRecord, recoveredResults);
+      if (outputMode !== undefined) {
+        await fsPromises.chmod(tempOutputPath, outputMode);
+      }
+      try {
+        await fsPromises.rename(tempOutputPath, jsonlOutputPath);
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          logger.warn(
+            '[Output] Falling back to JSONL rewrite with external backup because replacing the output file is not permitted',
+          );
+          await rewriteJsonlWithExternalBackup(
+            jsonlOutputPath,
+            outputMode,
+            evalRecord,
+            tempOutputPath,
+          );
+          await removeTemporaryJsonlOutput(tempOutputPath);
+          return;
+        }
+        throw error;
+      }
+    } catch (error) {
+      await removeTemporaryJsonlOutput(tempOutputPath);
+      throw error;
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
@@ -493,7 +780,11 @@ export async function writeMultipleOutputs(
   evalRecord: Eval,
   shareableUrl: string | null,
 ) {
-  await Promise.all(
+  const results = await Promise.allSettled(
     outputPaths.map((outputPath) => writeOutput(outputPath, evalRecord, shareableUrl)),
   );
+  const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (errors.length > 0) {
+    throw Object.assign(new Error('One or more output writes failed'), { errors });
+  }
 }

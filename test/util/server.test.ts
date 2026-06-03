@@ -33,7 +33,7 @@ vi.mock('../../src/util/readline', () => ({
 }));
 
 // Mock fetchWithProxy
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 
