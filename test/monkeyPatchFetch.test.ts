@@ -204,6 +204,50 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
+  it('should not override Authorization embedded in a cloud Request', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+
+    const request = new Request(CLOUD_API_HOST + '/api/v1/users/me', {
+      headers: { Authorization: 'Bearer caller-token' },
+    });
+    await monkeyPatchFetch(request);
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(request.headers.get('authorization')).toBe('Bearer caller-token');
+    expect(requestInit.headers).toBeUndefined();
+  });
+
+  it('should not override Authorization supplied with a Headers instance', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+
+    const url = CLOUD_API_HOST + '/api/v1/users/me';
+    const headers = new Headers({ Authorization: 'Bearer caller-token' });
+    await monkeyPatchFetch(url, { headers });
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).get('authorization')).toBe('Bearer caller-token');
+  });
+
+  it('should preserve cloud Request headers when adding Authorization', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+
+    const request = new Request(CLOUD_API_HOST + '/api/test', {
+      headers: { 'X-Custom-Header': 'custom-value' },
+    });
+    await monkeyPatchFetch(request);
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    const headers = new Headers(requestInit.headers);
+    expect(headers.get('authorization')).toBe('Bearer saved-token');
+    expect(headers.get('x-custom-header')).toBe('custom-value');
+  });
+
   it('should not add Authorization header for cloud API requests when no token available', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);

@@ -61,14 +61,38 @@ export function getCloudBearerToken(url: string | URL | Request): string | undef
   return token ? `Bearer ${token}` : undefined;
 }
 
+function getEffectiveHeaders(
+  url: string | URL | Request,
+  headers: HeadersInit | undefined,
+): HeadersInit | undefined {
+  return headers ?? (url instanceof Request ? url.headers : undefined);
+}
+
 /**
- * Case-insensitive check for a caller-supplied `Authorization` header. Request headers on
- * this path are always a plain object (see the `Record<string, string>` cast in
- * monkeyPatchFetch), so an object scan suffices. Used to avoid overriding an explicit
- * credential — e.g. the token being validated during cloud login/rotation.
+ * Case-insensitive check for a caller-supplied `Authorization` header. Used to avoid
+ * overriding an explicit credential — e.g. the token being validated during cloud
+ * login/rotation.
  */
-function hasAuthorizationHeader(headers: Record<string, string>): boolean {
-  return Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
+function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
+  return new Headers(headers).has('authorization');
+}
+
+function addAuthorizationHeader(
+  headers: HeadersInit | undefined,
+  authorization: string,
+): HeadersInit {
+  if (headers === undefined) {
+    return { Authorization: authorization };
+  }
+  if (headers instanceof Headers || Array.isArray(headers)) {
+    const mergedHeaders = new Headers(headers);
+    mergedHeaders.set('Authorization', authorization);
+    return mergedHeaders;
+  }
+  return {
+    ...headers,
+    Authorization: authorization,
+  };
 }
 
 /**
@@ -79,8 +103,8 @@ export async function monkeyPatchFetch(
   options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-  const headers = (options?.headers as Record<string, string>) || {};
-  const isSilent = headers['x-promptfoo-silent'] === 'true';
+  const headers = getEffectiveHeaders(url, options?.headers);
+  const isSilent = new Headers(headers).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
 
   const opts: RequestInit = {
@@ -107,11 +131,9 @@ export async function monkeyPatchFetch(
   // override an Authorization header the caller set explicitly — token
   // validation/rotation sends the token being validated, not the saved one.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !hasAuthorizationHeader(headers)) {
-    opts.headers = {
-      ...(opts.headers || {}),
-      Authorization: cloudAuth,
-    };
+  const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
+  if (cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
+    opts.headers = addAuthorizationHeader(effectiveHeaders, cloudAuth);
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
