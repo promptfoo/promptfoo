@@ -103,8 +103,7 @@
         "legacy-contracts",
         "legacy-runtime",
         "node",
-        "providers",
-        "view-server"
+        "providers"
       ]
     },
     {
