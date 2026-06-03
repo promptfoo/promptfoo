@@ -1,15 +1,21 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, render, screen } from '@testing-library/react';
+import { callApi } from '@app/utils/api';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 
+import type { ProviderOptions } from '../../types';
+
+vi.mock('@app/utils/api');
+
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange }: any) => (
+  default: ({ value, onValueChange, placeholder }: any) => (
     <textarea
       data-testid="code-editor"
+      placeholder={placeholder}
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
     />
@@ -25,26 +31,34 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return render(ui, { wrapper: Wrapper });
 };
 
+const defaultHttpTarget: ProviderOptions = {
+  id: 'http',
+  label: 'Test HTTP Target',
+  config: {
+    url: 'https://api.example.com/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:
+        'Bearer very-long-token-value-that-could-cause-layout-issues-if-not-handled-properly',
+    },
+    body: '{"message": "{{prompt}}"}',
+  },
+};
+
+const createSuccessfulTestResponse = (body: Record<string, unknown>) =>
+  ({
+    ok: true,
+    json: async () => body,
+  }) as Response;
+
 describe('HttpEndpointConfiguration - Header Field Layout', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;
   let mockSetBodyError: (error: string | React.ReactNode | null) => void;
   let mockSetUrlError: (error: string | null) => void;
 
   const defaultProps = {
-    selectedTarget: {
-      id: 'http',
-      label: 'Test HTTP Target',
-      config: {
-        url: 'https://api.example.com/chat',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:
-            'Bearer very-long-token-value-that-could-cause-layout-issues-if-not-handled-properly',
-        },
-        body: '{"message": "{{prompt}}"}',
-      },
-    },
+    selectedTarget: defaultHttpTarget,
     bodyError: null,
     urlError: null,
   };
@@ -379,5 +393,150 @@ describe('HttpEndpointConfiguration - Header Management', () => {
       'sm:items-center',
     );
     expect(screen.getByRole('button', { name: 'Remove header 1' })).toBeInTheDocument();
+  });
+});
+
+describe('HttpEndpointConfiguration - Configuration Change Suggestions', () => {
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetBodyError: (error: string | React.ReactNode | null) => void;
+  let mockSetUrlError: (error: string | null) => void;
+  const mockCallApi = vi.mocked(callApi);
+
+  beforeEach(() => {
+    mockUpdateCustomTarget = vi.fn();
+    mockSetBodyError = vi.fn();
+    mockSetUrlError = vi.fn();
+    vi.clearAllMocks();
+  });
+
+  const renderTarget = (selectedTarget: ProviderOptions = defaultHttpTarget) =>
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        bodyError={null}
+        setBodyError={mockSetBodyError}
+        urlError={null}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+  const mockSuggestionsResponse = (suggestion: Record<string, unknown>) => {
+    mockCallApi.mockResolvedValue(
+      createSuccessfulTestResponse({
+        testResult: {
+          changes_needed: true,
+          message: 'Changes needed',
+          configuration_change_suggestion: suggestion,
+        },
+        providerResponse: {},
+      }),
+    );
+  };
+
+  it('applies all suggested config changes and updates local HTTP form state', async () => {
+    const suggestion = {
+      headers: { 'X-New-Header': 'new-value', 'Content-Type': 'application/json' },
+      body: { new: 'body', prompt: '{{prompt}}' },
+    };
+    mockSuggestionsResponse(suggestion);
+    const user = userEvent.setup();
+
+    renderTarget({
+      ...defaultHttpTarget,
+      config: {
+        ...defaultHttpTarget.config,
+        headers: { 'X-Initial-Header': 'initial-value' },
+        body: JSON.stringify({ initial: 'body' }),
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /Test Target/i }));
+
+    expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Apply All/i }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', suggestion.headers);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('body', suggestion.body);
+    expect(screen.queryByDisplayValue('X-Initial-Header')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('X-New-Header')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('new-value')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Content-Type')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('application/json')).toBeInTheDocument();
+    await waitFor(() => {
+      const editorValues = screen
+        .getAllByTestId('code-editor')
+        .map((editor) => (editor as HTMLTextAreaElement).value);
+      expect(editorValues).toContain(JSON.stringify(suggestion.body, null, 2));
+    });
+  });
+
+  it('normalizes non-string suggested header values before updating config', async () => {
+    const suggestion = {
+      headers: {
+        'X-Number-Header': 123,
+        'X-Boolean-Header': true,
+        'X-Null-Header': null,
+      },
+      url: 'https://newexample.com/api',
+    };
+    mockSuggestionsResponse(suggestion);
+    const user = userEvent.setup();
+
+    renderTarget();
+
+    await user.click(screen.getByRole('button', { name: /Test Target/i }));
+    expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
+
+    const applyButtons = screen.getAllByRole('button', { name: /^Apply$/i });
+    await user.click(applyButtons[0]);
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', {
+      'X-Number-Header': '123',
+      'X-Boolean-Header': 'true',
+      'X-Null-Header': 'null',
+    });
+    expect(screen.getByDisplayValue('123')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('true')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('null')).toBeInTheDocument();
+
+    await user.click(applyButtons[1]);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('url', 'https://newexample.com/api');
+  });
+
+  it('passes the latest provider response into the response parser test modal', async () => {
+    const mockProviderResponse = {
+      raw: JSON.stringify({ message: 'hello world' }),
+      output: 'hello world',
+    };
+    mockCallApi.mockResolvedValue(
+      createSuccessfulTestResponse({
+        testResult: {
+          success: true,
+          message: 'Target configuration is valid!',
+        },
+        providerResponse: mockProviderResponse,
+      }),
+    );
+    const user = userEvent.setup();
+
+    renderTarget({
+      ...defaultHttpTarget,
+      config: {
+        ...defaultHttpTarget.config,
+        transformResponse: 'json.message',
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /Test Target/i }));
+    await waitFor(() =>
+      expect(mockCallApi).toHaveBeenCalledWith('/providers/test', expect.anything()),
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    expect(
+      await screen.findByPlaceholderText('Enter the API response from your endpoint'),
+    ).toHaveValue(mockProviderResponse.raw);
   });
 });

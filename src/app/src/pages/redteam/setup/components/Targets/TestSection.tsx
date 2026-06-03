@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -33,6 +33,7 @@ export interface TestResult {
   transformedRequest?: string | Record<string, unknown>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
+  configuration_change_suggestion?: Record<string, unknown>;
 }
 
 interface TestSectionProps {
@@ -43,6 +44,7 @@ interface TestSectionProps {
   disabled: boolean;
   detailsExpanded: boolean;
   onDetailsExpandedChange: (expanded: boolean) => void;
+  onApplyConfigSuggestion?: (field: string, value: unknown) => void;
 }
 
 interface CodeBlockProps {
@@ -65,6 +67,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ label, children, maxHeight = '200
   </div>
 );
 
+const formatSuggestionValue = (value: unknown): string =>
+  typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+
 const TestSection: React.FC<TestSectionProps> = ({
   selectedTarget,
   isTestRunning,
@@ -73,8 +78,39 @@ const TestSection: React.FC<TestSectionProps> = ({
   disabled,
   detailsExpanded,
   onDetailsExpandedChange,
+  onApplyConfigSuggestion,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
+  const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
+
+  const configSuggestions = useMemo(
+    () => Object.entries(testResult?.configuration_change_suggestion ?? {}),
+    [testResult?.configuration_change_suggestion],
+  );
+  const allSuggestionsApplied =
+    configSuggestions.length > 0 && appliedFields.size === configSuggestions.length;
+
+  useEffect(() => {
+    if (configSuggestions.length >= 0) {
+      setAppliedFields(new Set());
+    }
+  }, [configSuggestions]);
+
+  const handleApplySuggestion = (field: string, value: unknown) => {
+    onApplyConfigSuggestion?.(field, value);
+    setAppliedFields((prev) => new Set(prev).add(field));
+  };
+
+  const handleApplyAll = () => {
+    if (!onApplyConfigSuggestion) {
+      return;
+    }
+
+    configSuggestions.forEach(([field, value]) => {
+      onApplyConfigSuggestion(field, value);
+    });
+    setAppliedFields(new Set(configSuggestions.map(([field]) => field)));
+  };
 
   return (
     <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
@@ -163,6 +199,63 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </ul>
                         </div>
                       )}
+
+                    {configSuggestions.length > 0 && (
+                      <div className="mt-2 rounded-md bg-background/50 p-2">
+                        <p className="mb-1.5 font-medium">Configuration Changes</p>
+                        <div className="space-y-2">
+                          {configSuggestions.map(([field, value]) => {
+                            const isApplied = appliedFields.has(field);
+                            return (
+                              <div
+                                key={field}
+                                data-testid={`config-suggestion-${field}`}
+                                className={cn(
+                                  'flex flex-col gap-2 rounded-md border border-border/60 bg-background/80 p-2 sm:flex-row sm:items-start sm:justify-between',
+                                  isApplied && 'border-emerald-500/50 bg-emerald-500/10',
+                                )}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-semibold">{field}</p>
+                                  <pre
+                                    data-testid={`config-suggestion-${field}-value`}
+                                    className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed"
+                                  >
+                                    {formatSuggestionValue(value)}
+                                  </pre>
+                                </div>
+                                {onApplyConfigSuggestion && (
+                                  <Button
+                                    size="sm"
+                                    variant={isApplied ? 'outline' : 'secondary'}
+                                    onClick={
+                                      isApplied
+                                        ? handleTestTarget
+                                        : () => handleApplySuggestion(field, value)
+                                    }
+                                    className="shrink-0"
+                                  >
+                                    {isApplied && <Play className="mr-1.5 size-3.5" />}
+                                    {isApplied ? 'Test' : 'Apply'}
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {onApplyConfigSuggestion && configSuggestions.length > 1 && (
+                          <Button
+                            size="sm"
+                            variant={allSuggestionsApplied ? 'outline' : 'secondary'}
+                            className="mt-2"
+                            onClick={allSuggestionsApplied ? handleTestTarget : handleApplyAll}
+                          >
+                            {allSuggestionsApplied && <Play className="mr-1.5 size-3.5" />}
+                            {allSuggestionsApplied ? 'Test' : 'Apply All'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </AlertDescription>
                 </AlertContent>
               </Alert>
@@ -262,12 +355,10 @@ const TestSection: React.FC<TestSectionProps> = ({
                               {(() => {
                                 const raw = testResult.providerResponse?.raw;
                                 if (typeof raw === 'string') {
-                                  // Try to parse and format as JSON
                                   try {
                                     const parsed = JSON.parse(raw);
                                     return JSON.stringify(parsed, null, 2);
                                   } catch {
-                                    // Not valid JSON, return as-is
                                     return raw;
                                   }
                                 }

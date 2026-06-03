@@ -149,6 +149,7 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
+  const [savedProviderResponse, setSavedProviderResponse] = useState<string>('');
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
@@ -201,7 +202,18 @@ Content-Type: application/json
           transformedRequest: data.transformedRequest,
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+          configuration_change_suggestion: data.testResult?.configuration_change_suggestion,
         });
+
+        // Save the provider response for use in response parser test
+        if (data.providerResponse?.raw) {
+          const rawResponse =
+            typeof data.providerResponse.raw === 'string'
+              ? data.providerResponse.raw
+              : JSON.stringify(data.providerResponse.raw, null, 2);
+          setSavedProviderResponse(rawResponse);
+        }
+
         setTestDetailsExpanded(!isSuccess || hasConfigIssues);
         onTargetTested?.(isSuccess);
       } else {
@@ -824,6 +836,37 @@ ${exampleRequest}`;
           }
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
+          onApplyConfigSuggestion={(field, value) => {
+            const normalizedValue =
+              field === 'headers' &&
+              value !== null &&
+              typeof value === 'object' &&
+              !Array.isArray(value)
+                ? Object.fromEntries(Object.entries(value).map(([key, val]) => [key, String(val)]))
+                : value;
+
+            updateCustomTarget(field, normalizedValue);
+            if (
+              field === 'headers' &&
+              normalizedValue !== null &&
+              typeof normalizedValue === 'object' &&
+              !Array.isArray(normalizedValue)
+            ) {
+              setHeaders(
+                Object.entries(normalizedValue).map(([key, val]) => ({
+                  key,
+                  value: String(val),
+                })),
+              );
+            }
+            if (field === 'body') {
+              const bodyStr =
+                typeof normalizedValue === 'string'
+                  ? normalizedValue
+                  : JSON.stringify(normalizedValue, null, 2);
+              setRequestBody(bodyStr);
+            }
+          }}
         />
       </div>
 
@@ -951,6 +994,7 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
+        initialTestInput={savedProviderResponse}
       />
     </div>
   );
