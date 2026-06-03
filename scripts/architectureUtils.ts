@@ -269,7 +269,7 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
 }
 
 function getLiteralRuntimeCallSpecifier(node: ts.CallExpression): string | undefined {
-  if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
+  if (node.arguments.length === 0 || !ts.isStringLiteralLike(node.arguments[0])) {
     return undefined;
   }
   const expression = node.expression;

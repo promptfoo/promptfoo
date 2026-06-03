@@ -23,8 +23,10 @@ describe('extractModuleSpecifiers', () => {
       import imported from 'esm-import';
       export { exported } from 'esm-export';
       import('dynamic-import');
+      import('dynamic-import-with-options', { with: { type: 'json' } });
       const required = require('cjs-require');
       const resolved = require.resolve('cjs-resolve');
+      const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
       const moduleRequired = module.require('module-require');
       require(nonLiteral);
     `;
@@ -33,8 +35,10 @@ describe('extractModuleSpecifiers', () => {
       'esm-import',
       'esm-export',
       'dynamic-import',
+      'dynamic-import-with-options',
       'cjs-require',
       'cjs-resolve',
+      'cjs-resolve-with-paths',
       'module-require',
     ]);
   });
@@ -48,12 +52,15 @@ describe('extractRuntimeModuleSpecifiers', () => {
       export { type ExportedType, runtimeExport } from 'runtime-export';
       export type { OnlyExportedType } from 'type-export';
       import('dynamic-import');
+      import('dynamic-import-with-options', { with: { type: 'json' } });
       const required = require('cjs-require');
+      const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
       const moduleRequired = module.require('module-require');
       type Imported = import('import-type').Imported;
       void runtimeDefault;
       void runtimeValue;
       void required;
+      void resolvedWithPaths;
       void moduleRequired;
     `;
 
@@ -61,7 +68,9 @@ describe('extractRuntimeModuleSpecifiers', () => {
       'runtime-import',
       'runtime-export',
       'dynamic-import',
+      'dynamic-import-with-options',
       'cjs-require',
+      'cjs-resolve-with-paths',
       'module-require',
     ]);
   });
