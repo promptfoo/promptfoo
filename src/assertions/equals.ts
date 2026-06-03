@@ -1,6 +1,54 @@
-import util from 'util';
-
 import type { AssertionParams, GradingResult } from '../types/index';
+
+function getEnumerableOwnKeys(value: object): Array<string | symbol> {
+  return Reflect.ownKeys(value).filter(
+    (key) => Object.getOwnPropertyDescriptor(value, key)?.enumerable,
+  );
+}
+
+function isJsonDeepEqual(
+  left: unknown,
+  right: unknown,
+  compared = new WeakMap<object, WeakSet<object>>(),
+): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+  }
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  if (Object.getPrototypeOf(leftRecord) !== Object.getPrototypeOf(rightRecord)) {
+    return false;
+  }
+
+  const comparedWithLeft = compared.get(leftRecord);
+  if (comparedWithLeft?.has(rightRecord)) {
+    return true;
+  }
+  if (comparedWithLeft) {
+    comparedWithLeft.add(rightRecord);
+  } else {
+    compared.set(leftRecord, new WeakSet([rightRecord]));
+  }
+
+  const leftKeys = getEnumerableOwnKeys(leftRecord);
+  const rightKeys = getEnumerableOwnKeys(rightRecord);
+  if (leftKeys.length !== rightKeys.length || !leftKeys.every((key) => rightKeys.includes(key))) {
+    return false;
+  }
+
+  return leftKeys.every((key) =>
+    isJsonDeepEqual(Reflect.get(leftRecord, key), Reflect.get(rightRecord, key), compared),
+  );
+}
 
 export const handleEquals = async ({
   assertion,
@@ -14,7 +62,7 @@ export const handleEquals = async ({
   let pass: boolean;
   if (typeof renderedValue === 'object') {
     try {
-      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
+      pass = isJsonDeepEqual(renderedValue, JSON.parse(outputString)) !== inverse;
     } catch {
       pass = false;
     }
