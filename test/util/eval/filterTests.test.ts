@@ -658,5 +658,138 @@ describe('filterTests', () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.vars?.var1).toBe('test1');
     });
+
+    it('should not reintroduce metadata-excluded tests with matching vars', async () => {
+      const excludedTest: TestCase = {
+        description: 'integration test',
+        vars: { prompt: 'shared input' },
+        metadata: { type: 'integration' },
+        provider: 'provider-integration',
+      };
+      const selectedTest: TestCase = {
+        description: 'unit test',
+        vars: { prompt: 'shared input' },
+        metadata: { type: 'unit' },
+        provider: 'provider-unit',
+      };
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [excludedTest, selectedTest],
+      };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: excludedTest.vars,
+              provider: { id: 'provider-integration' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: excludedTest,
+            },
+            {
+              vars: selectedTest.vars,
+              provider: { id: 'provider-unit' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: selectedTest,
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadata: 'type=unit',
+        failing: 'eval-123',
+      });
+
+      expect(result).toEqual([selectedTest]);
+    });
+
+    it('should preserve generated result tests when metadata matches all config tests', async () => {
+      const configTest: TestCase = {
+        description: 'configured test',
+        vars: { prompt: 'configured' },
+        metadata: { type: 'unit' },
+      };
+      const generatedTest: TestCase = {
+        description: 'generated test',
+        vars: { prompt: 'generated' },
+        metadata: { type: 'unit', pluginId: 'cipher-code' },
+      };
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [configTest],
+      };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: configTest.vars,
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: configTest,
+            },
+            {
+              vars: generatedTest.vars,
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: generatedTest,
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadata: 'type=unit',
+        failing: 'eval-123',
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['configured test', 'generated test']);
+    });
+
+    it('should filter generated result tests by metadata before deduplication', async () => {
+      const excludedGeneratedTest: TestCase = {
+        description: 'excluded generated test',
+        vars: { prompt: 'shared generated input' },
+        metadata: { type: 'integration' },
+      };
+      const selectedGeneratedTest: TestCase = {
+        description: 'selected generated test',
+        vars: { prompt: 'shared generated input' },
+        metadata: { type: 'unit' },
+      };
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: excludedGeneratedTest.vars,
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: excludedGeneratedTest,
+            },
+            {
+              vars: selectedGeneratedTest.vars,
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: selectedGeneratedTest,
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadata: 'type=unit',
+        failing: 'eval-123',
+      });
+
+      expect(result).toEqual([selectedGeneratedTest]);
+    });
   });
 });
