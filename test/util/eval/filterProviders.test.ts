@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterProviderConfigs, filterProviders } from '../../../src/commands/eval/filterProviders';
+import { filterProviderConfigs, filterProviders } from '../../../src/util/eval/filterProviders';
 
 import type { ApiProvider, TestSuiteConfig } from '../../../src/types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../../src/types/providers';
