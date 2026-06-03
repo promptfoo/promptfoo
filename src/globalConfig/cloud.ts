@@ -90,9 +90,14 @@ export class CloudConfig {
    * Returns the API host from config file, PROMPTFOO_CLOUD_API_URL environment variable,
    * or defaults to the standard cloud API host.
    * Config file takes precedence over environment variable.
+   *
+   * Trailing slashes are stripped so callers that append a path (e.g.
+   * `${getApiHost()}/api/v1/...`) never produce a double slash. On-prem hosts
+   * entered via `promptfoo auth login --api-host https://host/` commonly include one.
    */
   private resolveApiHost(): string {
-    return this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+    return host.replace(/\/+$/, '');
   }
 
   isEnabled(): boolean {
@@ -100,7 +105,9 @@ export class CloudConfig {
   }
 
   setApiHost(apiHost: string): void {
-    this.config.apiHost = apiHost;
+    // Persist without a trailing slash so the stored host stays clean regardless of
+    // caller (defense in depth alongside the strip in resolveApiHost()).
+    this.config.apiHost = apiHost.replace(/\/+$/, '');
     this.saveConfig();
   }
 
@@ -182,7 +189,7 @@ export class CloudConfig {
 
   async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
     try {
-      const { fetchWithProxy } = await import('../util/fetch');
+      const { fetchWithProxy } = await import('../util/fetch/index');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,

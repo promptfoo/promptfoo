@@ -248,9 +248,9 @@ describe('XAIResponsesProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    // xAI prices the 5 completion and 3 reasoning tokens separately at the
-    // output rate: 10 input @ $1.25/M + 8 output @ $2.50/M.
-    expect(result.cost).toBeCloseTo(0.0000325, 10);
+    // output_tokens (5) already includes the 3 reasoning tokens, so they are
+    // not billed twice: 10 input @ $1.25/M + 5 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.000025, 10);
     expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
   });
 
@@ -286,8 +286,9 @@ describe('XAIResponsesProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    // 0 input @ $1.25/M + 8 output @ $2.50/M.
-    expect(result.cost).toBeCloseTo(0.00002, 10);
+    // 0 input @ $1.25/M + 5 output @ $2.50/M (output_tokens already includes
+    // the 3 reasoning tokens, so reasoning is not added on top).
+    expect(result.cost).toBeCloseTo(0.0000125, 10);
   });
 
   it('parses streamed Responses API events', async () => {
