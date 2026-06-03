@@ -191,6 +191,9 @@
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
+        "AWS_BEARER_TOKEN_BEDROCK": {
+          "type": "string"
+        },
         "AWS_BEDROCK_REGION": {
           "type": "string"
         },
@@ -1646,6 +1649,9 @@
                       "type": "string"
                     },
                     "ATLASCLOUD_API_KEY": {
+                      "type": "string"
+                    },
+                    "AWS_BEARER_TOKEN_BEDROCK": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {

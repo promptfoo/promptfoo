@@ -43,7 +43,7 @@ export class JsonlFileWriter {
     });
   }
 
-  async write(data: Record<string, any>): Promise<void> {
+  async write(data: unknown): Promise<void> {
     if (this.streamError) {
       throw this.wrapStreamError('write', this.streamError);
     }

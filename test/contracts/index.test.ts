@@ -11,6 +11,7 @@ import {
   GetUserResponseSchema,
   getInputDescription,
   getInputType,
+  hasFunctionToolCallValidator,
   InputDefinitionObjectSchema,
   InputsSchema,
   isTransformFunction,
@@ -65,6 +66,13 @@ describe('contracts leaf surface', () => {
       expect(UserSchemas.Login.Request).toBe(LoginRequestSchema);
       expect(UserSchemas.Get.Response).toBe(GetUserResponseSchema);
     });
+
+    it('re-exports provider capability helpers through the barrel', () => {
+      expect(hasFunctionToolCallValidator({ validateFunctionToolCall: () => {} })).toBe(true);
+      expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
+        false,
+      );
+    });
   });
 
   describe('ProviderEnvOverridesSchema', () => {
@@ -73,6 +81,18 @@ describe('contracts leaf surface', () => {
       expect(parsed.success).toBe(true);
       if (parsed.success) {
         expect(parsed.data.OPENAI_API_KEY).toBe('sk-known');
+      }
+    });
+
+    it('preserves AWS_BEARER_TOKEN_BEDROCK (used by the Bedrock OpenAI Responses path)', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        AWS_BEARER_TOKEN_BEDROCK: 'bedrock-api-key',
+        AWS_BEDROCK_REGION: 'us-east-2',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-api-key');
+        expect(parsed.data.AWS_BEDROCK_REGION).toBe('us-east-2');
       }
     });
 
