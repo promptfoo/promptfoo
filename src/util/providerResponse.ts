@@ -63,5 +63,5 @@ export function getActualPromptWithFallback(
   originalPrompt: string,
   options: { formatted?: boolean } = {},
 ): string {
-  return getActualPrompt(response, options) || originalPrompt;
+  return getActualPrompt(response, options) ?? originalPrompt;
 }

@@ -296,14 +296,13 @@ function getVariableCellValue({
   injectVarName: string;
   fallbackValue: string | object;
 }): string | object {
-  let value = fallbackValue;
+  const value = fallbackValue;
 
   if (varName === injectVarName) {
     for (const output of row.outputs || []) {
       const actualPrompt = getActualPrompt(output?.response);
-      if (actualPrompt) {
-        value = actualPrompt;
-        break;
+      if (actualPrompt !== undefined) {
+        return actualPrompt;
       }
     }
   }

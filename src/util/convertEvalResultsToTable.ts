@@ -52,9 +52,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
     // Check both result.response.metadata and result.metadata for legacy compatibility
     const actualPrompt =
-      getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
+      getActualPrompt(result.response) ?? (result.metadata?.redteamFinalPrompt as string);
 
-    if (result.vars && actualPrompt) {
+    if (result.vars && actualPrompt !== undefined) {
       const varKeys = Object.keys(result.vars);
       if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
         result.vars[varKeys[0]] = actualPrompt;

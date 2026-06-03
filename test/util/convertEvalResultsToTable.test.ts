@@ -300,6 +300,53 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].vars[0]).toBe('modified prompt');
   });
 
+  it('should preserve an explicitly empty provider prompt over legacy fallbacks', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              prompt: 'original prompt',
+            },
+            metadata: {
+              redteamFinalPrompt: 'legacy prompt',
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+              prompt: '',
+              metadata: {
+                redteamFinalPrompt: 'response legacy prompt',
+              },
+            },
+            provider: {
+              id: 'test-provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.body[0].vars[0]).toBe('');
+  });
+
   it('should handle multiple redteam final prompts', () => {
     const resultsFile: ResultsFile = {
       version: 4,

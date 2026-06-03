@@ -24,7 +24,7 @@ function getCellValueForInjectVar(
   // Check all outputs to find one with provider-reported prompt or redteamFinalPrompt
   for (const output of outputs) {
     const actualPrompt = getActualPrompt(output?.response);
-    if (actualPrompt) {
+    if (actualPrompt !== undefined) {
       return actualPrompt;
     }
   }
@@ -248,7 +248,7 @@ describe('ResultsTable inject variable cell rendering', () => {
       expect(result).toBe('Valid red team prompt');
     });
 
-    it('should continue searching when a provider prompt is empty', () => {
+    it('should preserve an explicitly empty provider prompt', () => {
       const originalValue = '{{topic}}';
       const outputs = [
         {
@@ -266,7 +266,7 @@ describe('ResultsTable inject variable cell rendering', () => {
       ];
 
       const result = getCellValueForInjectVar(originalValue, outputs);
-      expect(result).toBe('Fallback prompt');
+      expect(result).toBe('');
     });
 
     it('should handle empty array provider prompt as no prompt', () => {

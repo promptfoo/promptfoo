@@ -130,12 +130,12 @@ describe('getActualPromptWithFallback', () => {
     expect(getActualPromptWithFallback(undefined, 'original prompt')).toBe('original prompt');
   });
 
-  it('should return original prompt when prompt is empty string', () => {
+  it('should preserve an explicitly empty string prompt', () => {
     const response: ProviderResponse = {
       output: 'test output',
       prompt: '',
     };
-    expect(getActualPromptWithFallback(response, 'original prompt')).toBe('original prompt');
+    expect(getActualPromptWithFallback(response, 'original prompt')).toBe('');
   });
 
   it('should return original prompt when prompt is empty array', () => {
