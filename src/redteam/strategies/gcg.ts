@@ -65,7 +65,7 @@ async function generateGcgPrompts(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl(), {
+          headers: getRemoteGenerationHeaders({
             'x-promptfoo-silent': 'true',
           }),
           body: JSON.stringify(payload),

@@ -17,6 +17,7 @@ vi.mock('../src/logger', () => ({
 vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn(),
     getApiKey: vi.fn(),
   },
 }));
@@ -40,6 +41,7 @@ describe('monkeyPatchFetch', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue(CLOUD_API_HOST);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
     vi.mocked(logRequestResponse).mockClear();
     mockOriginalFetch.mockClear();
@@ -102,6 +104,37 @@ describe('monkeyPatchFetch', () => {
         Authorization: `Bearer ${apiKey}`,
       },
     });
+  });
+
+  it('should add Authorization header for configured on-prem cloud API requests', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    const apiKey = 'test-api-key-123';
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/api');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+
+    const url = 'https://onprem.example.com/api/v1/task';
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+  });
+
+  it.each([
+    'https://custom.example.com/harmful',
+    'https://api.promptfoo.dev.attacker.example.com/api/v1/task',
+  ])('should not forward cloud credentials to %s', async (url) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
   });
 
   it('should not add Authorization header for cloud API requests when no token available', async () => {

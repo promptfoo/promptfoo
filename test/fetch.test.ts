@@ -58,6 +58,7 @@ vi.mock('../src/logger', () => ({
 vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
   },
 }));
@@ -161,6 +162,7 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;

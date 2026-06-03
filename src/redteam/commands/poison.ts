@@ -61,7 +61,7 @@ export async function generatePoisonedDocument(
 ): Promise<PoisonResponse> {
   const response = await fetchWithProxy(getRemoteGenerationUrl(), {
     method: 'POST',
-    headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+    headers: getRemoteGenerationHeaders(),
     body: JSON.stringify({
       task: 'poison-document',
       document,

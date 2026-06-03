@@ -383,7 +383,7 @@ export async function extractGoalFromPrompt(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(requestBody),
       },
       getRequestTimeoutMs(),

@@ -59,7 +59,7 @@ export async function textToAudio(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(payload),
       },
       getRequestTimeoutMs(),

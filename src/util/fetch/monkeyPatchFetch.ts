@@ -2,7 +2,7 @@ import { promisify } from 'util';
 import { gzip } from 'zlib';
 
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
-import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
 import { sanitizeUrl } from '../sanitizer';
 
@@ -35,7 +35,7 @@ function getSafeProxyForConnectionLog(): string {
 export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
   try {
     const targetUrl = url instanceof Request ? url.url : url.toString();
-    return new URL(targetUrl).origin === CLOUD_API_HOST;
+    return new URL(targetUrl).origin === new URL(cloudConfig.getApiHost()).origin;
   } catch {
     return false;
   }

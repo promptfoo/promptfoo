@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
@@ -498,66 +498,14 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
 });
 
 describe('getRemoteGenerationHeaders', () => {
-  beforeEach(() => {
-    vi.stubEnv('PROMPTFOO_API_KEY', '');
-    vi.mocked(getEnvString).mockReturnValue('');
-    vi.mocked(readGlobalConfig).mockReturnValue({} as any);
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('adds a bearer token when the request targets the configured cloud host', () => {
-    vi.mocked(readGlobalConfig).mockReturnValue({
-      cloud: { apiKey: 'test-cloud-key', apiHost: 'https://onprem.example.com' },
-    } as any);
-
-    expect(getRemoteGenerationHeaders('https://onprem.example.com/api/v1/task')).toMatchObject({
+  it('returns JSON headers without cloud credentials', () => {
+    expect(getRemoteGenerationHeaders()).toEqual({
       'Content-Type': 'application/json',
-      Authorization: 'Bearer test-cloud-key',
     });
   });
 
-  it('does NOT add a token when the request targets a self-hosted override', () => {
-    vi.mocked(readGlobalConfig).mockReturnValue({
-      cloud: { apiKey: 'test-cloud-key' },
-    } as any);
-    vi.mocked(getEnvString).mockImplementation((key: string) =>
-      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://self-hosted.example.com/task' : '',
-    );
-
-    const headers = getRemoteGenerationHeaders(getRemoteGenerationUrl());
-    expect(headers['Content-Type']).toBe('application/json');
-    expect(headers.Authorization).toBeUndefined();
-  });
-
-  it('does NOT forward the cloud token to a custom unaligned-inference endpoint', () => {
-    vi.mocked(readGlobalConfig).mockReturnValue({
-      cloud: { apiKey: 'test-cloud-key', apiHost: 'https://onprem.example.com' },
-    } as any);
-    vi.mocked(getEnvString).mockImplementation((key: string) =>
-      key === 'PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT' ? 'https://custom.example.com/harmful' : '',
-    );
-
-    const endpoint = getRemoteGenerationUrlForUnaligned();
-
-    expect(endpoint).toBe('https://custom.example.com/harmful');
-    expect(getRemoteGenerationHeaders(endpoint).Authorization).toBeUndefined();
-  });
-
-  it('does NOT add a token when cloud is not enabled', () => {
-    expect(
-      getRemoteGenerationHeaders('https://api.promptfoo.app/api/v1/task').Authorization,
-    ).toBeUndefined();
-  });
-
   it('preserves caller-supplied extra headers', () => {
-    expect(
-      getRemoteGenerationHeaders('https://api.promptfoo.app/api/v1/task', {
-        'X-Custom': 'value',
-      }),
-    ).toMatchObject({
+    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toMatchObject({
       'Content-Type': 'application/json',
       'X-Custom': 'value',
     });

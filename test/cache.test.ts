@@ -31,6 +31,7 @@ vi.mock('../src/util/config/manage', () => ({
 vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.app',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
   },
 }));

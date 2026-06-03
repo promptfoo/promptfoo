@@ -22,7 +22,7 @@ export async function doRemoteGrading(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+        headers: getRemoteGenerationHeaders(),
         body,
       },
       getRequestTimeoutMs(),

@@ -59,7 +59,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
             version: VERSION,
             email: getUserEmail(),
           }),
-          headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+          headers: getRemoteGenerationHeaders(),
           method: 'POST',
         },
         options?.abortSignal,

@@ -83,7 +83,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       getRemoteGenerationUrl(),
       {
         body,
-        headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+        headers: getRemoteGenerationHeaders(),
         method: 'POST',
       },
       options?.abortSignal,

@@ -356,7 +356,7 @@ export default class GoatProvider implements ApiProvider {
             getRemoteGenerationUrl(),
             {
               body,
-              headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+              headers: getRemoteGenerationHeaders(),
               method: 'POST',
             },
             options?.abortSignal,
@@ -396,7 +396,7 @@ export default class GoatProvider implements ApiProvider {
           getRemoteGenerationUrl(),
           {
             body,
-            headers: getRemoteGenerationHeaders(getRemoteGenerationUrl()),
+            headers: getRemoteGenerationHeaders(),
             method: 'POST',
           },
           options?.abortSignal,

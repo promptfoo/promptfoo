@@ -371,7 +371,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
     const response = await fetchWithProxy(cloudFunctionUrl, {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(cloudFunctionUrl),
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         ...bodyResult.data,
         task: taskId,

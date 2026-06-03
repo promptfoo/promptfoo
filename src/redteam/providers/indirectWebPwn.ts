@@ -136,7 +136,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       url,
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(url),
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'create-web-page',
           testCaseId,
@@ -171,7 +171,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       url,
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(url),
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,

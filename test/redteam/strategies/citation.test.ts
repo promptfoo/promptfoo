@@ -41,7 +41,7 @@ describe('citation strategy', () => {
     mockGetUserEmail.mockReturnValue('test@example.com');
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
-    vi.mocked(getRemoteGenerationHeaders).mockImplementation((_url, extra) => ({
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
       'Content-Type': 'application/json',
       ...extra,
     }));

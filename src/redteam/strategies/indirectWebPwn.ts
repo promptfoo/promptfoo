@@ -117,7 +117,7 @@ export async function checkExfilTracking(
       url,
       {
         method: 'POST',
-        headers: getRemoteGenerationHeaders(url),
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,
@@ -236,7 +236,7 @@ async function createWebPage(
     url,
     {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(url),
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'create-web-page',
         testCaseId,
@@ -289,7 +289,7 @@ async function updateWebPage(
     url,
     {
       method: 'POST',
-      headers: getRemoteGenerationHeaders(url),
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'update-web-page',
         uuid,
