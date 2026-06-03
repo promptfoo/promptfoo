@@ -451,6 +451,38 @@ describe('Provider Registry', () => {
         factory!.create('azure:image:', mockProviderOptions, mockContext),
       ).rejects.toThrow(/Azure image provider requires a deployment name/);
 
+      // Model types without a default deployment must name one in the path. Cover both
+      // the missing (`azure:chat`) and empty (`azure:chat:`) third-segment variants.
+      for (const prefix of ['azure:chat', 'azure:completion']) {
+        await expect(factory!.create(prefix, mockProviderOptions, mockContext)).rejects.toThrow(
+          /requires a deployment name/,
+        );
+        await expect(
+          factory!.create(`${prefix}:`, mockProviderOptions, mockContext),
+        ).rejects.toThrow(/requires a deployment name/);
+      }
+      await expect(
+        factory!.create('azure:assistant', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure assistant provider requires an assistant ID/);
+      await expect(
+        factory!.create('azure:assistant:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure assistant provider requires an assistant ID/);
+      await expect(
+        factory!.create('azure:foundry-agent', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure foundry-agent provider requires an agent ID/);
+      await expect(
+        factory!.create('azure:foundry-agent:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure foundry-agent provider requires an agent ID/);
+
+      // Types with sensible defaults must still resolve without a deployment segment.
+      expect(
+        await factory!.create('azure:embedding', mockProviderOptions, mockContext),
+      ).toBeDefined();
+      expect(
+        await factory!.create('azure:responses', mockProviderOptions, mockContext),
+      ).toBeDefined();
+      expect(await factory!.create('azure:video', mockProviderOptions, mockContext)).toBeDefined();
+
       // MAI image models are Foundry-only; the Azure OpenAI prefix must reject them.
       await expect(
         factory!.create('azureopenai:image:mai-image-2-5', mockProviderOptions, mockContext),
