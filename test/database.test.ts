@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import fs from 'fs';
 import * as os from 'os';
@@ -9,27 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
-
-async function removeDatabaseFile(filePath: string): Promise<void> {
-  // libsql can release its Windows file handle a few seconds after Client.close().
-  const maxAttempts = process.platform === 'win32' ? 50 : 1;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      await fs.promises.rm(filePath, { force: true });
-      return;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      const isRetriableWindowsLock = code === 'EBUSY' || code === 'EPERM';
-
-      if (!isRetriableWindowsLock || attempt === maxAttempts) {
-        throw error;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-}
 
 describe('database WAL mode', () => {
   let tempDir: string;
@@ -113,19 +93,29 @@ describe('database WAL mode', () => {
     expect(fs.existsSync(database.getDbPath())).toBe(true);
   });
 
-  it('recreates a file-backed database after its database file is deleted', async () => {
+  it('creates a file-backed database after its database file is deleted before opening', async () => {
     const database = await import('../src/database');
-    const db = await database.getDb();
     const dbPath = database.getDbPath();
 
     expect(path.dirname(dbPath)).toBe(tempDir);
-    await db.run('CREATE TABLE deleted_database_probe (id INTEGER PRIMARY KEY)');
-    await db.run('INSERT INTO deleted_database_probe (id) VALUES (1)');
-    await database.closeDb();
+    execFileSync(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `
+        import { createClient } from '@libsql/client/node';
+        import { pathToFileURL } from 'node:url';
 
-    await removeDatabaseFile(dbPath);
-    await removeDatabaseFile(`${dbPath}-shm`);
-    await removeDatabaseFile(`${dbPath}-wal`);
+        const client = createClient({ url: pathToFileURL(process.argv[1]).href });
+        await client.execute('CREATE TABLE deleted_database_probe (id INTEGER PRIMARY KEY)');
+        await client.execute('INSERT INTO deleted_database_probe (id) VALUES (1)');
+        client.close();
+      `,
+      dbPath,
+    ]);
+
+    fs.rmSync(dbPath, { force: true });
+    fs.rmSync(`${dbPath}-shm`, { force: true });
+    fs.rmSync(`${dbPath}-wal`, { force: true });
     expect(fs.existsSync(dbPath)).toBe(false);
 
     const recreatedDb = await database.getDb();

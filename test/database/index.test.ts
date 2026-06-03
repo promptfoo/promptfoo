@@ -22,12 +22,20 @@ vi.mock('../../src/envars', async (importOriginal) => {
 });
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
+
+const ORIGINAL_HOME_DIR = os.homedir();
 
 describe('database', () => {
   let tempConfigDir: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(os.homedir).mockReset();
+    vi.mocked(os.homedir).mockReturnValue(ORIGINAL_HOME_DIR);
     vi.mocked(getConfigDirectoryPath).mockReset();
     vi.mocked(getEnvBool).mockReset();
     await closeDb();
@@ -59,21 +67,48 @@ describe('database', () => {
 
     it('should refuse to use the default user database when the process is running tests', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
-      vi.stubEnv('NODE_ENV', 'test');
+      vi.stubEnv('VITEST', 'true');
 
       expect(() => getDbPath()).toThrow(
         'Refusing to open the default Promptfoo database while running tests',
       );
     });
 
-    it('should not use Promptfoo env overrides to identify a test process', () => {
+    it('should allow the default user database when only NODE_ENV is test', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
-      cliState.config = { env: { NODE_ENV: 'test' } };
-      vi.stubEnv('NODE_ENV', '');
+      vi.stubEnv('NODE_ENV', 'test');
       vi.stubEnv('VITEST', undefined);
       vi.stubEnv('JEST_WORKER_ID', undefined);
 
       expect(() => getDbPath()).not.toThrow();
+    });
+
+    it('should not use Promptfoo env overrides to identify a test process', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      cliState.config = { env: { VITEST: 'true', JEST_WORKER_ID: '1' } };
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', undefined);
+
+      expect(() => getDbPath()).not.toThrow();
+    });
+
+    it('should refuse an alias that resolves to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'aliased-config');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.symlinkSync(
+        defaultConfigDir,
+        aliasedConfigDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
     });
   });
 

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { pathToFileURL } from 'node:url';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -34,17 +35,32 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
+function getComparableDatabasePath(dbPath: string): string {
+  const resolvedPath = path.resolve(dbPath);
+
+  try {
+    return fs.realpathSync.native(resolvedPath);
+  } catch {
+    try {
+      return path.join(
+        fs.realpathSync.native(path.dirname(resolvedPath)),
+        path.basename(resolvedPath),
+      );
+    } catch {
+      return resolvedPath;
+    }
+  }
+}
+
 function assertSafeTestDatabasePath(dbPath: string): void {
   const isTestProcess =
-    process.env.NODE_ENV === 'test' ||
-    process.env.VITEST !== undefined ||
-    process.env.JEST_WORKER_ID !== undefined;
+    process.env.VITEST !== undefined || process.env.JEST_WORKER_ID !== undefined;
   if (!isTestProcess) {
     return;
   }
 
   const defaultUserDbPath = path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db');
-  if (dbPath === defaultUserDbPath) {
+  if (getComparableDatabasePath(dbPath) === getComparableDatabasePath(defaultUserDbPath)) {
     throw new Error(
       'Refusing to open the default Promptfoo database while running tests. ' +
         'Set IS_TESTING=true for an in-memory database or set PROMPTFOO_CONFIG_DIR to a test-only directory.',
