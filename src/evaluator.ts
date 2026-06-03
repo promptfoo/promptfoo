@@ -27,6 +27,7 @@ import {
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
+import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
@@ -71,7 +72,6 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -84,7 +84,6 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
-import { getOutputFileFormat } from './util/outputFormats';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -107,6 +106,7 @@ import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
+import type { EvaluatorResultWriter, EvaluatorRuntime } from './evaluator/runtime';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type {
@@ -3089,10 +3089,16 @@ class Evaluator {
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
-  fileWriters: JsonlFileWriter[];
+  fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  runtime: EvaluatorRuntime;
 
-  constructor(testSuite: TestSuite, evalRecord: Eval, options: InternalEvaluateOptions) {
+  constructor(
+    testSuite: TestSuite,
+    evalRecord: Eval,
+    options: InternalEvaluateOptions,
+    runtime: EvaluatorRuntime,
+  ) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
     this.options = options;
@@ -3105,16 +3111,10 @@ class Evaluator {
     this.conversations = {};
     this.registers = {};
 
-    const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
-      ? evalRecord.config.outputPath.filter((p) => getOutputFileFormat(p) === 'jsonl')
-      : evalRecord.config.outputPath &&
-          getOutputFileFormat(evalRecord.config.outputPath) === 'jsonl'
-        ? [evalRecord.config.outputPath]
-        : [];
-
-    this.fileWriters = jsonlFiles.map(
-      (p) => new JsonlFileWriter(p, { append: Boolean(cliState.resume) }),
-    );
+    this.runtime = runtime;
+    this.fileWriters = runtime.createResultWriters(evalRecord.config.outputPath, {
+      append: Boolean(cliState.resume),
+    });
 
     // Create rate limit registry for adaptive concurrency control
     this.rateLimitRegistry = createRateLimitRegistry({
@@ -3230,7 +3230,7 @@ class Evaluator {
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
-      await this.evalRecord.addResult(row);
+      await this.runtime.persistResult(this.evalRecord, row);
     } catch (error) {
       this.evalRecord.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
@@ -3547,7 +3547,7 @@ class Evaluator {
       error,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.evalRecord.addResult(timeoutResult);
+    await this.runtime.persistResult(this.evalRecord, timeoutResult);
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4364,7 +4364,7 @@ class Evaluator {
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.evalRecord.addResult(timeoutResult);
+      await this.runtime.persistResult(this.evalRecord, timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -4751,7 +4751,6 @@ class Evaluator {
     let evaluationError: unknown;
     try {
       otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.evalRecord.id);
-
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
         const otelConfig = getDefaultOtelConfig();
@@ -4847,7 +4846,8 @@ export function evaluate(
   testSuite: TestSuite,
   evalRecord: Eval,
   options: InternalEvaluateOptions,
+  runtime: EvaluatorRuntime = nodeEvaluatorRuntime,
 ): Promise<Eval> {
-  const ev = new Evaluator(testSuite, evalRecord, options);
+  const ev = new Evaluator(testSuite, evalRecord, options, runtime);
   return ev.evaluate();
 }
