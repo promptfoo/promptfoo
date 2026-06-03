@@ -32,34 +32,19 @@ export function getRemoteGenerationUrl(): string {
 /**
  * Builds headers for a remote-generation request.
  *
- * Adds `Authorization: Bearer <apiKey>` when the user is logged into cloud AND the
- * request targets the configured cloud host (incl. on-prem). The global fetch
- * auth-injection only attaches the token for the public cloud origin, so on-prem
- * deployments need the header set explicitly (mirrors src/util/cloud.ts / share.ts).
- *
- * The token is intentionally NOT added when `PROMPTFOO_REMOTE_GENERATION_URL` is set,
- * since that env var redirects remote generation to a (possibly third-party)
- * self-hosted endpoint that must not receive the Promptfoo Cloud credential.
+ * Authentication is injected centrally at the fetch layer (monkeyPatchFetch, mirrored
+ * in cache.ts for cache-key parity) and only when the request URL's origin matches the
+ * configured Promptfoo Cloud host (cloudConfig.getApiHost(), incl. on-prem). Keeping
+ * this helper auth-free prevents cloud credentials from leaking to custom
+ * remote-generation endpoints.
  */
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     'Content-Type': 'application/json',
     ...extraHeaders,
   };
-
-  if (!getEnvString('PROMPTFOO_REMOTE_GENERATION_URL')) {
-    const cloudConfig = new CloudConfig();
-    if (cloudConfig.isEnabled()) {
-      const apiKey = cloudConfig.getApiKey();
-      if (apiKey) {
-        headers.Authorization = `Bearer ${apiKey}`;
-      }
-    }
-  }
-
-  return headers;
 }
 
 /**
