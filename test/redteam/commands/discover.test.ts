@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
@@ -116,10 +116,13 @@ describe('normalizeTargetPurposeDiscoveryResult', () => {
 
 describe('doTargetPurposeDiscovery', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
     mockSingleBar.mockImplementation(function () {
       return mockProgressBar;
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should handle empty prompt', async () => {
@@ -176,6 +179,9 @@ describe('doTargetPurposeDiscovery', () => {
     });
 
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+    expect(mockProgressBar.start).toHaveBeenCalledWith(5, 0);
+    expect(mockProgressBar.increment).toHaveBeenCalledTimes(2);
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
 
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
@@ -219,6 +225,7 @@ describe('doTargetPurposeDiscovery', () => {
     await expect(doTargetPurposeDiscovery(target)).rejects.toThrow('Too many retries, giving up.');
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(10);
     expect(target.callApi).toHaveBeenCalledTimes(9);
+    expect(mockProgressBar.start).toHaveBeenCalledWith(5, 0);
     expect(mockProgressBar.increment).toHaveBeenCalledTimes(10);
     expect(mockProgressBar.stop).toHaveBeenCalledOnce();
     expect(mockProgressBar.increment.mock.invocationCallOrder.at(-1)!).toBeLessThan(
@@ -397,7 +404,7 @@ describe('doTargetPurposeDiscovery', () => {
       callApi: vi.fn(),
     };
 
-    const error = await doTargetPurposeDiscovery(target, undefined, false).catch((e) => e);
+    const error = await doTargetPurposeDiscovery(target).catch((e) => e);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain(
       'Remote server returned HTTP 400: Unknown task: target-purpose-discovery',
@@ -406,6 +413,8 @@ describe('doTargetPurposeDiscovery', () => {
     // Should not retry — fetch should only be called once
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
     expect(target.callApi).not.toHaveBeenCalled();
+    expect(mockProgressBar.increment).toHaveBeenCalledOnce();
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
   });
 
   it('should surface an auth hint on 401 responses', async () => {
