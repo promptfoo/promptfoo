@@ -2601,6 +2601,43 @@ describe('runAssertion', () => {
       });
     });
 
+    it('should not xfail similarity provider errors', async () => {
+      const output = 'Test output';
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+        if (text === 'Similar output') {
+          return Promise.resolve({
+            error: 'Embedding provider unavailable',
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          });
+        }
+        return Promise.resolve({
+          embedding: [1, 0, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'similar',
+          value: 'Similar output',
+          xfail: true,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Embedding provider unavailable',
+        metadata: {
+          similarityProviderError: true,
+        },
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+
     it('should pass for a similar assertion with an array of string values', async () => {
       const output = 'Test output';
 

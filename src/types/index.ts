@@ -569,6 +569,9 @@ export interface GradingResult {
     // Set when webhook assertion transport, response status, or parsing fails.
     // Expected-failure handling must not turn broken assertion services into passes.
     webhookError?: true;
+    // Set when similarity assertions cannot get usable embedding/similarity
+    // provider output. Expected-failure handling must not hide grader outages.
+    similarityProviderError?: true;
     [key: string]: any;
   };
 }

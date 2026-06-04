@@ -97,6 +97,16 @@ function buildSimilarityResult(
   };
 }
 
+function similarityProviderFail(
+  reason: string,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  return {
+    ...fail(reason, tokensUsed),
+    metadata: { similarityProviderError: true },
+  };
+}
+
 async function calculateProviderSimilarity(
   finalProvider: ApiEmbeddingProvider | ApiSimilarityProvider,
   expected: string,
@@ -108,13 +118,16 @@ async function calculateProviderSimilarity(
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
-      return fail(similarityResp.error, tokensUsed);
+      return similarityProviderFail(similarityResp.error, tokensUsed);
     }
     if (similarityResp.similarity == null) {
-      return fail('Unknown error fetching similarity', tokensUsed);
+      return similarityProviderFail('Unknown error fetching similarity', tokensUsed);
     }
     if (!Number.isFinite(similarityResp.similarity)) {
-      return fail(`Invalid similarity score: ${similarityResp.similarity}`, tokensUsed);
+      return similarityProviderFail(
+        `Invalid similarity score: ${similarityResp.similarity}`,
+        tokensUsed,
+      );
     }
     return similarityResp.similarity;
   }
@@ -123,7 +136,7 @@ async function calculateProviderSimilarity(
     'callEmbeddingApi' in finalProvider ? finalProvider.callEmbeddingApi : undefined;
   if (typeof callEmbeddingApi !== 'function') {
     if ('callSimilarityApi' in finalProvider) {
-      return fail(
+      return similarityProviderFail(
         `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
         tokensUsed,
       );
@@ -142,14 +155,14 @@ async function calculateProviderSimilarity(
   accumulateTokenUsage(tokensUsed, mergedUsage);
 
   if (expectedEmbedding.error || outputEmbedding.error) {
-    return fail(
+    return similarityProviderFail(
       expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
       tokensUsed,
     );
   }
 
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
-    return fail('Embedding not found', tokensUsed);
+    return similarityProviderFail('Embedding not found', tokensUsed);
   }
 
   return calculateSimilarityScore(

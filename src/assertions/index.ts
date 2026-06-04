@@ -452,7 +452,8 @@ function applyProviderXFail(
   if (
     result.metadata?.graderError === true ||
     result.metadata?.scriptError === true ||
-    result.metadata?.webhookError === true
+    result.metadata?.webhookError === true ||
+    result.metadata?.similarityProviderError === true
   ) {
     return result;
   }

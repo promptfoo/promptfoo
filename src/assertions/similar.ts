@@ -52,6 +52,12 @@ export const handleSimilar = async ({
           ...result,
         };
       }
+      if (result.metadata?.similarityProviderError === true) {
+        return {
+          assertion,
+          ...result,
+        };
+      }
       if (result.score < minScore) {
         minScore = result.score;
       }
