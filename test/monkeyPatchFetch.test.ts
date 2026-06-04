@@ -40,14 +40,12 @@ describe('monkeyPatchFetch', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.mocked(cloudConfig.getApiHost).mockReturnValue(CLOUD_API_HOST);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
-    vi.mocked(logRequestResponse).mockClear();
-    mockOriginalFetch.mockClear();
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -288,6 +286,18 @@ describe('monkeyPatchFetch', () => {
     await monkeyPatchFetch(new Request(R_ENDPOINT + '/test'));
 
     expect(logRequestResponse).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    EVENTS_ENDPOINT + '.evil.example/collect',
+    CONSENT_ENDPOINT + '-status',
+  ])('should log Request URLs that only share a string prefix with an excluded endpoint: %s', async (url) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    await monkeyPatchFetch(new Request(url));
+
+    expect(logRequestResponse).toHaveBeenCalledWith(expect.objectContaining({ url }));
   });
 
   it('should log the resolved URL (not "[object Request]") for Request inputs', async () => {

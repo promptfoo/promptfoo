@@ -24,6 +24,25 @@ function getRequestUrlString(url: string | URL | Request): string {
   return url instanceof Request ? url.url : url.toString();
 }
 
+function matchesNoLogUrl(url: string, noLogUrl: string): boolean {
+  try {
+    const target = new URL(url);
+    const excluded = new URL(noLogUrl);
+    if (target.origin !== excluded.origin) {
+      return false;
+    }
+
+    const excludedPath = excluded.pathname.replace(/\/+$/, '');
+    return (
+      excludedPath === '' ||
+      target.pathname === excludedPath ||
+      target.pathname.startsWith(`${excludedPath}/`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function getSafeUrlForConnectionLog(url: string | URL | Request): string {
   return sanitizeUrl(getRequestUrlString(url));
 }
@@ -87,10 +106,9 @@ function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
 }
 
 /**
- * Returns `headers` with `name: value` set, preserving the input shape: a plain object stays
- * a plain object (so object callers keep object headers), while a `Headers` instance or
- * `[name, value][]` array is merged through `Headers` so existing entries are never dropped
- * (a naive object spread would discard them).
+ * Returns `headers` with `name: value` set. Plain objects retain their shape, while a
+ * `Headers` instance or `[name, value][]` array is normalized through `Headers` so existing
+ * entries are never dropped (a naive object spread would discard them).
  */
 function setHeader(headers: HeadersInit | undefined, name: string, value: string): HeadersInit {
   if (headers instanceof Headers || Array.isArray(headers)) {
@@ -112,7 +130,7 @@ export async function monkeyPatchFetch(
   const urlString = getRequestUrlString(url);
   const callerHeaders = getEffectiveHeaders(url, options?.headers);
   const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
-  const logEnabled = !NO_LOG_URLS.some((logUrl) => urlString.startsWith(logUrl)) && !isSilent;
+  const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
   const opts: RequestInit = {
     ...options,
