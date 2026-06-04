@@ -981,20 +981,18 @@ describe('logger', () => {
       expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
-    it('should redact webhook credentials embedded in URL paths', async () => {
-      const secret = 'slack-opaque-secret';
+    it('should redact secret-looking credentials embedded in URL paths', async () => {
+      const secret = `sk-${'a'.repeat(32)}`;
 
       await logger.logRequestResponse({
-        url: `https://hooks.slack.com/services/T000/B000/${secret}`,
+        url: `https://api.example.com/models/${secret}`,
         requestBody: null,
         requestMethod: 'POST',
         response: mockResponse as Response,
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain(
-        '"url": "https://hooks.slack.com/services/T000/B000/[REDACTED]"',
-      );
+      expect(loggedMessage).toContain('"url": "https://api.example.com/models/[REDACTED]"');
       expect(loggedMessage).not.toContain(secret);
     });
 

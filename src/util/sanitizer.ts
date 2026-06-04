@@ -556,23 +556,6 @@ function redactUrlPathCredentials(url: URL): void {
     }
   }
 
-  const hostname = url.hostname.toLowerCase();
-  if (hostname === 'hooks.slack.com' && decodedSegments[1] === 'services' && segments.length >= 5) {
-    segments[4] = REDACTED;
-    changed = true;
-  } else if (
-    (hostname === 'discord.com' ||
-      hostname.endsWith('.discord.com') ||
-      hostname === 'discordapp.com' ||
-      hostname.endsWith('.discordapp.com')) &&
-    decodedSegments[1] === 'api' &&
-    decodedSegments[2] === 'webhooks' &&
-    segments.length >= 5
-  ) {
-    segments[4] = REDACTED;
-    changed = true;
-  }
-
   if (changed) {
     url.pathname = segments.join('/');
   }

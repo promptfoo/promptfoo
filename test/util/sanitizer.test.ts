@@ -1438,27 +1438,6 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe(url);
     });
 
-    it.each([
-      [
-        'https://hooks.slack.com/services/T000/B000/slack-opaque-secret',
-        'https://hooks.slack.com/services/T000/B000/[REDACTED]',
-      ],
-      [
-        'https://discord.com/api/webhooks/1234/discord-opaque-secret',
-        'https://discord.com/api/webhooks/1234/[REDACTED]',
-      ],
-      [
-        'https://hooks.slack.com/serv%69ces/T000/B000/slack-opaque-secret',
-        'https://hooks.slack.com/serv%69ces/T000/B000/[REDACTED]',
-      ],
-      [
-        'https://discord.com/%61pi/webhooks/1234/discord-opaque-secret',
-        'https://discord.com/%61pi/webhooks/1234/[REDACTED]',
-      ],
-    ])('should redact known webhook path credentials in %s', (url, expected) => {
-      expect(sanitizeUrl(url)).toBe(expected);
-    });
-
     it('should redact secret-looking generic path segments', () => {
       const secret = 'sk-' + 'a'.repeat(32);
       expect(sanitizeUrl(`https://example.com/download/${secret}/artifact`)).toBe(
