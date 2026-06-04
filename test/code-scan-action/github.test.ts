@@ -4,7 +4,7 @@
 
 import * as github from '@actions/github';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
+import { getGitHubContext, partitionReviewCommentsByDiff } from '../../code-scan-action/src/github';
 import type { Octokit } from '@octokit/rest';
 
 const mocks = vi.hoisted(() => {
@@ -103,15 +103,17 @@ describe('GitHub API Client', () => {
         },
       },
     };
-    mocks.Octokit.mockImplementation(() => ({
-      pulls: {
-        createReview: vi.fn().mockResolvedValue({}),
-        get: vi.fn().mockResolvedValue({ data: mockDiff }),
-      },
-      issues: {
-        createComment: vi.fn().mockResolvedValue({}),
-      },
-    }));
+    mocks.Octokit.mockImplementation(function () {
+      return {
+        pulls: {
+          createReview: vi.fn().mockResolvedValue({}),
+          get: vi.fn().mockResolvedValue({ data: mockDiff }),
+        },
+        issues: {
+          createComment: vi.fn().mockResolvedValue({}),
+        },
+      } as unknown as Octokit;
+    });
   });
 
   describe('getGitHubContext', () => {
@@ -138,7 +140,7 @@ describe('GitHub API Client', () => {
     });
   });
 
-  describe('postReviewComments', () => {
+  describe('partitionReviewCommentsByDiff', () => {
     const mockContext = {
       owner: 'test-owner',
       repo: 'test-repo',
@@ -146,304 +148,33 @@ describe('GitHub API Client', () => {
       sha: 'abc123',
     };
 
-    it('should post review comments with Octokit', async () => {
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
-      });
-
-      const comments = [
+    it('clamps comments to visible diff lines and routes unmapped files to general comments', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
         {
           file: 'src/auth.ts',
-          line: 42,
-          finding: 'SQL injection vulnerability',
-        },
-      ];
-
-      await postReviewComments('fake-token', mockContext, comments);
-
-      expect(mockCreateReview).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        pull_number: 123,
-        event: 'COMMENT',
-        comments: [
-          {
-            path: 'src/auth.ts',
-            line: 42,
-            start_line: undefined,
-            side: 'RIGHT',
-            start_side: undefined,
-            body: 'SQL injection vulnerability',
-          },
-        ],
-      });
-    });
-
-    it('should handle single line comments when startLine equals line', async () => {
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
-      });
-
-      const comments = [
-        {
-          file: 'src/auth.ts',
-          line: 42,
-          startLine: 42, // Same as line - should be treated as single line
-          finding: 'Security issue',
-        },
-      ];
-
-      await postReviewComments('fake-token', mockContext, comments);
-
-      expect(mockCreateReview).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        pull_number: 123,
-        event: 'COMMENT',
-        comments: [
-          {
-            path: 'src/auth.ts',
-            line: 42,
-            start_line: undefined, // Should be undefined when startLine === line
-            side: 'RIGHT',
-            start_side: undefined, // Should be undefined when startLine === line
-            body: 'Security issue',
-          },
-        ],
-      });
-    });
-
-    it('should handle line range comments when startLine differs from line', async () => {
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
-      });
-
-      const comments = [
-        {
-          file: 'src/auth.ts',
-          line: 45,
-          startLine: 40, // Different from line - should be included
-          finding: 'Multi-line issue',
-        },
-      ];
-
-      await postReviewComments('fake-token', mockContext, comments);
-
-      expect(mockCreateReview).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        pull_number: 123,
-        event: 'COMMENT',
-        comments: [
-          {
-            path: 'src/auth.ts',
-            line: 45,
-            start_line: 40, // Should be included when startLine < line
-            side: 'RIGHT',
-            start_side: 'RIGHT', // Should be included when startLine < line
-            body: 'Multi-line issue',
-          },
-        ],
-      });
-    });
-
-    it('should handle mixed single line and range comments', async () => {
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
-      });
-
-      const comments = [
-        {
-          file: 'src/auth.ts',
-          line: 42,
-          startLine: 42, // Same line
-          finding: 'Issue 1',
+          line: 500,
+          finding: 'Finding in a changed file',
         },
         {
-          file: 'src/auth.ts',
-          line: 50,
-          startLine: 45, // Range
-          finding: 'Issue 2',
-        },
-        {
-          file: 'src/auth.ts',
-          line: 60,
-          // No startLine
-          finding: 'Issue 3',
-        },
-      ];
-
-      await postReviewComments('fake-token', mockContext, comments);
-
-      expect(mockCreateReview).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        pull_number: 123,
-        event: 'COMMENT',
-        comments: [
-          {
-            path: 'src/auth.ts',
-            line: 42,
-            start_line: undefined,
-            side: 'RIGHT',
-            start_side: undefined,
-            body: 'Issue 1',
-          },
-          {
-            path: 'src/auth.ts',
-            line: 50,
-            start_line: 45,
-            side: 'RIGHT',
-            start_side: 'RIGHT',
-            body: 'Issue 2',
-          },
-          {
-            path: 'src/auth.ts',
-            line: 60,
-            start_line: undefined,
-            side: 'RIGHT',
-            start_side: undefined,
-            body: 'Issue 3',
-          },
-        ],
-      });
-    });
-
-    it('should filter out comments without files', async () => {
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
-      });
-
-      const comments = [
-        {
-          file: 'src/auth.ts',
-          line: 42,
-          finding: 'Valid comment',
-        },
-        {
-          file: null,
-          line: null,
-          finding: 'Invalid comment - no file',
-        },
-      ];
-
-      await postReviewComments('fake-token', mockContext, comments);
-
-      expect(mockCreateReview).toHaveBeenCalledWith(
-        expect.objectContaining({
-          comments: [
-            {
-              path: 'src/auth.ts',
-              line: 42,
-              start_line: undefined,
-              side: 'RIGHT',
-              start_side: undefined,
-              body: 'Valid comment',
-            },
-          ],
-        }),
-      );
-    });
-
-    it('should post file-scoped comments without a line as general comments with context', async () => {
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      const mockCreateComment = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-          issues: {
-            createComment: mockCreateComment,
-          },
-        } as unknown as Octokit;
-      });
-
-      await postReviewComments('fake-token', mockContext, [
-        {
-          file: 'src/auth.ts',
-          line: null,
-          finding: 'File-only issue',
+          file: 'src/outside-diff.ts',
+          line: 12,
+          finding: 'Finding outside the diff',
         },
       ]);
 
-      expect(mockCreateReview).not.toHaveBeenCalled();
-      expect(mockCreateComment).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        issue_number: 123,
-        body: '**src/auth.ts**\n\nFile-only issue',
-      });
-    });
-
-    it('should post summary comment on error', async () => {
-      const mockCreateReview = vi.fn().mockRejectedValue(new Error('API error'));
-      const mockCreateComment = vi.fn().mockResolvedValue({});
-      mocks.Octokit.mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-          issues: {
-            createComment: mockCreateComment,
-          },
-        } as unknown as Octokit;
-      });
-
-      const comments = [
-        {
+      expect(result.lineComments).toEqual([
+        expect.objectContaining({
           file: 'src/auth.ts',
-          line: 42,
-          finding: 'SQL injection',
-        },
-      ];
-
-      await postReviewComments('fake-token', mockContext, comments);
-
-      expect(mockCreateComment).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        issue_number: 123,
-        body: expect.stringContaining('## LLM Security Scan Results'),
-      });
-      expect(mockCreateComment).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        issue_number: 123,
-        body: expect.stringContaining('src/auth.ts:42'),
-      });
+          line: 61,
+        }),
+      ]);
+      expect(result.generalComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/outside-diff.ts',
+          line: 12,
+        }),
+      ]);
     });
   });
 });

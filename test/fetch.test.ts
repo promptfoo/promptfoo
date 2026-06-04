@@ -56,8 +56,8 @@ vi.mock('../src/logger', () => ({
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
-  CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
   },
 }));
@@ -161,6 +161,7 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -1310,6 +1311,22 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
+  it('redacts URL credentials and sensitive query values in retry failure logs', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    const url =
+      'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+
+    await expect(fetchWithRetries(url, {}, 1000, 0)).rejects.toThrow(
+      'Request failed after 0 retries: Error: Network error',
+    );
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).not.toContain('webhook-user');
+    expect(debugLogs).not.toContain('webhook-password');
+    expect(debugLogs).not.toContain('webhook-secret');
+  });
+
   it('should not sleep after the final attempt', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -1367,6 +1384,24 @@ describe('fetchWithRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('redacts sensitive URL query values in rate-limit logs', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+      }),
+    );
+
+    await expect(
+      fetchWithRetries('https://n8n.example.com/webhook/agent?token=webhook-secret', {}, 1000, 0),
+    ).rejects.toThrow(/Rate limit exceeded/);
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).not.toContain('webhook-secret');
   });
 
   it('should respect maximum retry count', async () => {

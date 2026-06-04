@@ -19,6 +19,24 @@ import type { ParsedGitHubPR } from '../../types/codeScan';
 export const ALL_CLEAR_MESSAGE = '👍 All Clear';
 
 /**
+ * Whether a finding can be posted to a pull request as either an inline or general comment.
+ */
+export function isPrPostableFinding(comment: Comment): boolean {
+  return Boolean(comment.finding) && comment.severity !== CodeScanSeverity.NONE;
+}
+
+/**
+ * Whether any findings can be posted to a pull request.
+ */
+export function hasPrPostableFindings(comments: Comment[]): boolean {
+  return comments.some(isPrPostableFinding);
+}
+
+function hasInlineCommentLocation(comment: Comment): boolean {
+  return Boolean(comment.file) && comment.line != null && comment.line > 0;
+}
+
+/**
  * Parse GitHub PR string
  *
  * @param prString - GitHub PR string in format: owner/repo#number (e.g., promptfoo/promptfoo#123)
@@ -65,12 +83,11 @@ export function prepareComments(
     return rankB - rankA;
   });
 
-  // Separate line-specific comments from general PR comments
-  // Filter out severity='none' comments - they shouldn't be posted separately
-  const lineComments = sortedComments.filter((c) => c.file && c.line != null && c.finding);
-  const generalComments = sortedComments.filter(
-    (c) => (!c.file || c.line == null) && c.finding && c.severity !== CodeScanSeverity.NONE,
-  );
+  // Only findings with a valid line can become inline review comments. File-only and
+  // fileless findings remain useful, but must go through the general-comment path.
+  const postableComments = sortedComments.filter(isPrPostableFinding);
+  const lineComments = postableComments.filter(hasInlineCommentLocation);
+  const generalComments = postableComments.filter((comment) => !hasInlineCommentLocation(comment));
 
   // Check if we only have "none" severity comments (i.e., no real vulnerabilities)
   const hasOnlyNoneSeverity =

@@ -277,42 +277,33 @@ async function postInvalidLineComments(
 }
 
 /**
- * Post review comments on the PR
- * @param token GitHub token
- * @param context GitHub PR context
- * @param comments Structured comments to post
+ * Validate review-comment locations against the current PR diff.
+ * Comments that cannot be placed inline are returned separately for general posting.
  */
-export async function postReviewComments(
-  token: string,
+async function partitionReviewCommentsWithOctokit(
+  octokit: Octokit,
   context: PullRequestContext,
   comments: Comment[],
-): Promise<void> {
-  if (comments.length === 0) {
-    core.info('No comments to post');
-    return;
-  }
-
-  const octokit = new Octokit({ auth: token });
-
-  // Fetch PR diff to validate line numbers
+): Promise<{
+  lineComments: Comment[];
+  generalComments: Comment[];
+  invalidLineComments: Comment[];
+}> {
   const validRanges = await getPRDiffRanges(octokit, context);
-
-  // Process comments: clamp line numbers and handle invalid ones
-  const processedComments: Comment[] = [];
+  const lineComments: Comment[] = [];
+  const generalComments: Comment[] = [];
   const invalidLineComments: Comment[] = [];
 
   for (const comment of comments) {
     if (!comment.file || comment.line == null) {
-      // Already a general comment
-      processedComments.push(comment);
+      generalComments.push(comment);
       continue;
     }
 
     const clamped = clampCommentToValidRange(comment, validRanges);
     if (clamped) {
-      processedComments.push(clamped);
+      lineComments.push(clamped);
     } else {
-      // File not in diff - convert to general comment
       core.warning(
         `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
       );
@@ -320,19 +311,14 @@ export async function postReviewComments(
     }
   }
 
-  // Separate line-specific comments from general PR comments
-  const lineComments = processedComments.filter((c) => c.file && c.line != null && c.finding);
-  const generalComments = processedComments.filter((c) => (!c.file || c.line == null) && c.finding);
+  return { lineComments, generalComments, invalidLineComments };
+}
 
-  await postLineComments(octokit, context, lineComments);
-  await postGeneralComments(octokit, context, generalComments);
-  await postInvalidLineComments(octokit, context, invalidLineComments);
-
-  if (
-    lineComments.length === 0 &&
-    generalComments.length === 0 &&
-    invalidLineComments.length === 0
-  ) {
-    core.warning('No valid comments to post');
-  }
+export async function partitionReviewCommentsByDiff(
+  token: string,
+  context: PullRequestContext,
+  comments: Comment[],
+) {
+  const octokit = new Octokit({ auth: token });
+  return partitionReviewCommentsWithOctokit(octokit, context, comments);
 }
