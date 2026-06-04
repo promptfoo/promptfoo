@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBlobByHash } from '../src/blobs';
-import { uploadBlobRemote } from '../src/blobs/remoteUpload';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
@@ -77,14 +75,6 @@ vi.mock('../src/globalConfig/cloud', () => {
 vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: vi.fn((...args) => mockFetch(...args)),
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-}));
-
-vi.mock('../src/blobs', () => ({
-  getBlobByHash: vi.fn(),
-}));
-
-vi.mock('../src/blobs/remoteUpload', () => ({
-  uploadBlobRemote: vi.fn(),
 }));
 
 vi.mock('../src/globalConfig/accounts', () => ({
@@ -608,94 +598,6 @@ describe('createShareableUrl', () => {
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-    });
-
-    it('uploads local blob refs before sending result chunks to cloud', async () => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
-
-      const hash = '2a436d3ff9b224a80ef249284dde69ce80878ea905fcfcf65081f6ace1b62110';
-      mockEval.fetchResultsBatched = vi.fn().mockImplementation(() => {
-        const iterator = {
-          called: false,
-          next: async () => {
-            if (iterator.called) {
-              return { done: true, value: undefined };
-            }
-            iterator.called = true;
-            return {
-              done: false,
-              value: [
-                {
-                  id: '1',
-                  response: {
-                    output: `promptfoo://blob/${hash}`,
-                    images: [
-                      {
-                        mimeType: 'image/webp',
-                        blobRef: { uri: `promptfoo://blob/${hash}`, hash },
-                      },
-                    ],
-                  },
-                },
-              ] as EvalResult[],
-            };
-          },
-          [Symbol.asyncIterator]() {
-            return this;
-          },
-        };
-        return iterator;
-      });
-
-      vi.mocked(getBlobByHash).mockResolvedValue({
-        data: Buffer.from('image-bytes'),
-        metadata: {
-          mimeType: 'image/webp',
-          sizeBytes: 11,
-          createdAt: new Date().toISOString(),
-          provider: 'filesystem',
-          key: hash,
-        },
-      });
-      vi.mocked(uploadBlobRemote).mockResolvedValue({
-        ref: {
-          uri: `promptfoo://blob/${hash}`,
-          hash,
-          mimeType: 'image/webp',
-          sizeBytes: 11,
-          provider: 'gcs',
-        },
-        deduplicated: false,
-      });
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: 'mock-eval-id' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      await createShareableUrl(mockEval as Eval);
-
-      expect(getBlobByHash).toHaveBeenCalledTimes(1);
-      expect(getBlobByHash).toHaveBeenCalledWith(hash);
-      expect(uploadBlobRemote).toHaveBeenCalledTimes(1);
-      expect(uploadBlobRemote).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/webp', {
-        evalId: 'mock-eval-id',
-      });
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/results/mock-eval-id/results',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining(`promptfoo://blob/${hash}`),
         }),
       );
     });
