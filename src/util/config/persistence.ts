@@ -1,17 +1,24 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { isApiProvider } from '../../types/providers';
+interface ProviderMetadata {
+  label?: string;
+  transform?: unknown;
+  delay?: number;
+  inputs?: unknown;
+  config?: unknown;
+}
 
-import type { UnifiedConfig } from '../../types/index';
-import type {
-  ApiProvider,
-  ProviderFunction,
-  ProviderOptions,
-  ProvidersConfig,
-} from '../../types/providers';
+interface ReplayableProvider extends ProviderMetadata {
+  id?: string;
+}
 
-type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+interface ApiProviderLike extends ProviderMetadata {
+  id: () => string;
+  callApi: (...args: unknown[]) => unknown;
+}
+
+type ProviderFunctionWithMetadata = ((...args: unknown[]) => unknown) & ProviderMetadata;
+type ConfigWithProviders = { providers?: unknown };
 
 const PERSISTED_PROVIDER_KEYS = ['label', 'transform', 'delay', 'inputs', 'config'] as const;
 
@@ -23,10 +30,8 @@ const LEGACY_PROVIDER_SUMMARY_KEYS = new Set<string>([
   'config',
 ]);
 
-function getProviderMetadata(
-  provider: Partial<ProviderFunctionWithMetadata>,
-): Partial<ProviderOptions> {
-  const metadata: Partial<ProviderOptions> = {};
+function getProviderMetadata(provider: Partial<ProviderMetadata>): ProviderMetadata {
+  const metadata: ProviderMetadata = {};
   for (const key of PERSISTED_PROVIDER_KEYS) {
     const value = provider[key];
     if (value !== undefined) {
@@ -36,8 +41,17 @@ function getProviderMetadata(
   return metadata;
 }
 
+function isApiProviderLike(provider: unknown): provider is ApiProviderLike {
+  if (typeof provider !== 'object' || provider === null) {
+    return false;
+  }
+
+  const candidate = provider as Record<string, unknown>;
+  return typeof candidate.id === 'function' && typeof candidate.callApi === 'function';
+}
+
 function normalizeProviderForPersistence(provider: unknown): unknown {
-  if (isApiProvider(provider)) {
+  if (isApiProviderLike(provider)) {
     return {
       id: provider.id(),
       ...getProviderMetadata(provider),
@@ -57,13 +71,11 @@ function normalizeProviderForPersistence(provider: unknown): unknown {
   return provider;
 }
 
-function normalizeProvidersForPersistence(
-  providers: ProvidersConfig | undefined,
-): ProvidersConfig | undefined {
+function normalizeProvidersForPersistence(providers: unknown): unknown {
   if (!Array.isArray(providers)) {
-    return normalizeProviderForPersistence(providers) as ProvidersConfig | undefined;
+    return normalizeProviderForPersistence(providers);
   }
-  return providers.map(normalizeProviderForPersistence) as ProvidersConfig;
+  return providers.map(normalizeProviderForPersistence);
 }
 
 /**
@@ -71,23 +83,23 @@ function normalizeProvidersForPersistence(
  * function-valued `id` and `callApi` fields that JSON persistence drops, leaving
  * only display metadata such as `{ label, delay }`.
  */
-export function normalizeConfigForPersistence<T extends Partial<UnifiedConfig>>(config: T): T {
+export function normalizeConfigForPersistence<T extends object>(config: T): T {
   if (!('providers' in config)) {
     return config;
   }
 
   return {
     ...config,
-    providers: normalizeProvidersForPersistence(config.providers),
-  };
+    providers: normalizeProvidersForPersistence((config as ConfigWithProviders).providers),
+  } as T;
 }
 
-type ResultProviderLookup = Map<string, ProviderOptions[]>;
+type ResultProviderLookup = Map<string, ReplayableProvider[]>;
 
 function addResultProvider(
   lookup: ResultProviderLookup,
   key: string,
-  resultProvider: ProviderOptions,
+  resultProvider: ReplayableProvider,
 ) {
   const providers = lookup.get(key) ?? [];
   if (!providers.some((provider) => provider.id === resultProvider.id)) {
@@ -96,7 +108,7 @@ function addResultProvider(
   }
 }
 
-function buildResultProviderLookup(resultProviders: ProviderOptions[] = []) {
+function buildResultProviderLookup(resultProviders: ReplayableProvider[] = []) {
   const lookup: ResultProviderLookup = new Map();
   for (const resultProvider of resultProviders) {
     if (typeof resultProvider.id === 'string' && resultProvider.id.length > 0) {
@@ -108,6 +120,7 @@ function buildResultProviderLookup(resultProviders: ProviderOptions[] = []) {
   }
   return lookup;
 }
+
 function isLegacyProviderSummary(
   provider: unknown,
 ): provider is { label: string; config?: unknown } {
@@ -154,18 +167,17 @@ function normalizeLegacyProviderSummary(
     id: resultProvider?.id ?? provider.label,
   };
 }
+
 function normalizeLegacyProviders(
-  providers: ProvidersConfig | undefined,
+  providers: unknown,
   resultProviderLookup: ResultProviderLookup,
-): ProvidersConfig | undefined {
+): unknown {
   if (!Array.isArray(providers)) {
-    return normalizeLegacyProviderSummary(providers, resultProviderLookup) as
-      | ProvidersConfig
-      | undefined;
+    return normalizeLegacyProviderSummary(providers, resultProviderLookup);
   }
   return providers.map((provider) =>
     normalizeLegacyProviderSummary(provider, resultProviderLookup),
-  ) as ProvidersConfig;
+  );
 }
 
 /**
@@ -173,15 +185,18 @@ function normalizeLegacyProviders(
  * It is intentionally scoped to persisted eval replay; fresh config validation
  * should still reject label-only providers.
  */
-export async function normalizePersistedConfigForResume<T extends Partial<UnifiedConfig>>(
+export async function normalizePersistedConfigForResume<T extends object>(
   config: T,
-  loadResultProviders?: () => Promise<ProviderOptions[]>,
+  loadResultProviders?: () => Promise<ReplayableProvider[]>,
 ): Promise<T> {
   if (!('providers' in config)) {
     return config;
   }
 
-  const providers = Array.isArray(config.providers) ? config.providers : [config.providers];
+  const configWithProviders = config as ConfigWithProviders;
+  const providers = Array.isArray(configWithProviders.providers)
+    ? configWithProviders.providers
+    : [configWithProviders.providers];
   if (!providers.some(isLegacyProviderSummary)) {
     return config;
   }
@@ -190,8 +205,8 @@ export async function normalizePersistedConfigForResume<T extends Partial<Unifie
   return {
     ...config,
     providers: normalizeLegacyProviders(
-      config.providers,
+      configWithProviders.providers,
       buildResultProviderLookup(resultProviders),
     ),
-  };
+  } as T;
 }
