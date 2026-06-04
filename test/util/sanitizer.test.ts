@@ -1438,13 +1438,6 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe(url);
     });
 
-    it('should redact secret-looking generic path segments', () => {
-      const secret = 'sk-' + 'a'.repeat(32);
-      expect(sanitizeUrl(`https://example.com/download/${secret}/artifact`)).toBe(
-        'https://example.com/download/[REDACTED]/artifact',
-      );
-    });
-
     it('should handle data URLs', () => {
       const url = 'data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==';
       expect(sanitizeUrl(url)).toBe(url);

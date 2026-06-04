@@ -981,21 +981,6 @@ describe('logger', () => {
       expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
-    it('should redact secret-looking credentials embedded in URL paths', async () => {
-      const secret = `sk-${'a'.repeat(32)}`;
-
-      await logger.logRequestResponse({
-        url: `https://api.example.com/models/${secret}`,
-        requestBody: null,
-        requestMethod: 'POST',
-        response: mockResponse as Response,
-      });
-
-      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('"url": "https://api.example.com/models/[REDACTED]"');
-      expect(loggedMessage).not.toContain(secret);
-    });
-
     it('should log failed responses as debug when error flag not set', async () => {
       // @ts-expect-error
       mockResponse.ok = false;

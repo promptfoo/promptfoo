@@ -534,33 +534,6 @@ export const sanitizeBody = sanitizeObject;
 export const sanitizeHeaders = sanitizeObject;
 export const sanitizeQueryParams = sanitizeObject;
 
-function redactUrlPathCredentials(url: URL): void {
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return;
-  }
-
-  const segments = url.pathname.split('/');
-  const decodedSegments = segments.map((segment) => {
-    try {
-      return decodeURIComponent(segment);
-    } catch {
-      return segment;
-    }
-  });
-  let changed = false;
-
-  for (let index = 0; index < segments.length; index++) {
-    if (looksLikeSecret(decodedSegments[index])) {
-      segments[index] = REDACTED;
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    url.pathname = segments.join('/');
-  }
-}
-
 export function sanitizeUrl(url: string): string {
   try {
     // Ensure url is a string and handle edge cases
@@ -598,8 +571,6 @@ export function sanitizeUrl(url: string): string {
       sanitizedUrl.username = '***';
       sanitizedUrl.password = '***';
     }
-
-    redactUrlPathCredentials(sanitizedUrl);
 
     // Sanitize query parameters that might contain sensitive data
     const sensitiveParams =
