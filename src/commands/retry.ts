@@ -15,6 +15,7 @@ import {
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
+import { normalizePersistedConfigForResume } from '../util/config/persistence';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -311,7 +312,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     config = configs.config;
   } else {
     // Load configuration from the original evaluation
-    const configs = await resolveConfigs({}, originalEval.config);
+    const configs = await resolveConfigs(
+      {},
+      normalizePersistedConfigForResume(
+        originalEval.config,
+        await originalEval.getProvidersFromResults(),
+      ),
+    );
     testSuite = configs.testSuite;
     commandLineOptions = configs.commandLineOptions;
     config = configs.config;

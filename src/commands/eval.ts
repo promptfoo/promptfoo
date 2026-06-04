@@ -38,6 +38,7 @@ import {
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
+import { normalizePersistedConfigForResume } from '../util/config/persistence';
 import { maybeLoadFromExternalFile } from '../util/file';
 import {
   printBorder,
@@ -327,7 +328,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveConfigs(
+        {},
+        normalizePersistedConfigForResume(
+          resumeEval.config,
+          await resumeEval.getProvidersFromResults(),
+        ),
+      ));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -389,7 +396,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveConfigs(
+        {},
+        normalizePersistedConfigForResume(
+          resumeEval.config,
+          await resumeEval.getProvidersFromResults(),
+        ),
+      ));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {

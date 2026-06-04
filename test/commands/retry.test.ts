@@ -148,6 +148,46 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
+    it('retries legacy eval configs whose persisted provider only has label metadata', async () => {
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const evalRecord = await Eval.create(
+        {
+          prompts: [prompt.raw],
+          providers: [{ label: 'Echo target', delay: 0 }] as any,
+          tests: [{ vars: { name: 'World' } }],
+        },
+        [prompt],
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const staleResultId = `${evalRecord.id}-legacy-error`;
+      await db.insert(evalResultsTable).values({
+        id: staleResultId,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt,
+        testCase: { vars: { name: 'World' } },
+        provider: { id: 'echo', label: 'Echo target' },
+        response: { output: 'stale error' },
+        error: 'stale error',
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        namedScores: {},
+      });
+
+      await retryCommand(evalRecord.id, {});
+
+      const rows = await db
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, evalRecord.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).not.toBe(staleResultId);
+      expect(rows[0].success).toBe(true);
+    });
+
     it('rewrites the original JSONL output after partial cleanup with an override config', async () => {
       const artifactId = randomUUID();
       const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.JSONL`);
