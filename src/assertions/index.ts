@@ -449,7 +449,11 @@ function applyProviderXFail(
   if (assertion.weight === 0) {
     return result;
   }
-  if (result.metadata?.graderError === true || result.metadata?.scriptError === true) {
+  if (
+    result.metadata?.graderError === true ||
+    result.metadata?.scriptError === true ||
+    result.metadata?.webhookError === true
+  ) {
     return result;
   }
 

@@ -1879,7 +1879,40 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'Webhook error: Webhook response status: 500',
+      metadata: {
+        webhookError: true,
+      },
     });
+  });
+
+  it('should not xfail webhook transport errors', async () => {
+    const output = 'Expected output';
+
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response('', {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { ...webhookAssertion, xfail: true },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Webhook error: Webhook response status: 500',
+      metadata: {
+        webhookError: true,
+      },
+    });
+    expect(result.metadata?.xfail).toBeUndefined();
   });
 
   // Test for rouge-n assertion

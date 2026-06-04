@@ -566,6 +566,9 @@ export interface GradingResult {
     // Set when custom assertion code fails to execute. Expected-failure
     // handling must not turn broken assertion logic into a passing result.
     scriptError?: true;
+    // Set when webhook assertion transport, response status, or parsing fails.
+    // Expected-failure handling must not turn broken assertion services into passes.
+    webhookError?: true;
     [key: string]: any;
   };
 }
