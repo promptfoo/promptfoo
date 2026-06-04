@@ -8,6 +8,7 @@ import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
@@ -58,7 +59,7 @@ export async function textToAudio(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(payload),
       },
       getRequestTimeoutMs(),

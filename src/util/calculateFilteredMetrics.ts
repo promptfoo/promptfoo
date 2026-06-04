@@ -92,7 +92,7 @@ export async function calculateFilteredMetrics(
  * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
  */
 async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
-  const db = getDb();
+  const db = await getDb();
   const query = sql`
     SELECT COUNT(*) as count
     FROM eval_results
@@ -111,7 +111,7 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
  */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
-  const db = getDb();
+  const db = await getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
@@ -237,7 +237,7 @@ async function aggregateNamedScores(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
 ): Promise<void> {
-  const db = getDb();
+  const db = await getDb();
 
   // Use SQLite's json_each to parse JSON in database. When newer results include
   // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
@@ -421,7 +421,7 @@ async function aggregateAssertions(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
 ): Promise<void> {
-  const db = getDb();
+  const db = await getDb();
 
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory

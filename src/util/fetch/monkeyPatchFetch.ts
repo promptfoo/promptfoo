@@ -2,8 +2,9 @@ import { promisify } from 'util';
 import { gzip } from 'zlib';
 
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
-import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
+import { sanitizeUrl } from '../sanitizer';
 
 import type { FetchOptions } from './types';
 
@@ -18,19 +19,61 @@ function isConnectionError(error: Error) {
   );
 }
 
-/**
- * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
- */
+function getSafeUrlForConnectionLog(url: string | URL | Request): string {
+  return sanitizeUrl(url instanceof Request ? url.url : url.toString());
+}
 
+function getSafeProxyForConnectionLog(): string {
+  const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+  return proxyUrl ? `or Proxy: ${sanitizeUrl(proxyUrl)}` : '';
+}
+
+/**
+ * Returns true when `url` targets the configured Promptfoo Cloud origin: the public
+ * cloud host by default, or the on-prem host when one is configured via
+ * `cloudConfig.getApiHost()`. Matching is scheme+host+port exact (`URL.origin`), so
+ * look-alike hosts, HTTP downgrades, and different ports never match. Matching is
+ * origin-wide — every path on the configured cloud origin is treated as cloud, so the
+ * saved token may also reach sibling services hosted on that same origin. Fails closed
+ * (returns false) when either URL is unparseable, so a misconfigured host never leaks
+ * the token.
+ */
 export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
   try {
     const targetUrl = url instanceof Request ? url.url : url.toString();
-    return new URL(targetUrl).origin === CLOUD_API_HOST;
+    return new URL(targetUrl).origin === new URL(cloudConfig.getApiHost()).origin;
   } catch {
     return false;
   }
 }
 
+/**
+ * Resolves the `Authorization` header value for a request to the configured Promptfoo
+ * Cloud origin, or `undefined` when the request is not cloud-bound or no API key is
+ * saved. Centralizing this keeps the live request (`monkeyPatchFetch`) and the cache
+ * key (`getHeadersForCacheKey` in cache.ts) in lockstep.
+ */
+export function getCloudBearerToken(url: string | URL | Request): string | undefined {
+  if (!isPromptfooCloudApiHost(url)) {
+    return undefined;
+  }
+  const token = cloudConfig.getApiKey();
+  return token ? `Bearer ${token}` : undefined;
+}
+
+/**
+ * Case-insensitive check for a caller-supplied `Authorization` header. Request headers on
+ * this path are always a plain object (see the `Record<string, string>` cast in
+ * monkeyPatchFetch), so an object scan suffices. Used to avoid overriding an explicit
+ * credential — e.g. the token being validated during cloud login/rotation.
+ */
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
+}
+
+/**
+ * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
+ */
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
@@ -60,11 +103,14 @@ export async function monkeyPatchFetch(
     }
   }
 
-  if (isPromptfooCloudApiHost(url)) {
-    const token = cloudConfig.getApiKey();
+  // Attach the saved cloud credential only for cloud-bound requests, and never
+  // override an Authorization header the caller set explicitly — token
+  // validation/rotation sends the token being validated, not the saved one.
+  const cloudAuth = getCloudBearerToken(url);
+  if (cloudAuth && !hasAuthorizationHeader(headers)) {
     opts.headers = {
       ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Authorization: cloudAuth,
     };
   }
   try {
@@ -91,7 +137,7 @@ export async function monkeyPatchFetch(
       });
       if (isConnectionError(e as Error)) {
         logger.debug(
-          `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
+          `Connection error, please check your network connectivity to the host: ${getSafeUrlForConnectionLog(url)} ${getSafeProxyForConnectionLog()}`,
         );
         throw e;
       }

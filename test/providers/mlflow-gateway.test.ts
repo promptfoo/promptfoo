@@ -122,6 +122,17 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     expect(provider.config.apiKeyRequired).toBe(false);
   });
 
+  it('redacts an inline apiKey when serialized with toJSON()', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000', apiKey: 'secret-bearer-token' },
+    });
+
+    const json = provider.toJSON();
+    expect(json).toMatchObject({ provider: 'mlflow-gateway', model: 'my-endpoint' });
+    expect(json.config?.apiKey).toBeUndefined();
+    expect(JSON.stringify(json)).not.toContain('secret-bearer-token');
+  });
+
   it('should honor explicit apiKeyRequired true', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
       config: { gatewayUrl: 'http://localhost:5000', apiKeyRequired: true },

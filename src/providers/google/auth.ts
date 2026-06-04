@@ -19,6 +19,58 @@ import type { GoogleAuthOptions } from 'google-auth-library';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
+// gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
+// `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
+// reach the metadata host. Match the stable prefix (scoped by the warning type) rather than the
+// fully-interpolated string: the err.message/code suffix varies by failure mode (the codeless
+// `All promises were rejected`/`UNKNOWN` aggregate, plus non-allowlisted codes like ETIMEDOUT or
+// EAI_AGAIN), and a dependency reword of that suffix would otherwise silently defeat suppression.
+// Unrelated warnings and other warning types still surface.
+const EXPECTED_GCP_METADATA_LOOKUP_WARNING_PREFIX = 'received unexpected error = ';
+
+let activeGcpMetadataLookupWarningSuppressions = 0;
+let restoreEmitWarning: (() => void) | undefined;
+
+// The optional ADC probe should stay quiet when gcp-metadata cannot reach its hosts,
+// while explicit Vertex authentication and unrelated process warnings remain visible.
+async function suppressExpectedGcpMetadataLookupWarning<T>(action: () => Promise<T>): Promise<T> {
+  if (activeGcpMetadataLookupWarningSuppressions === 0) {
+    const originalEmitWarning = process.emitWarning;
+    const wrappedEmitWarning = ((warning: string | Error, ...args: unknown[]) => {
+      const message = warning instanceof Error ? warning.message : warning;
+      const type = warning instanceof Error ? warning.name : args[0];
+
+      if (
+        type === 'MetadataLookupWarning' &&
+        typeof message === 'string' &&
+        message.startsWith(EXPECTED_GCP_METADATA_LOOKUP_WARNING_PREFIX)
+      ) {
+        return;
+      }
+
+      Reflect.apply(originalEmitWarning, process, [warning, ...args]);
+    }) as typeof process.emitWarning;
+
+    process.emitWarning = wrappedEmitWarning;
+    restoreEmitWarning = () => {
+      if (process.emitWarning === wrappedEmitWarning) {
+        process.emitWarning = originalEmitWarning;
+      }
+    };
+  }
+
+  activeGcpMetadataLookupWarningSuppressions += 1;
+  try {
+    return await action();
+  } finally {
+    activeGcpMetadataLookupWarningSuppressions -= 1;
+    if (activeGcpMetadataLookupWarningSuppressions === 0) {
+      restoreEmitWarning?.();
+      restoreEmitWarning = undefined;
+    }
+  }
+}
+
 /**
  * Configuration for Google authentication
  */
@@ -521,7 +573,7 @@ export class GoogleAuthManager {
     if (!this.pendingHasDefaultCredentials) {
       const probe = (async () => {
         try {
-          await this.getOAuthClient();
+          await suppressExpectedGcpMetadataLookupWarning(() => this.getOAuthClient());
           return true;
         } catch {
           return false;
