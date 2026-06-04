@@ -409,6 +409,27 @@ describe('CloudConfig', () => {
       );
     });
 
+    it.each([
+      'https://api.promptfoo.app',
+      'https://www.promptfoo.app',
+      'https://promptfoo.app',
+    ])('should apply the license gate behind an API proxy for app URL %s', async (appUrl) => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        makeFetch({
+          ...onPremResponse,
+          app: { url: appUrl },
+          hasActiveLicense: false,
+        }),
+      );
+
+      await cloudConfigInstance.validateAndSetApiToken('token', 'https://cloud-proxy.example.com');
+
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),
+      );
+    });
+
     it('should disable sharing for public cloud host with hasActiveLicense: false after cutoff', async () => {
       const body = {
         ...onPremResponse,

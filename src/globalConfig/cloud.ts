@@ -15,12 +15,13 @@ const CLOUD_HOSTNAMES = new Set([
 // Free customers created before this date are grandfathered into auto-share.
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
 
-function getNormalizedHostname(url: string): string {
-  return new URL(url).hostname.toLowerCase().replace(/\.$/, '');
-}
-
 function isPromptfooCloudHost(url: string): boolean {
-  return CLOUD_HOSTNAMES.has(getNormalizedHostname(url));
+  try {
+    const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+    return CLOUD_HOSTNAMES.has(hostname);
+  } catch {
+    return false;
+  }
 }
 
 interface CloudUser {
@@ -197,9 +198,10 @@ export class CloudConfig {
     // On-prem installations are always enterprise deployments. Applying the
     // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
     // auto-sharing to the on-prem Report Server when the server omits the field
-    // or returns false because it has no licence-check logic.
-    const isOnPrem = !isPromptfooCloudHost(apiHost);
-    if (isOnPrem) {
+    // or returns false because it has no licence-check logic. The validated app
+    // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
+    const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
+    if (!isPublicCloud) {
       this.setSharing(true);
     } else if (typeof hasActiveLicense === 'boolean') {
       const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
