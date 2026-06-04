@@ -8,6 +8,7 @@ export const handleLlmRubric = async ({
   inverse,
   renderedValue,
   outputString,
+  providerResponse,
   test,
   providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
@@ -30,7 +31,7 @@ export const handleLlmRubric = async ({
     test.options,
     test.vars,
     assertion,
-    undefined,
+    providerResponse?.images?.length ? { providerResponse } : undefined,
     providerCallContext,
   );
 

@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
+import { getBlobByHash } from '../blobs';
+import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
@@ -20,6 +22,7 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
+  ImageOutput,
   ProviderResponse,
   VarValue,
 } from '../types/index';
@@ -134,6 +137,149 @@ export async function renderLlmRubricPrompt(
   return nunjucks.renderString(rubricPrompt, processedContext);
 }
 
+type MultimodalPromptPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+type ChatMessageLike = {
+  role?: unknown;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (message) =>
+        message !== null &&
+        typeof message === 'object' &&
+        typeof (message as ChatMessageLike).role === 'string',
+    )
+  );
+}
+
+function normalizeBase64ImageData(data: string, mimeType?: string): string {
+  const trimmed = data.trim();
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://')
+  ) {
+    return trimmed;
+  }
+
+  return `data:${mimeType || 'image/png'};base64,${trimmed}`;
+}
+
+async function imageOutputToImageUrl(image: ImageOutput): Promise<string | undefined> {
+  const dataBlobHash = image.data ? extractBlobHashesFromValue(image.data)[0] : undefined;
+  if (image.data && !dataBlobHash) {
+    return normalizeBase64ImageData(image.data, image.mimeType);
+  }
+
+  const blobHash = image.blobRef?.hash || dataBlobHash;
+  if (!blobHash) {
+    return undefined;
+  }
+
+  try {
+    const blob = await getBlobByHash(blobHash);
+    const mimeType =
+      image.mimeType || image.blobRef?.mimeType || blob.metadata.mimeType || 'image/png';
+    return `data:${mimeType};base64,${blob.data.toString('base64')}`;
+  } catch (error) {
+    logger.warn('[Rubric] Failed to load image blob for grading', {
+      error,
+      hash: blobHash,
+    });
+    return undefined;
+  }
+}
+
+function appendImagesToContent(
+  content: unknown,
+  imageParts: MultimodalPromptPart[],
+): MultimodalPromptPart[] {
+  if (Array.isArray(content)) {
+    return [...content, ...imageParts] as MultimodalPromptPart[];
+  }
+
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }, ...imageParts];
+  }
+
+  if (content === undefined || content === null) {
+    return imageParts;
+  }
+
+  return [{ type: 'text', text: JSON.stringify(content) }, ...imageParts];
+}
+
+function appendImagesToChatPrompt(renderedPrompt: string, imageUrls: string[]): string {
+  const imageParts = imageUrls.map<MultimodalPromptPart>((url) => ({
+    type: 'image_url',
+    image_url: { url },
+  }));
+
+  try {
+    const parsed = JSON.parse(renderedPrompt);
+    if (isChatMessageArray(parsed)) {
+      const messages = parsed.map((message) => ({ ...message }));
+      let userMessageIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          userMessageIndex = i;
+          break;
+        }
+      }
+
+      if (userMessageIndex >= 0) {
+        const userMessage = messages[userMessageIndex];
+        messages[userMessageIndex] = {
+          ...userMessage,
+          content: appendImagesToContent(userMessage.content, imageParts),
+        };
+      } else {
+        messages.push({ role: 'user', content: imageParts });
+      }
+
+      return JSON.stringify(messages);
+    }
+  } catch {
+    // Non-JSON prompts are still valid text prompts. Wrap them below.
+  }
+
+  return JSON.stringify([
+    {
+      role: 'user',
+      content: [{ type: 'text', text: renderedPrompt }, ...imageParts],
+    },
+  ]);
+}
+
+async function buildGradingProviderPrompt(
+  renderedPrompt: string,
+  images?: ImageOutput[],
+): Promise<{ prompt: string; imageCount: number }> {
+  if (!images?.length) {
+    return { prompt: renderedPrompt, imageCount: 0 };
+  }
+
+  const imageUrls = (await Promise.all(images.map(imageOutputToImageUrl))).filter(
+    (url): url is string => Boolean(url),
+  );
+
+  if (imageUrls.length === 0) {
+    return { prompt: renderedPrompt, imageCount: 0 };
+  }
+
+  return {
+    prompt: appendImagesToChatPrompt(renderedPrompt, imageUrls),
+    imageCount: imageUrls.length,
+  };
+}
+
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
@@ -187,6 +333,7 @@ export async function runJsonGradingPrompt({
   providerCallContext,
   throwOnError,
   vars,
+  images,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -196,9 +343,14 @@ export async function runJsonGradingPrompt({
   providerCallContext?: CallApiContextParams;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
+  images?: ImageOutput[];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, vars);
+  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
+  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
+    renderedPrompt,
+    images,
+  );
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -211,7 +363,7 @@ export async function runJsonGradingPrompt({
   );
   const resp = await callProviderWithContext(
     finalProvider,
-    prompt,
+    providerPrompt,
     label,
     vars,
     providerCallContext,
@@ -265,7 +417,8 @@ export async function runJsonGradingPrompt({
     }),
     metadata: {
       ...responseMetadata,
-      renderedGradingPrompt: prompt,
+      renderedGradingPrompt: renderedPrompt,
+      ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
     },
   };
 }

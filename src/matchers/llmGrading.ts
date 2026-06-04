@@ -129,6 +129,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
     preferRemote?: boolean;
+    providerResponse?: ProviderResponse;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -144,7 +145,9 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
+  const hasMultimodalOutput = Boolean(options?.providerResponse?.images?.length);
   if (
+    !hasMultimodalOutput &&
     !grading.rubricPrompt &&
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
@@ -178,6 +181,7 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
+      images: options?.providerResponse?.images,
       vars: {
         output: tryParse(llmOutput),
         rubric,

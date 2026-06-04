@@ -2,6 +2,7 @@ import path from 'path';
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
+import * as blobs from '../../src/blobs';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
@@ -258,6 +259,154 @@ describe('matchesLlmRubric', () => {
       renderedGradingPrompt: 'Grading prompt',
     });
     expect(result.metadata).not.toHaveProperty('self');
+  });
+
+  it('should attach image outputs to the grading provider prompt', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Grade this output: Generated image' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+        ],
+      },
+    ]);
+    expect(provider.callApi).toHaveBeenCalledWith(
+      prompt,
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: prompt,
+        }),
+      }),
+    );
+    expect(result.metadata).toEqual({
+      renderedGradingPrompt: 'Grade this output: Generated image',
+      renderedGradingPromptImages: 1,
+    });
+  });
+
+  it('should preserve JSON chat rubric prompts when attaching images', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: JSON.stringify([
+          { role: 'system', content: 'Return JSON.' },
+          { role: 'user', content: 'Grade this output: {{ output }}' },
+        ]),
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [
+            { data: 'abc123', mimeType: 'image/webp' },
+            { data: 'https://example.com/image.png', mimeType: 'image/png' },
+          ],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual([
+      { role: 'system', content: 'Return JSON.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Grade this output: Generated image' },
+          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        ],
+      },
+    ]);
+  });
+
+  it('should resolve blob-backed image outputs before grading', async () => {
+    const hash = 'a'.repeat(64);
+    vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+      data: Buffer.from('image-bytes'),
+      metadata: {
+        mimeType: 'image/png',
+        sizeBytes: 11,
+        createdAt: '2026-06-04T00:00:00.000Z',
+        provider: 'filesystem',
+        key: hash,
+      },
+    });
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [
+            {
+              blobRef: {
+                uri: `promptfoo://blob/${hash}`,
+                hash,
+                mimeType: 'image/png',
+                sizeBytes: 11,
+                provider: 'filesystem',
+              },
+            },
+          ],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(blobs.getBlobByHash).toHaveBeenCalledWith(hash);
+    expect(JSON.parse(prompt)[0].content[1]).toEqual({
+      type: 'image_url',
+      image_url: {
+        url: `data:image/png;base64,${Buffer.from('image-bytes').toString('base64')}`,
+      },
+    });
   });
 
   it('should render rubric when provided as an object', async () => {
