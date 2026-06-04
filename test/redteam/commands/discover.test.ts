@@ -7,17 +7,18 @@ import {
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
 
-const mockProgressBar = vi.hoisted(() => ({
-  increment: vi.fn(),
-  start: vi.fn(),
-  stop: vi.fn(),
+const { mockProgressBar, mockSingleBar } = vi.hoisted(() => ({
+  mockProgressBar: {
+    increment: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  },
+  mockSingleBar: vi.fn(),
 }));
 
 vi.mock('cli-progress', () => ({
   default: {
-    SingleBar: vi.fn(function () {
-      return mockProgressBar;
-    }),
+    SingleBar: mockSingleBar,
   },
 }));
 vi.mock('../../../src/util/fetch/index');
@@ -115,7 +116,10 @@ describe('normalizeTargetPurposeDiscoveryResult', () => {
 
 describe('doTargetPurposeDiscovery', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockSingleBar.mockImplementation(function () {
+      return mockProgressBar;
+    });
   });
 
   it('should handle empty prompt', async () => {
