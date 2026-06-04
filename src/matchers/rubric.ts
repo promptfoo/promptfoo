@@ -1,10 +1,9 @@
-import { lookup } from 'node:dns/promises';
 import fs from 'fs/promises';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
-import { getEnvBool, getEnvInt } from '../envars';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
@@ -27,9 +26,6 @@ import type {
 } from '../types/index';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
-const DEFAULT_GRADING_IMAGE_FETCH_TIMEOUT_MS = 30_000;
-const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
-const MAX_GRADING_IMAGE_REDIRECTS = 5;
 const MULTIMODAL_GRADING_INSTRUCTION =
   'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
@@ -174,207 +170,6 @@ function normalizeBase64ImageData(data: string, mimeType?: string): string {
   return `data:${mimeType || 'image/png'};base64,${trimmed}`;
 }
 
-function isPrivateIpv4(address: string): boolean {
-  const octets = address.split('.').map(Number);
-  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) {
-    return false;
-  }
-
-  const [a, b] = octets;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127)
-  );
-}
-
-function isPrivateIpv6(address: string): boolean {
-  const normalized = address.toLowerCase();
-  return (
-    normalized === '::1' ||
-    normalized.startsWith('fc') ||
-    normalized.startsWith('fd') ||
-    normalized.startsWith('fe8') ||
-    normalized.startsWith('fe9') ||
-    normalized.startsWith('fea') ||
-    normalized.startsWith('feb')
-  );
-}
-
-function isPrivateAddress(address: string): boolean {
-  if (address.includes('.')) {
-    return isPrivateIpv4(address);
-  }
-  if (address.includes(':')) {
-    return isPrivateIpv6(address);
-  }
-  return false;
-}
-
-async function isPrivateImageUrl(url: URL): Promise<boolean> {
-  if (getEnvBool('PROMPTFOO_ALLOW_GRADING_IMAGE_PRIVATE_URLS', false)) {
-    return false;
-  }
-
-  const hostname = url.hostname.toLowerCase();
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    return true;
-  }
-
-  if (isPrivateAddress(hostname)) {
-    return true;
-  }
-
-  try {
-    const addresses = await lookup(hostname, { all: true });
-    return addresses.some(({ address }) => isPrivateAddress(address));
-  } catch (error) {
-    logger.warn('[Rubric] Failed to resolve image URL before grading', {
-      error,
-      url: url.toString(),
-    });
-    return true;
-  }
-}
-
-function getResponseContentLength(response: Response): number | undefined {
-  const contentLength = response.headers.get('content-length');
-  if (!contentLength) {
-    return undefined;
-  }
-
-  const parsed = Number(contentLength);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-async function fetchImageWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const fetchModuleSpecifier = '../util/fetch/index';
-    const fetchModule = (await import(fetchModuleSpecifier)) as {
-      fetchWithProxy: (url: string, init?: RequestInit) => Promise<Response>;
-    };
-    return await fetchModule.fetchWithProxy(url, { redirect: 'manual', signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function hydrateImageUrl(url: string, mimeType?: string): Promise<string | undefined> {
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    return undefined;
-  }
-
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    return undefined;
-  }
-
-  const maxBytes = getEnvInt('PROMPTFOO_GRADING_IMAGE_MAX_BYTES', DEFAULT_GRADING_IMAGE_MAX_BYTES);
-  const timeoutMs = getEnvInt(
-    'PROMPTFOO_GRADING_IMAGE_FETCH_TIMEOUT_MS',
-    DEFAULT_GRADING_IMAGE_FETCH_TIMEOUT_MS,
-  );
-
-  try {
-    let currentUrl = parsedUrl;
-    let response: Response | undefined;
-
-    for (let redirects = 0; redirects <= MAX_GRADING_IMAGE_REDIRECTS; redirects++) {
-      if (await isPrivateImageUrl(currentUrl)) {
-        logger.warn('[Rubric] Skipping private image URL hydration for grading', {
-          url: currentUrl.toString(),
-        });
-        return undefined;
-      }
-
-      response = await fetchImageWithTimeout(currentUrl.toString(), timeoutMs);
-      if (response.status < 300 || response.status >= 400) {
-        break;
-      }
-
-      const location = response.headers.get('location');
-      if (!location) {
-        break;
-      }
-
-      if (redirects === MAX_GRADING_IMAGE_REDIRECTS) {
-        logger.warn('[Rubric] Too many redirects while hydrating image URL for grading', {
-          url: parsedUrl.toString(),
-        });
-        return undefined;
-      }
-
-      currentUrl = new URL(location, currentUrl);
-      if (currentUrl.protocol !== 'http:' && currentUrl.protocol !== 'https:') {
-        return undefined;
-      }
-    }
-
-    if (!response) {
-      return undefined;
-    }
-
-    if (!response.ok) {
-      logger.warn('[Rubric] Failed to hydrate image URL for grading', {
-        status: response.status,
-        statusText: response.statusText,
-        url: currentUrl.toString(),
-      });
-      return undefined;
-    }
-
-    const contentLength = getResponseContentLength(response);
-    if (contentLength !== undefined && contentLength > maxBytes) {
-      logger.warn('[Rubric] Skipping oversized image URL for grading', {
-        contentLength,
-        maxBytes,
-        url: currentUrl.toString(),
-      });
-      return undefined;
-    }
-
-    const responseMimeType = response.headers.get('content-type')?.split(';')[0]?.trim();
-    if (responseMimeType && !responseMimeType.startsWith('image/')) {
-      logger.warn('[Rubric] Skipping non-image URL for grading', {
-        contentType: responseMimeType,
-        url: currentUrl.toString(),
-      });
-      return undefined;
-    }
-
-    const resolvedMimeType = mimeType || responseMimeType || 'image/png';
-    if (!resolvedMimeType.startsWith('image/')) {
-      return undefined;
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.byteLength > maxBytes) {
-      logger.warn('[Rubric] Skipping oversized image URL for grading', {
-        contentLength: buffer.byteLength,
-        maxBytes,
-        url: currentUrl.toString(),
-      });
-      return undefined;
-    }
-
-    return `data:${resolvedMimeType};base64,${buffer.toString('base64')}`;
-  } catch (error) {
-    logger.warn('[Rubric] Failed to hydrate image URL for grading', {
-      error,
-      url: parsedUrl.toString(),
-    });
-    return undefined;
-  }
-}
-
 function extractBlobHashFromImageValue(value: unknown): string | undefined {
   if (typeof value === 'string') {
     const match = BLOB_URI_REGEX.exec(value);
@@ -412,11 +207,13 @@ async function loadImageBlobByHash(hash: string): Promise<{
 
 async function imageOutputToImageUrl(image: ImageOutput): Promise<string | undefined> {
   const dataBlobHash = extractBlobHashFromImageValue(image.data);
-  if (image.data?.trim().startsWith('http')) {
-    return (await hydrateImageUrl(image.data.trim(), image.mimeType)) || image.data.trim();
-  }
-
   if (image.data && !dataBlobHash) {
+    const data = image.data.trim();
+    if (/^https?:\/\//i.test(data)) {
+      throw new Error(
+        'Remote image URLs are not supported for multimodal grading. Provide local image output as a data URI, raw base64 string, or promptfoo blobRef instead.',
+      );
+    }
     return normalizeBase64ImageData(image.data, image.mimeType);
   }
 
