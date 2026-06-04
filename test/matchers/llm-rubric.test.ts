@@ -10,6 +10,7 @@ import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
+import { fetchWithTimeout } from '../../src/util/fetch/index';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
@@ -25,6 +26,19 @@ vi.mock('../../src/remoteGrading', () => ({
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
+const { mockLookup } = vi.hoisted(() => ({
+  mockLookup: vi.fn(),
+}));
+vi.mock('node:dns/promises', () => ({
+  lookup: mockLookup,
+}));
+vi.mock('../../src/util/fetch/index', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/util/fetch/index')>();
+  return {
+    ...actual,
+    fetchWithTimeout: vi.fn(),
+  };
+});
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -69,6 +83,12 @@ describe('matchesLlmRubric', () => {
     vi.resetAllMocks();
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    vi.mocked(fetchWithTimeout).mockResolvedValue(
+      new Response(Buffer.from('remote-image'), {
+        headers: { 'content-type': 'image/png' },
+      }),
+    );
 
     (cliState as any).config = {};
 
@@ -348,10 +368,91 @@ describe('matchesLlmRubric', () => {
         content: [
           { type: 'text', text: 'Grade this output: Generated image' },
           { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
-          { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${Buffer.from('remote-image').toString('base64')}`,
+            },
+          },
         ],
       },
     ]);
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://example.com/image.png',
+      { redirect: 'manual' },
+      30000,
+    );
+  });
+
+  it('should not hydrate private image URLs by default', async () => {
+    mockLookup.mockResolvedValueOnce([{ address: '127.0.0.1', family: 4 }]);
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'https://internal.example/image.png', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+    expect(JSON.parse(prompt)[0].content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'https://internal.example/image.png' },
+    });
+  });
+
+  it('should not hydrate image URLs that redirect to private addresses', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'http://127.0.0.1/image.png' },
+      }),
+    );
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'https://example.com/redirect-image.png', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(prompt)[0].content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'https://example.com/redirect-image.png' },
+    });
   });
 
   it('should resolve blob-backed image outputs before grading', async () => {
