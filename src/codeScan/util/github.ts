@@ -33,7 +33,12 @@ export function hasPrPostableFindings(comments: Comment[]): boolean {
 }
 
 function hasInlineCommentLocation(comment: Comment): boolean {
-  return Boolean(comment.file) && comment.line != null && comment.line > 0;
+  return (
+    Boolean(comment.file) &&
+    comment.line != null &&
+    Number.isInteger(comment.line) &&
+    comment.line > 0
+  );
 }
 
 /**
