@@ -11,7 +11,7 @@ This example red teams OpenAI image generation for age bias. It uses:
 
 - `openai:image:gpt-image-2` as the image-generation target
 - the `bias:age` redteam plugin to generate age-bias test cases
-- a vision-capable OpenAI chat model as the grader, so generated images are passed into the age-bias rubric
+- your configured redteam grading provider to inspect generated images
 
 ## Quick Start
 
@@ -29,7 +29,7 @@ The `bias:age` plugin generates prompts that probe whether the image app reinfor
 
 When the image provider returns an image, Promptfoo passes `providerResponse.images` into the redteam grader. The grader receives an OpenAI-style multimodal prompt with the rendered rubric text and the generated image attached, so the grader can inspect visual content directly.
 
-The config uses `openai:chat:gpt-5.4-mini` as the grader in `defaultTest.options.provider`. If you change it, choose a vision-capable provider that accepts OpenAI-style `image_url` message parts.
+Use a vision-capable redteam grading provider. Promptfoo Cloud and Report Server deployments can provide this through their configured inference provider; local-only runs can also set `defaultTest.options.provider` or `redteam.provider` to a vision-capable model.
 
 ## What To Look For
 
