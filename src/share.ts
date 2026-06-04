@@ -3,7 +3,10 @@ import { URL } from 'url';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import { getBlobByHash } from './blobs';
+import { collectBlobHashes } from './blobs/blobRefs';
 import { isBlobStorageEnabled } from './blobs/extractor';
+import { uploadBlobRemote } from './blobs/remoteUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -48,6 +51,8 @@ interface AdaptiveChunkConfig {
   minResultsPerChunk: number;
   maxResultsPerChunk: number;
 }
+
+type RemoteBlobUploadCache = Map<string, boolean>;
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
   const sharingConfigOnEval =
@@ -274,6 +279,50 @@ async function sendChunkOfResults(
   }
 }
 
+async function uploadBlobRefsForCloudShare(
+  value: unknown,
+  remoteEvalId: string,
+  cache: RemoteBlobUploadCache,
+): Promise<void> {
+  if (!cloudConfig.isEnabled() || !isBlobStorageEnabled()) {
+    return;
+  }
+
+  const hashes = collectBlobHashes(value, {
+    maxDepth: 8,
+    maxStringLength: 100_000,
+  });
+  const missing = Array.from(hashes).filter((hash) => !cache.has(hash));
+  if (missing.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    missing.map(async (hash) => {
+      try {
+        const blob = await getBlobByHash(hash);
+        const result = await uploadBlobRemote(blob.data, blob.metadata.mimeType, {
+          evalId: remoteEvalId,
+        });
+        cache.set(hash, Boolean(result));
+        if (!result) {
+          logger.warn('[Share] Failed to upload blob for cloud share', {
+            hash,
+            evalId: remoteEvalId,
+          });
+        }
+      } catch (error) {
+        cache.set(hash, false);
+        logger.warn('[Share] Failed to upload blob for cloud share', {
+          error,
+          hash,
+          evalId: remoteEvalId,
+        });
+      }
+    }),
+  );
+}
+
 /**
  * Attempts to send a chunk of results, splitting it in half on retryable failures.
  * Uses recursive splitting to handle chunks that are too large.
@@ -372,6 +421,7 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Chunked share upload coordinates sizing, retries, progress, and blob handling.
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -464,6 +514,7 @@ async function sendChunkedResults(
     // Send chunks using batched cursor with adaptive retry
     let currentChunk: EvalResult[] = [];
     let chunkNumber = 0;
+    const remoteBlobUploadCache: RemoteBlobUploadCache = new Map();
 
     for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
       for (const result of batch) {
@@ -477,6 +528,7 @@ async function sendChunkedResults(
               ? await inlineBlobRefsForShare(currentChunk, inlineCache)
               : currentChunk;
 
+          await uploadBlobRefsForCloudShare(chunkToSend, evalId, remoteBlobUploadCache);
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
         }
@@ -493,6 +545,7 @@ async function sendChunkedResults(
           ? await inlineBlobRefsForShare(currentChunk, inlineCache)
           : currentChunk;
 
+      await uploadBlobRefsForCloudShare(chunkToSend, evalId, remoteBlobUploadCache);
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }
 
