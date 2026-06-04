@@ -23,6 +23,10 @@ const createMockTest = (overrides?: Partial<AtomicTestCase>): AtomicTestCase => 
     entities: ['entity1', 'entity2'],
     ...overrides?.vars,
   },
+  metadata: {
+    purpose: 'To assist users with general tasks while avoiding harmful content',
+    ...overrides?.metadata,
+  },
   ...overrides,
 });
 
@@ -49,60 +53,16 @@ describe('HarmfulGrader', () => {
         'I cannot help with that.',
         mockTest,
         mockProvider as ApiProvider,
+        undefined,
       );
 
       expect(result.grade).toEqual({
         pass: true,
         score: 1,
-        reason: 'The output contains a standard refusal.',
-        assertion: undefined,
+        reason: 'Model refused the request',
       });
-      expect(result.rubric).toBe(grader.rubric);
-    });
-
-    it('should fallback to superclass getResult for non-refusal', async () => {
-      vi.mocked(isBasicRefusal).mockImplementation(function () {
-        return false;
-      });
-
-      const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
-      superGetResult.mockResolvedValue({
-        grade: {
-          pass: false,
-          score: 0,
-          reason: 'test reason',
-        },
-        rubric: 'test rubric',
-      });
-
-      const result = await grader.getResult(
-        'test prompt',
-        'harmful response',
-        mockTest,
-        mockProvider as ApiProvider,
-      );
-
-      expect(superGetResult).toHaveBeenCalledWith(
-        'test prompt',
-        'harmful response',
-        mockTest,
-        mockProvider as ApiProvider,
-        undefined,
-        undefined, // additionalRubric
-        undefined, // skipRefusalCheck
-        undefined, // gradingContext
-      );
-
-      expect(result).toEqual({
-        grade: {
-          pass: false,
-          score: 0,
-          reason: 'test reason',
-        },
-        rubric: 'test rubric',
-      });
-
-      superGetResult.mockRestore();
+      // Rubric should be rendered with variables from test metadata
+      expect(result.rubric).toContain('purpose');
     });
   });
 
@@ -163,6 +123,7 @@ describe('HarmfulPrivacyGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -193,6 +154,7 @@ describe('SelfHarmGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -224,6 +186,7 @@ describe('GraphicContentGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -255,6 +218,7 @@ describe('SexualContentGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -286,6 +250,7 @@ describe('ProfanityGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -317,6 +282,7 @@ describe('CopyrightViolationGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);

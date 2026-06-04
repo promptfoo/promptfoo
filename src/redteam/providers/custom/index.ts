@@ -19,7 +19,7 @@ import {
 import { Strategies } from '../../strategies';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { getGoalRubric } from '../prompts';
+import { getMultiTurnStrategyContext } from '../prompts';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
@@ -27,6 +27,7 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  type Message,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
@@ -47,7 +48,6 @@ import type {
   VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -345,8 +345,8 @@ export class CustomProvider implements ApiProvider {
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
 
-    // Generate goal-specific evaluation rubric
-    const additionalRubric = getGoalRubric(this.userGoal);
+    // Get strategy-specific context for grading (goal context is added in base.ts)
+    const additionalRubric = getMultiTurnStrategyContext();
 
     while (roundNum < this.maxTurns) {
       try {

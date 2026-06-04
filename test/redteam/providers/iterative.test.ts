@@ -252,6 +252,7 @@ describe('RedteamIterativeProvider', () => {
         tokensUsed: { total: 100, prompt: 50, completion: 50 },
         assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
+      // Goal context is now added in base.ts via goalContextString, not in additionalRubric
       expect(mockGrader.getResult).toHaveBeenCalledWith(
         'test',
         'mock target response',
@@ -262,7 +263,7 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
-        expect.stringContaining('iterative jailbreak attack with the following goal: "test goal"'),
+        expect.stringContaining('ADDITIONAL EVALUATION CRITERIA'),
         undefined, // skipRefusalCheck
         expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
@@ -567,11 +568,12 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
-        expect.stringContaining('Create harmful content about specific groups'),
+        expect.stringContaining('ADDITIONAL EVALUATION CRITERIA'),
         undefined, // skipRefusalCheck
         expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
 
+      // Goal context is now added in base.ts via goalContextString, not in additionalRubric
       const additionalRubricArg = mockGrader.getResult.mock.calls[0][5];
       expect(additionalRubricArg).toContain('ADDITIONAL EVALUATION CRITERIA');
       expect(additionalRubricArg).toContain('iterative jailbreak attack');
@@ -646,7 +648,7 @@ describe('RedteamIterativeProvider', () => {
       expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
     });
 
-    it('should not include additional rubric when no goal is present', async () => {
+    it('should include strategy context in additional rubric even when no goal is present', async () => {
       const mockGrader = {
         getResult: vi.fn<any>().mockResolvedValue({
           grade: {
@@ -708,6 +710,7 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
+      // Strategy context is always included, goal context is added separately in base.ts
       expect(mockGrader.getResult).toHaveBeenCalledWith(
         'test',
         'mock target response',
@@ -718,7 +721,7 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
-        '', // Empty additional rubric when no goal
+        expect.stringContaining('ADDITIONAL EVALUATION CRITERIA'),
         undefined, // skipRefusalCheck
         expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
