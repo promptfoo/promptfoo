@@ -118,6 +118,24 @@ describe('AssertionSchema', () => {
     }
   });
 
+  it('should reject xfail on assertion sets', () => {
+    const result = TestCaseSchema.safeParse({
+      assert: [
+        {
+          type: 'assert-set',
+          xfail: 'openai:*',
+          assert: [{ type: 'equals', value: 'expected value' }],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const xfailIssue = result.error.issues.find((issue) => issue.path.includes('xfail'));
+      expect(xfailIssue?.message).toBe('xfail is not supported for assert-set assertions');
+    }
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 

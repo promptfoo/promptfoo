@@ -690,6 +690,12 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
+const UnsupportedAssertionSetXFailSchema = z
+  .custom<never>((value) => value === undefined, {
+    message: 'xfail is not supported for assert-set assertions',
+  })
+  .optional();
+
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
@@ -704,6 +710,7 @@ export const AssertionSetSchema = z.object({
   // An external mapping of arbitrary strings to values that is defined
   // for every assertion in the set and passed into each assert
   config: z.record(z.string(), z.any()).optional(),
+  xfail: UnsupportedAssertionSetXFailSchema,
 });
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
@@ -757,12 +764,13 @@ export const AssertionSchema = z
     xfail: AssertionXFailSchema.optional(),
   })
   .superRefine((assertion, ctx) => {
+    const assertionType = assertion.type as string;
     if (
       assertion.xfail !== undefined &&
-      typeof assertion.type === 'string' &&
-      (assertion.type.startsWith('select-') ||
-        assertion.type === 'max-score' ||
-        assertion.type === 'human')
+      (assertionType.startsWith('select-') ||
+        assertionType === 'assert-set' ||
+        assertionType === 'max-score' ||
+        assertionType === 'human')
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
