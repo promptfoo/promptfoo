@@ -14,6 +14,10 @@ import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
 
+function getNonEmptyTokenUsage(tokensUsed: ReturnType<typeof createEmptyTokenUsage>) {
+  return tokensUsed.total > 0 ? tokensUsed : undefined;
+}
+
 function getConversationMessages({
   outputString,
   prompt,
@@ -63,9 +67,14 @@ export const handleConversationRelevance = async ({
       providerCallContext,
     );
 
+    if (result.tokensUsed) {
+      accumulateTokenUsage(tokensUsed, result.tokensUsed);
+    }
+
     if (result.metadata?.graderError === true) {
       return {
         ...result,
+        tokensUsed: getNonEmptyTokenUsage(tokensUsed),
         assertion,
       };
     }
@@ -77,11 +86,6 @@ export const handleConversationRelevance = async ({
       result.reason !== 'Response is not relevant to the conversation context'
     ) {
       irrelevancies.push(result.reason);
-    }
-
-    // Accumulate token usage
-    if (result.tokensUsed) {
-      accumulateTokenUsage(tokensUsed, result.tokensUsed);
     }
 
     totalWindows++;
@@ -141,6 +145,6 @@ export const handleConversationRelevance = async ({
     pass,
     score,
     reason,
-    tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
+    tokensUsed: getNonEmptyTokenUsage(tokensUsed),
   };
 };

@@ -2,7 +2,7 @@
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 import { callProviderWithContext, getAndCheckProvider } from '../../matchers/providers';
 import { loadRubricPrompt } from '../../matchers/rubric';
-import { fail, graderFail } from '../../matchers/shared';
+import { graderFail } from '../../matchers/shared';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
@@ -112,6 +112,6 @@ export async function matchesConversationRelevance(
       tokensUsed: resp.tokenUsage as TokenUsage,
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }

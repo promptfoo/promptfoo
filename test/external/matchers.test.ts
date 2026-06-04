@@ -228,6 +228,7 @@ describe('matchesConversationRelevance', () => {
     const result = await matchesConversationRelevance(messages, 0.5);
     expect(result.pass).toBe(false);
     expect(result.reason).toMatch(/Error parsing output/);
+    expect(result.metadata).toEqual({ graderError: true });
   });
 
   it('should use custom rubric prompt with {{ messages }} (safe templating boundary)', async () => {
