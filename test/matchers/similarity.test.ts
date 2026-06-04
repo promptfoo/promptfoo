@@ -438,5 +438,20 @@ describe('matchesSimilarity', () => {
       expect(remoteGeneration.shouldGenerateRemote).not.toHaveBeenCalled();
       expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
     });
+
+    it('should mark remote grading failures as similarity provider errors', async () => {
+      (cliState as any).config = { redteam: {} };
+      vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+      vi.spyOn(remoteGrading, 'doRemoteGrading').mockRejectedValue(new Error('network down'));
+
+      await expect(
+        matchesSimilarity('Expected output', 'Sample output', 0.5),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Could not perform remote grading: Error: network down',
+        metadata: { similarityProviderError: true },
+      });
+    });
   });
 });

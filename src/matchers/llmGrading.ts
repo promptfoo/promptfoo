@@ -297,7 +297,7 @@ export async function matchesFactuality(
       return buildFactualityResult(parsedJson.option, parsedJson.reason, grading, resp);
     }
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 
   // Fallback to old pattern matching format
@@ -306,7 +306,7 @@ export async function matchesFactuality(
     const parsedLegacy = parseLegacyFactualityResponse(resp.output);
     return buildFactualityResult(parsedLegacy.option, parsedLegacy.reason, grading, resp);
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 }
 

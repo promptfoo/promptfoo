@@ -231,11 +231,33 @@ describe('matchesFactuality', () => {
       pass: false,
       score: 0,
       reason: 'Invalid category value: Z',
+      metadata: { graderError: true },
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
       }),
+    });
+  });
+
+  it('should mark malformed factuality responses as grader errors', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockResolvedValue({
+          output: 'not a factuality verdict',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Factuality checker output did not match expected format: not a factuality verdict',
+      metadata: { graderError: true },
     });
   });
 

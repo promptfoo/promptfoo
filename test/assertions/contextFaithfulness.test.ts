@@ -131,6 +131,61 @@ describe('handleContextFaithfulness', () => {
     );
   });
 
+  it('should preserve matcher metadata when adding resolved context', async () => {
+    const mockResult = {
+      pass: false,
+      score: 0,
+      reason: 'grader unavailable',
+      metadata: { graderError: true as const },
+    };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        test: {
+          vars: {
+            query: 'What is the capital of France?',
+            context: 'Paris is the capital of France.',
+          },
+          options: {},
+        },
+        logProbs: null,
+        tokenUsage: null,
+        cached: false,
+        provider: null,
+        providerResponse: null,
+      },
+      inverse: false,
+      outputString: 'The capital of France is Paris.',
+      providerResponse: null,
+    } as any);
+
+    expect(result.metadata).toEqual({
+      graderError: true,
+      context: 'test context',
+    });
+  });
+
   it('should throw error when test.vars is undefined', async () => {
     await expect(
       handleContextFaithfulness({

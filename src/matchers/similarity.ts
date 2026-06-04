@@ -195,7 +195,7 @@ export async function matchesSimilarity(
         inverse,
       });
     } catch (error) {
-      return fail(`Could not perform remote grading: ${error}`);
+      return similarityProviderFail(`Could not perform remote grading: ${error}`);
     }
   }
 
