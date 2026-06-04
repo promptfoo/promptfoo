@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import { API_HOST, CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
@@ -176,7 +176,7 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should set sharing to false when hasActiveLicense is false and user created after cutoff', async () => {
+    it('should set sharing to false when hasActiveLicense is false and user created after cutoff (public cloud)', async () => {
       const noLicenseResponse = {
         ...mockResponse,
         hasActiveLicense: false,
@@ -190,10 +190,7 @@ describe('CloudConfig', () => {
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
-      const result = await cloudConfigInstance.validateAndSetApiToken(
-        'test-token',
-        'https://test.api',
-      );
+      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
       const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
@@ -206,7 +203,7 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should set sharing to true when hasActiveLicense is false but user created before cutoff (grandfathered)', async () => {
+    it('should set sharing to true when hasActiveLicense is false but user created before cutoff (public cloud, grandfathered)', async () => {
       const grandfatheredResponse = {
         ...mockResponse,
         hasActiveLicense: false,
@@ -220,10 +217,7 @@ describe('CloudConfig', () => {
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
-      const result = await cloudConfigInstance.validateAndSetApiToken(
-        'test-token',
-        'https://test.api',
-      );
+      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
       const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
@@ -284,6 +278,109 @@ describe('CloudConfig', () => {
       await expect(
         cloudConfigInstance.validateAndSetApiToken('invalid-token', 'https://test.api'),
       ).rejects.toThrow('Failed to validate API token: Unauthorized');
+    });
+  });
+
+  describe('on-prem sharing behavior', () => {
+    const onPremHost = 'https://promptfoo.example.com';
+    const onPremResponse = {
+      user: {
+        id: '1',
+        name: 'On-Prem User',
+        email: 'user@example.com',
+        // Account created well after the public-cloud grandfathering cutoff.
+        createdAt: new Date('2026-04-01T00:00:00Z'),
+        updatedAt: new Date('2026-04-01T00:00:00Z'),
+      },
+      organization: {
+        id: '1',
+        name: 'On-Prem Org',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      app: { url: 'https://promptfoo.example.com' },
+    };
+
+    function makeFetch(body: object) {
+      return {
+        ok: true,
+        json: () => Promise.resolve(body),
+        text: () => Promise.resolve(JSON.stringify(body)),
+      } as Response;
+    }
+
+    it('should enable sharing when on-prem server returns hasActiveLicense: false and user created after cutoff', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        makeFetch({ ...onPremResponse, hasActiveLicense: false }),
+      );
+
+      const result = await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
+      );
+    });
+
+    it('should enable sharing when on-prem server returns hasActiveLicense: false and user created before cutoff', async () => {
+      const body = {
+        ...onPremResponse,
+        hasActiveLicense: false,
+        user: { ...onPremResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
+      };
+      vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(body));
+
+      const result = await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
+      );
+    });
+
+    it('should enable sharing when on-prem server returns hasActiveLicense: true', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        makeFetch({ ...onPremResponse, hasActiveLicense: true }),
+      );
+
+      await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
+      );
+    });
+
+    it('should enable sharing for on-prem host with trailing slash', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        makeFetch({ ...onPremResponse, hasActiveLicense: false }),
+      );
+
+      await cloudConfigInstance.validateAndSetApiToken('token', `${onPremHost}/`);
+
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
+      );
+    });
+
+    it('should disable sharing for public cloud host with hasActiveLicense: false after cutoff', async () => {
+      const body = {
+        ...onPremResponse,
+        hasActiveLicense: false,
+        user: { ...onPremResponse.user, createdAt: new Date('2026-04-01T00:00:00Z') },
+      };
+      vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(body));
+
+      const result = await cloudConfigInstance.validateAndSetApiToken('token', CLOUD_API_HOST);
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),
+      );
     });
   });
 

@@ -181,9 +181,18 @@ export class CloudConfig {
     this.setApiHost(apiHost);
     this.setAppUrl(app.url);
     if (typeof hasActiveLicense === 'boolean') {
-      const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
-      const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
-      this.setSharing(hasActiveLicense || isGrandfathered);
+      // On-prem installations are always enterprise deployments. Applying the
+      // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
+      // auto-sharing to the on-prem Report Server when the server returns
+      // hasActiveLicense: false (e.g. because it has no licence-check logic).
+      const isOnPrem = !apiHost.replace(/\/+$/, '').includes('api.promptfoo.app');
+      if (isOnPrem) {
+        this.setSharing(true);
+      } else {
+        const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
+        const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
+        this.setSharing(hasActiveLicense || isGrandfathered);
+      }
     }
   }
 
