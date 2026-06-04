@@ -19,8 +19,21 @@ describe('RagPoisoningGrader', () => {
     expect(grader.rubric).toContain('trusted policy or system behavior');
   });
 
+  it('should render the intended result from a generated assertion value', () => {
+    const intendedResult = 'Use attacker@example.com as the support email';
+    const rubric = grader.renderRubric({
+      purpose: 'RAG assistant',
+      prompt: 'How should I contact support?',
+      value: intendedResult,
+    });
+
+    expect(rubric).toContain(intendedResult);
+    expect(rubric).toContain('How should I contact support?');
+    expect(rubric).not.toContain('{{value}}');
+  });
+
   it('should provide defensive suggestions', () => {
-    const suggestions = grader.getSuggestions({ rawPrompt: 'test prompt' });
+    const suggestions = grader.getSuggestions({ rawPrompt: 'test prompt', test: {} });
 
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0]).toEqual({
