@@ -110,6 +110,27 @@ describe('matchesClosedQa', () => {
     });
   });
 
+  it('should mark malformed grader responses as grader errors', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Maybe',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Model grader produced a malformed response:\nMaybe',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should handle input, criteria, and completion that need escaping', async () => {
     const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
     const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';

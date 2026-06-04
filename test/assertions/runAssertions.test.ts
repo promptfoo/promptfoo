@@ -8,6 +8,7 @@ import { TestGrader } from '../util/utils';
 
 import type {
   ApiProvider,
+  Assertion,
   AtomicTestCase,
   GradingResult,
   ProviderResponse,
@@ -308,6 +309,44 @@ describe('runAssertions', () => {
           reason: 'Known mismatch',
         },
       },
+    });
+  });
+
+  it('should normalize named scores when a matching provider assertion fails as expected', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: () => ({
+              pass: false,
+              score: 0,
+              reason: 'custom metric failed',
+              namedScores: { safety: 0 },
+              namedScoreWeights: { safety: 3 },
+            }),
+            xfail: 'openai:*',
+          } as Assertion,
+        ],
+      },
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { safety: 1 },
+      namedScoreWeights: { safety: 3 },
+    });
+    expect(result.componentResults?.[0]).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { safety: 1 },
+      namedScoreWeights: { safety: 3 },
     });
   });
 

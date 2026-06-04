@@ -464,6 +464,13 @@ function applyProviderXFail(
   }
 
   const reasonSuffix = match.reason ? ` (${match.reason})` : '';
+  const normalizedNamedScores = result.namedScores
+    ? {
+        namedScores: Object.fromEntries(
+          Object.keys(result.namedScores).map((metric) => [metric, result.pass ? 0 : 1]),
+        ),
+      }
+    : {};
   const metadata = {
     ...result.metadata,
     xfail: {
@@ -480,6 +487,7 @@ function applyProviderXFail(
   if (result.pass) {
     return {
       ...result,
+      ...normalizedNamedScores,
       pass: false,
       score: 0,
       reason: `Assertion was expected to fail for provider "${match.provider}"${reasonSuffix}, but passed`,
@@ -489,6 +497,7 @@ function applyProviderXFail(
 
   return {
     ...result,
+    ...normalizedNamedScores,
     pass: true,
     score: 1,
     reason: `Assertion failed as expected for provider "${match.provider}"${reasonSuffix}: ${result.reason}`,

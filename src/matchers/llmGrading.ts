@@ -357,6 +357,7 @@ export async function matchesClosedQa(
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
       reason = `Model grader produced a malformed response:\n${resp.output}`;
+      return graderFail(reason, resp.tokenUsage);
     }
     return {
       pass,
