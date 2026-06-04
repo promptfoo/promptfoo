@@ -8,7 +8,6 @@ import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders } from '../../providers/index';
@@ -18,7 +17,11 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
@@ -223,10 +226,10 @@ export async function doTargetPurposeDiscovery(
 
       const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
-        },
+        // Auth is injected centrally at the fetch layer for the configured cloud
+        // origin only, so the saved token is never sent to a custom
+        // PROMPTFOO_REMOTE_GENERATION_URL.
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(
           TargetPurposeDiscoveryRequestSchema.parse({
             state: {

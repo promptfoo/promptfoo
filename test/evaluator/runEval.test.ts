@@ -624,6 +624,32 @@ describe('runEval', () => {
     expect(result.vars).toEqual({ topic: 'weather' });
   });
 
+  it('should keep trace linkage when a traced provider call fails', async () => {
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('traced-error-provider'),
+      callApi: vi.fn().mockRejectedValue(new Error('Traced API Error')),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: {
+          evaluationId: 'eval-provider-error-trace',
+          tracingEnabled: true,
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.evaluationId).toBe('eval-provider-error-trace');
+    expect(result.error).toContain('Traced API Error');
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+  });
+
   it('should handle null output differently for red team tests', async () => {
     const nullOutputProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('null-provider'),

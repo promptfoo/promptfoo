@@ -30,9 +30,10 @@ vi.mock('node:module', () => {
   };
 });
 
-vi.mock('../../src/util/fetch', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../src/util/fetch')>('../../src/util/fetch');
+vi.mock('../../src/util/fetch/index', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
+    '../../src/util/fetch/index',
+  );
   return {
     ...actual,
     fetchWithRetries: vi.fn(actual.fetchWithRetries),

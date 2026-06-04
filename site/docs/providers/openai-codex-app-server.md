@@ -69,6 +69,26 @@ export OPENAI_API_KEY=your_api_key_here
 
 Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible evals, prefer API-key-backed runs or set `cli_env.CODEX_HOME` to a fixture home directory that already contains the intended Codex login state.
 
+### Run on Amazon Bedrock
+
+Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-app-server
+    config:
+      model: openai.gpt-5.5 # Bedrock model id (note the openai. prefix)
+      model_provider: amazon-bedrock
+      sandbox_mode: read-only
+      approval_policy: never
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+```
+
+The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model ids, request model access in a supported Region (`us-east-2` for GPT-5.5), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
+
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
@@ -326,7 +346,23 @@ Command output, tool arguments, and approval metadata are sanitized before they 
 
 ## Tracing
 
-Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items.
+Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
+
+To verify that an app-server protocol turn was traced, count the turn markers:
+
+```yaml
+assert:
+  - type: trace-span-count
+    value:
+      pattern: 'gen_ai.turn *'
+      min: 1
+      max: 1
+```
+
+An app-server `turn/start` request covers one agent turn, including any internal model
+generations and tool execution. App-server notifications do not expose those internal
+model-generation boundaries, so these markers cannot distinguish batched from
+sequential tool calls inside a turn.
 
 Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 

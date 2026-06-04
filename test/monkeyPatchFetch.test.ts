@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../src/constants';
 import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
 import logger, { logRequestResponse } from '../src/logger';
@@ -17,6 +17,7 @@ vi.mock('../src/logger', () => ({
 vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn(),
     getApiKey: vi.fn(),
   },
 }));
@@ -40,9 +41,14 @@ describe('monkeyPatchFetch', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue(CLOUD_API_HOST);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
     vi.mocked(logRequestResponse).mockClear();
     mockOriginalFetch.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should log successful requests and responses', async () => {
@@ -100,6 +106,104 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
+  it('should add Authorization header for configured on-prem cloud API requests', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    const apiKey = 'test-api-key-123';
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/api');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+
+    const url = 'https://onprem.example.com/api/v1/task';
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+  });
+
+  it.each([
+    'https://custom.example.com/harmful',
+    'https://api.promptfoo.dev.attacker.example.com/api/v1/task',
+  ])('should not forward cloud credentials to %s', async (url) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
+  });
+
+  it('should attach the token for a port-bearing on-prem cloud host', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    const apiKey = 'test-api-key-123';
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com:8443');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+
+    const url = 'https://onprem.example.com:8443/api/v1/task';
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+  });
+
+  it.each([
+    'https://onprem.example.com/api/v1/task', // same host, default :443 -> different origin
+    'http://onprem.example.com:8443/api/v1/task', // same host:port -> http vs https
+  ])('should not attach the token to %s when the cloud host is https://onprem.example.com:8443', async (url) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com:8443');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
+  });
+
+  it.each([
+    '',
+    'not a url',
+    'onprem.example.com',
+  ])('should fail closed (no token) when getApiHost() returns the unparseable value %p', async (host) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue(host);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+
+    const url = 'https://api.promptfoo.dev/api/v1/task';
+    await monkeyPatchFetch(url);
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
+  });
+
+  it.each([
+    'Authorization',
+    'authorization',
+  ])('should not override a caller-supplied %s header for cloud requests', async (headerName) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    // The saved token differs from the caller-supplied one: e.g. validating/rotating
+    // a new key against an already-logged-in cloud host must send the new token, not
+    // the saved one. Regression guard for CloudConfig.validateApiToken().
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+
+    const url = CLOUD_API_HOST + '/api/v1/users/me';
+    await monkeyPatchFetch(url, { headers: { [headerName]: 'Bearer caller-token' } });
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: { [headerName]: 'Bearer caller-token' },
+    });
+  });
+
   it('should not add Authorization header for cloud API requests when no token available', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
@@ -109,9 +213,7 @@ describe('monkeyPatchFetch', () => {
     const url = CLOUD_API_HOST + '/api/test';
     await monkeyPatchFetch(url);
 
-    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
-      headers: {},
-    });
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
   });
 
   it('should handle URL objects for cloud API requests', async () => {
@@ -194,6 +296,30 @@ describe('monkeyPatchFetch', () => {
     expect(logger.debug).toHaveBeenCalledWith(
       expect.stringContaining('Connection error, please check your network connectivity'),
     );
+  });
+
+  it('should redact credentials in connection error target and proxy URLs', async () => {
+    const connectionError = new TypeError('fetch failed');
+    connectionError.cause = {
+      stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple',
+    };
+    mockOriginalFetch.mockRejectedValue(connectionError);
+    vi.stubEnv('HTTP_PROXY', 'https://proxy-user:proxy-password@proxy.example.com?token=proxy-key');
+
+    const url =
+      'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+
+    await expect(monkeyPatchFetch(url)).rejects.toThrow('fetch failed');
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).toContain('proxy.example.com');
+    expect(debugLogs).not.toContain('webhook-user');
+    expect(debugLogs).not.toContain('webhook-password');
+    expect(debugLogs).not.toContain('webhook-secret');
+    expect(debugLogs).not.toContain('proxy-user');
+    expect(debugLogs).not.toContain('proxy-password');
+    expect(debugLogs).not.toContain('proxy-key');
   });
 
   it('should not log errors for excluded endpoints', async () => {
