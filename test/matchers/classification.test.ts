@@ -104,10 +104,30 @@ describe('matchesClassification', () => {
       }),
     };
 
-    await expect(matchesClassification(undefined, 'Sample output', 0.5, grading)).resolves.toEqual({
+    await expect(
+      matchesClassification(undefined, 'Sample output', 0.5, grading),
+    ).resolves.toMatchObject({
       pass: false,
       reason: 'No classification scores returned',
       score: 0,
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should mark classification provider errors as grader errors', async () => {
+    const grading: GradingConfig = {
+      provider: Object.assign(createMockProvider({ id: 'failing-classification-provider' }), {
+        callClassificationApi: vi.fn().mockResolvedValue({ error: 'classification unavailable' }),
+      }),
+    };
+
+    await expect(
+      matchesClassification(undefined, 'Sample output', 0.5, grading),
+    ).resolves.toMatchObject({
+      pass: false,
+      reason: 'classification unavailable',
+      score: 0,
+      metadata: { graderError: true },
     });
   });
 

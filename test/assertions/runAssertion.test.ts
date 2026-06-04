@@ -2676,6 +2676,70 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('Grader provider errors with xfail', () => {
+    it('should not xfail classification provider errors', async () => {
+      const classificationProvider = Object.assign(
+        createMockProvider({ id: 'classification-provider' }),
+        {
+          callClassificationApi: vi.fn().mockResolvedValue({ error: 'classification unavailable' }),
+        },
+      );
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: createMockProvider({ id: 'openai:gpt-4o-mini' }),
+        assertion: {
+          type: 'classifier',
+          value: 'safe',
+          xfail: true,
+        },
+        test: {
+          options: {
+            provider: classificationProvider,
+          },
+        } as AtomicTestCase,
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'classification unavailable',
+        metadata: { graderError: true },
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+
+    it('should not xfail moderation provider errors', async () => {
+      const moderationProvider = Object.assign(createMockProvider({ id: 'moderation-provider' }), {
+        callModerationApi: vi.fn().mockResolvedValue({ error: 'moderation unavailable' }),
+      });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: createMockProvider({ id: 'openai:gpt-4o-mini' }),
+        assertion: {
+          type: 'moderation',
+          xfail: true,
+        },
+        test: {
+          options: {
+            provider: moderationProvider,
+          },
+        } as AtomicTestCase,
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Moderation API error: moderation unavailable',
+        metadata: { graderError: true },
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+  });
+
   describe('is-xml', () => {
     const provider = {
       callApi: vi.fn().mockResolvedValue({ cost: 0.001 }),

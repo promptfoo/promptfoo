@@ -80,6 +80,28 @@ describe('handleModeration', () => {
     });
   });
 
+  it('preserves matcher metadata', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Moderation API error: provider unavailable',
+      metadata: { graderError: true },
+    });
+
+    const result = await handleModeration({
+      ...baseParams,
+      providerResponse: { output: 'output' },
+    });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Moderation API error: provider unavailable',
+      metadata: { graderError: true },
+      assertion: mockAssertion,
+    });
+  });
+
   it('should use redteam final prompt when available', async () => {
     mockedMatchesModeration.mockResolvedValue({
       pass: true,

@@ -108,10 +108,11 @@ describe('matchesModeration', () => {
         userPrompt: 'test prompt',
         assistantResponse: 'test response',
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       pass: false,
       score: 0,
       reason: 'Moderation API error: provider unavailable',
+      metadata: { graderError: true },
     });
   });
 

@@ -86,11 +86,8 @@ export const handleModeration = async ({
     test.options,
   );
 
-  const pass = moderationResult.pass;
   return {
-    pass,
-    score: moderationResult.score,
-    reason: moderationResult.reason,
+    ...moderationResult,
     assertion,
   };
 };

@@ -4,6 +4,7 @@ import { loadApiProvider } from '../providers/index';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../redteam/constants';
 import invariant from '../util/invariant';
 import { getAndCheckProvider } from './providers';
+import { graderFail } from './shared';
 
 import type { ApiModerationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -46,11 +47,7 @@ export async function matchesModeration(
 
   const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
   if (resp.error) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Moderation API error: ${resp.error}`,
-    };
+    return graderFail(`Moderation API error: ${resp.error}`);
   }
 
   const { flags } = resp;

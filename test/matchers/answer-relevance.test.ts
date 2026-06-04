@@ -161,6 +161,38 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.completionDetails).toBeDefined();
   });
 
+  it('should mark question generation provider errors as grader errors', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'question grader unavailable',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesAnswerRelevance('Input text', 'Sample output', 0.5)).resolves.toMatchObject(
+      {
+        pass: false,
+        score: 0,
+        reason: 'question grader unavailable',
+        metadata: { graderError: true },
+      },
+    );
+  });
+
+  it('should mark embedding provider errors as grader errors', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      error: 'embedding provider unavailable',
+      tokenUsage: { total: 5, prompt: 2, completion: 3 },
+    });
+
+    await expect(matchesAnswerRelevance('Input text', 'Sample output', 0.5)).resolves.toMatchObject(
+      {
+        pass: false,
+        score: 0,
+        reason: 'embedding provider unavailable',
+        metadata: { graderError: true },
+      },
+    );
+  });
+
   it('should return metadata with generated questions and similarities', async () => {
     const input = 'What is the capital of France?';
     const output = 'The capital of France is Paris.';

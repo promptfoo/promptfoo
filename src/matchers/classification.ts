@@ -1,5 +1,5 @@
 import { getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { graderFail } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -27,17 +27,13 @@ export async function matchesClassification(
   const resp = await finalProvider.callClassificationApi(output);
 
   if (!resp.classification) {
-    return fail(resp.error || 'Unknown error fetching classification');
+    return graderFail(resp.error || 'Unknown error fetching classification');
   }
   let score: number;
   if (expected === undefined) {
     const scores = Object.values(resp.classification);
     if (scores.length === 0) {
-      return {
-        pass: false,
-        score: 0,
-        reason: 'No classification scores returned',
-      };
+      return graderFail('No classification scores returned');
     }
     score = Math.max(...scores);
   } else {
