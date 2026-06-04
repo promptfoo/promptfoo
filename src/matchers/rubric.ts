@@ -34,6 +34,8 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_IMAGE_FETCH_TIMEOUT_MS = 30_000;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const MAX_GRADING_IMAGE_REDIRECTS = 5;
+const MULTIMODAL_GRADING_INSTRUCTION =
+  'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.';
 
 export class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -411,10 +413,16 @@ function appendImagesToContent(
 }
 
 function appendImagesToChatPrompt(renderedPrompt: string, imageUrls: string[]): string {
-  const imageParts = imageUrls.map<MultimodalPromptPart>((url) => ({
-    type: 'image_url',
-    image_url: { url },
-  }));
+  const imageParts: MultimodalPromptPart[] = [
+    {
+      type: 'text',
+      text: MULTIMODAL_GRADING_INSTRUCTION,
+    },
+    ...imageUrls.map<MultimodalPromptPart>((url) => ({
+      type: 'image_url',
+      image_url: { url },
+    })),
+  ];
 
   try {
     const parsed = JSON.parse(renderedPrompt);

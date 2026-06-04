@@ -311,6 +311,10 @@ describe('matchesLlmRubric', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Grade this output: Generated image' },
+          {
+            type: 'text',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.',
+          },
           { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
         ],
       },
@@ -367,6 +371,10 @@ describe('matchesLlmRubric', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Grade this output: Generated image' },
+          {
+            type: 'text',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.',
+          },
           { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
           {
             type: 'image_url',
@@ -411,7 +419,7 @@ describe('matchesLlmRubric', () => {
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(fetchWithTimeout).not.toHaveBeenCalled();
-    expect(JSON.parse(prompt)[0].content[1]).toEqual({
+    expect(JSON.parse(prompt)[0].content[2]).toEqual({
       type: 'image_url',
       image_url: { url: 'https://internal.example/image.png' },
     });
@@ -449,7 +457,7 @@ describe('matchesLlmRubric', () => {
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(prompt)[0].content[1]).toEqual({
+    expect(JSON.parse(prompt)[0].content[2]).toEqual({
       type: 'image_url',
       image_url: { url: 'https://example.com/redirect-image.png' },
     });
@@ -502,7 +510,7 @@ describe('matchesLlmRubric', () => {
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(blobs.getBlobByHash).toHaveBeenCalledWith(hash);
-    expect(JSON.parse(prompt)[0].content[1]).toEqual({
+    expect(JSON.parse(prompt)[0].content[2]).toEqual({
       type: 'image_url',
       image_url: {
         url: `data:image/png;base64,${Buffer.from('image-bytes').toString('base64')}`,
