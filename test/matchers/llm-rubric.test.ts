@@ -391,6 +391,79 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should append a user message when a JSON chat rubric has no user message', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: JSON.stringify([{ role: 'system', content: 'Return JSON.' }]),
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual([
+      { role: 'system', content: 'Return JSON.' },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.',
+          },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+        ],
+      },
+    ]);
+  });
+
+  it('should leave the grading prompt unchanged when image outputs cannot be materialized', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'text only ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the output match?',
+      'Generated output',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated output',
+          images: [{}],
+        },
+      },
+    );
+
+    expect(provider.callApi).toHaveBeenCalledWith(
+      'Grade this output: Generated output',
+      expect.any(Object),
+    );
+    expect(result.metadata).toEqual({
+      renderedGradingPrompt: 'Grade this output: Generated output',
+    });
+  });
+
   it('should not hydrate private image URLs by default', async () => {
     mockLookup.mockResolvedValueOnce([{ address: '127.0.0.1', family: 4 }]);
     const provider = createMockProvider({
