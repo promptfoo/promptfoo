@@ -37,7 +37,6 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { renderMetricName } from '../util/metricNames';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -111,8 +110,6 @@ import type {
   ProviderResponse,
   ScoringFunction,
 } from '../types/index';
-
-export { renderMetricName } from '../util/metricNames';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
@@ -319,6 +316,33 @@ const ASSERTION_HANDLERS: Record<
 };
 
 const nunjucks = getNunjucksEngine();
+
+/**
+ * Renders a metric name template with test variables.
+ * @param metric - The metric name, possibly containing Nunjucks template syntax
+ * @param vars - The test variables to use for rendering
+ * @returns The rendered metric name, or the original if rendering fails
+ */
+export function renderMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (!metric) {
+    return metric;
+  }
+  try {
+    const rendered = nunjucks.renderString(metric, vars);
+    if (rendered === '' && metric !== '') {
+      logger.debug(`Metric template "${metric}" rendered to empty string`);
+    }
+    return rendered;
+  } catch (error) {
+    logger.warn(
+      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
+    );
+    return metric;
+  }
+}
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
