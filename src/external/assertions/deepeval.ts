@@ -1,7 +1,6 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 
-import { isGraderFailure } from '../../matchers/llmGrading';
 import { callProviderWithContext, getAndCheckProvider } from '../../matchers/providers';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
@@ -64,7 +63,7 @@ export const handleConversationRelevance = async ({
       providerCallContext,
     );
 
-    if (isGraderFailure(result)) {
+    if (result.metadata?.graderError === true) {
       return {
         ...result,
         assertion,

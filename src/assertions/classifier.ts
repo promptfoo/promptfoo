@@ -1,5 +1,4 @@
 import { matchesClassification } from '../matchers/classification';
-import { isGraderFailure } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -23,7 +22,7 @@ export async function handleClassifier({
     test.options,
   );
 
-  if (inverse && !isGraderFailure(classificationResult)) {
+  if (inverse && classificationResult.metadata?.graderError !== true) {
     classificationResult.pass = !classificationResult.pass;
     classificationResult.score = 1 - classificationResult.score;
   }

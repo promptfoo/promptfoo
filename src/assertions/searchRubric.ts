@@ -1,4 +1,3 @@
-import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesSearchRubric } from '../matchers/search';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -27,7 +26,7 @@ export async function handleSearchRubric({
     providerCallContext,
   );
 
-  if (inverse && !isGraderFailure(result)) {
+  if (inverse && result.metadata?.graderError !== true) {
     result.pass = !result.pass;
     result.reason = result.pass
       ? `Output does not require web search verification: ${result.reason}`
