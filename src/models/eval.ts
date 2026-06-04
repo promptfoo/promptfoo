@@ -211,6 +211,15 @@ function projectPromptForRedteamReport<T extends Prompt>(
   } as T;
 }
 
+function projectProviderForRedteamReport(
+  provider: EvaluateResult['provider'],
+): EvaluateResult['provider'] {
+  return {
+    id: provider.id ?? '',
+    ...(typeof provider.label === 'string' && { label: provider.label }),
+  };
+}
+
 function createProjectedGradingResult(row: RedteamReportResultRow): GradingResult | undefined {
   if (!row.gradingResultExists) {
     return undefined;
@@ -418,7 +427,7 @@ function projectResultForRedteamReport(
     testIdx: result.testIdx,
     testCase,
     promptId: stripFlags.shouldStripPromptText ? hashPrompt(result.prompt) : result.promptId,
-    provider: result.provider,
+    provider: projectProviderForRedteamReport(result.provider),
     prompt: projectPromptForRedteamReport(result.prompt, stripFlags.shouldStripPromptText),
     vars: stripFlags.shouldStripTestVars ? {} : projectVarsForRedteamReport(result.vars, injectVar),
     response,

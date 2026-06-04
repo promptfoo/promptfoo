@@ -70,6 +70,12 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
+const OpenApiResultRowParamsSchema = z.object({
+  id: z.string().min(1),
+  testIdx: z.number().int().nonnegative(),
+  promptIdx: z.number().int().nonnegative(),
+});
+
 export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
@@ -248,7 +254,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Results'],
     summary: 'Get one evaluation result row',
     request: {
-      params: params('ResultRowParams', ServerSchemas.ResultRow.Params),
+      params: params('ResultRowParams', OpenApiResultRowParamsSchema),
     },
     responses: {
       200: jsonResponse('ResultRowResponse', ServerSchemas.ResultRow.Response),

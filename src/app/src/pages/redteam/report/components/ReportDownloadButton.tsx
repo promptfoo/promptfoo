@@ -12,6 +12,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
@@ -33,6 +34,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
   const [isHovering, setIsHovering] = useState(false);
 
   const { recordEvent } = useTelemetry();
+  const { showToast } = useToast();
 
   const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
@@ -89,6 +91,11 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       : `report.${extension}`;
   };
 
+  const showDownloadError = (format: 'CSV' | 'JSON', error: unknown) => {
+    const message = error instanceof Error && error.message ? error.message : 'Unexpected error';
+    showToast(`Failed to download ${format}: ${message}`, 'error', 5000);
+  };
+
   const handleCsvDownload = () => {
     setIsDownloading(true);
 
@@ -112,6 +119,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       }
     } catch (error) {
       console.error('Error generating CSV:', error);
+      showDownloadError('CSV', error);
     } finally {
       setIsDownloading(false);
     }
@@ -147,6 +155,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       }
     } catch (error) {
       console.error('Error generating JSON:', error);
+      showDownloadError('JSON', error);
     } finally {
       setIsDownloading(false);
     }

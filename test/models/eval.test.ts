@@ -1510,6 +1510,33 @@ describe('evaluator', () => {
       expect(projected.results.results[0].vars).toEqual({});
     });
 
+    it('removes provider config from legacy compact result projections', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            provider: {
+              id: 'legacy-provider',
+              label: 'Legacy provider',
+              config: {
+                apiKey: 'provider-secret-should-not-appear',
+                oversized: 'provider-config-should-not-appear'.repeat(100),
+              },
+            } as EvaluateResult['provider'],
+          }),
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].provider).toEqual({
+        id: 'legacy-provider',
+        label: 'Legacy provider',
+      });
+      expect(JSON.stringify(projected)).not.toContain('provider-secret-should-not-appear');
+      expect(JSON.stringify(projected)).not.toContain('provider-config-should-not-appear');
+    });
+
     it('preserves report-relevant JSON types in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addResult(

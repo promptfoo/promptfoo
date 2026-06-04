@@ -81,6 +81,7 @@ describe('server OpenAPI generation', () => {
     const addEvalResultsOperation = paths['/api/eval/{id}/results']?.post as any;
     const createEvalJobOperation = paths['/api/eval/job']?.post as any;
     const evalTableOperation = paths['/api/eval/{id}/table']?.get as any;
+    const resultRowOperation = paths['/api/results/{id}/rows/{testIdx}/{promptIdx}']?.get as any;
     const getMediaOperation = paths['/api/media/{type}/{filename}']?.get as any;
     const getMediaInfoOperation = paths['/api/media/info/{type}/{filename}']?.get as any;
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
@@ -99,6 +100,12 @@ describe('server OpenAPI generation', () => {
     ) as any;
     const evalTableLimitParam = evalTableOperation?.parameters?.find(
       (param: any) => param.name === 'limit',
+    ) as any;
+    const resultRowTestIdxParam = resultRowOperation?.parameters?.find(
+      (param: any) => param.name === 'testIdx',
+    ) as any;
+    const resultRowPromptIdxParam = resultRowOperation?.parameters?.find(
+      (param: any) => param.name === 'promptIdx',
     ) as any;
     const evalTableResponseContent = evalTableOperation?.responses['200']?.content;
     const evalTableJsonSchema = evalTableResponseContent?.['application/json']?.schema as
@@ -143,6 +150,20 @@ describe('server OpenAPI generation', () => {
     expect(evalTableJsonSchema?.oneOf ?? evalTableJsonSchema?.anyOf).toHaveLength(2);
     expect(evalTableLimitParam?.schema).toEqual(
       expect.objectContaining({ default: 50, type: 'integer' }),
+    );
+    expect(resultRowTestIdxParam).toEqual(
+      expect.objectContaining({
+        in: 'path',
+        required: true,
+        schema: expect.objectContaining({ minimum: 0, type: 'integer' }),
+      }),
+    );
+    expect(resultRowPromptIdxParam).toEqual(
+      expect.objectContaining({
+        in: 'path',
+        required: true,
+        schema: expect.objectContaining({ minimum: 0, type: 'integer' }),
+      }),
     );
     expect(
       getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties

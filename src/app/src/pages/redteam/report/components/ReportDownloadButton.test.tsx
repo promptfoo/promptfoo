@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { mockObjectUrl, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
@@ -35,6 +36,18 @@ describe('ReportDownloadButton', () => {
   } as unknown as EvalData;
   let objectUrlMock: ReturnType<typeof mockObjectUrl>;
 
+  const renderDownloadButton = (props?: Partial<ComponentProps<typeof ReportDownloadButton>>) =>
+    renderWithProviders(
+      <ToastProvider>
+        <ReportDownloadButton
+          evalId="eval-1"
+          evalDescription="Report"
+          evalData={compactEvalData}
+          {...props}
+        />
+      </ToastProvider>,
+    );
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetCallApiMock();
@@ -52,13 +65,7 @@ describe('ReportDownloadButton', () => {
     mockCallApiResponse({ data: fullEvalData });
     const user = userEvent.setup();
 
-    renderWithProviders(
-      <ReportDownloadButton
-        evalId="eval/report id"
-        evalDescription="Report"
-        evalData={compactEvalData}
-      />,
-    );
+    renderDownloadButton({ evalId: 'eval/report id' });
 
     await user.click(screen.getByRole('button', { name: 'download report' }));
     await user.click(await screen.findByText('JSON'));
@@ -69,6 +76,21 @@ describe('ReportDownloadButton', () => {
       });
       expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     });
+  });
+
+  it('shows an error and does not create a JSON file when the full evaluation request fails', async () => {
+    mockCallApiResponse({ error: 'server error' }, { ok: false, status: 500 });
+    const user = userEvent.setup();
+
+    renderDownloadButton();
+
+    await user.click(screen.getByRole('button', { name: 'download report' }));
+    await user.click(await screen.findByText('JSON'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to download JSON: Failed to load full evaluation data (500)',
+    );
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it('uses the provider-reported final prompt in CSV exports', async () => {
@@ -106,9 +128,7 @@ describe('ReportDownloadButton', () => {
     } as unknown as EvalData;
     const user = userEvent.setup();
 
-    renderWithProviders(
-      <ReportDownloadButton evalId="eval-1" evalDescription="Report" evalData={evalData} />,
-    );
+    renderDownloadButton({ evalData });
 
     await user.click(screen.getByRole('button', { name: 'download report' }));
     await user.click(await screen.findByText('CSV'));
