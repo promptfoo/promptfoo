@@ -340,9 +340,9 @@ export async function doEval(
         commandLineOptions,
       } = await resolveConfigs(
         {},
-        normalizePersistedConfigForResume(
+        await normalizePersistedConfigForResume(
           resumeEval.config,
-          await resumeEval.getProvidersFromResults(),
+          resumeEval.getProvidersFromResults.bind(resumeEval),
         ),
       ));
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -408,9 +408,9 @@ export async function doEval(
         commandLineOptions,
       } = await resolveConfigs(
         {},
-        normalizePersistedConfigForResume(
+        await normalizePersistedConfigForResume(
           resumeEval.config,
-          await resumeEval.getProvidersFromResults(),
+          resumeEval.getProvidersFromResults.bind(resumeEval),
         ),
       ));
 

@@ -326,6 +326,8 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
 
+    expect(originalEval.getProvidersFromResults).toHaveBeenCalledTimes(1);
+
     expect(resolveConfigs).toHaveBeenCalledWith(
       {},
       {

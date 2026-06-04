@@ -308,9 +308,9 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     // Load configuration from the original evaluation
     const configs = await resolveConfigs(
       {},
-      normalizePersistedConfigForResume(
+      await normalizePersistedConfigForResume(
         originalEval.config,
-        await originalEval.getProvidersFromResults(),
+        originalEval.getProvidersFromResults.bind(originalEval),
       ),
     );
     testSuite = configs.testSuite;

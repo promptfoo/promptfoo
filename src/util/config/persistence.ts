@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { isApiProvider } from '../../types/providers';
 
 import type { UnifiedConfig } from '../../types/index';
@@ -80,54 +82,81 @@ export function normalizeConfigForPersistence<T extends Partial<UnifiedConfig>>(
   };
 }
 
+type ResultProviderLookup = Map<string, ProviderOptions[]>;
+
+function addResultProvider(
+  lookup: ResultProviderLookup,
+  key: string,
+  resultProvider: ProviderOptions,
+) {
+  const providers = lookup.get(key) ?? [];
+  if (!providers.some((provider) => provider.id === resultProvider.id)) {
+    providers.push(resultProvider);
+    lookup.set(key, providers);
+  }
+}
+
 function buildResultProviderLookup(resultProviders: ProviderOptions[] = []) {
-  const lookup = new Map<string, ProviderOptions>();
+  const lookup: ResultProviderLookup = new Map();
   for (const resultProvider of resultProviders) {
     if (typeof resultProvider.id === 'string' && resultProvider.id.length > 0) {
-      lookup.set(resultProvider.id, resultProvider);
+      addResultProvider(lookup, resultProvider.id, resultProvider);
       if (typeof resultProvider.label === 'string' && resultProvider.label.length > 0) {
-        lookup.set(resultProvider.label, resultProvider);
+        addResultProvider(lookup, resultProvider.label, resultProvider);
       }
     }
   }
   return lookup;
 }
-
-function normalizeLegacyProviderSummary(
+function isLegacyProviderSummary(
   provider: unknown,
-  resultProviderLookup: Map<string, ProviderOptions>,
-): unknown {
+): provider is { label: string; config?: unknown } {
   if (
     typeof provider !== 'object' ||
     provider === null ||
     Array.isArray(provider) ||
     'id' in provider
   ) {
-    return provider;
+    return false;
   }
 
   const providerObject = provider as { label?: unknown };
   const keys = Object.keys(providerObject);
-  if (
+  return (
     typeof providerObject.label === 'string' &&
     providerObject.label.length > 0 &&
     keys.length > 0 &&
     keys.every((key) => LEGACY_PROVIDER_SUMMARY_KEYS.has(key))
-  ) {
-    const resultProvider = resultProviderLookup.get(providerObject.label);
-    return {
-      ...resultProvider,
-      ...providerObject,
-      id: resultProvider?.id ?? providerObject.label,
-    };
-  }
-
-  return provider;
+  );
 }
 
+function normalizeLegacyProviderSummary(
+  provider: unknown,
+  resultProviderLookup: ResultProviderLookup,
+): unknown {
+  if (!isLegacyProviderSummary(provider)) {
+    return provider;
+  }
+
+  const candidates = resultProviderLookup.get(provider.label) ?? [];
+  const configMatches = candidates.filter((candidate) =>
+    isDeepStrictEqual(candidate.config, provider.config),
+  );
+  const resultProvider =
+    candidates.length === 1
+      ? candidates[0]
+      : configMatches.length === 1
+        ? configMatches[0]
+        : undefined;
+  return {
+    ...resultProvider,
+    ...provider,
+    id: resultProvider?.id ?? provider.label,
+  };
+}
 function normalizeLegacyProviders(
   providers: ProvidersConfig | undefined,
-  resultProviderLookup: Map<string, ProviderOptions>,
+  resultProviderLookup: ResultProviderLookup,
 ): ProvidersConfig | undefined {
   if (!Array.isArray(providers)) {
     return normalizeLegacyProviderSummary(providers, resultProviderLookup) as
@@ -144,14 +173,20 @@ function normalizeLegacyProviders(
  * It is intentionally scoped to persisted eval replay; fresh config validation
  * should still reject label-only providers.
  */
-export function normalizePersistedConfigForResume<T extends Partial<UnifiedConfig>>(
+export async function normalizePersistedConfigForResume<T extends Partial<UnifiedConfig>>(
   config: T,
-  resultProviders?: ProviderOptions[],
-): T {
+  loadResultProviders?: () => Promise<ProviderOptions[]>,
+): Promise<T> {
   if (!('providers' in config)) {
     return config;
   }
 
+  const providers = Array.isArray(config.providers) ? config.providers : [config.providers];
+  if (!providers.some(isLegacyProviderSummary)) {
+    return config;
+  }
+
+  const resultProviders = loadResultProviders ? await loadResultProviders() : [];
   return {
     ...config,
     providers: normalizeLegacyProviders(
