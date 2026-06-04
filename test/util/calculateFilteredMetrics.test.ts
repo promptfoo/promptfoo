@@ -784,7 +784,7 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScoreWeights?.accuracy).toBe(10002);
     });
 
-    it('should aggregate weighted named scores using grading result denominators', async () => {
+    it('should preserve weighted totals and rendered assertion counts', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,
       });
@@ -792,11 +792,11 @@ describe('calculateFilteredMetrics', () => {
       await eval_.addResult({
         promptIdx: 0,
         testIdx: 0,
-        testCase: { vars: {} },
+        testCase: { vars: { suffix: 'alpha' } },
         promptId: 'weighted-test',
         provider: { id: 'test', label: 'test' },
         prompt: { raw: 'test', label: 'test' },
-        vars: {},
+        vars: { suffix: 'alpha' },
         response: {
           output: 'test',
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
@@ -810,11 +810,33 @@ describe('calculateFilteredMetrics', () => {
           pass: false,
           score: 0.75,
           reason: 'weighted metric',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'first accuracy assertion',
+              assertion: {
+                type: 'contains',
+                value: 'a',
+                metric: 'accuracy:{{ suffix }}',
+              },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'second accuracy assertion',
+              assertion: {
+                type: 'contains',
+                value: 'b',
+                metric: 'accuracy:{{ suffix }}',
+              },
+            },
+          ],
           namedScoreWeights: {
-            accuracy: 4,
+            'accuracy:alpha': 4,
           },
         },
-        namedScores: { accuracy: 0.75 },
+        namedScores: { 'accuracy:alpha': 0.75 },
         cost: 0.001,
         metadata: {},
       });
@@ -825,9 +847,81 @@ describe('calculateFilteredMetrics', () => {
         whereSql: sql`eval_id = ${eval_.id}`,
       });
 
-      expect(metrics[0].namedScores.accuracy).toBeCloseTo(3, 10);
-      expect(metrics[0].namedScoreWeights?.accuracy).toBe(4);
-      expect(metrics[0].namedScoresCount.accuracy).toBe(1);
+      expect(metrics[0].namedScores['accuracy:alpha']).toBeCloseTo(3, 10);
+      expect(metrics[0].namedScoreWeights?.['accuracy:alpha']).toBe(4);
+      expect(metrics[0].namedScoresCount['accuracy:alpha']).toBe(2);
+    });
+
+    it.each([
+      ['expression', 'accuracy:\\u007b\\u007b suffix \\u007d\\u007d'],
+      [
+        'block',
+        'accuracy:\\u007b\\u0025 if suffix \\u0025\\u007dalpha\\u007b\\u0025 endif \\u0025\\u007d',
+      ],
+    ])('should render Unicode-escaped weighted %s metric templates', async (syntaxType, metric) => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: `weighted-unicode-escaped-template-${syntaxType}`,
+        evalId: eval_.id,
+        namedScores: '{"accuracy:alpha": 0.75}',
+        gradingResult: `{"componentResults": [{"assertion": {"metric": "${metric}"}}, {"assertion": {"metric": "${metric}"}}], "namedScoreWeights": {"accuracy:alpha": 4}}`,
+        testCase: '{"vars": {"suffix": "alpha"}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores['accuracy:alpha']).toBeCloseTo(3, 10);
+      expect(metrics[0].namedScoresCount['accuracy:alpha']).toBe(2);
+      expect(metrics[0].namedScoreWeights?.['accuracy:alpha']).toBe(4);
+    });
+
+    it('should process weighted templated counts across bounded fallback batches', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      const db = await getDb();
+      await db.run(sql`
+        WITH RECURSIVE row_numbers(value) AS (
+          SELECT 1
+          UNION ALL
+          SELECT value + 1 FROM row_numbers WHERE value < 5001
+        )
+        INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, named_scores, grading_result, latency_ms, cost
+        )
+        SELECT
+          printf('weighted-template-batch-%04d', value),
+          ${eval_.id},
+          0,
+          value,
+          ${'{"vars": {"suffix": "alpha"}}'},
+          ${'{}'},
+          ${'{}'},
+          0,
+          0.75,
+          ${'{"accuracy:alpha": 0.75}'},
+          ${'{"componentResults": [{"assertion": {"metric": "accuracy:{{ suffix }}"}}, {"assertion": {"metric": "accuracy:{{ suffix }}"}}], "namedScoreWeights": {"accuracy:alpha": 4}}'},
+          100,
+          0.001
+        FROM row_numbers
+      `);
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores['accuracy:alpha']).toBeCloseTo(5001 * 0.75 * 4, 8);
+      expect(metrics[0].namedScoresCount['accuracy:alpha']).toBe(10002);
+      expect(metrics[0].namedScoreWeights?.['accuracy:alpha']).toBe(5001 * 4);
     });
 
     it('should combine weighted and unweighted rows for the same metric', async () => {
@@ -920,7 +1014,7 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScoreWeights?.accuracy).toBe(6);
     });
 
-    it('should route only the unweighted metric of a partially weighted row through the fallback', async () => {
+    it('should aggregate a partially weighted component row exactly once', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,
       });
@@ -974,7 +1068,7 @@ describe('calculateFilteredMetrics', () => {
         whereSql: sql`eval_id = ${eval_.id}`,
       });
 
-      // `accuracy` is handled once by the SQL fast path and not re-counted by the fallback.
+      // The whole component-bearing row uses the canonical fallback exactly once.
       expect(metrics[0].namedScores.accuracy).toBeCloseTo(3, 10);
       expect(metrics[0].namedScoresCount.accuracy).toBe(1);
       expect(metrics[0].namedScoreWeights?.accuracy).toBe(4);

@@ -27,7 +27,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
-import { accumulateNamedMetric } from './namedMetrics';
+import { accumulateNamedMetric, type NamedMetricAccumulator } from './namedMetrics';
 
 import type { GradingResult, PromptMetrics, Vars } from '../types/index';
 
@@ -389,6 +389,16 @@ const hasAmbiguousNamedScoreJsonSql = sql`
   OR ${hasDuplicateTestVarsPropertySql}
 `;
 
+// Raw scans keep ordinary rows on the SQL fast path. Imported rows with a
+// Unicode escape use the bounded renderer because the escape may decode to a
+// Nunjucks delimiter.
+const hasComponentMetricTemplateSyntaxSql = sql`
+  instr(CAST(${componentResultsJson} AS TEXT), '{{') > 0
+  OR instr(CAST(${componentResultsJson} AS TEXT), '{%') > 0
+  OR instr(CAST(${componentResultsJson} AS TEXT), '{#') > 0
+  OR instr(CAST(${componentResultsJson} AS TEXT), ${'\\u'}) > 0
+`;
+
 const hasAmbiguousAssertionJsonSql = sql`
   ${hasDuplicateComponentResultsPropertySql}
   OR ${hasDuplicateComponentPassPropertySql}
@@ -415,14 +425,32 @@ async function aggregateNamedScores(
   // multiply them back into weighted totals before aggregating prompt metrics.
   //
   // Entries without stored weights need the same assertion-count fallback as
-  // accumulateNamedMetric(), including template-rendered metric names, so those
-  // rows are handled in JavaScript below.
+  // accumulateNamedMetric(), so those rows are handled in JavaScript below.
+  // Literal component metric names can be counted directly in SQL. Rows with
+  // template syntax use a bounded JavaScript count-only fallback so rendering
+  // stays aligned with the canonical accumulator without moving weighted totals
+  // and weights out of the fast path.
   const query = sql`
     SELECT
       prompt_idx,
       score_entries.key as metric_name,
       SUM(CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)) as metric_sum,
-      COUNT(*) as metric_count,
+      SUM(
+        CASE
+          WHEN ${hasComponentMetricTemplateSyntaxSql} THEN 1
+          ELSE MAX(
+            1,
+            (
+              SELECT COUNT(*)
+              FROM json_each(${componentResultsJson}) as component_entries
+              WHERE component_entries.type = 'object'
+                AND json_type(component_entries.value, '$.assertion.metric') = 'text'
+                AND json_extract(component_entries.value, '$.assertion.metric')
+                  = score_entries.key
+            )
+          )
+        END
+      ) as metric_count,
       SUM(CAST(weight_entries.value AS REAL)) as metric_weight_total
     FROM eval_results
     JOIN json_each(${namedScoresJson}) as score_entries
@@ -603,7 +631,15 @@ interface FallbackNamedScoreRow {
 function aggregateFallbackNamedScoreRow(
   metrics: PromptMetrics[],
   row: FallbackNamedScoreRow,
-  aggregateAllMetrics: boolean,
+  {
+    metricMode,
+    countDeltaOnly,
+    useRawJson,
+  }: {
+    metricMode: 'all' | 'unweighted' | 'weighted';
+    countDeltaOnly: boolean;
+    useRawJson: boolean;
+  },
 ): void {
   const idx = row.prompt_idx;
   if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
@@ -615,13 +651,13 @@ function aggregateFallbackNamedScoreRow(
     return;
   }
 
-  const gradingResult = aggregateAllMetrics
+  const gradingResult = useRawJson
     ? parseGradingResultForNamedMetrics(row.grading_result)
     : createCompactGradingResultForNamedMetrics(
         row.named_score_weights,
         row.component_metric_templates,
       );
-  const testVars = aggregateAllMetrics
+  const testVars = useRawJson
     ? ((parseJsonObject(row.test_case)?.vars as Vars | undefined) ?? {})
     : ((parseJsonObject(row.test_vars) ?? {}) as Vars);
 
@@ -631,13 +667,30 @@ function aggregateFallbackNamedScoreRow(
     }
 
     const metricWeight = getValidNamedScoreWeight(gradingResult, metricName);
-    if (metricWeight !== undefined) {
-      if (aggregateAllMetrics) {
-        addOwnMetricValue(metrics[idx].namedScores, metricName, metricValue * metricWeight);
-        addOwnMetricValue(metrics[idx].namedScoresCount, metricName, 1);
-        metrics[idx].namedScoreWeights ||= {};
-        addOwnMetricValue(metrics[idx].namedScoreWeights, metricName, metricWeight);
-      }
+    if (
+      (metricMode === 'unweighted' && metricWeight !== undefined) ||
+      (metricMode === 'weighted' && metricWeight === undefined)
+    ) {
+      continue;
+    }
+
+    if (countDeltaOnly) {
+      const countAccumulator: NamedMetricAccumulator = {
+        namedScores: {},
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      };
+      accumulateNamedMetric(countAccumulator, {
+        metricName,
+        metricValue,
+        gradingResult,
+        testVars,
+      });
+      addOwnMetricValue(
+        metrics[idx].namedScoresCount,
+        metricName,
+        (countAccumulator.namedScoresCount[metricName] ?? 1) - 1,
+      );
       continue;
     }
 
@@ -656,6 +709,7 @@ async function aggregateFallbackNamedScores(
 ): Promise<void> {
   await aggregateAmbiguousNamedScores(metrics, whereSql);
   await aggregateUnweightedNamedScores(metrics, whereSql);
+  await aggregateTemplatedWeightedNamedScoreCounts(metrics, whereSql);
 }
 
 async function aggregateAmbiguousNamedScores(
@@ -692,7 +746,11 @@ async function aggregateAmbiguousNamedScores(
     }
 
     for (const row of results) {
-      aggregateFallbackNamedScoreRow(metrics, row, true);
+      aggregateFallbackNamedScoreRow(metrics, row, {
+        metricMode: 'all',
+        countDeltaOnly: false,
+        useRawJson: true,
+      });
     }
 
     lastResultId = results[results.length - 1]?.id;
@@ -735,6 +793,63 @@ async function aggregateUnweightedNamedScores(
               weight_entries.key IS NULL
               OR NOT (${validNamedScoreWeightSql})
             )
+          )
+      ORDER BY eval_results.id
+      LIMIT ${NAMED_SCORE_FALLBACK_BATCH_SIZE}
+    `;
+
+    const results = (await db.all(query)) as FallbackNamedScoreRow[];
+
+    if (results.length === 0) {
+      break;
+    }
+
+    for (const row of results) {
+      aggregateFallbackNamedScoreRow(metrics, row, {
+        metricMode: 'unweighted',
+        countDeltaOnly: false,
+        useRawJson: false,
+      });
+    }
+
+    lastResultId = results[results.length - 1]?.id;
+    if (lastResultId === undefined || results.length < NAMED_SCORE_FALLBACK_BATCH_SIZE) {
+      break;
+    }
+  }
+}
+
+async function aggregateTemplatedWeightedNamedScoreCounts(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+): Promise<void> {
+  const db = await getDb();
+  let lastResultId: string | undefined;
+
+  while (true) {
+    const cursorSql =
+      lastResultId === undefined ? sql`` : sql`AND eval_results.id > ${lastResultId}`;
+    const query = sql`
+      SELECT
+        id,
+        prompt_idx,
+        named_scores,
+        ${namedScoreWeightsJson} as named_score_weights,
+        ${componentMetricTemplatesJson} as component_metric_templates,
+        ${testVarsJson} as test_vars
+      FROM eval_results
+      WHERE ${whereSql}
+        ${cursorSql}
+        AND named_scores IS NOT NULL
+        AND NOT (${hasAmbiguousNamedScoreJsonSql})
+        AND (${hasComponentMetricTemplateSyntaxSql})
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(${namedScoresJson}) as score_entries
+          JOIN json_each(${namedScoreWeightsJson}) as weight_entries
+            ON weight_entries.key = score_entries.key
+            AND ${validNamedScoreWeightSql}
+          WHERE ${validNamedScoreSql}
         )
       ORDER BY eval_results.id
       LIMIT ${NAMED_SCORE_FALLBACK_BATCH_SIZE}
@@ -747,7 +862,11 @@ async function aggregateUnweightedNamedScores(
     }
 
     for (const row of results) {
-      aggregateFallbackNamedScoreRow(metrics, row, false);
+      aggregateFallbackNamedScoreRow(metrics, row, {
+        metricMode: 'weighted',
+        countDeltaOnly: true,
+        useRawJson: false,
+      });
     }
 
     lastResultId = results[results.length - 1]?.id;

@@ -270,6 +270,20 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
           pass: false,
           score: 0.75,
           reason: 'weighted metric',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'first accuracy assertion',
+              assertion: { type: 'contains', value: 'a', metric: 'accuracy' },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'second accuracy assertion',
+              assertion: { type: 'contains', value: 'b', metric: 'accuracy' },
+            },
+          ],
           namedScoreWeights: { accuracy: 4 },
         },
         namedScores: { accuracy: 0.75 },
@@ -285,7 +299,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       expect(response.body.filteredMetrics).not.toBeNull();
       expect(response.body.filteredMetrics[0]).toMatchObject({
         namedScores: { accuracy: 3 },
-        namedScoresCount: { accuracy: 1 },
+        namedScoresCount: { accuracy: 2 },
         namedScoreWeights: { accuracy: 4 },
       });
     });
