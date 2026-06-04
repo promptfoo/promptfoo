@@ -17,9 +17,10 @@
  *
  * Critical design decisions:
  * 1. Single GROUP BY query for all basic metrics + token usage
- * 2. SQL JSON aggregation for named scores (avoids memory issues)
- * 3. SQL JSON aggregation for assertions (complex nested JSON)
- * 4. OOM protection with MAX_RESULTS_FOR_METRICS limit
+ * 2. SQL JSON aggregation for weighted named scores
+ * 3. Bounded fallback batches for legacy named scores without stored weights
+ * 4. SQL JSON aggregation for assertions (complex nested JSON)
+ * 5. OOM protection with MAX_RESULTS_FOR_METRICS limit
  */
 
 import { type SQL, sql } from 'drizzle-orm';
@@ -42,6 +43,8 @@ export interface FilteredMetricsOptions {
  * Protects against OOM on extremely large filtered datasets.
  */
 const MAX_RESULTS_FOR_METRICS = 50000;
+const NAMED_SCORE_FALLBACK_BATCH_SIZE = 5000;
+const AMBIGUOUS_NAMED_SCORE_BATCH_SIZE = 500;
 
 /**
  * Calculates metrics for filtered results using optimized SQL aggregation.
@@ -52,11 +55,15 @@ const MAX_RESULTS_FOR_METRICS = 50000;
  * user-provided values are properly escaped.
  *
  * This is the core performance optimization - instead of making 2-3 queries
- * per prompt (which would be 30 queries for 10 prompts), we make 3-4 total queries:
+ * per prompt (which would be 30 queries for 10 prompts), we make seven baseline
+ * queries plus bounded fallback pages when matching rows exist:
  * 1. Count check (OOM protection)
  * 2. Basic metrics + token usage (GROUP BY prompt_idx)
- * 3. Named scores (GROUP BY prompt_idx, metric_name)
- * 4. Assertions (GROUP BY prompt_idx)
+ * 3. Weighted named scores (GROUP BY prompt_idx, metric_name)
+ * 4. Ambiguous named-score JSON fallback probe/pages
+ * 5. Legacy unweighted named-score fallback probe/pages
+ * 6. Assertions (GROUP BY prompt_idx)
+ * 7. Ambiguous assertion JSON fallback probe/pages
  *
  * @param opts - Options including WHERE clause SQL fragment
  * @returns Array of PromptMetrics, one per prompt
@@ -200,18 +207,74 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 }
 
 /**
- * SQL expression yielding a result's `grading_result.namedScoreWeights` object,
- * or an empty object when it is missing or malformed.
+ * Safe JSON objects for named-score aggregation.
  *
- * Shared by the weighted SQL fast path and the unweighted JS fallback selector
- * so both define the weighted/unweighted partition boundary identically.
+ * Every json_each() input uses these expressions so malformed imported JSON
+ * cannot fail before SQLite applies a json_valid() filter.
  */
-const namedScoreWeightsJson = sql`
+const namedScoresJson = sql`
+  CASE
+    WHEN named_scores IS NOT NULL
+      AND json_valid(named_scores)
+      AND json_type(named_scores) = 'object'
+    THEN named_scores
+    ELSE json('{}')
+  END
+`;
+
+const gradingResultJson = sql`
   CASE
     WHEN grading_result IS NOT NULL
       AND json_valid(grading_result)
-      AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
-    THEN json_extract(grading_result, '$.namedScoreWeights')
+      AND json_type(grading_result) = 'object'
+    THEN grading_result
+    ELSE json('{}')
+  END
+`;
+
+const namedScoreWeightsJson = sql`
+  CASE
+    WHEN json_type(${gradingResultJson}, '$.namedScoreWeights') = 'object'
+    THEN json_extract(${gradingResultJson}, '$.namedScoreWeights')
+    ELSE json('{}')
+  END
+`;
+
+const testCaseJson = sql`
+  CASE
+    WHEN test_case IS NOT NULL
+      AND json_valid(test_case)
+      AND json_type(test_case) = 'object'
+    THEN test_case
+    ELSE json('{}')
+  END
+`;
+
+const componentResultsJson = sql`
+  CASE
+    WHEN json_type(${gradingResultJson}, '$.componentResults') = 'array'
+    THEN json_extract(${gradingResultJson}, '$.componentResults')
+    ELSE json('[]')
+  END
+`;
+
+const componentMetricTemplatesJson = sql`
+  (
+    SELECT json_group_array(
+      CASE
+        WHEN component_entries.type = 'object'
+        THEN json_extract(component_entries.value, '$.assertion.metric')
+        ELSE NULL
+      END
+    )
+    FROM json_each(${componentResultsJson}) as component_entries
+  )
+`;
+
+const testVarsJson = sql`
+  CASE
+    WHEN json_type(${testCaseJson}, '$.vars') = 'object'
+    THEN json_extract(${testCaseJson}, '$.vars')
     ELSE json('{}')
   END
 `;
@@ -224,9 +287,117 @@ const validNamedScoreWeightSql = sql`
     BETWEEN -1.7976931348623157e308 AND 1.7976931348623157e308
 `;
 
+const validNamedScoreSql = sql`
+  score_entries.type IN ('integer', 'real')
+  AND CAST(score_entries.value AS REAL)
+    BETWEEN -1.7976931348623157e308 AND 1.7976931348623157e308
+`;
+
+const hasDuplicateNamedScoreKeysSql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${namedScoresJson}) as duplicate_score_entries
+    GROUP BY duplicate_score_entries.key
+    HAVING COUNT(*) > 1
+  )
+`;
+
+const hasDuplicateNamedScoreWeightsPropertySql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${gradingResultJson}) as grading_result_entries
+    WHERE grading_result_entries.key = 'namedScoreWeights'
+    GROUP BY grading_result_entries.key
+    HAVING COUNT(*) > 1
+  )
+`;
+
+const hasDuplicateNamedScoreWeightKeysSql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${namedScoreWeightsJson}) as duplicate_weight_entries
+    GROUP BY duplicate_weight_entries.key
+    HAVING COUNT(*) > 1
+  )
+`;
+
+const hasDuplicateComponentResultsPropertySql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${gradingResultJson}) as grading_result_entries
+    WHERE grading_result_entries.key = 'componentResults'
+    GROUP BY grading_result_entries.key
+    HAVING COUNT(*) > 1
+  )
+`;
+
+const hasDuplicateComponentMetricPropertySql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${componentResultsJson}) as component_entries
+    WHERE component_entries.type = 'object'
+      AND (
+        (
+          SELECT COUNT(*)
+          FROM json_each(component_entries.value) as component_properties
+          WHERE component_properties.key = 'assertion'
+        ) > 1
+        OR (
+          SELECT COUNT(*)
+          FROM json_each(
+            CASE
+              WHEN json_type(component_entries.value, '$.assertion') = 'object'
+              THEN json_extract(component_entries.value, '$.assertion')
+              ELSE json('{}')
+            END
+          ) as assertion_properties
+          WHERE assertion_properties.key = 'metric'
+        ) > 1
+      )
+  )
+`;
+
+const hasDuplicateComponentPassPropertySql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${componentResultsJson}) as component_entries
+    WHERE component_entries.type = 'object'
+      AND (
+        SELECT COUNT(*)
+        FROM json_each(component_entries.value) as component_properties
+        WHERE component_properties.key = 'pass'
+      ) > 1
+  )
+`;
+
+const hasDuplicateTestVarsPropertySql = sql`
+  EXISTS (
+    SELECT 1
+    FROM json_each(${testCaseJson}) as test_case_entries
+    WHERE test_case_entries.key = 'vars'
+    GROUP BY test_case_entries.key
+    HAVING COUNT(*) > 1
+  )
+`;
+
+const hasAmbiguousNamedScoreJsonSql = sql`
+  ${hasDuplicateNamedScoreKeysSql}
+  OR ${hasDuplicateNamedScoreWeightsPropertySql}
+  OR ${hasDuplicateNamedScoreWeightKeysSql}
+  OR ${hasDuplicateComponentResultsPropertySql}
+  OR ${hasDuplicateComponentMetricPropertySql}
+  OR ${hasDuplicateTestVarsPropertySql}
+`;
+
+const hasAmbiguousAssertionJsonSql = sql`
+  ${hasDuplicateComponentResultsPropertySql}
+  OR ${hasDuplicateComponentPassPropertySql}
+`;
+
 /**
  * Aggregate named scores using SQL json_each().
- * This is MUCH more efficient than fetching all results and parsing in JavaScript.
+ * This is much more efficient than fetching ordinary weighted results and parsing
+ * them in JavaScript. Legacy and ambiguous rows are processed in bounded batches.
  *
  * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
  *
@@ -254,13 +425,14 @@ async function aggregateNamedScores(
       COUNT(*) as metric_count,
       SUM(CAST(weight_entries.value AS REAL)) as metric_weight_total
     FROM eval_results
-    JOIN json_each(eval_results.named_scores) as score_entries
+    JOIN json_each(${namedScoresJson}) as score_entries
     JOIN json_each(${namedScoreWeightsJson}) as weight_entries
       ON weight_entries.key = score_entries.key
       AND ${validNamedScoreWeightSql}
     WHERE ${whereSql}
       AND named_scores IS NOT NULL
-      AND json_valid(named_scores)
+      AND ${validNamedScoreSql}
+      AND NOT (${hasAmbiguousNamedScoreJsonSql})
     GROUP BY prompt_idx, score_entries.key
   `;
 
@@ -276,29 +448,48 @@ async function aggregateNamedScores(
   for (const row of results) {
     const idx = row.prompt_idx;
     if (idx >= 0 && idx < metrics.length && metrics[idx]) {
-      metrics[idx].namedScores[row.metric_name] = row.metric_sum;
-      metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
+      setOwnMetricValue(metrics[idx].namedScores, row.metric_name, row.metric_sum);
+      setOwnMetricValue(metrics[idx].namedScoresCount, row.metric_name, row.metric_count);
       metrics[idx].namedScoreWeights ||= {};
-      metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
+      setOwnMetricValue(metrics[idx].namedScoreWeights, row.metric_name, row.metric_weight_total);
     }
   }
 
-  await aggregateUnweightedNamedScores(metrics, whereSql);
+  await aggregateFallbackNamedScores(metrics, whereSql);
 }
 
-function parseJsonObject<T extends object>(value: unknown): T | undefined {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | undefined {
   if (!value) {
     return undefined;
   }
-  if (typeof value === 'object') {
-    return value as T;
+  if (isRecord(value)) {
+    return value;
   }
   if (typeof value !== 'string') {
     return undefined;
   }
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' ? (parsed as T) : undefined;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseJsonArray(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
@@ -308,95 +499,260 @@ function isValidNamedScoreWeight(weight: unknown): weight is number {
   return typeof weight === 'number' && Number.isFinite(weight);
 }
 
-function hasValidNamedScoreWeight(
+function getValidNamedScoreWeight(
   gradingResult: GradingResult | undefined,
   metricName: string,
-): boolean {
-  return isValidNamedScoreWeight(gradingResult?.namedScoreWeights?.[metricName]);
+): number | undefined {
+  const namedScoreWeights = gradingResult?.namedScoreWeights;
+  if (!Object.prototype.hasOwnProperty.call(namedScoreWeights ?? {}, metricName)) {
+    return undefined;
+  }
+  const weight = namedScoreWeights?.[metricName];
+  return isValidNamedScoreWeight(weight) ? weight : undefined;
 }
 
-function withOnlyValidNamedScoreWeights(
-  gradingResult: GradingResult | undefined,
-): GradingResult | undefined {
-  if (!gradingResult?.namedScoreWeights) {
-    return gradingResult;
+function parseGradingResultForNamedMetrics(value: unknown): GradingResult | undefined {
+  const gradingResult = parseJsonObject(value);
+  if (!gradingResult) {
+    return undefined;
   }
 
-  const validWeights = Object.fromEntries(
-    Object.entries(gradingResult.namedScoreWeights).filter(([, weight]) =>
-      isValidNamedScoreWeight(weight),
-    ),
-  );
+  const rawWeights = isRecord(gradingResult.namedScoreWeights)
+    ? gradingResult.namedScoreWeights
+    : undefined;
+  const validWeights = rawWeights
+    ? Object.fromEntries(
+        Object.entries(rawWeights).filter((entry): entry is [string, number] =>
+          isValidNamedScoreWeight(entry[1]),
+        ),
+      )
+    : undefined;
+  const componentResults = Array.isArray(gradingResult.componentResults)
+    ? (gradingResult.componentResults.filter(isRecord) as unknown as GradingResult[])
+    : undefined;
 
   return {
-    ...gradingResult,
+    pass: false,
+    score: 0,
+    reason: '',
+    componentResults,
     namedScoreWeights: validWeights,
   };
+}
+
+function createCompactGradingResultForNamedMetrics(
+  namedScoreWeightsValue: unknown,
+  componentMetricTemplatesValue: unknown,
+): GradingResult {
+  const rawWeights = parseJsonObject(namedScoreWeightsValue);
+  const validWeights = rawWeights
+    ? Object.fromEntries(
+        Object.entries(rawWeights).filter((entry): entry is [string, number] =>
+          isValidNamedScoreWeight(entry[1]),
+        ),
+      )
+    : undefined;
+  const componentResults = (parseJsonArray(componentMetricTemplatesValue) ?? [])
+    .filter((metric): metric is string => typeof metric === 'string')
+    .map((metric) => ({ assertion: { metric } }) as GradingResult);
+
+  return {
+    pass: false,
+    score: 0,
+    reason: '',
+    componentResults,
+    namedScoreWeights: validWeights,
+  };
+}
+
+function setOwnMetricValue(
+  record: Record<string, number>,
+  metricName: string,
+  value: number,
+): void {
+  Object.defineProperty(record, metricName, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
+}
+
+function addOwnMetricValue(
+  record: Record<string, number>,
+  metricName: string,
+  delta: number,
+): void {
+  const currentValue = Object.prototype.hasOwnProperty.call(record, metricName)
+    ? record[metricName]
+    : 0;
+  setOwnMetricValue(record, metricName, currentValue + delta);
+}
+
+interface FallbackNamedScoreRow {
+  id: string;
+  prompt_idx: number;
+  named_scores: unknown;
+  grading_result?: unknown;
+  test_case?: unknown;
+  named_score_weights?: unknown;
+  component_metric_templates?: unknown;
+  test_vars: unknown;
+}
+
+function aggregateFallbackNamedScoreRow(
+  metrics: PromptMetrics[],
+  row: FallbackNamedScoreRow,
+  aggregateAllMetrics: boolean,
+): void {
+  const idx = row.prompt_idx;
+  if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
+    return;
+  }
+
+  const namedScores = parseJsonObject(row.named_scores);
+  if (!namedScores) {
+    return;
+  }
+
+  const gradingResult = aggregateAllMetrics
+    ? parseGradingResultForNamedMetrics(row.grading_result)
+    : createCompactGradingResultForNamedMetrics(
+        row.named_score_weights,
+        row.component_metric_templates,
+      );
+  const testVars = aggregateAllMetrics
+    ? ((parseJsonObject(row.test_case)?.vars as Vars | undefined) ?? {})
+    : ((parseJsonObject(row.test_vars) ?? {}) as Vars);
+
+  for (const [metricName, metricValue] of Object.entries(namedScores)) {
+    if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
+      continue;
+    }
+
+    const metricWeight = getValidNamedScoreWeight(gradingResult, metricName);
+    if (metricWeight !== undefined) {
+      if (aggregateAllMetrics) {
+        addOwnMetricValue(metrics[idx].namedScores, metricName, metricValue * metricWeight);
+        addOwnMetricValue(metrics[idx].namedScoresCount, metricName, 1);
+        metrics[idx].namedScoreWeights ||= {};
+        addOwnMetricValue(metrics[idx].namedScoreWeights, metricName, metricWeight);
+      }
+      continue;
+    }
+
+    accumulateNamedMetric(metrics[idx], {
+      metricName,
+      metricValue,
+      gradingResult,
+      testVars,
+    });
+  }
+}
+
+async function aggregateFallbackNamedScores(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+): Promise<void> {
+  await aggregateAmbiguousNamedScores(metrics, whereSql);
+  await aggregateUnweightedNamedScores(metrics, whereSql);
+}
+
+async function aggregateAmbiguousNamedScores(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+): Promise<void> {
+  const db = await getDb();
+  let lastResultId: string | undefined;
+
+  while (true) {
+    const cursorSql =
+      lastResultId === undefined ? sql`` : sql`AND eval_results.id > ${lastResultId}`;
+    const query = sql`
+      SELECT
+        id,
+        prompt_idx,
+        named_scores,
+        grading_result,
+        test_case,
+        NULL as test_vars
+      FROM eval_results
+      WHERE ${whereSql}
+        ${cursorSql}
+        AND named_scores IS NOT NULL
+        AND (${hasAmbiguousNamedScoreJsonSql})
+      ORDER BY eval_results.id
+      LIMIT ${AMBIGUOUS_NAMED_SCORE_BATCH_SIZE}
+    `;
+
+    const results = (await db.all(query)) as FallbackNamedScoreRow[];
+
+    if (results.length === 0) {
+      break;
+    }
+
+    for (const row of results) {
+      aggregateFallbackNamedScoreRow(metrics, row, true);
+    }
+
+    lastResultId = results[results.length - 1]?.id;
+    if (lastResultId === undefined || results.length < AMBIGUOUS_NAMED_SCORE_BATCH_SIZE) {
+      break;
+    }
+  }
 }
 
 async function aggregateUnweightedNamedScores(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
 ): Promise<void> {
-  const db = getDb();
+  const db = await getDb();
+  let lastResultId: string | undefined;
 
-  const query = sql`
-    SELECT
-      prompt_idx,
-      named_scores,
-      grading_result,
-      test_case
-    FROM eval_results
-    WHERE ${whereSql}
-      AND named_scores IS NOT NULL
-      AND json_valid(named_scores)
-      AND EXISTS (
-        SELECT 1
-        FROM json_each(eval_results.named_scores) as score_entries
-        LEFT JOIN json_each(${namedScoreWeightsJson}) as weight_entries
-          ON weight_entries.key = score_entries.key
-        WHERE weight_entries.key IS NULL
-          OR NOT (${validNamedScoreWeightSql})
-      )
-  `;
+  while (true) {
+    const cursorSql =
+      lastResultId === undefined ? sql`` : sql`AND eval_results.id > ${lastResultId}`;
+    const query = sql`
+      SELECT
+        id,
+        prompt_idx,
+        named_scores,
+        ${namedScoreWeightsJson} as named_score_weights,
+        ${componentMetricTemplatesJson} as component_metric_templates,
+        ${testVarsJson} as test_vars
+      FROM eval_results
+      WHERE ${whereSql}
+        ${cursorSql}
+        AND named_scores IS NOT NULL
+        AND NOT (${hasAmbiguousNamedScoreJsonSql})
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(${namedScoresJson}) as score_entries
+          LEFT JOIN json_each(${namedScoreWeightsJson}) as weight_entries
+            ON weight_entries.key = score_entries.key
+          WHERE ${validNamedScoreSql}
+            AND (
+              weight_entries.key IS NULL
+              OR NOT (${validNamedScoreWeightSql})
+            )
+        )
+      ORDER BY eval_results.id
+      LIMIT ${NAMED_SCORE_FALLBACK_BATCH_SIZE}
+    `;
 
-  const results = (await db.all(query)) as Array<{
-    prompt_idx: number;
-    named_scores: unknown;
-    grading_result: unknown;
-    test_case: unknown;
-  }>;
+    const results = (await db.all(query)) as FallbackNamedScoreRow[];
 
-  for (const row of results) {
-    const idx = row.prompt_idx;
-    if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
-      continue;
+    if (results.length === 0) {
+      break;
     }
 
-    const namedScores = parseJsonObject<Record<string, unknown>>(row.named_scores);
-    if (!namedScores) {
-      continue;
+    for (const row of results) {
+      aggregateFallbackNamedScoreRow(metrics, row, false);
     }
 
-    const gradingResult = parseJsonObject<GradingResult>(row.grading_result);
-    const gradingResultWithValidWeights = withOnlyValidNamedScoreWeights(gradingResult);
-    const testCase = parseJsonObject<{ vars?: Vars }>(row.test_case);
-
-    for (const [metricName, metricValue] of Object.entries(namedScores)) {
-      if (
-        typeof metricValue !== 'number' ||
-        !Number.isFinite(metricValue) ||
-        hasValidNamedScoreWeight(gradingResult, metricName)
-      ) {
-        continue;
-      }
-
-      accumulateNamedMetric(metrics[idx], {
-        metricName,
-        metricValue,
-        gradingResult: gradingResultWithValidWeights,
-        testVars: testCase?.vars || {},
-      });
+    lastResultId = results[results.length - 1]?.id;
+    if (lastResultId === undefined || results.length < NAMED_SCORE_FALLBACK_BATCH_SIZE) {
+      break;
     }
   }
 }
@@ -423,36 +779,31 @@ async function aggregateAssertions(
 ): Promise<void> {
   const db = await getDb();
 
-  // SQLite query to count assertions from nested JSON
-  // This is complex but avoids fetching all results into memory
+  // Count ordinary rows in SQLite. Rows with duplicate JSON properties are
+  // excluded so they can use JSON.parse's last-key-wins semantics below.
   const query = sql`
     SELECT
       prompt_idx,
       SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
-            )
-          ELSE 0
-        END
+        (
+          SELECT COUNT(*)
+          FROM json_each(${componentResultsJson}) as component_entries
+          WHERE component_entries.type = 'object'
+            AND CAST(json_extract(component_entries.value, '$.pass') AS INTEGER) = 1
+        )
       ) as assert_pass_count,
       SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
-            )
-          ELSE 0
-        END
+        (
+          SELECT COUNT(*)
+          FROM json_each(${componentResultsJson}) as component_entries
+          WHERE component_entries.type = 'object'
+            AND CAST(json_extract(component_entries.value, '$.pass') AS INTEGER) = 0
+        )
       ) as assert_fail_count
     FROM eval_results
     WHERE ${whereSql}
       AND grading_result IS NOT NULL
+      AND NOT (${hasAmbiguousAssertionJsonSql})
     GROUP BY prompt_idx
   `;
 
@@ -468,6 +819,77 @@ async function aggregateAssertions(
     if (idx >= 0 && idx < metrics.length && metrics[idx]) {
       metrics[idx].assertPassCount = row.assert_pass_count || 0;
       metrics[idx].assertFailCount = row.assert_fail_count || 0;
+    }
+  }
+
+  await aggregateAmbiguousAssertions(metrics, whereSql);
+}
+
+interface AmbiguousAssertionRow {
+  id: string;
+  prompt_idx: number;
+  grading_result: unknown;
+}
+
+function aggregateAmbiguousAssertionRow(
+  metrics: PromptMetrics[],
+  row: AmbiguousAssertionRow,
+): void {
+  const idx = row.prompt_idx;
+  if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
+    return;
+  }
+
+  const gradingResult = parseJsonObject(row.grading_result);
+  const componentResults = Array.isArray(gradingResult?.componentResults)
+    ? gradingResult.componentResults
+    : [];
+
+  for (const componentResult of componentResults) {
+    if (!isRecord(componentResult)) {
+      continue;
+    }
+    if (componentResult.pass === true) {
+      metrics[idx].assertPassCount++;
+    } else if (componentResult.pass === false) {
+      metrics[idx].assertFailCount++;
+    }
+  }
+}
+
+async function aggregateAmbiguousAssertions(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+): Promise<void> {
+  const db = await getDb();
+  let lastResultId: string | undefined;
+
+  while (true) {
+    const cursorSql =
+      lastResultId === undefined ? sql`` : sql`AND eval_results.id > ${lastResultId}`;
+    const query = sql`
+      SELECT id, prompt_idx, grading_result
+      FROM eval_results
+      WHERE ${whereSql}
+        ${cursorSql}
+        AND grading_result IS NOT NULL
+        AND (${hasAmbiguousAssertionJsonSql})
+      ORDER BY eval_results.id
+      LIMIT ${AMBIGUOUS_NAMED_SCORE_BATCH_SIZE}
+    `;
+
+    const results = (await db.all(query)) as AmbiguousAssertionRow[];
+    if (results.length === 0) {
+      break;
+    }
+
+    for (const row of results) {
+      aggregateAmbiguousAssertionRow(metrics, row);
+    }
+
+    lastResultId = results[results.length - 1]?.id;
+    if (lastResultId === undefined || results.length < AMBIGUOUS_NAMED_SCORE_BATCH_SIZE) {
+      break;
     }
   }
 }

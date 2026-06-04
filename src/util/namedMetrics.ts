@@ -19,13 +19,35 @@ function getContributingAssertionCount(
   metricName: string,
   testVars: Vars,
 ): number {
-  const contributingAssertions =
-    gradingResult?.componentResults?.reduce((count, componentResult) => {
-      const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-      return renderedMetric === metricName ? count + 1 : count;
-    }, 0) ?? 0;
+  const componentResults = Array.isArray(gradingResult?.componentResults)
+    ? gradingResult.componentResults
+    : [];
+  const contributingAssertions = componentResults.reduce((count, componentResult) => {
+    if (!componentResult || typeof componentResult !== 'object') {
+      return count;
+    }
+    const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+    return renderedMetric === metricName ? count + 1 : count;
+  }, 0);
 
   return contributingAssertions > 0 ? contributingAssertions : 1;
+}
+
+function getOwnMetricValue(record: Record<string, number>, metricName: string): number | undefined {
+  return Object.prototype.hasOwnProperty.call(record, metricName) ? record[metricName] : undefined;
+}
+
+function setOwnMetricValue(
+  record: Record<string, number>,
+  metricName: string,
+  value: number,
+): void {
+  Object.defineProperty(record, metricName, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
 }
 
 function getNamedMetricContribution({
@@ -77,14 +99,23 @@ export function accumulateNamedMetric(
     testVars,
   });
 
-  accumulator.namedScores[metricName] =
-    (accumulator.namedScores[metricName] ?? 0) + weightedScoreTotal;
-  accumulator.namedScoresCount[metricName] =
-    (accumulator.namedScoresCount[metricName] ?? 0) + assertionCount;
+  setOwnMetricValue(
+    accumulator.namedScores,
+    metricName,
+    (getOwnMetricValue(accumulator.namedScores, metricName) ?? 0) + weightedScoreTotal,
+  );
+  setOwnMetricValue(
+    accumulator.namedScoresCount,
+    metricName,
+    (getOwnMetricValue(accumulator.namedScoresCount, metricName) ?? 0) + assertionCount,
+  );
 
   accumulator.namedScoreWeights ||= {};
-  accumulator.namedScoreWeights[metricName] =
-    (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
+  setOwnMetricValue(
+    accumulator.namedScoreWeights,
+    metricName,
+    (getOwnMetricValue(accumulator.namedScoreWeights, metricName) ?? 0) + metricWeightTotal,
+  );
 }
 
 export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {
@@ -92,7 +123,7 @@ export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): 
 
   for (const [metricName, assertionCount] of Object.entries(accumulator.namedScoresCount)) {
     if (!Object.prototype.hasOwnProperty.call(accumulator.namedScoreWeights, metricName)) {
-      accumulator.namedScoreWeights[metricName] = assertionCount;
+      setOwnMetricValue(accumulator.namedScoreWeights, metricName, assertionCount);
     }
   }
 }

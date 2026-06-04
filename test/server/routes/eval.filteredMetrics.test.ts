@@ -16,6 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
+import { ResultFailureReason } from '../../../src/types/index';
 import EvalFactory from '../../factories/evalFactory';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
@@ -242,6 +243,51 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       expect(metrics.namedScores).toHaveProperty('relevance');
       expect(metrics.namedScoresCount).toHaveProperty('accuracy');
       expect(metrics.namedScoresCount).toHaveProperty('relevance');
+    });
+
+    it('should return exact weighted named metric totals and denominators', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'weighted-api-test',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'weighted-api-output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.75,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.75,
+          reason: 'weighted metric',
+          namedScoreWeights: { accuracy: 4 },
+        },
+        namedScores: { accuracy: 0.75 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const response = await api
+        .get(`/api/eval/${eval_.id}/table`)
+        .query({ filterMode: 'failures' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.filteredMetrics).not.toBeNull();
+      expect(response.body.filteredMetrics[0]).toMatchObject({
+        namedScores: { accuracy: 3 },
+        namedScoresCount: { accuracy: 1 },
+        namedScoreWeights: { accuracy: 4 },
+      });
     });
   });
 

@@ -14,6 +14,33 @@ import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
+async function insertRawNamedScoreResult({
+  id,
+  evalId,
+  testIdx = 0,
+  namedScores,
+  gradingResult,
+  testCase = '{"vars": {}}',
+}: {
+  id: string;
+  evalId: string;
+  testIdx?: number;
+  namedScores: string;
+  gradingResult: string;
+  testCase?: string;
+}): Promise<void> {
+  const db = await getDb();
+  await db.run(sql`
+    INSERT INTO eval_results (
+      id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+      success, score, named_scores, grading_result, latency_ms, cost
+    ) VALUES (
+      ${id}, ${evalId}, 0, ${testIdx}, ${testCase}, ${'{}'}, ${'{}'},
+      0, 0.8, ${namedScores}, ${gradingResult}, 100, 0.001
+    )
+  `);
+}
+
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -435,19 +462,13 @@ describe('calculateFilteredMetrics', () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,
       });
-      const db = getDb();
-
-      await db.run(`
-        INSERT INTO eval_results (
-          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
-          success, score, named_scores, grading_result, latency_ms, cost
-        ) VALUES (
-          'overflowing-weight', '${eval_.id}', 0, 0, '{"vars": {}}', '{}', '{}',
-          0, 0.8, '{"accuracy": 0.8}',
+      await insertRawNamedScoreResult({
+        id: 'overflowing-weight',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult:
           '{"componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}], "namedScoreWeights": {"accuracy": 1e999}}',
-          100, 0.001
-        )
-      `);
+      });
 
       const metrics = await calculateFilteredMetrics({
         evalId: eval_.id,
@@ -458,6 +479,309 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
       expect(metrics[0].namedScoresCount.accuracy).toBe(2);
       expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+    });
+
+    it('should ignore malformed componentResults without zeroing valid metrics', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'malformed-component-results',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult: '{"componentResults": {}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0]).toMatchObject({
+        score: 0.8,
+        testFailCount: 1,
+        namedScores: { accuracy: 0.8 },
+        namedScoresCount: { accuracy: 1 },
+        namedScoreWeights: { accuracy: 1 },
+      });
+    });
+
+    it('should safely aggregate metric names that collide with object prototypes', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'prototype-metric-name',
+        evalId: eval_.id,
+        namedScores: '{"constructor": 0.8, "__proto__": 0.4}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "constructor"}}, {"assertion": {"metric": "__proto__"}}]}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(Object.prototype.hasOwnProperty.call(metrics[0].namedScores, 'constructor')).toBe(
+        true,
+      );
+      expect(Object.prototype.hasOwnProperty.call(metrics[0].namedScores, '__proto__')).toBe(true);
+      expect(metrics[0].namedScores.constructor).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScores.__proto__).toBeCloseTo(0.4, 10);
+      expect(metrics[0].namedScoresCount.constructor).toBe(1);
+      expect(metrics[0].namedScoresCount.__proto__).toBe(1);
+      expect(metrics[0].namedScoreWeights?.constructor).toBe(1);
+      expect(metrics[0].namedScoreWeights?.__proto__).toBe(1);
+    });
+
+    it('should use last-key-wins semantics for duplicate named score weight keys', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-weight-keys',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}], "namedScoreWeights": {"accuracy": 4, "accuracy": null}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(2);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+    });
+
+    it('should use last-key-wins semantics for duplicate named score keys', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-score-keys',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.1, "accuracy": 0.8}',
+        gradingResult: '{"namedScoreWeights": {"accuracy": 4}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(3.2, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(1);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(4);
+    });
+
+    it('should process ambiguous named score rows across bounded fallback batches', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      const db = await getDb();
+      await db.run(sql`
+        WITH RECURSIVE row_numbers(value) AS (
+          SELECT 1
+          UNION ALL
+          SELECT value + 1 FROM row_numbers WHERE value < 501
+        )
+        INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, named_scores, grading_result, latency_ms, cost
+        )
+        SELECT
+          printf('ambiguous-batch-%04d', value),
+          ${eval_.id},
+          0,
+          value,
+          ${'{"vars": {}}'},
+          ${'{}'},
+          ${'{}'},
+          0,
+          0.8,
+          ${'{"accuracy": 0.1, "accuracy": 0.8}'},
+          ${'{"namedScoreWeights": {"accuracy": 4}}'},
+          100,
+          0.001
+        FROM row_numbers
+      `);
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(501 * 0.8 * 4, 8);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(501);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(501 * 4);
+    });
+
+    it('should use the final duplicate namedScoreWeights property', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-weight-properties',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}], "namedScoreWeights": {"accuracy": 4}, "namedScoreWeights": null}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(2);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+    });
+
+    it('should use the final duplicate componentResults property', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-component-results',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "accuracy"}}], "componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}]}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(3);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(3);
+    });
+
+    it('should use the final duplicate vars property for rendered metric names', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-test-vars',
+        evalId: eval_.id,
+        namedScores: '{"accuracy:last": 0.8}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "accuracy:{{ suffix }}"}}, {"assertion": {"metric": "accuracy:{{ suffix }}"}}]}',
+        testCase: '{"vars": {"suffix": "first"}, "vars": {"suffix": "last"}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores['accuracy:last']).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount['accuracy:last']).toBe(2);
+      expect(metrics[0].namedScoreWeights?.['accuracy:last']).toBe(2);
+    });
+
+    it('should use the final duplicate assertion metric property', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-assertion-metric',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "ignored", "metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}]}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(2);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+    });
+
+    it('should safely write prototype-colliding metric names on the weighted SQL path', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'weighted-prototype-metric',
+        evalId: eval_.id,
+        namedScores: '{"__proto__": 0.75}',
+        gradingResult: '{"namedScoreWeights": {"__proto__": 4}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(Object.prototype.hasOwnProperty.call(metrics[0].namedScores, '__proto__')).toBe(true);
+      expect(metrics[0].namedScores.__proto__).toBeCloseTo(3, 10);
+      expect(metrics[0].namedScoresCount.__proto__).toBe(1);
+      expect(metrics[0].namedScoreWeights?.__proto__).toBe(4);
+    });
+
+    it('should process legacy named score rows across bounded fallback batches', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      const db = await getDb();
+      await db.run(sql`
+        WITH RECURSIVE row_numbers(value) AS (
+          SELECT 1
+          UNION ALL
+          SELECT value + 1 FROM row_numbers WHERE value < 5001
+        )
+        INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, named_scores, grading_result, latency_ms, cost
+        )
+        SELECT
+          printf('fallback-batch-%04d', value),
+          ${eval_.id},
+          0,
+          value,
+          ${'{"vars": {}}'},
+          ${'{}'},
+          ${'{}'},
+          0,
+          0.8,
+          ${'{"accuracy": 0.8}'},
+          ${'{"componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}]}'},
+          100,
+          0.001
+        FROM row_numbers
+      `);
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(5001 * 0.8, 8);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(10002);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(10002);
     });
 
     it('should aggregate weighted named scores using grading result denominators', async () => {
@@ -680,6 +1004,74 @@ describe('calculateFilteredMetrics', () => {
       // Total assertions should equal results (1 assertion per result)
       const totalAssertions = metrics[0].assertPassCount + metrics[0].assertFailCount;
       expect(totalAssertions).toBe(10);
+    });
+
+    it('should use the final duplicate componentResults property for assertion counts', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-component-results-assertions',
+        evalId: eval_.id,
+        namedScores: '{}',
+        gradingResult:
+          '{"componentResults": [{"pass": true}], "componentResults": [{"pass": false}, {"pass": false}, {"pass": false}]}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(0);
+      expect(metrics[0].assertFailCount).toBe(3);
+    });
+
+    it('should use the final duplicate pass property for assertion counts', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'duplicate-component-pass',
+        evalId: eval_.id,
+        namedScores: '{}',
+        gradingResult: '{"componentResults": [{"pass": true, "pass": false}, {"pass": true}]}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(1);
+      expect(metrics[0].assertFailCount).toBe(1);
+    });
+
+    it('should ignore non-array componentResults without zeroing other metrics', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await insertRawNamedScoreResult({
+        id: 'string-component-results',
+        evalId: eval_.id,
+        namedScores: '{}',
+        gradingResult: '{"componentResults": "oops"}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0]).toMatchObject({
+        score: 0.8,
+        testFailCount: 1,
+        assertPassCount: 0,
+        assertFailCount: 0,
+      });
     });
 
     it('should handle results without grading results', async () => {
