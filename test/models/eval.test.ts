@@ -1574,6 +1574,59 @@ describe('evaluator', () => {
       expect(result.gradingResult?.componentResults?.[0].assertion).not.toHaveProperty('value');
     });
 
+    it('does not synthesize compact details from null or scalar JSON columns', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: undefined,
+          gradingResult: null,
+          metadata: { pluginId: 'harmful' },
+          testCase: {
+            vars: { prompt: 'null-column prompt' },
+            metadata: { pluginId: 'harmful' },
+          },
+        }),
+      );
+      await eval1.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          metadata: { pluginId: 'harmful' },
+          testCase: {
+            vars: { prompt: 'scalar-column prompt' },
+            metadata: { pluginId: 'harmful' },
+          },
+        }),
+      );
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET
+          provider = json(${JSON.stringify('scalar-provider')}),
+          prompt = json(${JSON.stringify('scalar-prompt')}),
+          response = json(${JSON.stringify('scalar-response')}),
+          grading_result = json(${JSON.stringify('scalar-grading')}),
+          metadata = json(${JSON.stringify('scalar-metadata')})
+        WHERE ${evalResultsTable.evalId} = ${eval1.id} AND ${evalResultsTable.testIdx} = 1
+      `);
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const [nullJsonResult, scalarJsonResult] = projected.results.results;
+
+        expect(nullJsonResult.response).toBeUndefined();
+        expect(nullJsonResult.gradingResult).toBeUndefined();
+        expect(scalarJsonResult.response).toBeUndefined();
+        expect(scalarJsonResult.gradingResult).toBeUndefined();
+        expect(scalarJsonResult.provider).toEqual({ id: '' });
+        expect(scalarJsonResult.prompt).toEqual({ raw: '', label: '' });
+        expect(scalarJsonResult.metadata).toBeUndefined();
+        expect(JSON.stringify(projected)).not.toContain('[output stripped]');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('honors output strip flags in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addPrompts([

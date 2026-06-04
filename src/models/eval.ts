@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, type SQL, type SQLWrapper, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -185,6 +185,14 @@ function parseJsonFragment<T>(value: string | null): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+function jsonObjectOrEmpty(value: SQLWrapper): SQL {
+  return sql`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN ${value} ELSE json('{}') END ELSE json('{}') END`;
+}
+
+function jsonIsObject(value: SQLWrapper): SQL<number> {
+  return sql<number>`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN 1 ELSE 0 END ELSE 0 END`;
 }
 
 function projectPromptForRedteamReport<T extends Prompt>(
@@ -1903,12 +1911,12 @@ export default class Eval {
 
     const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
     const db = await getDb();
-    const validProviderJson = sql`CASE WHEN json_valid(${evalResultsTable.provider}) THEN ${evalResultsTable.provider} ELSE json('{}') END`;
-    const validPromptJson = sql`CASE WHEN json_valid(${evalResultsTable.prompt}) THEN ${evalResultsTable.prompt} ELSE json('{}') END`;
-    const validTestCaseJson = sql`CASE WHEN json_valid(${evalResultsTable.testCase}) THEN ${evalResultsTable.testCase} ELSE json('{}') END`;
-    const validResponseJson = sql`CASE WHEN json_valid(${evalResultsTable.response}) THEN ${evalResultsTable.response} ELSE json('{}') END`;
-    const validGradingResultJson = sql`CASE WHEN json_valid(${evalResultsTable.gradingResult}) THEN ${evalResultsTable.gradingResult} ELSE json('{}') END`;
-    const validMetadataJson = sql`CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE json('{}') END`;
+    const validProviderJson = jsonObjectOrEmpty(evalResultsTable.provider);
+    const validPromptJson = jsonObjectOrEmpty(evalResultsTable.prompt);
+    const validTestCaseJson = jsonObjectOrEmpty(evalResultsTable.testCase);
+    const validResponseJson = jsonObjectOrEmpty(evalResultsTable.response);
+    const validGradingResultJson = jsonObjectOrEmpty(evalResultsTable.gradingResult);
+    const validMetadataJson = jsonObjectOrEmpty(evalResultsTable.metadata);
     const validTestCaseVarsJson = sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
     const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
     const rows = await db
@@ -1939,7 +1947,7 @@ export default class Eval {
             sql`, `,
           )})
         )`,
-        responseExists: sql<number>`CASE WHEN json_valid(${evalResultsTable.response}) THEN 1 ELSE 0 END`,
+        responseExists: jsonIsObject(evalResultsTable.response),
         responseOutput: sql<string | null>`${validResponseJson} -> '$.output'`,
         responsePrompt: sql<string | null>`${validResponseJson} -> '$.prompt'`,
         responseRedteamFinalPrompt: sql<
@@ -1950,7 +1958,7 @@ export default class Eval {
         success: evalResultsTable.success,
         score: evalResultsTable.score,
         latencyMs: evalResultsTable.latencyMs,
-        gradingResultExists: sql<number>`CASE WHEN json_valid(${evalResultsTable.gradingResult}) THEN 1 ELSE 0 END`,
+        gradingResultExists: jsonIsObject(evalResultsTable.gradingResult),
         gradingPass: sql<number | null>`json_extract(${validGradingResultJson}, '$.pass')`,
         gradingScore: sql<number | null>`json_extract(${validGradingResultJson}, '$.score')`,
         gradingReason: sql<string | null>`json_extract(${validGradingResultJson}, '$.reason')`,
