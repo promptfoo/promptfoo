@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterPrompts } from '../../../src/commands/eval/filterPrompts';
+import { filterPrompts } from '../../../src/util/eval/filterPrompts';
 
 import type { Prompt } from '../../../src/types/index';
 
