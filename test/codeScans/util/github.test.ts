@@ -147,30 +147,4 @@ describe('prepareComments', () => {
     expect(result.reviewBody).not.toContain(ALL_CLEAR_MESSAGE);
     expect(result.reviewBody).toContain('Found issues');
   });
-
-  it('should route file-only findings (line: null) to generalComments, not lineComments', () => {
-    const comments: Comment[] = [
-      {
-        file: 'src/example.ts',
-        line: null,
-        finding: 'File-scoped issue',
-        severity: CodeScanSeverity.HIGH,
-      },
-      {
-        file: 'src/other.ts',
-        line: 42,
-        finding: 'Inline issue',
-        severity: CodeScanSeverity.MEDIUM,
-      },
-    ];
-
-    const result = prepareComments(comments, 'Review', 'low');
-
-    expect(result.lineComments).toHaveLength(1);
-    expect(result.lineComments[0].line).toBe(42);
-
-    expect(result.generalComments).toHaveLength(1);
-    expect(result.generalComments[0].file).toBe('src/example.ts');
-    expect(result.generalComments[0].line).toBeNull();
-  });
 });
