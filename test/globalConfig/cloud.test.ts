@@ -24,6 +24,10 @@ describe('CloudConfig', () => {
     cloudConfigInstance = new CloudConfig();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('constructor', () => {
     it('should initialize with default values when no saved config exists', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
@@ -230,7 +234,7 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should preserve existing sharing value when hasActiveLicense is omitted from response', async () => {
+    it('should preserve existing sharing value when public cloud omits hasActiveLicense', async () => {
       // Pre-set sharing to true to verify it is preserved
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -253,10 +257,7 @@ describe('CloudConfig', () => {
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
       const setSharingSpy = vi.spyOn(cloudConfigInstance, 'setSharing');
 
-      const result = await cloudConfigInstance.validateAndSetApiToken(
-        'test-token',
-        'https://test.api',
-      );
+      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
       // setSharing should NOT have been called when hasActiveLicense is undefined
@@ -366,6 +367,48 @@ describe('CloudConfig', () => {
       );
     });
 
+    it('should enable sharing when an on-prem server omits hasActiveLicense', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {
+          appUrl: 'https://promptfoo.example.com',
+          apiHost: onPremHost,
+          apiKey: 'existing-key',
+          sharing: false,
+        },
+      });
+      cloudConfigInstance = new CloudConfig();
+      vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(onPremResponse));
+
+      await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
+      );
+    });
+
+    it.each([
+      'https://api.promptfoo.app.internal.example.com',
+      'https://onprem.example.com/prefix/api.promptfoo.app',
+      'https://api.promptfoo.app@onprem.example.com',
+      'https://www.promptfoo.app.internal.example.com',
+      'https://www.promptfoo.app@onprem.example.com',
+      'https://promptfoo.app.internal.example.com',
+      'https://promptfoo.app@onprem.example.com',
+    ])('should enable sharing for on-prem URL %s', async (host) => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        makeFetch({ ...onPremResponse, hasActiveLicense: false }),
+      );
+
+      await cloudConfigInstance.validateAndSetApiToken('token', host);
+
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
+      );
+    });
+
     it('should disable sharing for public cloud host with hasActiveLicense: false after cutoff', async () => {
       const body = {
         ...onPremResponse,
@@ -377,6 +420,32 @@ describe('CloudConfig', () => {
       const result = await cloudConfigInstance.validateAndSetApiToken('token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),
+      );
+    });
+
+    it.each([
+      CLOUD_API_HOST.toUpperCase(),
+      `${CLOUD_API_HOST}.`,
+      `${CLOUD_API_HOST}/prefix`,
+      'https://www.promptfoo.app',
+      'https://WWW.PROMPTFOO.APP.',
+      'https://www.promptfoo.app/prefix',
+      'https://promptfoo.app',
+      'https://PROMPTFOO.APP.',
+      'https://promptfoo.app/prefix',
+    ])('should apply the license gate to public cloud URL %s', async (host) => {
+      const body = {
+        ...onPremResponse,
+        hasActiveLicense: false,
+        user: { ...onPremResponse.user, createdAt: new Date('2026-04-01T00:00:00Z') },
+      };
+      vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(body));
+
+      await cloudConfigInstance.validateAndSetApiToken('token', host);
+
       const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),

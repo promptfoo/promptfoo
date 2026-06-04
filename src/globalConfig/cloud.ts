@@ -6,8 +6,22 @@ export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
 export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
+const CLOUD_HOSTNAMES = new Set([
+  new URL(CLOUD_API_HOST).hostname,
+  new URL('https://www.promptfoo.app').hostname,
+  new URL('https://promptfoo.app').hostname,
+]);
+
 // Free customers created before this date are grandfathered into auto-share.
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
+
+function getNormalizedHostname(url: string): string {
+  return new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+}
+
+function isPromptfooCloudHost(url: string): boolean {
+  return CLOUD_HOSTNAMES.has(getNormalizedHostname(url));
+}
 
 interface CloudUser {
   id: string;
@@ -180,19 +194,17 @@ export class CloudConfig {
     this.setApiKey(token);
     this.setApiHost(apiHost);
     this.setAppUrl(app.url);
-    if (typeof hasActiveLicense === 'boolean') {
-      // On-prem installations are always enterprise deployments. Applying the
-      // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
-      // auto-sharing to the on-prem Report Server when the server returns
-      // hasActiveLicense: false (e.g. because it has no licence-check logic).
-      const isOnPrem = !apiHost.replace(/\/+$/, '').includes('api.promptfoo.app');
-      if (isOnPrem) {
-        this.setSharing(true);
-      } else {
-        const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
-        const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
-        this.setSharing(hasActiveLicense || isGrandfathered);
-      }
+    // On-prem installations are always enterprise deployments. Applying the
+    // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
+    // auto-sharing to the on-prem Report Server when the server omits the field
+    // or returns false because it has no licence-check logic.
+    const isOnPrem = !isPromptfooCloudHost(apiHost);
+    if (isOnPrem) {
+      this.setSharing(true);
+    } else if (typeof hasActiveLicense === 'boolean') {
+      const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
+      const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
+      this.setSharing(hasActiveLicense || isGrandfathered);
     }
   }
 
