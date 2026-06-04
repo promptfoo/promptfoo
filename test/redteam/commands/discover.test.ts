@@ -174,6 +174,38 @@ describe('doTargetPurposeDiscovery', () => {
     });
   });
 
+  it('should stop when the maximum turn count is reached', async () => {
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            done: false,
+            question: 'What else should I know?',
+            state: {
+              currentQuestionIndex: 0,
+              answers: [],
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      ),
+    );
+
+    const target = createMockProvider({
+      id: 'test',
+      response: { output: 'Another answer' },
+    });
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toThrow(
+      'Too many retries, giving up.',
+    );
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(10);
+    expect(target.callApi).toHaveBeenCalledTimes(10);
+  });
+
   it('delegates auth to the fetch layer and never sends an Authorization header itself', async () => {
     // Single done=true turn so exactly one remote-generation request is made.
     mockedFetchWithProxy.mockResolvedValue(

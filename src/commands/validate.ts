@@ -18,6 +18,7 @@ import { setupEnv } from '../util/index';
 import { isUuid } from '../util/uuid';
 import type { Command } from 'commander';
 
+import type { ProviderTestResult, SessionTestResult } from '../node/testProvider';
 import type { UnifiedConfig } from '../types/index';
 import type { ApiProvider } from '../types/providers';
 
@@ -82,20 +83,29 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
 /**
  * Display detailed test results with suggestions
  */
-function displayTestResult(result: any, testName: string): void {
+function displayTestResult(result: ProviderTestResult | SessionTestResult, testName: string): void {
   const indent = '    ';
+  const analysis = 'analysis' in result ? result.analysis : undefined;
+  const sessionId = 'sessionId' in result ? result.sessionId : undefined;
+  const reason = 'reason' in result ? result.reason : undefined;
+  const transformedRequest =
+    'transformedRequest' in result &&
+    result.transformedRequest !== null &&
+    typeof result.transformedRequest === 'object'
+      ? (result.transformedRequest as Record<string, unknown>)
+      : undefined;
 
   if (result.success) {
     logger.info(chalk.green(`  ✓ ${testName}`));
     if (result.message && result.message !== 'Test completed') {
       logger.info(chalk.dim(`${indent}${result.message}`));
     }
-    if (result.sessionId) {
-      logger.info(chalk.dim(`${indent}Session ID: ${result.sessionId}`));
+    if (sessionId) {
+      logger.info(chalk.dim(`${indent}Session ID: ${sessionId}`));
     }
   } else {
     // Check if this is a "suggestions" failure (configuration issue) vs a hard error
-    const hasSuggestions = result.analysis?.changes_needed;
+    const hasSuggestions = analysis?.changes_needed;
     const isHardError = result.error && !hasSuggestions;
 
     if (isHardError) {
@@ -118,15 +128,13 @@ function displayTestResult(result: any, testName: string): void {
       }
     }
 
-    if (result.reason) {
-      logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
+    if (reason) {
+      logger.info(chalk.dim(`${indent}Reason: ${reason}`));
     }
   }
 
   // Display API analysis feedback if available (from testAnalyzerResponse)
-  if (result.analysis?.changes_needed) {
-    const analysis = result.analysis;
-
+  if (analysis?.changes_needed) {
     logger.info('');
     logger.info(chalk.cyan(`${indent}Suggestions:`));
     if (analysis.changes_needed_reason) {
@@ -141,14 +149,14 @@ function displayTestResult(result: any, testName: string): void {
   }
 
   // Show transformed request if available (only when verbose or debug)
-  if (result.transformedRequest) {
+  if (transformedRequest) {
     logger.debug('');
     logger.debug(chalk.dim(`${indent}Request details:`));
-    if (result.transformedRequest.url) {
-      logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
+    if (transformedRequest.url) {
+      logger.debug(chalk.dim(`${indent}  URL: ${transformedRequest.url}`));
     }
-    if (result.transformedRequest.method) {
-      logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
+    if (transformedRequest.method) {
+      logger.debug(chalk.dim(`${indent}  Method: ${transformedRequest.method}`));
     }
   }
 }

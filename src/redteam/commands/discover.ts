@@ -284,7 +284,7 @@ export async function doTargetPurposeDiscovery(
           throw new Error(errorMessage);
         }
 
-        if (turn > MAX_TURN_COUNT) {
+        if (turn >= MAX_TURN_COUNT) {
           const errorMessage = `Too many retries, giving up.`;
           logger.error(`${LOG_PREFIX} ${errorMessage}`);
           throw new Error(errorMessage);
