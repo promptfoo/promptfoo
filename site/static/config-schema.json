@@ -877,6 +877,9 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "xfail": {
+                "not": {}
               }
             },
             "required": ["type", "assert"],

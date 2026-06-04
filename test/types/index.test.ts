@@ -130,10 +130,6 @@ describe('AssertionSchema', () => {
     });
 
     expect(result.success).toBe(false);
-    if (!result.success) {
-      const xfailIssue = result.error.issues.find((issue) => issue.path.includes('xfail'));
-      expect(xfailIssue?.message).toBe('xfail is not supported for assert-set assertions');
-    }
   });
 
   it('should validate all base assertion types', () => {

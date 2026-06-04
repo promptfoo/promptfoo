@@ -690,12 +690,6 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
-const UnsupportedAssertionSetXFailSchema = z
-  .custom<never>((value) => value === undefined, {
-    message: 'xfail is not supported for assert-set assertions',
-  })
-  .optional();
-
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
@@ -710,7 +704,7 @@ export const AssertionSetSchema = z.object({
   // An external mapping of arbitrary strings to values that is defined
   // for every assertion in the set and passed into each assert
   config: z.record(z.string(), z.any()).optional(),
-  xfail: UnsupportedAssertionSetXFailSchema,
+  xfail: z.never().optional(),
 });
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
