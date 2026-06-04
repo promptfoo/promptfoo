@@ -126,6 +126,7 @@ export abstract class RedteamPluginBase {
      * In multi-input mode, returns Record<string, string>[]
      */
     let retryInstructions: string | undefined;
+    // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
     const generatePrompts = async (
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
     ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
@@ -229,6 +230,7 @@ export abstract class RedteamPluginBase {
 
       return acceptedPrompts as { __prompt: string }[] | Record<string, string>[];
     };
+    // biome-ignore-end lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
 
     const allPrompts = await retryWithDeduplication(
       generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
@@ -542,7 +544,13 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
+    const grade = (
+      gradingContext?.providerResponse
+        ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
+            providerResponse: gradingContext.providerResponse,
+          })
+        : await matchesLlmRubric(finalRubric, llmOutput, grading)
+    ) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

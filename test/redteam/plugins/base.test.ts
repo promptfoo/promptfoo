@@ -1235,6 +1235,39 @@ describe('RedteamGraderBase', () => {
     expect(result.rubric).toContain('Current timestamp:');
   });
 
+  it('should pass provider response context to multimodal graders', async () => {
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    const providerResponse = {
+      output: 'generated image',
+      images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'generated image',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+      undefined /* additionalRubric */,
+      undefined /* skipRefusalCheck */,
+      { providerResponse },
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.stringContaining('Test rubric for test-purpose'),
+      'generated image',
+      expect.any(Object),
+      undefined,
+      undefined,
+      { providerResponse },
+    );
+  });
+
   it('should prefer remote grading when test options only contain a target provider', async () => {
     cliState.config = {
       redteam: {},
