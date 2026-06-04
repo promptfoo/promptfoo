@@ -7,6 +7,19 @@ import {
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
 
+const mockProgressBar = vi.hoisted(() => ({
+  increment: vi.fn(),
+  start: vi.fn(),
+  stop: vi.fn(),
+}));
+
+vi.mock('cli-progress', () => ({
+  default: {
+    SingleBar: vi.fn(function () {
+      return mockProgressBar;
+    }),
+  },
+}));
 vi.mock('../../../src/util/fetch/index');
 
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
@@ -199,11 +212,14 @@ describe('doTargetPurposeDiscovery', () => {
       response: { output: 'Another answer' },
     });
 
-    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toThrow(
-      'Too many retries, giving up.',
-    );
+    await expect(doTargetPurposeDiscovery(target)).rejects.toThrow('Too many retries, giving up.');
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(10);
-    expect(target.callApi).toHaveBeenCalledTimes(10);
+    expect(target.callApi).toHaveBeenCalledTimes(9);
+    expect(mockProgressBar.increment).toHaveBeenCalledTimes(10);
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
+    expect(mockProgressBar.increment.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+      mockProgressBar.stop.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('delegates auth to the fetch layer and never sends an Authorization header itself', async () => {
