@@ -616,76 +616,6 @@ describe('code-scan-action main', () => {
     });
   });
 
-  describe('fallback comment posting', () => {
-    it('posts file-scoped findings without a line as general comments with file context', async () => {
-      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
-
-      const mockCreateReview = vi.fn().mockResolvedValue({});
-      const mockCreateComment = vi.fn().mockResolvedValue({});
-      mocks.github.getOctokit.mockReturnValue({
-        rest: {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({
-              data: { base: { ref: 'main' } },
-            }),
-          },
-          issues: {
-            createComment: mockCreateComment,
-          },
-        },
-      });
-
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          _args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
-            const response = JSON.stringify({
-              success: true,
-              review: 'Found issues',
-              commentsPosted: false,
-              comments: [
-                {
-                  file: 'src/example.ts',
-                  line: null,
-                  finding: 'File-scoped issue',
-                  severity: 'high',
-                },
-              ],
-            });
-            options.listeners.stdout(Buffer.from(response));
-          }
-          return 0;
-        },
-      );
-
-      await import('../../code-scan-action/src/main');
-
-      await vi.waitFor(() => {
-        expect(mockCreateComment).toHaveBeenCalledWith({
-          owner: 'test-owner',
-          repo: 'test-repo',
-          issue_number: 123,
-          body: expect.stringContaining('**src/example.ts**'),
-        });
-      });
-
-      expect(mockCreateReview).toHaveBeenCalledWith(
-        expect.objectContaining({
-          comments: undefined,
-        }),
-      );
-      expect(mockCreateComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining('File-scoped issue'),
-        }),
-      );
-    });
-  });
-
   describe('SARIF output', () => {
     function mockFallbackPosting() {
       const createReview = vi.fn().mockResolvedValue({});
@@ -806,6 +736,35 @@ describe('code-scan-action main', () => {
 
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
+    it('posts file-only findings from ordinary scan responses as general fallback comments', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/file-only.ts',
+            line: null,
+            finding: 'This file configures an unsafe model tool.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/file-only.ts**'),
+        }),
+      );
     });
 
     it('posts line-level mixed-skip findings as fallback comments and writes SARIF', async () => {
