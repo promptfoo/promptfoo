@@ -10,7 +10,7 @@ import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
-import { fetchWithTimeout } from '../../src/util/fetch/index';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
@@ -36,7 +36,7 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/util/fetch/index')>();
   return {
     ...actual,
-    fetchWithTimeout: vi.fn(),
+    fetchWithProxy: vi.fn(),
   };
 });
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
@@ -84,7 +84,7 @@ describe('matchesLlmRubric', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
     mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
-    vi.mocked(fetchWithTimeout).mockResolvedValue(
+    vi.mocked(fetchWithProxy).mockResolvedValue(
       new Response(Buffer.from('remote-image'), {
         headers: { 'content-type': 'image/png' },
       }),
@@ -385,10 +385,9 @@ describe('matchesLlmRubric', () => {
         ],
       },
     ]);
-    expect(fetchWithTimeout).toHaveBeenCalledWith(
+    expect(fetchWithProxy).toHaveBeenCalledWith(
       'https://example.com/image.png',
-      { redirect: 'manual' },
-      30000,
+      expect.objectContaining({ redirect: 'manual' }),
     );
   });
 
@@ -418,7 +417,7 @@ describe('matchesLlmRubric', () => {
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(fetchWithTimeout).not.toHaveBeenCalled();
+    expect(fetchWithProxy).not.toHaveBeenCalled();
     expect(JSON.parse(prompt)[0].content[2]).toEqual({
       type: 'image_url',
       image_url: { url: 'https://internal.example/image.png' },
@@ -426,7 +425,7 @@ describe('matchesLlmRubric', () => {
   });
 
   it('should not hydrate image URLs that redirect to private addresses', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
       new Response(null, {
         status: 302,
         headers: { location: 'http://127.0.0.1/image.png' },
@@ -456,7 +455,7 @@ describe('matchesLlmRubric', () => {
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(1);
     expect(JSON.parse(prompt)[0].content[2]).toEqual({
       type: 'image_url',
       image_url: { url: 'https://example.com/redirect-image.png' },

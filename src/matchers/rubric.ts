@@ -1,16 +1,12 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import fs from 'fs/promises';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
-import { getBlobByHash } from '../blobs';
-import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
-import { fetchWithTimeout } from '../util/fetch/index';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
@@ -36,6 +32,8 @@ const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const MAX_GRADING_IMAGE_REDIRECTS = 5;
 const MULTIMODAL_GRADING_INSTRUCTION =
   'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.';
+const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
+const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/i;
 
 export class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -208,11 +206,10 @@ function isPrivateIpv6(address: string): boolean {
 }
 
 function isPrivateAddress(address: string): boolean {
-  const ipVersion = isIP(address);
-  if (ipVersion === 4) {
+  if (address.includes('.')) {
     return isPrivateIpv4(address);
   }
-  if (ipVersion === 6) {
+  if (address.includes(':')) {
     return isPrivateIpv6(address);
   }
   return false;
@@ -254,6 +251,20 @@ function getResponseContentLength(response: Response): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+async function fetchImageWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const fetchModuleSpecifier = '../util/fetch/index';
+    const fetchModule = (await import(fetchModuleSpecifier)) as {
+      fetchWithProxy: (url: string, init?: RequestInit) => Promise<Response>;
+    };
+    return await fetchModule.fetchWithProxy(url, { redirect: 'manual', signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function hydrateImageUrl(url: string, mimeType?: string): Promise<string | undefined> {
   let parsedUrl: URL;
   try {
@@ -284,7 +295,7 @@ async function hydrateImageUrl(url: string, mimeType?: string): Promise<string |
         return undefined;
       }
 
-      response = await fetchWithTimeout(currentUrl.toString(), { redirect: 'manual' }, timeoutMs);
+      response = await fetchImageWithTimeout(currentUrl.toString(), timeoutMs);
       if (response.status < 300 || response.status >= 400) {
         break;
       }
@@ -364,8 +375,43 @@ async function hydrateImageUrl(url: string, mimeType?: string): Promise<string |
   }
 }
 
+function extractBlobHashFromImageValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const match = BLOB_URI_REGEX.exec(value);
+    return match?.[1]?.toLowerCase();
+  }
+
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as { hash?: unknown; uri?: unknown };
+  if (typeof candidate.hash === 'string' && BLOB_HASH_REGEX.test(candidate.hash)) {
+    return candidate.hash.toLowerCase();
+  }
+  if (typeof candidate.uri === 'string') {
+    return extractBlobHashFromImageValue(candidate.uri);
+  }
+
+  return undefined;
+}
+
+async function loadImageBlobByHash(hash: string): Promise<{
+  data: Buffer;
+  metadata: { mimeType?: string };
+}> {
+  const blobModuleSpecifier = '../blobs';
+  const blobModule = (await import(blobModuleSpecifier)) as {
+    getBlobByHash: (hash: string) => Promise<{
+      data: Buffer;
+      metadata: { mimeType?: string };
+    }>;
+  };
+  return blobModule.getBlobByHash(hash);
+}
+
 async function imageOutputToImageUrl(image: ImageOutput): Promise<string | undefined> {
-  const dataBlobHash = image.data ? extractBlobHashesFromValue(image.data)[0] : undefined;
+  const dataBlobHash = extractBlobHashFromImageValue(image.data);
   if (image.data?.trim().startsWith('http')) {
     return (await hydrateImageUrl(image.data.trim(), image.mimeType)) || image.data.trim();
   }
@@ -380,7 +426,7 @@ async function imageOutputToImageUrl(image: ImageOutput): Promise<string | undef
   }
 
   try {
-    const blob = await getBlobByHash(blobHash);
+    const blob = await loadImageBlobByHash(blobHash);
     const mimeType =
       image.mimeType || image.blobRef?.mimeType || blob.metadata.mimeType || 'image/png';
     return `data:${mimeType};base64,${blob.data.toString('base64')}`;
