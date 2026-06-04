@@ -115,6 +115,124 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should pass when the grading provider returns a score but not pass', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: '0.6', reason: 'Test grading output' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        reason: 'Test grading output',
+        score: 0.6,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should fail when provider returns neither pass nor score', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const graderOutput = JSON.stringify({ reason: 'Can not determine pass or score' });
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: graderOutput,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: "llm-rubric response must contain a 'pass' or 'score' field",
+      metadata: { graderError: true },
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when provider returns null pass without a score', async () => {
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: null, reason: 'No verdict supplied' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric('Expected output', 'Sample output', options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: "llm-rubric response must contain a 'pass' or 'score' field",
+        metadata: { graderError: true },
+      }),
+    );
+  });
+
+  it('should treat null score as omitted when provider returns a pass verdict', async () => {
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: null, reason: 'Boolean pass supplied' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric('Expected output', 'Sample output', options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Boolean pass supplied',
+      }),
+    );
+  });
+
+  it('should use a valid score when provider returns null pass', async () => {
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: null, score: 0.6, reason: 'Score supplied' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric('Expected output', 'Sample output', options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 0.6,
+        reason: 'Score supplied',
+      }),
+    );
+  });
+
   it('should handle when provider returns direct object output instead of string', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -554,6 +672,88 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should fail when the grading provider returns pass false but score more than threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: false, score: '0.6', reason: 'Grading failed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0.6,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should use a generic fallback reason when pass is false but the score meets the default threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: false, score: '0.6' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0.6,
+      }),
+    );
+  });
+
+  it('should fail when the grading provider returns pass true but score less than threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: true, score: '0.4', reason: 'Grading failed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0.4,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
   it('should fail when the grading provider returns a failing result', async () => {
     const expected = 'Expected output';
     const output = 'Different output';
@@ -850,6 +1050,33 @@ describe('matchesLlmRubric', () => {
         score: 0.799,
         pass: false,
         reason: 'Just below threshold',
+      }),
+    );
+  });
+
+  it('should allow threshold zero to preserve boolean-only pass behavior', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const output = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0,
+    };
+    const options: GradingConfig = {
+      rubricPrompt,
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 0, reason: 'Boolean pass preserved' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric(rubricPrompt, output, options, {}, assertion)).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        pass: true,
+        score: 0,
+        reason: 'Boolean pass preserved',
       }),
     );
   });
@@ -1320,6 +1547,99 @@ Evaluate the response
     });
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('should apply the default threshold to remote llm-rubric grading results', async () => {
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({ output: '' }),
+      }),
+    };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 0,
+      reason: 'Remote boolean pass with failing score',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric('Test rubric', 'Test output', grading, {}, undefined, {
+      preferRemote: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: 'Remote boolean pass with failing score',
+      }),
+    );
+  });
+
+  it('should honor threshold zero for remote llm-rubric grading results', async () => {
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'Test rubric',
+      threshold: 0,
+    };
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({ output: '' }),
+      }),
+    };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 0,
+      reason: 'Remote boolean pass preserved',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric('Test rubric', 'Test output', grading, {}, assertion, {
+      preferRemote: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        assertion,
+        pass: true,
+        score: 0,
+        reason: 'Remote boolean pass preserved',
+      }),
+    );
+  });
+
+  it('should preserve a remote boolean pass when the remote grader omits score', async () => {
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({ output: '' }),
+      }),
+    };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: undefined as unknown as number,
+      reason: 'Remote pass without numeric score',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric('Test rubric', 'Test output', grading, {}, undefined, {
+      preferRemote: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Remote pass without numeric score',
+      }),
+    );
   });
 
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {

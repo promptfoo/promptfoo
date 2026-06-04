@@ -23,10 +23,10 @@ assert:
 
 ## Comparing to LLM-Rubric
 
-The `search-rubric` assertion behaves exactly like `llm-rubric`, but automatically uses a provider with web search capabilities:
+The `search-rubric` assertion evaluates rubric-style verdicts while automatically using a provider with web search capabilities:
 
 ```yaml
-# These are equivalent:
+# Two ways to grade current information with web search:
 assert:
   # Using llm-rubric with a web-search capable provider
   - type: llm-rubric
@@ -37,6 +37,8 @@ assert:
   - type: search-rubric
     value: 'Contains current stock price for Apple (AAPL) within $5'
 ```
+
+Unlike `llm-rubric`, which applies a default score threshold of `0.5`, `search-rubric` only applies a score threshold when you explicitly set `threshold`.
 
 ## Using Variables in the Rubric
 
@@ -199,6 +201,8 @@ assert:
     value: 'Contains accurate information about current US inflation rate'
     threshold: 0.9 # Requires 90% accuracy for economic data
 ```
+
+`search-rubric` does not apply a default threshold; omit `threshold` when the grader's boolean verdict should decide pass/fail.
 
 ## Best Practices
 

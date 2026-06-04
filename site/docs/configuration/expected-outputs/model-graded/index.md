@@ -387,6 +387,8 @@ defaultTest:
       ]
 ```
 
+If this rubric is used only to record scores and its `pass: true` verdict should not be rejected by the default `llm-rubric` score cutoff, configure its assertion with `threshold: 0`, as in the linked example.
+
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/eval-custom-grading-prompt/promptfooconfig.yaml).
 
 ### Image-based rubric prompts
@@ -674,40 +676,32 @@ tests:
 
 Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanisms:
 
-1. **Without threshold**: PASS depends only on the grader's `pass` field (defaults to `true` if omitted)
-2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
+1. **Default threshold**: `llm-rubric` applies a default threshold of `0.5`, so PASS requires the returned score to meet that cutoff as well as any explicit `pass` field.
+2. **Configured threshold**: Set `threshold` to require a different score; set `threshold: 0` to preserve boolean-only pass behavior for non-negative scores.
 
-This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
+This means a result like `{"pass": true, "score": 0}` fails by default. It passes only when you intentionally configure `threshold: 0`.
 
-**Common issue**: Tests show PASS even when scores are low
+**Common issue**: Partially correct responses pass when your evaluation requires a higher quality bar
 
 ```yaml
-# ❌ Problem: All tests pass regardless of score
+# Problem: Partial credit above 0.5 satisfies the default threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # No threshold set - always passes if grader doesn't return explicit pass: false
+      Score response quality from 0 to 1.
+      Partially correct responses may score between 0.5 and 0.8.
 ```
 
-**Solutions**:
+**Solution**:
 
 ```yaml
-# ✅ Option A: Add threshold to make score drive PASS/FAIL
+# Require high-quality responses
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    threshold: 1  # Only pass when score >= 1
-
-# ✅ Option B: Have grader control pass explicitly
-assert:
-  - type: llm-rubric
-    value: |
-      Return {"pass": true, "score": 1} if the response is correct
-      Return {"pass": false, "score": 0} if the response is incorrect
+      Score response quality from 0 to 1.
+      Partially correct responses may score between 0.5 and 0.8.
+    threshold: 0.9
 ```
 
 ### Threshold usage across assertion types

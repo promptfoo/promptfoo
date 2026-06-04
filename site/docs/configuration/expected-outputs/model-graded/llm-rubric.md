@@ -295,7 +295,7 @@ For more details, see the [object template handling guide](/docs/usage/troublesh
 
 ## Threshold Support
 
-The `llm-rubric` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
+The `llm-rubric` assertion type applies a score threshold when the grader returns a score. The default threshold is `0.5`; set `threshold` to override it. For example:
 
 ```yaml
 assert:
@@ -308,48 +308,49 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 ## Pass vs. Score Semantics
 
-- PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
-- If the model omits `pass`, promptfoo assumes `pass: true` by default.
-- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
-- When `threshold` is set, both must be true for the assertion to pass:
+- PASS is determined by the LLM's boolean `pass` field and the score threshold.
+- If the model omits `pass` but returns `score`, promptfoo uses the score threshold.
+- If the model omits both `pass` and `score`, the assertion fails as malformed grader output.
+- Both must be true for the assertion to pass:
   - `pass === true`
   - `score >= threshold`
 
-This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
-
-:::caution
-If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
-:::
+This means a result like `{ pass: true, score: 0 }` fails by default because it does not meet the default threshold of `0.5`. If you want a different numeric cutoff, set `threshold` accordingly.
 
 ### Common misconfiguration
 
+The default `0.5` threshold already classifies binary scores correctly: `0` fails and `1` passes. Set a stricter threshold when your grader awards partial credit but the evaluation should accept only high-quality results:
+
 ```yaml
-# ❌ Problem: Returns 0/1 scores but no threshold set
+# Problem: Partially correct responses can score above the default cutoff
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # Missing threshold - always passes due to pass defaulting to true
+      Score the response quality between 0 and 1.
+      Partially correct responses may score between 0.5 and 0.8.
+    # Defaults to threshold: 0.5, which accepts partial credit
 ```
 
-**Fixes:**
+**Fix:** require the quality level your test needs:
 
 ```yaml
-# ✅ Option A: Add threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    threshold: 1
+      Score the response quality between 0 and 1.
+      Partially correct responses may score between 0.5 and 0.8.
+    threshold: 0.9
+```
 
-# ✅ Option B: Control pass explicitly
+To preserve legacy boolean-only behavior for a grader that returns both `pass` and a score, set `threshold: 0`. In that mode, a non-negative score no longer vetoes `pass: true`:
+
+```yaml
 assert:
   - type: llm-rubric
     value: |
-      Return {"pass": true, "score": 1} if the response is correct
-      Return {"pass": false, "score": 0} if the response is incorrect
+      Return {"pass": true, "score": 0} when the criterion is met.
+      Return {"pass": false, "score": 0} when the criterion is not met.
+    threshold: 0
 ```
 
 ## Negation with `not-llm-rubric`
