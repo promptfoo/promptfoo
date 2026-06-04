@@ -52,7 +52,7 @@ describe('JsonlFileWriter', () => {
     expect(mocks.createWriteStream).not.toHaveBeenCalled();
   });
 
-  it('resolves after the final flush completes and swallows a late close error', async () => {
+  it('waits for the underlying file descriptor to close', async () => {
     const stream = createMockWriteStream();
     stream.end.mockImplementation((callback?: () => void) => {
       callback?.();
@@ -61,17 +61,44 @@ describe('JsonlFileWriter', () => {
 
     const writer = new JsonlFileWriter('/tmp/results.jsonl');
     await writer.write({ a: 1 });
-    await expect(writer.close()).resolves.toBeUndefined();
-    // The rejecting listener is replaced (not left attached), and a late fd-close error
-    // emitted after 'finish' is swallowed rather than thrown as an unhandled 'error' event.
+    const closePromise = writer.close();
+    let settled = false;
+    closePromise.finally(() => {
+      settled = true;
+    });
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+
+    stream.emit('close');
+    await expect(closePromise).resolves.toBeUndefined();
     expect(stream.listenerCount('error')).toBe(1);
-    expect(() => stream.emit('error', new Error('late close error'))).not.toThrow();
+  });
+
+  it('rejects errors emitted while the file descriptor is closing', async () => {
+    const stream = createMockWriteStream();
+    stream.end.mockImplementation((callback?: () => void) => {
+      callback?.();
+      return stream;
+    });
+
+    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    await writer.write({ a: 1 });
+    const closePromise = writer.close();
+
+    stream.emit('error', new Error('late close error'));
+    stream.emit('close');
+
+    await expect(closePromise).rejects.toThrow(
+      'Failed to close JSONL output /tmp/results.jsonl: late close error',
+    );
   });
 
   it('rejects final flush errors with the output path', async () => {
     const stream = createMockWriteStream();
     stream.end.mockImplementation(() => {
       stream.emit('error', new Error('disk full'));
+      stream.emit('close');
       return stream;
     });
 
