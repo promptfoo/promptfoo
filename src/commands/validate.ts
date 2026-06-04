@@ -18,12 +18,14 @@ import { setupEnv } from '../util/index';
 import { isUuid } from '../util/uuid';
 import type { Command } from 'commander';
 
-import type { ProviderTestResult, SessionTestResult } from '../node/testProvider';
 import type { UnifiedConfig } from '../types/index';
 import type { ApiProvider } from '../types/providers';
 
 const VALIDATE_FAILURE_PREFIX = 'Failed to validate configuration: ';
 const LOAD_FAILURE_PREFIX = 'Failed to load configuration: ';
+
+type ProviderTestResult = Awaited<ReturnType<typeof testProviderConnectivity>>;
+type SessionTestResult = Awaited<ReturnType<typeof testProviderSession>>;
 
 interface ValidateOptions {
   config?: string[];
