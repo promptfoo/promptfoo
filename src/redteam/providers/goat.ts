@@ -62,6 +62,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
+import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
@@ -710,20 +711,7 @@ export default class GoatProvider implements ApiProvider {
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
           // Build grading context with tracing and exfil tracking data
-          let gradingContext:
-            | {
-                traceContext?: TraceContextData | null;
-                traceSummary?: string;
-                wasExfiltrated?: boolean;
-                exfilCount?: number;
-                exfilRecords?: Array<{
-                  timestamp: string;
-                  ip: string;
-                  userAgent: string;
-                  queryParams: Record<string, string>;
-                }>;
-              }
-            | undefined;
+          let gradingContext: RedteamGradingContext | undefined;
 
           // First try to get exfil data from provider response metadata (Playwright provider)
           if (finalResponse.metadata?.wasExfiltrated === undefined) {
@@ -770,6 +758,10 @@ export default class GoatProvider implements ApiProvider {
               traceSummary: gradingTraceSummary,
             };
           }
+          gradingContext = {
+            ...(gradingContext ?? {}),
+            providerResponse: finalResponse,
+          };
 
           const { grade, rubric } = await grader.getResult(
             attackerMessage.content,

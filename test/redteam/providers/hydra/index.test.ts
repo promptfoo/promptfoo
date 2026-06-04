@@ -1149,6 +1149,7 @@ describe('HydraProvider', () => {
         undefined, // additionalRubric
         undefined, // skipRefusalCheck
         expect.objectContaining({
+          providerResponse: expect.anything(),
           traceContext: null,
           traceSummary: undefined,
         }),

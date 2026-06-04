@@ -644,6 +644,7 @@ export class CrescendoProvider implements ApiProvider {
             }));
             gradingContext = {
               ...(gradingContext ?? {}),
+              providerResponse: lastResponse,
               redteamHistory: [...redteamHistory],
               conversationHistory: conversationHistoryForGrading,
               conversationTranscript: formatRedteamHistoryAsTranscript(

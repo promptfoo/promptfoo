@@ -73,6 +73,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata, RedteamFileConfig } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -882,18 +883,7 @@ async function runRedteamConversation({
             };
 
             // Build grading context with exfil tracking data
-            let gradingContext:
-              | {
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
+            let gradingContext: RedteamGradingContext | undefined;
 
             // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
             // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
@@ -940,6 +930,11 @@ async function runRedteamConversation({
                 exfilRecords: [],
               };
             }
+
+            gradingContext = {
+              ...(gradingContext ?? {}),
+              providerResponse: targetResponse,
+            };
 
             const { grade, rubric } = await grader.getResult(
               newInjectVar,

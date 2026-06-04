@@ -181,6 +181,11 @@ export class IntentGrader extends RedteamGraderBase {
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     // Ensure we have all required metadata
     const metadata = {
       ...test.metadata,

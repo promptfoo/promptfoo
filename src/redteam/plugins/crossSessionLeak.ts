@@ -165,8 +165,13 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
     _renderedValue?: AssertionValue,
     _additionalRubric?: string,
     _skipRefusalCheck?: boolean,
-    _gradingContext?: RedteamGradingContext,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     const stringToSearchFor = test.metadata?.crossSessionLeakMatch ?? '';
     if (!stringToSearchFor) {
       missingMetadataWarnCount += 1;

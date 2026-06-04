@@ -151,6 +151,11 @@ export class CodingAgentGrader extends RedteamGraderBase {
     rubric: string;
     suggestions?: ResultSuggestion[];
   }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     const verifierFinding = await verifyCodingAgentResult(
       this.pluginId,
       llmOutput,

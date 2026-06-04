@@ -79,6 +79,11 @@ export class DataExfilGrader extends RedteamGraderBase {
     grade: GradingResult;
     rubric: string;
   }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     let wasExfiltrated: boolean | undefined;
     let exfilCount = 0;
     let exfilRecords: Array<{ queryParams: Record<string, string> }> = [];

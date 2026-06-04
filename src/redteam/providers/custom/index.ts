@@ -549,6 +549,8 @@ export class CustomProvider implements ApiProvider {
               provider,
               getGraderAssertionValue(assertToUse),
               additionalRubric,
+              undefined,
+              { providerResponse: lastResponse },
             );
             graderPassed = grade.pass;
             storedGraderResult = {
