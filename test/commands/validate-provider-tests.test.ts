@@ -127,6 +127,79 @@ describe('Validate Command Provider Tests', () => {
       );
     });
 
+    it('should display connectivity suggestions and transformed request details', async () => {
+      const mockStatelessHttpProvider = createMockProvider({
+        id: 'http://example.com',
+        config: { stateful: false },
+      });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockStatelessHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: false,
+        message: 'Configuration needs changes',
+        providerResponse: { output: 'test' },
+        transformedRequest: {
+          url: 'http://example.com/api',
+          method: 'POST',
+        },
+        analysis: {
+          changes_needed: true,
+          changes_needed_reason: 'Response format needs changes',
+          changes_needed_suggestions: ['Add transformResponse'],
+        },
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Response format needs changes'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Add transformResponse'));
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('URL: http://example.com/api'),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Method: POST'));
+    });
+
+    it('should ignore malformed connectivity suggestions', async () => {
+      const mockStatelessHttpProvider = createMockProvider({
+        id: 'http://example.com',
+        config: { stateful: false },
+      });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockStatelessHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: false,
+        message: 'Configuration needs changes',
+        analysis: {
+          changes_needed: true,
+          changes_needed_suggestions: 'Add transformResponse' as unknown as string[],
+        },
+      });
+
+      await expect(
+        doValidateTarget({ target: 'http://example.com' }, defaultConfig),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should display the reason for a failed session test', async () => {
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: true,
+        message: 'Connectivity test passed',
+      });
+      vi.mocked(testProviderSession).mockResolvedValue({
+        success: false,
+        message: 'Session test failed',
+        reason: 'The target did not preserve context',
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Reason: The target did not preserve context'),
+      );
+    });
+
     it('should skip session test when target is not stateful (stateful=false)', async () => {
       const mockNonStatefulHttpProvider = createMockProvider({
         id: 'http://example.com',
