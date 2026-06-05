@@ -19,6 +19,7 @@ import { callProviderWithContext, getAndCheckProvider } from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
+  materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
@@ -145,9 +146,8 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
-  const hasMultimodalOutput = Boolean(options?.providerResponse?.images?.length);
+  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
   if (
-    !hasMultimodalOutput &&
     !grading.rubricPrompt &&
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
@@ -161,6 +161,7 @@ export async function matchesLlmRubric(
           rubric,
           output: llmOutput,
           vars: vars || {},
+          ...(imageOutputs.length ? { images: imageOutputs } : {}),
         })),
         assertion,
       };
@@ -181,7 +182,7 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
-      images: options?.providerResponse?.images,
+      images: imageOutputs,
       vars: {
         output: tryParse(llmOutput),
         rubric,

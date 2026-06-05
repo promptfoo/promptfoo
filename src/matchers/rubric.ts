@@ -224,7 +224,7 @@ function getBase64DecodedBytes(base64Data: string): number {
 
 function imageOutputToImageUrl(
   image: ImageOutput,
-): { url: string; decodedBytes: number } | undefined {
+): { output: ImageOutput; url: string; decodedBytes: number } | undefined {
   if (image.blobRef || hasBlobRefImageValue(image.data)) {
     throw new Error(
       'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
@@ -239,13 +239,68 @@ function imageOutputToImageUrl(
       );
     }
 
+    const url = normalizeBase64ImageData(image.data, image.mimeType);
     return {
-      url: normalizeBase64ImageData(image.data, image.mimeType),
+      output: {
+        data: url,
+        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+      },
+      url,
       decodedBytes: getBase64DecodedBytes(getBase64ImageData(image.data)),
     };
   }
 
   return undefined;
+}
+
+export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
+  imageOutputs: ImageOutput[];
+  imageUrls: string[];
+} {
+  if (!images?.length) {
+    return { imageOutputs: [], imageUrls: [] };
+  }
+
+  const maxImages = getEnvInt('PROMPTFOO_GRADING_MAX_IMAGES', DEFAULT_GRADING_MAX_IMAGES);
+  if (images.length > maxImages) {
+    throw new Error(
+      `Too many images for multimodal grading: received ${images.length}, maximum is ${maxImages}.`,
+    );
+  }
+
+  const maxImageBytes = getEnvInt(
+    'PROMPTFOO_GRADING_IMAGE_MAX_BYTES',
+    DEFAULT_GRADING_IMAGE_MAX_BYTES,
+  );
+  const maxTotalImageBytes = getEnvInt(
+    'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES',
+    DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES,
+  );
+  const materializedImages = images
+    .map(imageOutputToImageUrl)
+    .filter((image): image is { output: ImageOutput; url: string; decodedBytes: number } =>
+      Boolean(image),
+    );
+
+  let totalImageBytes = 0;
+  for (const image of materializedImages) {
+    if (image.decodedBytes > maxImageBytes) {
+      throw new Error(
+        `Image output exceeds multimodal grading size limit: ${image.decodedBytes} bytes, maximum is ${maxImageBytes}.`,
+      );
+    }
+    totalImageBytes += image.decodedBytes;
+    if (totalImageBytes > maxTotalImageBytes) {
+      throw new Error(
+        `Image outputs exceed multimodal grading total size limit: ${totalImageBytes} bytes, maximum is ${maxTotalImageBytes}.`,
+      );
+    }
+  }
+
+  return {
+    imageOutputs: materializedImages.map((image) => image.output),
+    imageUrls: materializedImages.map((image) => image.url),
+  };
 }
 
 function appendImagesToContent(
@@ -323,40 +378,7 @@ async function buildGradingProviderPrompt(
     return { prompt: renderedPrompt, imageCount: 0 };
   }
 
-  const maxImages = getEnvInt('PROMPTFOO_GRADING_MAX_IMAGES', DEFAULT_GRADING_MAX_IMAGES);
-  if (images.length > maxImages) {
-    throw new Error(
-      `Too many images for multimodal grading: received ${images.length}, maximum is ${maxImages}.`,
-    );
-  }
-
-  const maxImageBytes = getEnvInt(
-    'PROMPTFOO_GRADING_IMAGE_MAX_BYTES',
-    DEFAULT_GRADING_IMAGE_MAX_BYTES,
-  );
-  const maxTotalImageBytes = getEnvInt(
-    'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES',
-    DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES,
-  );
-  const materializedImages = images
-    .map(imageOutputToImageUrl)
-    .filter((image): image is { url: string; decodedBytes: number } => Boolean(image));
-
-  let totalImageBytes = 0;
-  for (const image of materializedImages) {
-    if (image.decodedBytes > maxImageBytes) {
-      throw new Error(
-        `Image output exceeds multimodal grading size limit: ${image.decodedBytes} bytes, maximum is ${maxImageBytes}.`,
-      );
-    }
-    totalImageBytes += image.decodedBytes;
-    if (totalImageBytes > maxTotalImageBytes) {
-      throw new Error(
-        `Image outputs exceed multimodal grading total size limit: ${totalImageBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
-  }
-  const imageUrls = materializedImages.map((image) => image.url);
+  const { imageUrls } = materializeImageOutputsForGrading(images);
 
   if (imageUrls.length === 0) {
     return { prompt: renderedPrompt, imageCount: 0 };

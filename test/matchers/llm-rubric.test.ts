@@ -1675,6 +1675,81 @@ Evaluate the response
     expect(result.reason).toBe('Remote grading passed');
   });
 
+  it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {
+    const rubric = 'Does the image match?';
+    const llmOutput = 'Generated image';
+    const grading = {};
+    const vars = { expectedColor: 'blue' };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote multimodal grading passed',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading, vars, undefined, {
+      providerResponse: {
+        output: llmOutput,
+        images: [{ data: 'abc123', mimeType: 'image/webp' }],
+      },
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars,
+      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(result.reason).toBe('Remote multimodal grading passed');
+  });
+
+  it('should use local multimodal grading when a local grading provider is configured', async () => {
+    const rubric = 'Does the image match?';
+    const llmOutput = 'Generated image';
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Local multimodal grading passed' }),
+      },
+    });
+    const grading = {
+      provider,
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, {
+      providerResponse: {
+        output: llmOutput,
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+      },
+    });
+
+    expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    expect(provider.callApi).toHaveBeenCalled();
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.arrayContaining([
+            {
+              type: 'image_url',
+              image_url: { url: 'data:image/png;base64,abc123' },
+            },
+          ]),
+        }),
+      ]),
+    );
+    expect(result.reason).toBe('Local multimodal grading passed');
+  });
+
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
