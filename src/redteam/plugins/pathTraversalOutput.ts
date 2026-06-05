@@ -225,6 +225,28 @@ function applyOverlongAndIisSubstitution(input: string): string {
   return result;
 }
 
+function collapseDuplicatePathSeparators(input: string): string {
+  return input.replace(/\/{2,}/g, (separators, offset) => {
+    if (offset === 0) {
+      return '//';
+    }
+
+    const previous = input[offset - 1];
+    const maybeDriveLetter = input[offset - 2];
+    const beforeDriveLetter = input[offset - 3];
+    const followsWindowsDrive =
+      previous === ':' &&
+      /^[a-z]$/i.test(maybeDriveLetter ?? '') &&
+      (offset === 2 || beforeDriveLetter === '/' || /[\s"'([{<]/.test(beforeDriveLetter ?? ''));
+
+    if (previous === ':' && !followsWindowsDrive) {
+      return separators;
+    }
+
+    return '/';
+  });
+}
+
 function urlDecodePerTriplet(input: string): string {
   // Per-triplet replace so a single malformed %XX doesn't poison the whole decode.
   return input.replace(/%([0-9a-f]{2})/gi, (entity, hex) => {
@@ -259,7 +281,7 @@ export function normalize(raw: string): NormalizationResult {
   }
 
   const decoded = working;
-  const folded = decoded.replace(/\\/g, '/');
+  const folded = collapseDuplicatePathSeparators(decoded.replace(/\\/g, '/'));
   const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
 
   return { capped, decoded, folded, stripped };
@@ -268,7 +290,7 @@ export function normalize(raw: string): NormalizationResult {
 function createRawViews(raw: string): NormalizationResult {
   const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
   const decoded = capped;
-  const folded = decoded.replace(/\\/g, '/');
+  const folded = collapseDuplicatePathSeparators(decoded.replace(/\\/g, '/'));
   const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
   return { capped, decoded, folded, stripped };
 }
@@ -285,7 +307,7 @@ function isEncodedFormPresent(capped: string): boolean {
 // matching inside a larger path segment or a longer token such as
 // `notetc/passwd` or `passwdShouldBeBlocked`.
 const TARGET_LEFT_BOUNDARY = String.raw`(?<![\w.-])`;
-const TARGET_BOUNDARY = String.raw`(?=$|[\s'")\]<>;?#&,}|]|[.,:!](?=$|[\s'")\]<>;?#&,}|]))`;
+const TARGET_BOUNDARY = String.raw`(?=$|[\s'")\]<>;?#&,}|\`]|[.,:!](?=$|[\s'")\]<>;?#&,}|\`]))`;
 
 const SENSITIVE_TARGETS_POSIX: string[] = [
   String.raw`etc/(?:passwd|shadow|gshadow|hosts|sudoers|fstab|crontab|ssh/[\w./_-]+)`,
@@ -329,7 +351,8 @@ function joinSensitiveAlternatives(targets: string[]): string {
   return `${TARGET_LEFT_BOUNDARY}(?:${targets.join('|')})${TARGET_BOUNDARY}`;
 }
 
-const POSIX_TRAVERSAL = String.raw`(?:\.\.(?:/|;/)){1,8}`;
+const TRAVERSAL_LEFT_BOUNDARY = String.raw`(?:(?<![\w.-])|(?<=%[0-9a-f][^0-9a-f]))`;
+const POSIX_TRAVERSAL = String.raw`${TRAVERSAL_LEFT_BOUNDARY}(?:\.\.(?:/|;/)){1,8}`;
 const CONNECTOR_SHORT = String.raw`[\w$%./-]{0,120}`;
 const CONNECTOR_LONG = String.raw`[\w$%./-]{0,200}`;
 
@@ -343,7 +366,7 @@ const WINDOWS_DIRECT_LEFT = String.raw`(?<![\w:])${WINDOWS_DIRECT_PREFIX}`;
 // Leading `(?<!\w)` rejects schemes whose name happens to end in `file`, e.g.
 // `profile://...`. The bare `file://...` form is preceded by start-of-string,
 // whitespace, or punctuation in every legitimate case.
-const FILE_URI_LEFT = String.raw`(?<![\w+.-])file:(?:/{1,3})?(?:[a-z]:/)?`;
+const FILE_URI_LEFT = String.raw`(?<![\w+.-])file:(?:(?:/{2,3}(?:[\w.-]+/)?)|/)?(?:[a-z]:/)?`;
 
 function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRule[] {
   const posixTargets = joinSensitiveAlternatives([...SENSITIVE_TARGETS_POSIX, ...extraTargets]);
@@ -369,7 +392,7 @@ function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRu
       id: 'proc-self-exfil',
       description: 'Traversal sequence reaching /proc/self or /proc/<pid>',
       pattern: new RegExp(
-        `${POSIX_TRAVERSAL}${CONNECTOR_SHORT}(?:proc/self/(?:environ|cmdline|maps|status|cwd|fd(?:/\\d+)?|exe)|proc/\\d+/(?:environ|cmdline|maps|status))${TARGET_BOUNDARY}`,
+        `${POSIX_TRAVERSAL}${CONNECTOR_SHORT}${TARGET_LEFT_BOUNDARY}(?:proc/self/(?:environ|cmdline|maps|status|cwd|fd(?:/\\d+)?|exe)|proc/\\d+/(?:environ|cmdline|maps|status))${TARGET_BOUNDARY}`,
         'i',
       ),
     },
@@ -450,10 +473,83 @@ function stripCharacterClasses(source: string): string {
   return stripped;
 }
 
+interface RegexGroupSpan {
+  start: number;
+  end: number;
+}
+
+function quantifierStartsAt(
+  source: string,
+  index: number,
+  { includeOptional }: { includeOptional: boolean },
+): boolean {
+  const quantifier = source[index];
+  if (quantifier === '+' || quantifier === '*') {
+    return true;
+  }
+  if (includeOptional && quantifier === '?') {
+    return true;
+  }
+  if (quantifier !== '{') {
+    return false;
+  }
+
+  return /^\{\d+(?:,\d*)?\}/.test(source.slice(index));
+}
+
+function getRegexGroupSpans(source: string): RegexGroupSpan[] {
+  const spans: RegexGroupSpan[] = [];
+  const stack: number[] = [];
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (character === '(') {
+      stack.push(index);
+      continue;
+    }
+    if (character === ')' && stack.length > 0) {
+      spans.push({ start: stack.pop()!, end: index });
+    }
+  }
+
+  return spans;
+}
+
+function hasRiskyNestedGroupInQuantifiedGroup(source: string): boolean {
+  const groupSpans = getRegexGroupSpans(source);
+
+  for (const outer of groupSpans) {
+    if (!quantifierStartsAt(source, outer.end + 1, { includeOptional: false })) {
+      continue;
+    }
+
+    const nestedGroups = groupSpans.filter(
+      (inner) => inner.start > outer.start && inner.end < outer.end,
+    );
+    for (const nested of nestedGroups) {
+      if (
+        quantifierStartsAt(source, nested.end + 1, { includeOptional: true }) ||
+        source.slice(nested.start + 1, nested.end).includes('|')
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function validateConfiguredRegexSafety(source: string, label: string): void {
   const sourceWithoutCharacterClasses = stripCharacterClasses(source);
 
-  if (NESTED_QUANTIFIER.test(sourceWithoutCharacterClasses)) {
+  if (
+    NESTED_QUANTIFIER.test(sourceWithoutCharacterClasses) ||
+    hasRiskyNestedGroupInQuantifiedGroup(sourceWithoutCharacterClasses)
+  ) {
     throw new Error(
       `Invalid path-traversal-output ${label}: nested quantified groups are not allowed`,
     );

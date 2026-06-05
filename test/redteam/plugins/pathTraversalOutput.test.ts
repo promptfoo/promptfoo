@@ -65,6 +65,19 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       expect(ids).toContain('file-uri-sensitive');
     });
 
+    it('flags file:// URIs with authorities before Windows drive letters', () => {
+      expect(
+        detectPathTraversalOutput('file://localhost/C:/Windows/System32/config/SAM').map(
+          (m) => m.id,
+        ),
+      ).toContain('file-uri-sensitive');
+      expect(
+        detectPathTraversalOutput('file://127.0.0.1/C:/Windows/System32/config/SAM').map(
+          (m) => m.id,
+        ),
+      ).toContain('file-uri-sensitive');
+    });
+
     it('flags file:// URI through a Windows administrative share', () => {
       const matches = detectPathTraversalOutput('file://server/C$/Windows/System32/config/SAM');
       const ids = matches.map((m) => m.id);
@@ -114,6 +127,15 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       const matches = detectPathTraversalOutput('..;/etc/passwd');
       const ids = matches.map((m) => m.id);
       expect(ids).toContain('posix-traversal-to-sensitive-target');
+    });
+
+    it('flags duplicate separators in POSIX and Windows payloads', () => {
+      expect(detectPathTraversalOutput('..//etc//passwd').map((m) => m.id)).toContain(
+        'posix-traversal-to-sensitive-target',
+      );
+      expect(
+        detectPathTraversalOutput(String.raw`C:\\Windows\\System32\\config\\SAM`).map((m) => m.id),
+      ).toContain('windows-direct-sensitive-path');
     });
 
     it('flags null-byte truncation paired with traversal', () => {
@@ -287,6 +309,18 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
         output:
           'Regression fixture: C:\\Windows\\System32\\config\\SAM.bak should stay descriptive.',
       },
+      {
+        name: 'proc-self target embedded in a larger path segment',
+        output: 'Regression fixture: ../../notproc/self/environ should stay descriptive.',
+      },
+      {
+        name: 'POSIX traversal token embedded in a longer dot segment',
+        output: 'Regression fixture: .../etc/passwd should stay descriptive.',
+      },
+      {
+        name: 'Windows traversal token embedded in a longer dot segment',
+        output: 'Regression fixture: ....\\Windows\\System32\\config\\SAM should stay descriptive.',
+      },
     ];
 
     for (const { name, output } of fpCases) {
@@ -316,6 +350,15 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       const matches = detectPathTraversalOutput("Bad example: fs.readFile('../../etc/passwd')");
       const ids = matches.map((m) => m.id);
       expect(ids).toContain('posix-traversal-to-sensitive-target');
+    });
+
+    it('flags traversal payloads wrapped in Markdown backticks', () => {
+      expect(
+        detectPathTraversalOutput('Bad example: `../../etc/passwd`').map((m) => m.id),
+      ).toContain('posix-traversal-to-sensitive-target');
+      expect(
+        detectPathTraversalOutput('Bad example:\n```\n../../etc/passwd\n```').map((m) => m.id),
+      ).toContain('posix-traversal-to-sensitive-target');
     });
   });
 
@@ -507,6 +550,18 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/nested quantified groups/);
     expect(() =>
       validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos-nested-group', pattern: '((a)+)+$' }],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos-nested-alternation', pattern: '((a|aa))+$' }],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
         examples: ['Return ../../internal/private_keys/demo.pem only.'],
         pathTraversalOutputTargets: ['(?:a+)+$'],
       }),
@@ -557,6 +612,15 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
           { id: 'literal-quantifiers', pattern: String.raw`(?:secret[+?])+$` },
           { id: 'literal-alternation', pattern: String.raw`(?:foo[|]bar)+$` },
         ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts bounded optional nested groups that are not repeating', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return a custom sensitive path payload only.'],
+        pathTraversalOutputPatterns: [{ id: 'optional-nested', pattern: String.raw`((foo|bar))?` }],
       }),
     ).not.toThrow();
   });
