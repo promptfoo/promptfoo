@@ -815,9 +815,9 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with provider raw output, tracing, and exfil tracking data.
+          // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {
-            providerResponse: targetResponse,
+            ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
               : {}),

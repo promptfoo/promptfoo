@@ -62,6 +62,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
+import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
@@ -709,21 +710,10 @@ export default class GoatProvider implements ApiProvider {
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
-          // Build grading context with tracing and exfil tracking data
-          let gradingContext:
-            | {
-                traceContext?: TraceContextData | null;
-                traceSummary?: string;
-                wasExfiltrated?: boolean;
-                exfilCount?: number;
-                exfilRecords?: Array<{
-                  timestamp: string;
-                  ip: string;
-                  userAgent: string;
-                  queryParams: Record<string, string>;
-                }>;
-              }
-            | undefined;
+          // Build grading context with image outputs, tracing, and exfil tracking data.
+          let gradingContext: RedteamGradingContext | undefined = finalResponse.images?.length
+            ? { imageOutputs: finalResponse.images }
+            : undefined;
 
           // First try to get exfil data from provider response metadata (Playwright provider)
           if (finalResponse.metadata?.wasExfiltrated === undefined) {
@@ -739,6 +729,7 @@ export default class GoatProvider implements ApiProvider {
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
                 gradingContext = {
+                  ...(gradingContext ?? {}),
                   ...(tracingOptions.includeInGrading
                     ? {
                         traceContext: targetResponse.traceContext,
@@ -754,6 +745,7 @@ export default class GoatProvider implements ApiProvider {
           } else {
             logger.debug('[GOAT] Using exfil data from provider response metadata');
             gradingContext = {
+              ...(gradingContext ?? {}),
               ...(tracingOptions.includeInGrading
                 ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
                 : {}),
@@ -764,8 +756,9 @@ export default class GoatProvider implements ApiProvider {
           }
 
           // Fallback to just tracing context if no exfil data found
-          if (!gradingContext && tracingOptions.includeInGrading) {
+          if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
             gradingContext = {
+              ...(gradingContext ?? {}),
               traceContext: targetResponse.traceContext,
               traceSummary: gradingTraceSummary,
             };

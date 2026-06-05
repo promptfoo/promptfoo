@@ -448,6 +448,11 @@ export abstract class RedteamGraderBase {
     suggestions?: ResultSuggestion[];
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    const {
+      providerResponse: gradingProviderResponse,
+      imageOutputs,
+      ...templateGradingContext
+    } = gradingContext ?? {};
 
     const providerId = provider?.id?.();
     const providerTools = provider?.config?.tools;
@@ -465,8 +470,9 @@ export abstract class RedteamGraderBase {
       entities: test.metadata?.entities ?? [],
       tools,
       testVars: test.vars ?? {},
-      // Spread all gradingContext properties to make them accessible in rubrics
-      ...(gradingContext || {}),
+      // Spread public grading context properties to make them accessible in rubrics.
+      // Image payloads/provider internals are intentionally excluded above.
+      ...templateGradingContext,
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
@@ -544,10 +550,14 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
+    const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
     const grade = (
-      gradingContext?.providerResponse
+      imagesForGrading?.length
         ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
-            providerResponse: gradingContext.providerResponse,
+            providerResponse: {
+              output: llmOutput,
+              images: imagesForGrading,
+            },
           })
         : await matchesLlmRubric(finalRubric, llmOutput, grading)
     ) as GradingResult;

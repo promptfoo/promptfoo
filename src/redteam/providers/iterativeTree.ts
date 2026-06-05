@@ -73,6 +73,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata, RedteamFileConfig } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -881,19 +882,10 @@ async function runRedteamConversation({
               vars: iterationVars,
             };
 
-            // Build grading context with exfil tracking data
-            let gradingContext:
-              | {
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
+            // Build grading context with image outputs and exfil tracking data.
+            let gradingContext: RedteamGradingContext | undefined = targetResponse.images?.length
+              ? { imageOutputs: targetResponse.images }
+              : undefined;
 
             // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
             // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
@@ -916,6 +908,7 @@ async function runRedteamConversation({
                 const exfilData = await checkExfilTracking(webPageUuid, evalId);
                 if (exfilData) {
                   gradingContext = {
+                    ...(gradingContext ?? {}),
                     wasExfiltrated: exfilData.wasExfiltrated,
                     exfilCount: exfilData.exfilCount,
                     exfilRecords: exfilData.exfilRecords,
@@ -930,11 +923,15 @@ async function runRedteamConversation({
             }
 
             // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-            if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+            if (
+              gradingContext?.wasExfiltrated === undefined &&
+              targetResponse.metadata?.wasExfiltrated !== undefined
+            ) {
               logger.debug(
                 '[IterativeTree] Using exfil data from provider response metadata (fallback)',
               );
               gradingContext = {
+                ...(gradingContext ?? {}),
                 wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
                 exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
                 exfilRecords: [],

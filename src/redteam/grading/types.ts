@@ -1,4 +1,5 @@
 import type { TraceContextData } from '../../tracing/traceContext';
+import type { ImageOutput } from '../../types';
 import type { ProviderResponse } from '../../types/providers';
 import type { TraceData } from '../../types/tracing';
 import type { RedteamHistoryEntry } from '../types';
@@ -11,6 +12,7 @@ import type { RedteamHistoryEntry } from '../types';
  */
 export interface RedteamGradingContext {
   providerResponse?: ProviderResponse;
+  imageOutputs?: ImageOutput[];
   traceData?: TraceData | null;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
