@@ -1267,7 +1267,7 @@ describe('HydraProvider', () => {
       });
     });
 
-    it('passes target image outputs into the grader without raw provider internals', async () => {
+    it('passes target response evidence and image outputs into the grader', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -1275,7 +1275,7 @@ describe('HydraProvider', () => {
 
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
         images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
       });
 
@@ -1298,12 +1298,15 @@ describe('HydraProvider', () => {
 
       const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
         imageOutputs?: Array<{ data?: string; mimeType?: string }>;
-        providerResponse?: { raw?: unknown };
+        providerResponse?: { output?: unknown; raw?: unknown };
       };
       expect(gradingContext.imageOutputs).toEqual([
         { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
       ]);
-      expect(gradingContext.providerResponse).toBeUndefined();
+      expect(gradingContext.providerResponse).toMatchObject({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+      });
     });
   });
 
