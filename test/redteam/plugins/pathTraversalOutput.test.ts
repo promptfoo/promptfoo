@@ -138,6 +138,33 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       ).toContain('windows-direct-sensitive-path');
     });
 
+    it('flags UNC payloads embedded after leading text (not just at offset 0)', () => {
+      // Regression: separator collapsing must preserve a folded `\\host\share` UNC
+      // root that appears after any path-token boundary, otherwise `//server` is
+      // rewritten to `/server` and the UNC rule no longer matches. Real model output
+      // wraps the payload in prose, punctuation, or backticks.
+      const embeddedUncCases = [
+        String.raw`Here is the file: \\server\C$\Windows\System32\config\SAM`,
+        String.raw`config path=\\server\C$\Windows\System32\config\SAM`,
+        String.raw`values: x,\\server\C$\Windows\System32\config\SAM`,
+        'code: `\\\\server\\C$\\Windows\\System32\\config\\SAM`',
+        String.raw`See: \\?\UNC\fileserver\C$\Windows\System32\config\SAM now`,
+      ];
+      for (const output of embeddedUncCases) {
+        expect(detectPathTraversalOutput(output).map((m) => m.id)).toContain(
+          'windows-direct-sensitive-path',
+        );
+      }
+    });
+
+    it('flags percent-encoded UNC payloads embedded after leading text', () => {
+      expect(
+        detectPathTraversalOutput(
+          'leak: %5c%5cserver%5cC$%5cwindows%5csystem32%5cconfig%5csam done',
+        ).map((m) => m.id),
+      ).toContain('windows-direct-sensitive-path');
+    });
+
     it('flags null-byte truncation paired with traversal', () => {
       const matches = detectPathTraversalOutput(`../uploads/file.jpg${NUL}.php`);
       const ids = matches.map((m) => m.id);
@@ -262,6 +289,14 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       {
         name: 'https URL whose path mentions a sensitive Windows target (URL scheme must not match drive prefix)',
         output: 'See https://example.com/share/Windows/System32/config/SAM for details.',
+      },
+      {
+        // Regression: an earlier collapsible `//` run must not desync the folded
+        // match index from the decoded view, or the URL-path drive skip reads the
+        // wrong prefix and wrongly flags this benign URL.
+        name: 'https URL drive path preceded by a collapsible separator run',
+        output:
+          'x//////////////////// See https://example.com/C:/Windows/System32/config/SAM for details.',
       },
       {
         name: 'http URL whose path mentions a POSIX sensitive target',
@@ -487,6 +522,17 @@ describe('path-traversal-output / normalize', () => {
     const { folded } = normalize(`foo.jpg${NUL}.php`);
     expect(folded).toContain(NUL);
   });
+
+  it('keeps `decodedAligned` index-aligned with `folded` after separator collapse', () => {
+    // The Windows-direct skip checks index `decodedAligned` with offsets taken from
+    // `folded`, so the two must stay the same length and `decodedAligned` must retain
+    // the original separator characters (`\\` vs `//`) to tell a UNC root from a URL.
+    const raw = String.raw`x//////// note \\server\C$\Windows\System32\config\SAM end`;
+    const { folded, decodedAligned } = normalize(raw);
+    expect(decodedAligned).toHaveLength(folded.length);
+    expect(decodedAligned).toContain('\\\\server');
+    expect(folded).toContain('//server');
+  });
 });
 
 describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () => {
@@ -587,6 +633,69 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         pathTraversalOutputTargets: ['(?:a|aa)+$'],
       }),
     ).toThrow(/quantified alternation groups/);
+  });
+
+  it('rejects quantified alternation whose alternatives are wrapped in nested groups', () => {
+    // The regex guard cannot see a top-level `|` once the quantified group contains
+    // nested parens, so `((a)|(a))+` previously slipped through and was exponential.
+    for (const pattern of ['((a)|(a))+$', '((a)|a)+$', '(x(a)|(a)y)+$', '(?:(a)|(a))+$']) {
+      expect(() =>
+        validatePathTraversalOutputPluginConfig({
+          examples: ['Return custom traversal only.'],
+          pathTraversalOutputPatterns: [{ id: 'redos-grouped-alternation', pattern }],
+        }),
+      ).toThrow(/quantified alternation groups/);
+    }
+  });
+
+  it('rejects adjacent unbounded quantifiers over the same expression (polynomial ReDoS)', () => {
+    for (const pattern of ['^a*a*$', '^a+a+$', String.raw`\w*\w*`, '[a-z]+[a-z]+']) {
+      expect(() =>
+        validatePathTraversalOutputPluginConfig({
+          examples: ['Return custom traversal only.'],
+          pathTraversalOutputPatterns: [{ id: 'redos-adjacent', pattern }],
+        }),
+      ).toThrow(/adjacent unbounded quantifiers/);
+    }
+  });
+
+  it('rejects unbounded quantified backreferences', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos-backref', pattern: String.raw`^([a]+)\1+$` }],
+      }),
+    ).toThrow(/quantified backreferences/);
+  });
+
+  it('accepts bounded and non-overlapping quantifier sequences', () => {
+    // Guard against over-rejection: distinct adjacent atoms and a single separator
+    // between unbounded atoms are linear, so they must stay valid.
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return a custom sensitive path payload only.'],
+        pathTraversalOutputPatterns: [
+          { id: 'distinct-atoms', pattern: 'a+b+' },
+          { id: 'separated-atoms', pattern: String.raw`\w+/\w+` },
+          { id: 'single-unbounded', pattern: 'corp-secret-[a-z]+' },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects ReDoS-prone custom patterns at validation time without executing them', () => {
+    // Validation must short-circuit on the pattern source, never compile-and-run it
+    // against adversarial input, so rejection stays in single-digit milliseconds.
+    const start = performance.now();
+    for (const pattern of ['((a)|(a))+$', '^a*a*$', String.raw`^([a]+)\1+$`]) {
+      expect(() =>
+        validatePathTraversalOutputPluginConfig({
+          examples: ['Return custom traversal only.'],
+          pathTraversalOutputPatterns: [{ id: 'redos-timing', pattern }],
+        }),
+      ).toThrow();
+    }
+    expect(performance.now() - start).toBeLessThan(100);
   });
 
   it('rejects unbounded wildcard custom regexes that collapse detector selectivity', () => {

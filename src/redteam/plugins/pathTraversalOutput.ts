@@ -172,6 +172,9 @@ const NESTED_QUANTIFIER =
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
+// Matches an unbounded-quantified backreference such as `\1+`, `\1*`, or `\1{2,}`,
+// which can drive super-linear backtracking, e.g. `^([a]+)\1+$`.
+const QUANTIFIED_BACKREFERENCE = /\\[1-9]\d*(?:[*+]|\{\d+,\})/;
 
 function decodeJsonHexUnicode(input: string): string {
   // \uXXXX (4 hex)
@@ -225,26 +228,67 @@ function applyOverlongAndIisSubstitution(input: string): string {
   return result;
 }
 
-function collapseDuplicatePathSeparators(input: string): string {
-  return input.replace(/\/{2,}/g, (separators, offset) => {
-    if (offset === 0) {
-      return '//';
-    }
+function separatorRunKeepCount(folded: string, offset: number, runLength: number): number {
+  // Decide how many separators of a folded `/{2,}` run to keep when collapsing.
+  if (offset === 0) {
+    // A leading run normalizes to a single `//` UNC-style root.
+    return 2;
+  }
 
-    const previous = input[offset - 1];
-    const maybeDriveLetter = input[offset - 2];
-    const beforeDriveLetter = input[offset - 3];
-    const followsWindowsDrive =
-      previous === ':' &&
-      /^[a-z]$/i.test(maybeDriveLetter ?? '') &&
-      (offset === 2 || beforeDriveLetter === '/' || /[\s"'([{<]/.test(beforeDriveLetter ?? ''));
+  const previous = folded[offset - 1];
+  const maybeDriveLetter = folded[offset - 2];
+  const beforeDriveLetter = folded[offset - 3];
+  const followsWindowsDrive =
+    previous === ':' &&
+    /^[a-z]$/i.test(maybeDriveLetter ?? '') &&
+    (offset === 2 || beforeDriveLetter === '/' || /[\s"'`([{<]/.test(beforeDriveLetter ?? ''));
 
-    if (previous === ':' && !followsWindowsDrive) {
-      return separators;
-    }
+  // A `scheme://authority` run is kept intact so URL forms survive normalization.
+  if (previous === ':' && !followsWindowsDrive) {
+    return runLength;
+  }
 
-    return '/';
-  });
+  // Collapse a redundant separator only when it continues a path segment, i.e. the
+  // preceding char is a path-segment char (`[\w.-]`) or a Windows drive colon.
+  // Otherwise the run roots a UNC path (folded from `\\host\share`) or a
+  // protocol-relative URL, whose leading `//` the Windows UNC rule keys on — keep it.
+  // Using a path-segment allowlist (rather than a delimiter blocklist) means UNC
+  // roots after `=`, backticks, commas, quotes, etc. are preserved, not just after
+  // whitespace.
+  if (followsWindowsDrive || /[\w.-]/.test(previous ?? '')) {
+    return 1;
+  }
+  return 2;
+}
+
+function foldAndCollapseSeparators(decoded: string): { folded: string; decodedAligned: string } {
+  // Fold backslashes to `/` (a 1:1, position-preserving transform) and collapse
+  // duplicate separators, while emitting a `decodedAligned` companion that keeps the
+  // ORIGINAL separator characters at the SAME offsets as `folded`. Downstream skip
+  // checks need both: `folded` to match against, and `decodedAligned` to tell a real
+  // `\\` UNC root from a forward-slash `//` URL authority WITHOUT offset drift (a
+  // length-changing collapse on `folded` alone would desync `match.index` from the
+  // raw `decoded` view).
+  const foldedRaw = decoded.replace(/\\/g, '/');
+  let folded = '';
+  let decodedAligned = '';
+  let cursor = 0;
+  const runPattern = /\/{2,}/g;
+  let run: RegExpExecArray | null;
+  while ((run = runPattern.exec(foldedRaw)) !== null) {
+    const runStart = run.index;
+    const runLength = run[0].length;
+    folded += foldedRaw.slice(cursor, runStart);
+    decodedAligned += decoded.slice(cursor, runStart);
+    const keep = separatorRunKeepCount(foldedRaw, runStart, runLength);
+    // Keep the first `keep` separators from each view so the two stay aligned.
+    folded += foldedRaw.slice(runStart, runStart + keep);
+    decodedAligned += decoded.slice(runStart, runStart + keep);
+    cursor = runStart + runLength;
+  }
+  folded += foldedRaw.slice(cursor);
+  decodedAligned += decoded.slice(cursor);
+  return { folded, decodedAligned };
 }
 
 function urlDecodePerTriplet(input: string): string {
@@ -261,6 +305,9 @@ function urlDecodePerTriplet(input: string): string {
 export interface NormalizationResult {
   capped: string;
   decoded: string;
+  /** `decoded` with the same separator-collapse edits as `folded`, but original
+   * separator characters preserved, so it stays index-aligned with `folded`. */
+  decodedAligned: string;
   folded: string;
   stripped: string;
 }
@@ -281,18 +328,18 @@ export function normalize(raw: string): NormalizationResult {
   }
 
   const decoded = working;
-  const folded = collapseDuplicatePathSeparators(decoded.replace(/\\/g, '/'));
+  const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
   const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
 
-  return { capped, decoded, folded, stripped };
+  return { capped, decoded, decodedAligned, folded, stripped };
 }
 
 function createRawViews(raw: string): NormalizationResult {
   const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
   const decoded = capped;
-  const folded = collapseDuplicatePathSeparators(decoded.replace(/\\/g, '/'));
+  const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
   const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
-  return { capped, decoded, folded, stripped };
+  return { capped, decoded, decodedAligned, folded, stripped };
 }
 
 function isEncodedFormPresent(capped: string): boolean {
@@ -543,6 +590,134 @@ function hasRiskyNestedGroupInQuantifiedGroup(source: string): boolean {
   return false;
 }
 
+function hasQuantifiedTopLevelAlternationGroup(source: string): boolean {
+  // The regex-based QUANTIFIED_ALTERNATION guard only sees a top-level `|` when the
+  // quantified group has no nested parens (its `[^()]*` cannot span them). A group
+  // such as `((a)|(a))+` wraps the alternatives in nested groups, so the regex misses
+  // it even though it is catastrophic-backtracking alternation. Walk the spans and
+  // flag any quantified group whose own body alternates at depth 0.
+  const groupSpans = getRegexGroupSpans(source);
+
+  for (const outer of groupSpans) {
+    if (!quantifierStartsAt(source, outer.end + 1, { includeOptional: false })) {
+      continue;
+    }
+
+    let depth = 0;
+    for (let index = outer.start + 1; index < outer.end; index++) {
+      const character = source[index];
+      if (character === '\\') {
+        index++;
+        continue;
+      }
+      if (character === '(') {
+        depth++;
+        continue;
+      }
+      if (character === ')') {
+        depth--;
+        continue;
+      }
+      if (character === '|' && depth === 0) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+interface QuantifiedAtom {
+  text: string;
+  unbounded: boolean;
+}
+
+// Structural regex chars are emitted as their own tokens so they break adjacency
+// between repeated atoms (e.g. the `)(` in `(a*)(a*)` is not a single `a*a*`).
+const STRUCTURAL_REGEX_CHARS = new Set(['(', ')', '|', '^', '$']);
+
+function readCharClassEnd(source: string, start: number): number {
+  let cursor = start + 1;
+  if (source[cursor] === '^') {
+    cursor++;
+  }
+  if (source[cursor] === ']') {
+    cursor++;
+  }
+  while (cursor < source.length && source[cursor] !== ']') {
+    cursor += source[cursor] === '\\' ? 2 : 1;
+  }
+  return cursor + 1;
+}
+
+function readQuantifier(source: string, index: number): { unbounded: boolean; next: number } {
+  const quantifier = source[index];
+  if (quantifier === '*' || quantifier === '+') {
+    return { unbounded: true, next: index + 1 };
+  }
+  if (quantifier === '?') {
+    return { unbounded: false, next: index + 1 };
+  }
+  if (quantifier === '{') {
+    const braced = /^\{\d+(?:,(\d*))?\}/.exec(source.slice(index));
+    if (braced) {
+      // Unbounded only for the open form `{n,}` (captured group is the empty string).
+      return { unbounded: braced[1] === '', next: index + braced[0].length };
+    }
+  }
+  return { unbounded: false, next: index };
+}
+
+function tokenizeQuantifiedAtoms(source: string): QuantifiedAtom[] {
+  // Tokenize so a character class is one opaque atom (never look inside it) and each
+  // atom carries whether its trailing quantifier is unbounded.
+  const tokens: QuantifiedAtom[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const character = source[index];
+    if (STRUCTURAL_REGEX_CHARS.has(character)) {
+      tokens.push({ text: character, unbounded: false });
+      index++;
+      continue;
+    }
+
+    let atom: string;
+    if (character === '\\') {
+      atom = source.slice(index, index + 2);
+      index += 2;
+    } else if (character === '[') {
+      const end = readCharClassEnd(source, index);
+      atom = source.slice(index, end);
+      index = end;
+    } else {
+      atom = character;
+      index++;
+    }
+
+    const quantifier = readQuantifier(source, index);
+    index = quantifier.next;
+    tokens.push({ text: atom, unbounded: quantifier.unbounded });
+  }
+  return tokens;
+}
+
+function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
+  // Detect the canonical polynomial-ReDoS shape: two adjacent, unbounded-quantified
+  // copies of the SAME atom (`a*a*`, `a+a+`, `\w*\w*`, `[a-z]+[a-z]+`). The grouped
+  // checks above miss these because the ambiguity is between sibling atoms, not
+  // nested groups.
+  const tokens = tokenizeQuantifiedAtoms(source);
+  for (let position = 0; position + 1 < tokens.length; position++) {
+    const current = tokens[position];
+    const next = tokens[position + 1];
+    if (current.unbounded && next.unbounded && current.text === next.text) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function validateConfiguredRegexSafety(source: string, label: string): void {
   const sourceWithoutCharacterClasses = stripCharacterClasses(source);
 
@@ -554,7 +729,10 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
       `Invalid path-traversal-output ${label}: nested quantified groups are not allowed`,
     );
   }
-  if (QUANTIFIED_ALTERNATION.test(sourceWithoutCharacterClasses)) {
+  if (
+    QUANTIFIED_ALTERNATION.test(sourceWithoutCharacterClasses) ||
+    hasQuantifiedTopLevelAlternationGroup(sourceWithoutCharacterClasses)
+  ) {
     throw new Error(
       `Invalid path-traversal-output ${label}: quantified alternation groups are not allowed`,
     );
@@ -562,6 +740,18 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
   if (UNBOUNDED_WILDCARD.test(sourceWithoutCharacterClasses)) {
     throw new Error(
       `Invalid path-traversal-output ${label}: unbounded wildcard operators are not allowed`,
+    );
+  }
+  if (QUANTIFIED_BACKREFERENCE.test(sourceWithoutCharacterClasses)) {
+    throw new Error(
+      `Invalid path-traversal-output ${label}: quantified backreferences are not allowed`,
+    );
+  }
+  // Run the adjacency check against the raw source so character-class atoms stay
+  // intact for the identical-atom comparison.
+  if (hasAdjacentUnboundedOverlappingQuantifiers(source)) {
+    throw new Error(
+      `Invalid path-traversal-output ${label}: adjacent unbounded quantifiers over the same expression are not allowed`,
     );
   }
 }
@@ -611,9 +801,9 @@ function findRuleEvidence(
       rule.id === 'windows-direct-sensitive-path' &&
       ((evidence.startsWith('//') &&
         !evidence.startsWith('//?/') &&
-        normalized.decoded.slice(matchStart, matchStart + 2) !== '\\\\') ||
+        normalized.decodedAligned.slice(matchStart, matchStart + 2) !== '\\\\') ||
         (evidence.match(/^[a-z]:\//i) &&
-          isWindowsDriveEvidenceInsideUrlPath(normalized.decoded, matchStart)))
+          isWindowsDriveEvidenceInsideUrlPath(normalized.decodedAligned, matchStart)))
     ) {
       continue;
     }
@@ -624,8 +814,8 @@ function findRuleEvidence(
   return undefined;
 }
 
-function isWindowsDriveEvidenceInsideUrlPath(decoded: string, matchStart: number): boolean {
-  const uriPrefix = decoded
+function isWindowsDriveEvidenceInsideUrlPath(decodedAligned: string, matchStart: number): boolean {
+  const uriPrefix = decodedAligned
     .slice(0, matchStart)
     .match(/(?:^|[\s"'([{<])[a-z][a-z0-9+.-]*:\/\/[^\s"'([{<]*$/i)?.[0];
 
