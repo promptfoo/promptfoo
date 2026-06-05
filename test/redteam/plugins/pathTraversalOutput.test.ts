@@ -686,6 +686,11 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
       String.raw`^[\d\D]+[^]+a$`,
       '[ab]+[bc]+',
       String.raw`\d+\d+`,
+      // Arbitrary literals (shared char outside any fixed sample set) and overlapping
+      // ranges must be caught by deriving candidate chars from the atoms themselves.
+      '^c+c+$',
+      'Q*Q*',
+      '[c-e]+[d-f]+',
     ]) {
       expect(() =>
         validatePathTraversalOutputPluginConfig({
@@ -715,9 +720,11 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         examples: ['Return a custom sensitive path payload only.'],
         pathTraversalOutputPatterns: [
           { id: 'distinct-atoms', pattern: 'a+b+' },
+          { id: 'distinct-literals', pattern: 'c+d+' },
           { id: 'separated-atoms', pattern: String.raw`\w+/\w+` },
           { id: 'single-unbounded', pattern: 'corp-secret-[a-z]+' },
           { id: 'distinct-classes', pattern: '[a-z]+[A-Z]+' },
+          { id: 'disjoint-ranges', pattern: '[a-c]+[x-z]+' },
           { id: 'escaped-bracket-class', pattern: String.raw`[\]]+` },
         ],
       }),

@@ -739,10 +739,64 @@ function atomMatchesChar(atom: string, character: string): boolean {
   }
 }
 
+// Backslash escapes that denote a CLASS (no single literal char to extract); overlap
+// for these is covered by the fixed samples instead.
+const CLASS_ESCAPE_LETTERS = new Set(['d', 'D', 'w', 'W', 's', 'S', 'b', 'B']);
+const CONTROL_ESCAPE_CHARS: Record<string, string> = {
+  n: '\n',
+  t: '\t',
+  r: '\r',
+  f: '\f',
+  v: '\v',
+  '0': '\0',
+};
+
+function escapedLiteralChar(escapeLetter: string | undefined): string[] {
+  if (escapeLetter === undefined || CLASS_ESCAPE_LETTERS.has(escapeLetter)) {
+    return [];
+  }
+  return [CONTROL_ESCAPE_CHARS[escapeLetter] ?? escapeLetter];
+}
+
+// Characters the atom DEFINITELY matches, derived from its own text, so overlap is
+// found even when the shared character is an arbitrary literal not in the fixed
+// samples (e.g. `c+c+`). Class escapes / negated classes return nothing here and lean
+// on the samples. Range endpoints are returned as literals (`[c-e]` -> c, e).
+function atomRepresentativeChars(atom: string): string[] {
+  if (atom.length === 1) {
+    return [atom];
+  }
+  if (atom.startsWith('\\')) {
+    return escapedLiteralChar(atom[1]);
+  }
+  if (atom.startsWith('[')) {
+    const body = atom.slice(atom[1] === '^' ? 2 : 1, -1);
+    const chars: string[] = [];
+    for (let index = 0; index < body.length; index++) {
+      if (body[index] === '\\') {
+        chars.push(...escapedLiteralChar(body[index + 1]));
+        index++;
+        continue;
+      }
+      chars.push(body[index]);
+    }
+    return chars;
+  }
+  return [];
+}
+
 function atomsCanMatchCommonChar(first: string, second: string): boolean {
-  return ATOM_OVERLAP_SAMPLES.some(
-    (character) => atomMatchesChar(first, character) && atomMatchesChar(second, character),
-  );
+  const candidates = new Set([
+    ...ATOM_OVERLAP_SAMPLES,
+    ...atomRepresentativeChars(first),
+    ...atomRepresentativeChars(second),
+  ]);
+  for (const character of candidates) {
+    if (atomMatchesChar(first, character) && atomMatchesChar(second, character)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
