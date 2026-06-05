@@ -278,7 +278,10 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(gradingContext.imageOutputs).toEqual([
         { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
       ]);
-      expect(gradingContext.providerResponse).toBeUndefined();
+      expect(gradingContext.providerResponse).toMatchObject({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
     });
 
     it('should handle agent provider errors gracefully', async () => {

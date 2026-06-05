@@ -531,9 +531,10 @@ export async function runRedteamConversation({
           : undefined;
 
         // Build grading context with image outputs and exfil tracking data.
-        let gradingContext: RedteamGradingContext | undefined = targetResponse.images?.length
-          ? { imageOutputs: targetResponse.images }
-          : undefined;
+        let gradingContext: RedteamGradingContext | undefined = {
+          providerResponse: targetResponse,
+          ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+        };
 
         // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
         // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid

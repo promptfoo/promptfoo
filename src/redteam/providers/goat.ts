@@ -716,9 +716,10 @@ export default class GoatProvider implements ApiProvider {
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
-          let gradingContext: RedteamGradingContext | undefined = finalResponse.images?.length
-            ? { imageOutputs: finalResponse.images }
-            : undefined;
+          let gradingContext: RedteamGradingContext | undefined = {
+            providerResponse: finalResponse,
+            ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
+          };
 
           // First try to get exfil data from provider response metadata (Playwright provider)
           if (finalResponse.metadata?.wasExfiltrated === undefined) {

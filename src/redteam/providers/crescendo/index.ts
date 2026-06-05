@@ -590,9 +590,10 @@ export class CrescendoProvider implements ApiProvider {
               : undefined;
 
             // Build grading context with image outputs, tracing, and exfil tracking data.
-            let gradingContext: RedteamGradingContext | undefined = lastResponse.images?.length
-              ? { imageOutputs: lastResponse.images }
-              : undefined;
+            let gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: lastResponse,
+              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
 
             // First try to get exfil data from provider response metadata (Playwright provider)
             if (lastResponse.metadata?.wasExfiltrated === undefined) {

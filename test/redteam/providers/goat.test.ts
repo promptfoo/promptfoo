@@ -1248,7 +1248,10 @@ describe('RedteamGoatProvider', () => {
     expect(mockGrader.getResult.mock.calls[0][1]).toBe(
       '[Image output attached. Inspect the attached image directly for visual grading.]',
     );
-    expect(mockGrader.getResult.mock.calls[0][7]).toEqual({
+    expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({
+      providerResponse: {
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+      },
       imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
     });
     expect(result.metadata?.storedGraderResult).toMatchObject(graderResult);

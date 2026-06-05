@@ -528,6 +528,7 @@ export async function runMetaAgentRedteam({
 
         // Build grading context with image outputs, tracing, and exfil tracking data.
         const gradingContext: RedteamGradingContext = {
+          providerResponse: targetResponse,
           ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
           ...(tracingOptions.includeInGrading
             ? { traceContext, traceSummary: gradingTraceSummary }

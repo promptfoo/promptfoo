@@ -543,9 +543,10 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const gradingContext: RedteamGradingContext | undefined = lastResponse.images?.length
-              ? { imageOutputs: lastResponse.images }
-              : undefined;
+            const gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: lastResponse,
+              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
