@@ -1,3 +1,5 @@
+import { removeStoredRepeatPassRateMetadata } from '../repeatPassRateMetadata';
+
 import type EvalResult from '../../models/evalResult';
 import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
@@ -26,6 +28,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
 
   return {
     ...result,
+    metadata: removeStoredRepeatPassRateMetadata(result.metadata),
     id: result.id || `${result.testIdx}-${result.promptIdx}`,
     text: resultText || '',
     prompt: result.prompt.raw,

@@ -17,6 +17,7 @@ import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateMetadata';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -1499,6 +1500,19 @@ describe('evaluator', () => {
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
+    });
+
+    it('should keep internal repeat grouping metadata out of metadata discovery', async () => {
+      const eval_ = await EvalFactory.create();
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"visible":"value","${REPEAT_PASS_RATE_GROUP_METADATA_KEY}":7}') WHERE eval_id = '${eval_.id}'`,
+      );
+
+      expect(await EvalQueries.getMetadataKeysFromEval(eval_.id)).toEqual(['visible']);
+      expect(
+        await EvalQueries.getMetadataValuesFromEval(eval_.id, REPEAT_PASS_RATE_GROUP_METADATA_KEY),
+      ).toEqual([]);
     });
 
     it('hides the reserved __promptfoo namespace from key listings', async () => {

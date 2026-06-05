@@ -5,6 +5,7 @@ import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
 } from '../../../src/util/exportToFile/index';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../../src/util/repeatPassRateMetadata';
 
 import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';
@@ -104,6 +105,27 @@ describe('exportToFile utils', () => {
   });
 
   describe('convertEvalResultToTableCell', () => {
+    it('omits internal repeat grouping metadata from table cells', () => {
+      const result: Partial<EvalResult> = {
+        id: 'test-internal-metadata',
+        testIdx: 0,
+        promptIdx: 0,
+        testCase: {},
+        success: true,
+        response: { output: 'test output' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        provider: { id: 'test-provider' },
+        failureReason: ResultFailureReason.NONE,
+        metadata: {
+          visible: 'metadata',
+          [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7,
+        },
+      };
+
+      const output = convertEvalResultToTableCell(result as EvalResult);
+      expect(output.metadata).toEqual({ visible: 'metadata' });
+    });
+
     it('should handle successful assertion result', () => {
       const result: Partial<EvalResult> = {
         id: 'test-1',

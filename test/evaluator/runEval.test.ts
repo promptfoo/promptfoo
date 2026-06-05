@@ -490,6 +490,37 @@ describe('runEval', () => {
     expect(result?.metadata).toMatchObject({ sessionId: 'test-metadata-session' });
   });
 
+  it('does not expose internal repeat grouping in provider context or direct results', async () => {
+    const repeatedProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('repeat-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      repeatGroupTestIdx: 7,
+      provider: repeatedProvider,
+      prompt: { raw: 'Test prompt', label: 'repeat-label' },
+      test: { metadata: { visible: 'metadata' } },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(repeatedProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt',
+      expect.objectContaining({
+        test: expect.objectContaining({ metadata: { visible: 'metadata' } }),
+      }),
+      undefined,
+    );
+    expect(result.testCase.metadata).toEqual({ visible: 'metadata' });
+    expect(result.metadata).not.toHaveProperty('__promptfooRepeatGroupTestIdx');
+    expect(JSON.stringify(result)).not.toContain('__promptfooRepeatGroupTestIdx');
+  });
+
   it('should preserve provider error context and plugin metadata on failure', async () => {
     const apiError: any = new Error('Request failed with status code 400');
     apiError.response = {

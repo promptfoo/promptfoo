@@ -219,6 +219,8 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  /** Internal stable row identity used when aggregating repeated evaluations. */
+  repeatGroupTestIdx?: number;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;

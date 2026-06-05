@@ -12,6 +12,10 @@ import {
   ResultFailureReason,
 } from '../../src/types/index';
 import {
+  REPEAT_PASS_RATE_GROUP_METADATA_KEY,
+  tagRepeatPassRateResult,
+} from '../../src/util/repeatPassRateMetadata';
+import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
@@ -982,6 +986,31 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('findManyByEvalIdBatched', () => {
+    it('continues streaming after gaps in persisted test indices', async () => {
+      const evalId = 'test-eval-id-batched-sparse';
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 5,
+        testCase: mockTestCase,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 8,
+        testCase: mockTestCase,
+      });
+
+      const batches: number[][] = [];
+      for await (const batch of EvalResult.findManyByEvalIdBatched(evalId, { batchSize: 2 })) {
+        batches.push(batch.map((result) => result.testIdx));
+      }
+
+      expect(batches).toEqual([[5], [8]]);
+    });
+  });
+
   describe('createManyFromEvaluateResult', () => {
     it('preserves trace linkage across bulk persistence', async () => {
       const [result] = await EvalResult.createManyFromEvaluateResult(
@@ -1199,6 +1228,22 @@ describe('EvalResult', () => {
           },
         }),
       );
+    });
+
+    it('stores repeat grouping internally without exposing it in public results', async () => {
+      const taggedResult = tagRepeatPassRateResult(
+        createEvaluateResult({ metadata: { visible: 'metadata' } }),
+        7,
+      );
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', taggedResult, {
+        persist: false,
+      });
+
+      expect(result.metadata).toMatchObject({
+        visible: 'metadata',
+        [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7,
+      });
+      expect(result.toEvaluateResult().metadata).toEqual({ visible: 'metadata' });
     });
 
     it('should preserve the original response object when response stripping is disabled', () => {
