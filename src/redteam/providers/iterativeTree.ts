@@ -909,7 +909,7 @@ async function runRedteamConversation({
                 const exfilData = await checkExfilTracking(webPageUuid, evalId);
                 if (exfilData) {
                   gradingContext = {
-                    ...(gradingContext ?? {}),
+                    ...gradingContext,
                     wasExfiltrated: exfilData.wasExfiltrated,
                     exfilCount: exfilData.exfilCount,
                     exfilRecords: exfilData.exfilRecords,
@@ -932,7 +932,7 @@ async function runRedteamConversation({
                 '[IterativeTree] Using exfil data from provider response metadata (fallback)',
               );
               gradingContext = {
-                ...(gradingContext ?? {}),
+                ...gradingContext,
                 wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
                 exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
                 exfilRecords: [],
