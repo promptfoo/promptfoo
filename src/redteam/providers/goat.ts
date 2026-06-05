@@ -4,7 +4,6 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { ATTACHED_IMAGE_OUTPUT_PLACEHOLDER } from '../../matchers/shared';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
@@ -66,6 +65,11 @@ import type {
 import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
+
+// Kept local (rather than imported from matchers/shared) to avoid a redteam -> core
+// cross-layer dependency. Keep in sync with ATTACHED_IMAGE_OUTPUT_PLACEHOLDER there.
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 /**
  * Represents metadata for the GOAT conversation process.

@@ -7,7 +7,6 @@ import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
-import { toDataUri } from '../util/dataUrl';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
@@ -263,7 +262,7 @@ function normalizeBase64ImageData(
   }
 
   return {
-    dataUri: toDataUri(normalizedMimeType, base64Data),
+    dataUri: `data:${normalizedMimeType};base64,${base64Data}`,
     base64Data,
     mimeType: normalizedMimeType,
     decodedBytes,
