@@ -21,6 +21,7 @@ import {
   loadRubricPrompt,
   materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
+  resolveBlobBackedImageOutputs,
   runJsonGradingPrompt,
 } from './rubric';
 import {
@@ -149,6 +150,14 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
+  // The evaluator externalizes large image outputs, so `output` is often a blob URI
+  // (e.g. `promptfoo://blob/<hash>`) rather than the base64 itself. Replace it too.
+  if (/^promptfoo:\/\/blob\/[a-f0-9]{64}/i.test(trimmedOutput)) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  // Compare against the original (pre-normalization) image payloads so a raw
+  // base64url output still matches its attached image and gets the placeholder.
   if (
     imageOutputs.some((image) => {
       if (!image.data) {
@@ -189,8 +198,13 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
-  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
-  const gradingOutput = getGradingOutputForImages(llmOutput, imageOutputs);
+  // Resolve any blob-backed image outputs (the evaluator externalizes images > 1KiB
+  // to blobRefs before assertions run) so they can be attached to the grader.
+  const resolvedImages = await resolveBlobBackedImageOutputs(options?.providerResponse?.images);
+  const { imageOutputs } = materializeImageOutputsForGrading(resolvedImages);
+  const gradingOutput = imageOutputs.length
+    ? getGradingOutputForImages(llmOutput, options?.providerResponse?.images)
+    : llmOutput;
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&

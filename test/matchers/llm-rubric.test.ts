@@ -24,6 +24,11 @@ vi.mock('../../src/remoteGrading', () => ({
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
+const { mockGetBlobByHash } = vi.hoisted(() => ({ mockGetBlobByHash: vi.fn() }));
+vi.mock('../../src/blobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/blobs')>()),
+  getBlobByHash: mockGetBlobByHash,
+}));
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -1027,8 +1032,63 @@ describe('matchesLlmRubric', () => {
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
-  it('should reject blob-backed image outputs before grading', async () => {
+  it('should resolve blob-backed image outputs and attach them to the grader', async () => {
     const hash = 'a'.repeat(64);
+    mockGetBlobByHash.mockResolvedValue({
+      data: Buffer.from('hello'),
+      metadata: { mimeType: 'image/png' },
+    });
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      // The evaluator externalizes the output to a blob URI for large images.
+      `promptfoo://blob/${hash}`,
+      { rubricPrompt: 'Grade this output: {{ output }}', provider },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: `promptfoo://blob/${hash}`,
+          images: [
+            {
+              mimeType: 'image/png',
+              blobRef: {
+                uri: `promptfoo://blob/${hash}`,
+                hash,
+                mimeType: 'image/png',
+                sizeBytes: 5,
+                provider: 'filesystem',
+              },
+            },
+          ],
+        },
+      },
+    );
+
+    expect(mockGetBlobByHash).toHaveBeenCalledWith(hash);
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const content = JSON.parse(prompt)[0].content;
+    // The resolved blob is attached as an image part...
+    expect(content.at(-1)).toEqual({
+      type: 'image_url',
+      image_url: { url: `data:image/png;base64,${Buffer.from('hello').toString('base64')}` },
+    });
+    // ...and the blob-URI text output is replaced with the placeholder.
+    expect(content[0]).toEqual({
+      type: 'text',
+      text: 'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+  });
+
+  it('should fail clearly when a blob-backed image output cannot be resolved', async () => {
+    const hash = 'b'.repeat(64);
+    mockGetBlobByHash.mockRejectedValue(new Error('blob not found'));
     const provider = createMockProvider({
       response: {
         output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
@@ -1039,10 +1099,7 @@ describe('matchesLlmRubric', () => {
       matchesLlmRubric(
         'Does the image match?',
         'Generated image',
-        {
-          rubricPrompt: 'Grade this output',
-          provider,
-        },
+        { rubricPrompt: 'Grade this output', provider },
         {},
         undefined,
         {
@@ -1062,10 +1119,40 @@ describe('matchesLlmRubric', () => {
           },
         },
       ),
-    ).rejects.toThrow(
-      'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
-    );
+    ).rejects.toThrow('Failed to load blob-backed image output for multimodal grading');
     expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should replace a raw base64url output that matches an attached image with the placeholder', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    // Same raw base64url string in output and images[].data (Codex P2 regression):
+    // canonicalization must not defeat the placeholder substitution.
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'q-_z',
+      { rubricPrompt: 'Grade this output: {{ output }}', provider },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'q-_z',
+          images: [{ data: 'q-_z', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const content = JSON.parse(prompt)[0].content;
+    expect(content[0]).toEqual({
+      type: 'text',
+      text: 'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
   });
 
   it('should normalize whitespace-padded base64 image output before grading', async () => {

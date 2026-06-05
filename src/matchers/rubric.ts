@@ -3,6 +3,7 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { loadFromJavaScriptFile } from '../assertions/utils';
+import { getBlobByHash } from '../blobs';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
@@ -296,12 +297,12 @@ function getBase64DecodedBytes(base64Data: string): number {
 
 function imageOutputToImageUrl(
   image: ImageOutput,
-):
-  | { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string; rawChars: number }
-  | undefined {
+): { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string } | undefined {
   if (image.blobRef || hasBlobRefImageValue(image.data)) {
+    // Blob-backed outputs should have been resolved by resolveBlobBackedImageOutputs
+    // before reaching here; if one slips through, fail loudly rather than silently drop it.
     throw new Error(
-      'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
+      'Blob-backed image output could not be resolved for multimodal grading. Ensure the blob store is reachable, or configure the image provider to return base64 or data URI image output.',
     );
   }
 
@@ -322,13 +323,63 @@ function imageOutputToImageUrl(
       dataUri: normalized.dataUri,
       base64Data: normalized.base64Data,
       mimeType: normalized.mimeType,
-      // Measure the canonical data URI rather than the raw input so line-wrapping
-      // whitespace can't inflate the count and falsely trip the raw-char limit.
-      rawChars: normalized.dataUri.length,
     };
   }
 
   return undefined;
+}
+
+function getBlobHashForImage(image: ImageOutput): string | undefined {
+  if (typeof image.blobRef?.hash === 'string' && BLOB_HASH_REGEX.test(image.blobRef.hash)) {
+    return image.blobRef.hash;
+  }
+  if (typeof image.data === 'string') {
+    return BLOB_URI_REGEX.exec(image.data)?.[1];
+  }
+  return undefined;
+}
+
+/**
+ * Resolve blob-backed image outputs to inline base64 data URIs so they can be
+ * attached to the grading prompt. The evaluator externalizes any image output
+ * larger than `BLOB_MIN_SIZE` (1KiB) to `images[].blobRef` before assertions run,
+ * so without this step the headline "grade an image output" workflow would error.
+ *
+ * Inline (data URI / base64) images are returned untouched. The resolved data URI
+ * is used transiently for the grader call and is not persisted to results.
+ */
+export async function resolveBlobBackedImageOutputs(
+  images?: ImageOutput[],
+): Promise<ImageOutput[] | undefined> {
+  if (!images?.length) {
+    return images;
+  }
+
+  return Promise.all(
+    images.map(async (image) => {
+      const hash = getBlobHashForImage(image);
+      if (!hash) {
+        return image;
+      }
+
+      let blob;
+      try {
+        blob = await getBlobByHash(hash);
+      } catch (error) {
+        throw new Error(
+          `Failed to load blob-backed image output for multimodal grading (blob ${hash.slice(0, 12)}…): ${error}`,
+        );
+      }
+
+      const mimeType = image.mimeType || blob.metadata.mimeType || 'image/png';
+      return {
+        ...image,
+        data: `data:${mimeType};base64,${blob.data.toString('base64')}`,
+        mimeType,
+        blobRef: undefined,
+      };
+    }),
+  );
 }
 
 export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
@@ -365,20 +416,34 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS',
     Math.ceil(maxTotalImageBytes / 3) * 4 + maxImages * DATA_URI_METADATA_MAX_CHARS,
   );
+
+  // Enforce the raw-character caps on the *original* payloads BEFORE any
+  // normalization, so a whitespace-padded or adversarial output can't force a
+  // multi-hundred-MB allocation/scan in normalizeBase64ImageData's whitespace strip.
+  let totalRawChars = 0;
+  for (const image of images) {
+    const rawChars = image.data?.length ?? 0;
+    if (rawChars > maxRawChars) {
+      throw new Error(
+        `Image output raw data exceeds multimodal grading size limit: ${rawChars} characters, maximum is ${maxRawChars}.`,
+      );
+    }
+    totalRawChars += rawChars;
+    if (totalRawChars > maxTotalRawChars) {
+      throw new Error(
+        `Image outputs raw data exceeds multimodal grading total size limit: ${totalRawChars} characters, maximum is ${maxTotalRawChars}.`,
+      );
+    }
+  }
+
   const materializedImages = images.map(imageOutputToImageUrl).filter(
     (
       image,
-    ): image is {
-      output: ImageOutput;
-      dataUri: string;
-      base64Data: string;
-      mimeType: string;
-      rawChars: number;
-    } => Boolean(image),
+    ): image is { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string } =>
+      Boolean(image),
   );
 
   let totalImageBytes = 0;
-  let totalRawChars = 0;
   for (const image of materializedImages) {
     const decodedBytes = getBase64DecodedBytes(image.base64Data);
     if (decodedBytes > maxImageBytes) {
@@ -386,22 +451,10 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
         `Image output exceeds multimodal grading size limit: ${decodedBytes} bytes, maximum is ${maxImageBytes}.`,
       );
     }
-    const imageRawChars = Math.max(image.rawChars, image.dataUri.length);
-    if (imageRawChars > maxRawChars) {
-      throw new Error(
-        `Image output raw data exceeds multimodal grading size limit: ${imageRawChars} characters, maximum is ${maxRawChars}.`,
-      );
-    }
     totalImageBytes += decodedBytes;
     if (totalImageBytes > maxTotalImageBytes) {
       throw new Error(
         `Image outputs exceed multimodal grading total size limit: ${totalImageBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
-    totalRawChars += imageRawChars;
-    if (totalRawChars > maxTotalRawChars) {
-      throw new Error(
-        `Image outputs raw data exceeds multimodal grading total size limit: ${totalRawChars} characters, maximum is ${maxTotalRawChars}.`,
       );
     }
   }
