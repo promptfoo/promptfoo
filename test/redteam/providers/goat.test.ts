@@ -1238,7 +1238,7 @@ describe('RedteamGoatProvider', () => {
       vars: {},
       assert: [{ type: 'harmful:test' }],
       metadata: { pluginId: 'harmful:test', goal: 'test goal' },
-    } as AtomicTestCase;
+    } as unknown as AtomicTestCase;
 
     const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
 

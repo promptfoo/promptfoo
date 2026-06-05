@@ -158,9 +158,12 @@ type MultimodalPromptPart =
   | {
       type: 'image';
       source: { type: 'base64'; media_type: string; data: string };
+    }
+  | {
+      inlineData: { mimeType: string; data: string };
     };
 
-type MultimodalPromptFormat = 'anthropic' | 'openai' | 'responses';
+type MultimodalPromptFormat = 'anthropic' | 'google' | 'openai' | 'responses';
 
 type ChatMessageLike = {
   role?: unknown;
@@ -387,7 +390,11 @@ function appendImagesToContent(
 ): MultimodalPromptPart[] {
   if (Array.isArray(content)) {
     const normalizedContent =
-      format === 'responses' ? content.map(toResponsesContentPart) : content;
+      format === 'responses'
+        ? content.map(toResponsesContentPart)
+        : format === 'google'
+          ? content.map(toGoogleContentPart)
+          : content;
     return [...normalizedContent, ...imageParts] as MultimodalPromptPart[];
   }
 
@@ -411,6 +418,9 @@ function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptForma
     if (isAnthropicCompatibleProviderId(providerId)) {
       return 'anthropic';
     }
+    if (isGoogleCompatibleProviderId(providerId)) {
+      return 'google';
+    }
   } catch {
     // Fall back to the broadly supported OpenAI-compatible shape.
   }
@@ -424,6 +434,10 @@ function isAnthropicCompatibleProviderId(providerId: string): boolean {
     /^bedrock:(?:converse:|kb:)?(?:[^:]*\.)?anthropic\.claude/i.test(providerId) ||
     /^vertex:claude/i.test(providerId)
   );
+}
+
+function isGoogleCompatibleProviderId(providerId: string): boolean {
+  return /^google(?::|$)/i.test(providerId) || /^vertex:(?:chat:)?gemini/i.test(providerId);
 }
 
 function buildTextPart(text: string, format: MultimodalPromptFormat): MultimodalPromptPart {
@@ -452,6 +466,15 @@ function buildImageParts(
         source: {
           type: 'base64',
           media_type: image.mimeType,
+          data: image.base64Data,
+        },
+      };
+    }
+
+    if (format === 'google') {
+      return {
+        inlineData: {
+          mimeType: image.mimeType,
           data: image.base64Data,
         },
       };
@@ -513,6 +536,102 @@ function toResponsesContentPart(part: unknown): MultimodalPromptPart {
   }
 
   return { type: 'input_text', text: stringifyContentPart(part) };
+}
+
+function toGoogleContentPart(part: unknown): MultimodalPromptPart {
+  if (typeof part === 'string') {
+    return { type: 'text', text: part };
+  }
+
+  if (!part || typeof part !== 'object' || Array.isArray(part)) {
+    return { type: 'text', text: stringifyContentPart(part) };
+  }
+
+  const contentPart = part as Record<string, unknown>;
+  if (contentPart.type === 'text' && typeof contentPart.text === 'string') {
+    return { type: 'text', text: contentPart.text };
+  }
+  if (contentPart.type === 'input_text' && typeof contentPart.text === 'string') {
+    return { type: 'text', text: contentPart.text };
+  }
+  if (
+    contentPart.type === 'image_url' &&
+    contentPart.image_url &&
+    typeof contentPart.image_url === 'object' &&
+    typeof (contentPart.image_url as { url?: unknown }).url === 'string'
+  ) {
+    return (
+      dataUriToGoogleContentPart((contentPart.image_url as { url: string }).url) || {
+        type: 'text',
+        text: stringifyContentPart(part),
+      }
+    );
+  }
+  if (contentPart.type === 'input_image' && typeof contentPart.image_url === 'string') {
+    return (
+      dataUriToGoogleContentPart(contentPart.image_url) || {
+        type: 'text',
+        text: stringifyContentPart(part),
+      }
+    );
+  }
+  if (
+    contentPart.type === 'image' &&
+    contentPart.source &&
+    typeof contentPart.source === 'object'
+  ) {
+    const source = contentPart.source as { type?: unknown; media_type?: unknown; data?: unknown };
+    if (
+      source.type === 'base64' &&
+      typeof source.media_type === 'string' &&
+      typeof source.data === 'string'
+    ) {
+      return {
+        inlineData: {
+          mimeType: source.media_type,
+          data: source.data,
+        },
+      };
+    }
+  }
+  if (contentPart.inlineData && typeof contentPart.inlineData === 'object') {
+    const inlineData = contentPart.inlineData as { mimeType?: unknown; data?: unknown };
+    if (typeof inlineData.mimeType === 'string' && typeof inlineData.data === 'string') {
+      return {
+        inlineData: {
+          mimeType: inlineData.mimeType,
+          data: inlineData.data,
+        },
+      };
+    }
+  }
+  if (contentPart.inline_data && typeof contentPart.inline_data === 'object') {
+    const inlineData = contentPart.inline_data as { mime_type?: unknown; data?: unknown };
+    if (typeof inlineData.mime_type === 'string' && typeof inlineData.data === 'string') {
+      return {
+        inlineData: {
+          mimeType: inlineData.mime_type,
+          data: inlineData.data,
+        },
+      };
+    }
+  }
+
+  return { type: 'text', text: stringifyContentPart(part) };
+}
+
+function dataUriToGoogleContentPart(dataUri: string): MultimodalPromptPart | undefined {
+  if (!dataUri.trim().startsWith('data:')) {
+    return undefined;
+  }
+
+  const normalized = normalizeBase64ImageData(dataUri);
+  return {
+    inlineData: {
+      mimeType: normalized.mimeType,
+      data: normalized.base64Data,
+    },
+  };
 }
 
 function stringifyContentPart(part: unknown): string {
