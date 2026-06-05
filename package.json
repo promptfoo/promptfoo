@@ -185,7 +185,7 @@
       "chevrotain": "11.2.0"
     },
     "@inquirer/core": {
-      "mute-stream": "3.0.0"
+      "mute-stream": "4.0.0"
     },
     "webpack": "5.107.2",
     "dompurify": "3.4.5",
