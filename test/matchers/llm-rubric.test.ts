@@ -477,6 +477,45 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it.each([
+    'cloudflare-ai-gateway:anthropic:messages:claude-3-5-sonnet-latest',
+    'cloudflare-gateway:anthropic:claude-sonnet-4-20250514',
+  ])('should use Anthropic image parts for wrapped Anthropic grading provider %s', async (id) => {
+    const provider = createMockProvider({
+      id,
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)[0].content).toContainEqual({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: 'image/png',
+        data: 'abc123',
+      },
+    });
+  });
+
   it('should use Responses image parts for Responses grading providers', async () => {
     const provider = createMockProvider({
       id: 'openai:responses:gpt-5.4',

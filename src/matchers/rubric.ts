@@ -408,7 +408,7 @@ function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptForma
     if (/(^|:)responses(?::|$)/i.test(providerId)) {
       return 'responses';
     }
-    if (/^anthropic(?::|$)/i.test(providerId)) {
+    if (/(^|:)anthropic(?::|$)/i.test(providerId)) {
       return 'anthropic';
     }
   } catch {
