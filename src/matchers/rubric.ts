@@ -408,7 +408,7 @@ function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptForma
     if (/(^|:)responses(?::|$)/i.test(providerId)) {
       return 'responses';
     }
-    if (/(^|:)anthropic(?::|$)/i.test(providerId)) {
+    if (isAnthropicCompatibleProviderId(providerId)) {
       return 'anthropic';
     }
   } catch {
@@ -416,6 +416,14 @@ function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptForma
   }
 
   return 'openai';
+}
+
+function isAnthropicCompatibleProviderId(providerId: string): boolean {
+  return (
+    /(^|:)anthropic(?::|$)/i.test(providerId) ||
+    /^bedrock:(?:converse:|kb:)?(?:[^:]*\.)?anthropic\.claude/i.test(providerId) ||
+    /^vertex:claude/i.test(providerId)
+  );
 }
 
 function buildTextPart(text: string, format: MultimodalPromptFormat): MultimodalPromptPart {

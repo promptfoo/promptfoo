@@ -480,6 +480,9 @@ describe('matchesLlmRubric', () => {
   it.each([
     'cloudflare-ai-gateway:anthropic:messages:claude-3-5-sonnet-latest',
     'cloudflare-gateway:anthropic:claude-sonnet-4-20250514',
+    'bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'vertex:claude-3-5-sonnet-v2@20241022',
   ])('should use Anthropic image parts for wrapped Anthropic grading provider %s', async (id) => {
     const provider = createMockProvider({
       id,
