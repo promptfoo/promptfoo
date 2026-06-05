@@ -48,6 +48,7 @@ export async function doRemoteGrading(
       score: result.score,
       reason: result.reason,
       tokensUsed: result.tokensUsed,
+      metadata: result.metadata,
     };
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
