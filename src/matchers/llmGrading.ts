@@ -35,6 +35,7 @@ import {
 import type {
   Assertion,
   CallApiContextParams,
+  GradingBlobResolver,
   GradingConfig,
   GradingResult,
   ProviderResponse,
@@ -186,6 +187,7 @@ export async function matchesLlmRubric(
     throwOnError?: boolean;
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
+    resolveImageBlob?: GradingBlobResolver;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -202,8 +204,12 @@ export async function matchesLlmRubric(
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
   // Resolve any blob-backed image outputs (the evaluator externalizes images > 1KiB
-  // to blobRefs before assertions run) so they can be attached to the grader.
-  const resolvedImages = await resolveBlobBackedImageOutputs(options?.providerResponse?.images);
+  // to blobRefs before assertions run) so they can be attached to the grader. The
+  // resolver is injected by the evaluator through the grading call contract.
+  const resolvedImages = await resolveBlobBackedImageOutputs(
+    options?.providerResponse?.images,
+    options?.resolveImageBlob,
+  );
   // Materialize once here and reuse downstream; runJsonGradingPrompt no longer
   // re-validates/re-decodes the (potentially multi-MB) image payloads.
   const { imageOutputs, imageData } = materializeImageOutputsForGrading(resolvedImages);

@@ -22,7 +22,6 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { setGradingBlobResolver } from './matchers/imageBlobResolver';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
@@ -69,7 +68,7 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { type ApiProvider, isApiProvider } from './types/providers';
+import { type ApiProvider, type GradingBlobResolver, isApiProvider } from './types/providers';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -125,13 +124,13 @@ import type {
 import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
-// Wire the core grading matcher to the blob store so it can resolve blob-backed image
-// outputs (externalized before assertions run) without importing storage itself. The
-// adapter (StoredBlob -> { data, mimeType }) lives here, in the layer that owns persistence.
-setGradingBlobResolver(async (hash) => {
+// Resolves a blob hash to bytes + MIME for the core grading matcher, which receives it
+// through the grading call contract (runAssertions) rather than importing the blob store.
+// The adapter (StoredBlob -> { data, mimeType }) lives here, the layer that owns persistence.
+const resolveImageBlob: GradingBlobResolver = async (hash) => {
   const blob = await getBlobByHash(hash);
   return { data: blob.data, mimeType: blob.metadata.mimeType };
-});
+};
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
@@ -1263,6 +1262,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          resolveImageBlob,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1283,6 +1283,7 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        resolveImageBlob,
       }),
   );
   applyGradingResult(ret, checkResult);

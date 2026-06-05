@@ -4,7 +4,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import { setGradingBlobResolver } from '../../src/matchers/imageBlobResolver';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -25,8 +24,9 @@ vi.mock('../../src/remoteGrading', () => ({
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
-// The matcher resolves blob-backed images via an injected resolver (registered by the
-// evaluator at runtime). Register a mock resolver per-test instead of mocking the store.
+// The matcher resolves blob-backed images via a resolver injected through the grading
+// options (the evaluator threads it through the call contract at runtime). Pass this mock
+// via `options.resolveImageBlob` instead of mocking the store.
 const mockBlobResolver = vi.fn();
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
@@ -70,7 +70,6 @@ describe('matchesLlmRubric', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    setGradingBlobResolver(mockBlobResolver);
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
 
@@ -1064,6 +1063,7 @@ describe('matchesLlmRubric', () => {
             },
           ],
         },
+        resolveImageBlob: mockBlobResolver,
       },
     );
 
@@ -1114,6 +1114,7 @@ describe('matchesLlmRubric', () => {
               },
             ],
           },
+          resolveImageBlob: mockBlobResolver,
         },
       ),
     ).rejects.toThrow('Failed to load blob-backed image output for multimodal grading');
@@ -1146,6 +1147,7 @@ describe('matchesLlmRubric', () => {
               output: 'Generated image',
               images: [{ blobRef: blobRefFor('a'.repeat(64), 5) }, { blobRef: blobRefFor('b'.repeat(64), 5) }],
             },
+            resolveImageBlob: mockBlobResolver,
           },
         ),
       ).rejects.toThrow('Too many images for multimodal grading: received 2, maximum is 1.');
@@ -1174,6 +1176,7 @@ describe('matchesLlmRubric', () => {
               output: 'Generated image',
               images: [{ blobRef: blobRefFor('c'.repeat(64), 30) }],
             },
+            resolveImageBlob: mockBlobResolver,
           },
         ),
       ).rejects.toThrow('Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.');
@@ -1203,6 +1206,7 @@ describe('matchesLlmRubric', () => {
               output: 'Generated image',
               images: [{ blobRef: blobRefFor(hash, 1) }],
             },
+            resolveImageBlob: mockBlobResolver,
           },
         ),
       ).rejects.toThrow('Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.');

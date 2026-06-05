@@ -14,7 +14,6 @@ import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
-import { getGradingBlobResolver } from './imageBlobResolver';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, MULTIMODAL_GRADING_INSTRUCTION, normalizeMatcherTokenUsage } from './shared';
 
@@ -22,6 +21,7 @@ import type {
   ApiProvider,
   Assertion,
   CallApiContextParams,
+  GradingBlobResolver,
   GradingConfig,
   GradingResult,
   ImageOutput,
@@ -381,15 +381,17 @@ const BLOB_READ_CONCURRENCY = 4;
  * larger than `BLOB_MIN_SIZE` (1KiB) to `images[].blobRef` before assertions run,
  * so without this step the headline "grade an image output" workflow would error.
  *
- * Resource guards run BEFORE any blob read: the image-count cap and the declared
- * `blobRef.sizeBytes` cap reject early, and the actual read size is re-checked
- * before the +33% base64 expansion. Reads are bounded-concurrency. The blob bytes
- * are fetched via an injected resolver (registered by the evaluator) so this core
- * matcher never imports the blob store directly. Inline (data URI / base64) images
- * are returned untouched; the resolved data URI is transient and not persisted.
+ * Resource guards run in stages so no work is wasted on rejected payloads: the
+ * image-count cap and the declared `blobRef.sizeBytes` cap reject before any read;
+ * each blob's actual read size is checked before encoding; and the cumulative actual
+ * byte total is verified BEFORE any base64 expansion. Reads are bounded-concurrency.
+ * The blob bytes are fetched via a resolver injected by the evaluator (threaded through
+ * the grading call contract) so this core matcher never imports the blob store. Inline
+ * images are returned untouched; the resolved data URI is transient and not persisted.
  */
 export async function resolveBlobBackedImageOutputs(
   images?: ImageOutput[],
+  resolveImageBlob?: GradingBlobResolver,
 ): Promise<ImageOutput[] | undefined> {
   if (!images?.length) {
     return images;
@@ -424,37 +426,61 @@ export async function resolveBlobBackedImageOutputs(
     }
   }
 
-  const resolveBlob = getGradingBlobResolver();
+  // (c) Read + per-image actual-size check (bounded concurrency), WITHOUT encoding yet.
+  type ResolvedSlot = { image: ImageOutput; blob?: { data: Buffer; mimeType?: string } };
+  const slots: ResolvedSlot[] = await async.mapLimit(
+    images,
+    BLOB_READ_CONCURRENCY,
+    async (image: ImageOutput): Promise<ResolvedSlot> => {
+      const hash = getBlobHashForImage(image);
+      if (!hash) {
+        return { image };
+      }
+      if (!resolveImageBlob) {
+        throw new Error(
+          'Blob-backed image output could not be resolved for multimodal grading: no blob resolver provided. ' +
+            'This is wired automatically by the evaluator; configure the image provider to return base64 or a data URI if running the matcher standalone.',
+        );
+      }
 
-  return async.mapLimit(images, BLOB_READ_CONCURRENCY, async (image: ImageOutput) => {
-    const hash = getBlobHashForImage(image);
-    if (!hash) {
+      let blob: { data: Buffer; mimeType?: string };
+      try {
+        blob = await resolveImageBlob(hash);
+      } catch (error) {
+        throw new Error(
+          `Failed to load blob-backed image output for multimodal grading (blob ${hash.slice(0, 12)}…): ${error}`,
+        );
+      }
+
+      // Declared size may lie; the store may hold up to BLOB_MAX_SIZE while grading caps lower.
+      if (blob.data.length > maxImageBytes) {
+        throw new Error(
+          `Image output exceeds multimodal grading size limit: ${blob.data.length} bytes, maximum is ${maxImageBytes}.`,
+        );
+      }
+      return { image, blob };
+    },
+  );
+
+  // (d) Cumulative ACTUAL-byte cap BEFORE any base64 expansion.
+  let totalActualBytes = 0;
+  for (const { blob } of slots) {
+    if (!blob) {
+      continue;
+    }
+    totalActualBytes += blob.data.length;
+    if (totalActualBytes > maxTotalImageBytes) {
+      throw new Error(
+        `Image outputs exceed multimodal grading total size limit: ${totalActualBytes} bytes, maximum is ${maxTotalImageBytes}.`,
+      );
+    }
+  }
+
+  // (e) Encode now that per-image and cumulative byte totals are within bounds.
+  return slots.map(({ image, blob }) => {
+    if (!blob) {
       return image;
     }
-    if (!resolveBlob) {
-      throw new Error(
-        'Blob-backed image output could not be resolved for multimodal grading: no blob resolver registered. ' +
-          'This is wired automatically by the evaluator; configure the image provider to return base64 or a data URI if running the matcher standalone.',
-      );
-    }
-
-    let blob: { data: Buffer; mimeType?: string };
-    try {
-      blob = await resolveBlob(hash);
-    } catch (error) {
-      throw new Error(
-        `Failed to load blob-backed image output for multimodal grading (blob ${hash.slice(0, 12)}…): ${error}`,
-      );
-    }
-
-    // (c) Re-check the ACTUAL read size before the +33% base64 expansion (declared size
-    // may lie, and the store may legitimately hold up to BLOB_MAX_SIZE while grading caps lower).
-    if (blob.data.length > maxImageBytes) {
-      throw new Error(
-        `Image output exceeds multimodal grading size limit: ${blob.data.length} bytes, maximum is ${maxImageBytes}.`,
-      );
-    }
-
     const mimeType = image.mimeType || blob.mimeType || 'image/png';
     return {
       ...image,
@@ -492,7 +518,11 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   let totalRawChars = 0;
   for (const image of images) {
     let rawChars = image.data?.length ?? 0;
-    if (image.data && !image.data.trim().startsWith('data:')) {
+    // Only inspect the payload (and count its separate mimeType) while it's still within
+    // the cap. The data: prefix check uses a bounded slice rather than a full `.trim()`,
+    // so an oversized whitespace-padded payload is rejected by the length check below
+    // without first allocating a trimmed copy of the adversarial string.
+    if (image.data && rawChars <= maxRawChars && !/^\s*data:/i.test(image.data.slice(0, 64))) {
       rawChars += image.mimeType?.length ?? 0;
     }
     if (rawChars > maxRawChars) {

@@ -5,9 +5,15 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
-import { setGradingBlobResolver } from '../../src/matchers/imageBlobResolver';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { createMockProvider } from '../factories/provider';
+
+// The resolver the evaluator injects through the grading call contract — here wired to
+// the real (filesystem) store so the test exercises the full externalize -> resolve round-trip.
+const resolveImageBlob = async (hash: string) => {
+  const blob = await getBlobByHash(hash);
+  return { data: blob.data, mimeType: blob.metadata.mimeType };
+};
 
 // Regression for the externalized-image grading path: the evaluator externalizes
 // image outputs larger than BLOB_MIN_SIZE (1KiB) to images[].blobRef before
@@ -21,17 +27,10 @@ describe('multimodal grading with blob-backed (externalized) image outputs', () 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-blob-grading-'));
     provider = new FilesystemBlobStorageProvider({ basePath: tempDir });
     setBlobStorageProvider(provider);
-    // The matcher resolves blobs via an injected resolver (registered by the evaluator
-    // at runtime); wire it to the real store so this test exercises the full round-trip.
-    setGradingBlobResolver(async (hash) => {
-      const blob = await getBlobByHash(hash);
-      return { data: blob.data, mimeType: blob.metadata.mimeType };
-    });
   });
 
   afterEach(() => {
     resetBlobStorageProvider();
-    setGradingBlobResolver(undefined);
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -58,7 +57,7 @@ describe('multimodal grading with blob-backed (externalized) image outputs', () 
       { rubricPrompt: 'Grade this output: {{ output }}', provider: grader },
       {},
       undefined,
-      { providerResponse: blobbedResponse },
+      { providerResponse: blobbedResponse, resolveImageBlob },
     );
 
     expect(result.pass).toBe(true);
