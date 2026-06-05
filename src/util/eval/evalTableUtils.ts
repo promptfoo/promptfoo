@@ -1,6 +1,4 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
-import { escapeCsvFormula } from '../../csv';
-import { getEnvBool } from '../../envars';
 import { ResultFailureReason } from '../../types/index';
 
 import type Eval from '../../models/eval';
@@ -447,12 +445,51 @@ export function tableRowToCsvValues(
 function escapeCsvRowsForFormulaInjection(
   rows: (string | number | boolean)[][],
 ): (string | number | boolean)[][] {
-  if (getEnvBool('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING')) {
+  // Keep this process-level opt-out local to the node-layer export path so CSV
+  // serialization does not add another dependency on the legacy runtime layer.
+  const disableEscaping = ['1', 'true', 'yes', 'yup', 'yeppers'].includes(
+    process.env.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?.toLowerCase() ?? '',
+  );
+  if (disableEscaping) {
     return rows;
   }
   return rows.map((row) =>
     row.map((cell) => (typeof cell === 'string' ? escapeCsvFormula(cell) : cell)),
   );
+}
+
+function isNumericCell(value: string): boolean {
+  return value.trim() !== '' && Number.isFinite(Number(value));
+}
+
+/**
+ * Neutralize spreadsheet formula (CSV) injection at eval export time (CWE-1236).
+ *
+ * Spreadsheet applications execute cells beginning with `=`, `+`, `-`, or `@`
+ * as formulas. Exported eval data can contain attacker-controlled model output,
+ * variables, and grader comments, and CSV quoting alone does not neutralize
+ * those formulas. Prefix dangerous values with the spreadsheet-native text
+ * marker while preserving finite signed numbers.
+ *
+ * Leading whitespace and zero-width characters are ignored when identifying a
+ * trigger because spreadsheet applications can strip them before evaluation.
+ */
+export function escapeCsvFormula(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+
+  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
+  const firstChar = unpadded[0];
+  if (firstChar === undefined) {
+    return value;
+  }
+
+  const isFormulaTrigger =
+    firstChar === '=' ||
+    firstChar === '@' ||
+    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
+  return isFormulaTrigger ? `'${value}` : value;
 }
 
 /**

