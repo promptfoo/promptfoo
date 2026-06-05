@@ -80,6 +80,39 @@ describe('doRemoteGrading', () => {
     );
   });
 
+  it('does not add grader error metadata when remote grading succeeds without metadata', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({
+      task: 'llm-rubric',
+      rubric: 'Only pass if the response is correct.',
+      output: 'Example output',
+      vars: {},
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+    });
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
   it('redacts inline image data from remote grading debug logs', async () => {
     vi.mocked(getUserEmail).mockReturnValue('user@example.com');
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
@@ -111,7 +144,11 @@ describe('doRemoteGrading', () => {
         images: [{ data: '[REDACTED_IMAGE_DATA]', mimeType: 'image/png' }],
       }),
     });
-    expect(JSON.stringify(mockLoggerDebug.mock.calls)).not.toContain('abc123');
+    const firstDebugPayload = mockLoggerDebug.mock.calls[0][1] as {
+      body: { images: Array<{ data: string; mimeType: string }> };
+    };
+    expect(firstDebugPayload.body.images[0].data).toBe('[REDACTED_IMAGE_DATA]');
+    expect(firstDebugPayload.body.images[0].data).not.toContain('abc123');
     expect(fetchWithCache).toHaveBeenCalledWith(
       'https://api.promptfoo.test/task',
       expect.objectContaining({
