@@ -691,6 +691,10 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
       '^c+c+$',
       'Q*Q*',
       '[c-e]+[d-f]+',
+      // Hex/unicode-escaped literals must be parsed as whole atoms and decoded, so a
+      // hex-spelled repeat (`\x63` = `c`) is recognized as the same footgun as `c+c+`.
+      String.raw`^\x63+\x63+$`,
+      String.raw`[\x63-\x65]+[\x64-\x66]+`,
     ]) {
       expect(() =>
         validatePathTraversalOutputPluginConfig({

@@ -639,6 +639,33 @@ interface QuantifiedAtom {
 // between repeated atoms (e.g. the `)(` in `(a*)(a*)` is not a single `a*a*`).
 const STRUCTURAL_REGEX_CHARS = new Set(['(', ')', '|', '^', '$']);
 
+function readEscapeEnd(source: string, start: number): number {
+  // `start` is at a backslash. Consume a complete escape so multi-char escapes
+  // (`\xHH`, `\uHHHH`, `\u{H+}`, `\cX`) are treated as one atom, not split.
+  const next = source[start + 1];
+  if (next === undefined) {
+    return start + 1;
+  }
+  if (next === 'x' && /^[0-9a-f]{2}$/i.test(source.slice(start + 2, start + 4))) {
+    return start + 4;
+  }
+  if (next === 'u') {
+    if (source[start + 2] === '{') {
+      const close = source.indexOf('}', start + 3);
+      if (close !== -1) {
+        return close + 1;
+      }
+    }
+    if (/^[0-9a-f]{4}$/i.test(source.slice(start + 2, start + 6))) {
+      return start + 6;
+    }
+  }
+  if (next === 'c' && /^[a-z]$/i.test(source[start + 2] ?? '')) {
+    return start + 3;
+  }
+  return start + 2;
+}
+
 function readCharClassEnd(source: string, start: number): number {
   // JavaScript char-class semantics: `[]` is the empty class and `[^]` matches any
   // char, so the first unescaped `]` always closes (no PCRE "leading `]` is literal"
@@ -648,7 +675,7 @@ function readCharClassEnd(source: string, start: number): number {
     cursor++;
   }
   while (cursor < source.length && source[cursor] !== ']') {
-    cursor += source[cursor] === '\\' ? 2 : 1;
+    cursor = source[cursor] === '\\' ? readEscapeEnd(source, cursor) : cursor + 1;
   }
   return cursor + 1;
 }
@@ -686,8 +713,9 @@ function tokenizeQuantifiedAtoms(source: string): QuantifiedAtom[] {
 
     let atom: string;
     if (character === '\\') {
-      atom = source.slice(index, index + 2);
-      index += 2;
+      const end = readEscapeEnd(source, index);
+      atom = source.slice(index, end);
+      index = end;
     } else if (character === '[') {
       const end = readCharClassEnd(source, index);
       atom = source.slice(index, end);
@@ -751,34 +779,70 @@ const CONTROL_ESCAPE_CHARS: Record<string, string> = {
   '0': '\0',
 };
 
-function escapedLiteralChar(escapeLetter: string | undefined): string[] {
-  if (escapeLetter === undefined || CLASS_ESCAPE_LETTERS.has(escapeLetter)) {
-    return [];
+// The literal character a single backslash escape denotes, or undefined for a class
+// escape (`\d`, `\w`, ...) which has no single representative. Handles control escapes
+// and numeric escapes (`\xHH`, `\uHHHH`, `\u{H+}`, `\cX`) so a hex/unicode-spelled
+// literal still yields its character.
+function decodeEscape(escape: string): string | undefined {
+  const body = escape.slice(1);
+  if (body.length === 0) {
+    return undefined;
   }
-  return [CONTROL_ESCAPE_CHARS[escapeLetter] ?? escapeLetter];
+  const hex = /^x([0-9a-f]{2})$/i.exec(body);
+  if (hex) {
+    return String.fromCharCode(Number.parseInt(hex[1], 16));
+  }
+  const unit = /^u([0-9a-f]{4})$/i.exec(body);
+  if (unit) {
+    return String.fromCharCode(Number.parseInt(unit[1], 16));
+  }
+  const codePoint = /^u\{([0-9a-f]+)\}$/i.exec(body);
+  if (codePoint) {
+    try {
+      return String.fromCodePoint(Number.parseInt(codePoint[1], 16));
+    } catch {
+      return undefined;
+    }
+  }
+  const control = /^c([a-z])$/i.exec(body);
+  if (control) {
+    return String.fromCharCode(control[1].toUpperCase().charCodeAt(0) % 32);
+  }
+  if (body.length === 1) {
+    return CLASS_ESCAPE_LETTERS.has(body) ? undefined : (CONTROL_ESCAPE_CHARS[body] ?? body);
+  }
+  return undefined;
 }
 
 // Characters the atom DEFINITELY matches, derived from its own text, so overlap is
 // found even when the shared character is an arbitrary literal not in the fixed
-// samples (e.g. `c+c+`). Class escapes / negated classes return nothing here and lean
-// on the samples. Range endpoints are returned as literals (`[c-e]` -> c, e).
+// samples (e.g. `c+c+`, `\x63+\x63+`). Class escapes / negated classes return nothing
+// here and lean on the samples. Range endpoints are returned as literals (`[c-e]` ->
+// c, e).
 function atomRepresentativeChars(atom: string): string[] {
   if (atom.length === 1) {
     return [atom];
   }
   if (atom.startsWith('\\')) {
-    return escapedLiteralChar(atom[1]);
+    const decoded = decodeEscape(atom);
+    return decoded === undefined ? [] : [decoded];
   }
   if (atom.startsWith('[')) {
     const body = atom.slice(atom[1] === '^' ? 2 : 1, -1);
     const chars: string[] = [];
-    for (let index = 0; index < body.length; index++) {
+    let index = 0;
+    while (index < body.length) {
       if (body[index] === '\\') {
-        chars.push(...escapedLiteralChar(body[index + 1]));
-        index++;
+        const end = readEscapeEnd(body, index);
+        const decoded = decodeEscape(body.slice(index, end));
+        if (decoded !== undefined) {
+          chars.push(decoded);
+        }
+        index = end;
         continue;
       }
       chars.push(body[index]);
+      index++;
     }
     return chars;
   }
