@@ -382,9 +382,12 @@ export async function resolveBlobBackedImageOutputs(
   );
 }
 
+/** Normalized image payload ready to be attached to a grading prompt. */
+export type GradingImageData = { dataUri: string; base64Data: string; mimeType: string };
+
 export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   imageOutputs: ImageOutput[];
-  imageData: { dataUri: string; base64Data: string; mimeType: string }[];
+  imageData: GradingImageData[];
 } {
   if (!images?.length) {
     return { imageOutputs: [], imageData: [] };
@@ -790,18 +793,12 @@ function appendImagesToChatPrompt(
   ]);
 }
 
-async function buildGradingProviderPrompt(
+function buildGradingProviderPrompt(
   renderedPrompt: string,
-  images?: ImageOutput[],
+  imageData?: GradingImageData[],
   provider?: ApiProvider,
-): Promise<{ prompt: string; imageCount: number }> {
-  if (!images?.length) {
-    return { prompt: renderedPrompt, imageCount: 0 };
-  }
-
-  const { imageData } = materializeImageOutputsForGrading(images);
-
-  if (imageData.length === 0) {
+): { prompt: string; imageCount: number } {
+  if (!imageData?.length) {
     return { prompt: renderedPrompt, imageCount: 0 };
   }
 
@@ -865,7 +862,7 @@ export async function runJsonGradingPrompt({
   providerCallContext,
   throwOnError,
   vars,
-  images,
+  imageData,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -875,7 +872,7 @@ export async function runJsonGradingPrompt({
   providerCallContext?: CallApiContextParams;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
-  images?: ImageOutput[];
+  imageData?: GradingImageData[];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
@@ -889,9 +886,9 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
-  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
+  const { prompt: providerPrompt, imageCount } = buildGradingProviderPrompt(
     renderedPrompt,
-    images,
+    imageData,
     finalProvider,
   );
   const resp = await callProviderWithContext(

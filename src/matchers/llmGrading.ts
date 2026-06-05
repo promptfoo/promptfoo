@@ -129,11 +129,14 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
 }
 
 function getDataUriPayload(data: string): string | undefined {
-  const [metadata, payload] = data.trim().split(',', 2);
-  if (!payload || !metadata.toLowerCase().startsWith('data:image/')) {
+  // Split on the first comma only (base64 never contains one); `split(',', 2)`
+  // would truncate a payload that did.
+  const trimmed = data.trim();
+  const commaIndex = trimmed.indexOf(',');
+  if (commaIndex === -1 || !trimmed.slice(0, commaIndex).toLowerCase().startsWith('data:image/')) {
     return undefined;
   }
-  return payload;
+  return trimmed.slice(commaIndex + 1) || undefined;
 }
 
 function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
@@ -201,7 +204,9 @@ export async function matchesLlmRubric(
   // Resolve any blob-backed image outputs (the evaluator externalizes images > 1KiB
   // to blobRefs before assertions run) so they can be attached to the grader.
   const resolvedImages = await resolveBlobBackedImageOutputs(options?.providerResponse?.images);
-  const { imageOutputs } = materializeImageOutputsForGrading(resolvedImages);
+  // Materialize once here and reuse downstream; runJsonGradingPrompt no longer
+  // re-validates/re-decodes the (potentially multi-MB) image payloads.
+  const { imageOutputs, imageData } = materializeImageOutputsForGrading(resolvedImages);
   const gradingOutput = imageOutputs.length
     ? getGradingOutputForImages(llmOutput, options?.providerResponse?.images)
     : llmOutput;
@@ -240,7 +245,7 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
-      images: imageOutputs,
+      imageData,
       vars: {
         output: tryParse(gradingOutput),
         rubric,
