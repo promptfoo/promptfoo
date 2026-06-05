@@ -66,6 +66,9 @@ import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
+
 /**
  * Represents metadata for the GOAT conversation process.
  */
@@ -656,19 +659,21 @@ export default class GoatProvider implements ApiProvider {
         if (targetResponse.error) {
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
+        const hasTargetImages = Boolean(targetResponse.images?.length);
         invariant(
-          targetResponse.output,
-          `[GOAT] Expected target response output to be set, but got: ${safeJsonStringify(targetResponse)}`,
+          targetResponse.output || hasTargetImages,
+          `[GOAT] Expected target response output or images to be set, but got: ${safeJsonStringify(targetResponse)}`,
         );
 
         const stringifiedOutput =
           typeof targetResponse.output === 'string'
             ? targetResponse.output
             : safeJsonStringify(targetResponse.output);
-        const finalOutput = stringifiedOutput;
+        const finalOutput =
+          stringifiedOutput || (hasTargetImages ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER : '');
         const finalResponse = targetResponse;
 
-        if (!stringifiedOutput) {
+        if (!stringifiedOutput && !hasTargetImages) {
           logger.debug('[GOAT] Target response output is not a string or JSON', {
             response: targetResponse,
           });
@@ -677,7 +682,7 @@ export default class GoatProvider implements ApiProvider {
 
         messages.push({
           role: 'assistant',
-          content: stringifiedOutput,
+          content: finalOutput,
         });
 
         // Store this turn in redteamHistory with audio/image data if present
@@ -685,7 +690,7 @@ export default class GoatProvider implements ApiProvider {
           prompt: attackerMessage.content,
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
-          output: stringifiedOutput,
+          output: finalOutput,
           outputAudio:
             targetResponse.audio?.data && targetResponse.audio?.format
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
@@ -704,7 +709,7 @@ export default class GoatProvider implements ApiProvider {
           : undefined;
 
         previousTraceSummary = attackTraceSummary;
-        previousTargetOutput = stringifiedOutput;
+        previousTargetOutput = finalOutput;
 
         lastTargetResponse = finalResponse;
 
@@ -786,7 +791,7 @@ export default class GoatProvider implements ApiProvider {
           this.successfulAttacks.push({
             turn,
             prompt: attackerMessage.content,
-            response: stringifiedOutput,
+            response: finalOutput,
             traceSummary: attackTraceSummary,
           });
 

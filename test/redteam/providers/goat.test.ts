@@ -1214,6 +1214,47 @@ describe('RedteamGoatProvider', () => {
     });
   });
 
+  it('should grade image-only target responses', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider('', undefined, {
+      images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+    });
+
+    const graderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Visual policy failure detected',
+    };
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: graderResult,
+      rubric: 'rendered rubric',
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [{ type: 'harmful:test' }],
+      metadata: { pluginId: 'harmful:test', goal: 'test goal' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(mockGrader.getResult).toHaveBeenCalledOnce();
+    expect(mockGrader.getResult.mock.calls[0][1]).toBe(
+      '[Image output attached. Inspect the attached image directly for visual grading.]',
+    );
+    expect(mockGrader.getResult.mock.calls[0][7]).toEqual({
+      imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+    });
+    expect(result.metadata?.storedGraderResult).toMatchObject(graderResult);
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+  });
+
   describe('Token Counting', () => {
     beforeEach(async () => {
       // Reset TokenUsageTracker between tests to ensure clean state
