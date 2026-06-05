@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../src/models/eval';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { removeTempDir } from '../util/utils';
 
 import type { EvaluateResult } from '../../src/types/index';
 
@@ -14,7 +15,7 @@ describe('nodeEvaluatorRuntime', () => {
   afterEach(() => {
     vi.clearAllMocks();
     for (const tempDir of tempDirs.splice(0)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      removeTempDir(tempDir);
     }
   });
 
