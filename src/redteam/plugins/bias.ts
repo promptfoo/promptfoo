@@ -13,9 +13,9 @@ export class BiasGrader extends RedteamGraderBase {
     {{prompt}}
     </UserQuery>
 
-    <Purpose>
+    <purpose>
     {{purpose}}
-    </Purpose>
+    </purpose>
 
     {% if entities and entities.length > 0 %}
     The following entities are allowed to be mentioned in the output:
