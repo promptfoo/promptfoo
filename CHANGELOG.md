@@ -6,27 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.121.15](https://github.com/promptfoo/promptfoo/compare/0.121.14...0.121.15) (2026-06-05)
 
-
 ### Features
 
-* **assertions:** grade multimodal outputs ([#9617](https://github.com/promptfoo/promptfoo/issues/9617)) ([ec4d3b4](https://github.com/promptfoo/promptfoo/commit/ec4d3b42e29133e0479028d38de394b949c9c092))
-* **build:** add DAG-aware architecture cycle checks ([#9557](https://github.com/promptfoo/promptfoo/issues/9557)) ([9d7d810](https://github.com/promptfoo/promptfoo/commit/9d7d810c2118c63cb537bf05ea2d34c12bd22066))
-* **providers:** add Azure MAI image provider and MAI model recognition ([#9595](https://github.com/promptfoo/promptfoo/issues/9595)) ([e091527](https://github.com/promptfoo/promptfoo/commit/e091527e2eae0539b9b6d78abb462eddc15e093d))
-* **providers:** upgrade MiniMax default model to M3 ([#9598](https://github.com/promptfoo/promptfoo/issues/9598)) ([43b30c5](https://github.com/promptfoo/promptfoo/commit/43b30c5bc50368842ecd08432edc2e37543db5a2))
-
+- **assertions:** grade multimodal outputs ([#9617](https://github.com/promptfoo/promptfoo/issues/9617)) ([ec4d3b4](https://github.com/promptfoo/promptfoo/commit/ec4d3b42e29133e0479028d38de394b949c9c092))
+- **build:** add DAG-aware architecture cycle checks ([#9557](https://github.com/promptfoo/promptfoo/issues/9557)) ([9d7d810](https://github.com/promptfoo/promptfoo/commit/9d7d810c2118c63cb537bf05ea2d34c12bd22066))
+- **providers:** add Azure MAI image provider and MAI model recognition ([#9595](https://github.com/promptfoo/promptfoo/issues/9595)) ([e091527](https://github.com/promptfoo/promptfoo/commit/e091527e2eae0539b9b6d78abb462eddc15e093d))
+- **providers:** upgrade MiniMax default model to M3 ([#9598](https://github.com/promptfoo/promptfoo/issues/9598)) ([43b30c5](https://github.com/promptfoo/promptfoo/commit/43b30c5bc50368842ecd08432edc2e37543db5a2))
 
 ### Bug Fixes
 
-* **auth:** enable auto-share for on-prem Report Server after login ([#9612](https://github.com/promptfoo/promptfoo/issues/9612)) ([8ece593](https://github.com/promptfoo/promptfoo/commit/8ece593840d8dba3f5d2e1e05f55116ec1a92c30))
-* **auth:** preserve cloud request headers ([#9610](https://github.com/promptfoo/promptfoo/issues/9610)) ([3a2c5e6](https://github.com/promptfoo/promptfoo/commit/3a2c5e64796b3852381b6168ad2da735f3161c1d))
-* **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
-* **code-scan:** reject fractional inline comment lines ([#9556](https://github.com/promptfoo/promptfoo/issues/9556)) ([0a2b329](https://github.com/promptfoo/promptfoo/commit/0a2b32997dd83033e218cf523562b69cebc88527))
-* **eval:** compose metadata and result filters ([#9604](https://github.com/promptfoo/promptfoo/issues/9604)) ([49539ee](https://github.com/promptfoo/promptfoo/commit/49539ee61786540a77bcb9765f23cb8a2c4e1828))
-* **eval:** preserve --config ordering when expanding a directory entry ([#9606](https://github.com/promptfoo/promptfoo/issues/9606)) ([fc081a0](https://github.com/promptfoo/promptfoo/commit/fc081a0bbaa91c27b93bdd4c28533f5912023deb))
-* harden validation and target discovery ([#9614](https://github.com/promptfoo/promptfoo/issues/9614)) ([465d610](https://github.com/promptfoo/promptfoo/commit/465d610aade97837ed5bf731d54c3b2389e92819))
-* **providers:** require deployment name for no-default Azure provider types ([#9603](https://github.com/promptfoo/promptfoo/issues/9603)) ([da48abd](https://github.com/promptfoo/promptfoo/commit/da48abd6bc1b92e44acd5d4c88a0a02058721b3b))
-* **providers:** suppress optional GCP metadata warning ([#9554](https://github.com/promptfoo/promptfoo/issues/9554)) ([8dcc44b](https://github.com/promptfoo/promptfoo/commit/8dcc44bd2b2278db047363545566917cb1566975))
-* **redteam:** restrict remote auth to cloud host ([#9597](https://github.com/promptfoo/promptfoo/issues/9597)) ([1b2c6d9](https://github.com/promptfoo/promptfoo/commit/1b2c6d932494d38ad6162478d0a5fbb9a1a5f1fb))
+- **auth:** enable auto-share for on-prem Report Server after login ([#9612](https://github.com/promptfoo/promptfoo/issues/9612)) ([8ece593](https://github.com/promptfoo/promptfoo/commit/8ece593840d8dba3f5d2e1e05f55116ec1a92c30))
+- **auth:** preserve cloud request headers ([#9610](https://github.com/promptfoo/promptfoo/issues/9610)) ([3a2c5e6](https://github.com/promptfoo/promptfoo/commit/3a2c5e64796b3852381b6168ad2da735f3161c1d))
+- **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
+- **code-scan:** reject fractional inline comment lines ([#9556](https://github.com/promptfoo/promptfoo/issues/9556)) ([0a2b329](https://github.com/promptfoo/promptfoo/commit/0a2b32997dd83033e218cf523562b69cebc88527))
+- **eval:** compose metadata and result filters ([#9604](https://github.com/promptfoo/promptfoo/issues/9604)) ([49539ee](https://github.com/promptfoo/promptfoo/commit/49539ee61786540a77bcb9765f23cb8a2c4e1828))
+- **eval:** preserve --config ordering when expanding a directory entry ([#9606](https://github.com/promptfoo/promptfoo/issues/9606)) ([fc081a0](https://github.com/promptfoo/promptfoo/commit/fc081a0bbaa91c27b93bdd4c28533f5912023deb))
+- harden validation and target discovery ([#9614](https://github.com/promptfoo/promptfoo/issues/9614)) ([465d610](https://github.com/promptfoo/promptfoo/commit/465d610aade97837ed5bf731d54c3b2389e92819))
+- **providers:** require deployment name for no-default Azure provider types ([#9603](https://github.com/promptfoo/promptfoo/issues/9603)) ([da48abd](https://github.com/promptfoo/promptfoo/commit/da48abd6bc1b92e44acd5d4c88a0a02058721b3b))
+- **providers:** suppress optional GCP metadata warning ([#9554](https://github.com/promptfoo/promptfoo/issues/9554)) ([8dcc44b](https://github.com/promptfoo/promptfoo/commit/8dcc44bd2b2278db047363545566917cb1566975))
+- **redteam:** restrict remote auth to cloud host ([#9597](https://github.com/promptfoo/promptfoo/issues/9597)) ([1b2c6d9](https://github.com/promptfoo/promptfoo/commit/1b2c6d932494d38ad6162478d0a5fbb9a1a5f1fb))
 
 ## [0.121.14](https://github.com/promptfoo/promptfoo/compare/0.121.13...0.121.14) (2026-06-02)
 
