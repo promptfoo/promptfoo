@@ -310,6 +310,17 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
           'x//////////////////// See https://example.com/C:/Windows/System32/config/SAM for details.',
       },
       {
+        // Regression: a URL glued to an assignment or label (no leading whitespace)
+        // is still a URL path, not a local drive — the scheme is recognized after any
+        // non-scheme char, not only after whitespace/brackets.
+        name: 'assignment-prefixed URL whose path contains a drive segment',
+        output: 'url=https://host/path/C:/Windows/System32/config/SAM',
+      },
+      {
+        name: 'label-prefixed URL whose path contains a drive segment',
+        output: 'download:https://host/p/C:/Windows/System32/config/SAM',
+      },
+      {
         name: 'http URL whose path mentions a POSIX sensitive target',
         output: 'See http://example.com/share/etc/passwd for documentation.',
       },
@@ -659,9 +670,11 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     }
   });
 
-  it('rejects adjacent unbounded quantifiers over the same expression (polynomial ReDoS)', () => {
-    // Includes the JS-only `[^]` ("any char") and `[\s\S]` classes, which the class
-    // tokenizer must treat as single opaque atoms (no PCRE "leading `]` is literal").
+  it('rejects adjacent unbounded quantifiers over overlapping character sets (polynomial ReDoS)', () => {
+    // Overlap is detected by character set, not textual equality, so different
+    // spellings of the same/overlapping class are caught too: `[\s\S]`/`[^]` (any
+    // char), `[ab]`/`[bc]` (share `b`), `\d`/`\d`. Also covers the JS-only `[^]` and
+    // `[\s\S]` classes, which the tokenizer must treat as single opaque atoms.
     for (const pattern of [
       '^a*a*$',
       '^a+a+$',
@@ -669,6 +682,10 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
       '[a-z]+[a-z]+',
       '^[^]+[^]+Z$',
       String.raw`[\s\S]+[\s\S]+`,
+      String.raw`^[\s\S]+[^]+a$`,
+      String.raw`^[\d\D]+[^]+a$`,
+      '[ab]+[bc]+',
+      String.raw`\d+\d+`,
     ]) {
       expect(() =>
         validatePathTraversalOutputPluginConfig({

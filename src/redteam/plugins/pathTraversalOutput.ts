@@ -704,16 +704,59 @@ function tokenizeQuantifiedAtoms(source: string): QuantifiedAtom[] {
   return tokens;
 }
 
+// Representative characters spanning the common regex character classes. Two atoms
+// that both match the same sample can match a shared input character, which is what
+// makes adjacent unbounded quantifiers backtrack super-linearly.
+const ATOM_OVERLAP_SAMPLES = [
+  'a',
+  'b',
+  'Z',
+  '5',
+  ' ',
+  '\t',
+  '\n',
+  '/',
+  '\\',
+  '.',
+  '-',
+  '_',
+  ':',
+  ';',
+  '=',
+  '!',
+  '#',
+  '%',
+  '@',
+  'é',
+];
+
+function atomMatchesChar(atom: string, character: string): boolean {
+  try {
+    // `s` flag so `.` and negated classes treat newline like any other char.
+    return new RegExp(`^(?:${atom})$`, 's').test(character);
+  } catch {
+    return false;
+  }
+}
+
+function atomsCanMatchCommonChar(first: string, second: string): boolean {
+  return ATOM_OVERLAP_SAMPLES.some(
+    (character) => atomMatchesChar(first, character) && atomMatchesChar(second, character),
+  );
+}
+
 function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
-  // Detect the canonical polynomial-ReDoS shape: two adjacent, unbounded-quantified
-  // copies of the SAME atom (`a*a*`, `a+a+`, `\w*\w*`, `[a-z]+[a-z]+`). The grouped
-  // checks above miss these because the ambiguity is between sibling atoms, not
-  // nested groups.
+  // Detect the canonical polynomial-ReDoS shape: two adjacent unbounded-quantified
+  // atoms whose character sets OVERLAP (`a*a*`, `\w*\w*`, `[a-z]+[a-z]+`, and
+  // semantically-equivalent spellings such as `[\s\S]+[^]+` or `[ab]+[bc]+`). The
+  // grouped checks above miss these because the ambiguity is between sibling atoms,
+  // not nested groups. Overlap is tested by character sampling rather than textual
+  // equality so different spellings of the same set still match.
   const tokens = tokenizeQuantifiedAtoms(source);
   for (let position = 0; position + 1 < tokens.length; position++) {
     const current = tokens[position];
     const next = tokens[position + 1];
-    if (current.unbounded && next.unbounded && current.text === next.text) {
+    if (current.unbounded && next.unbounded && atomsCanMatchCommonChar(current.text, next.text)) {
       return true;
     }
   }
@@ -818,9 +861,13 @@ function findRuleEvidence(
 }
 
 function isWindowsDriveEvidenceInsideUrlPath(decodedAligned: string, matchStart: number): boolean {
+  // The scheme sits at start-of-string or directly after any char that cannot be part
+  // of a scheme name (`[a-z0-9+.-]`). Matching on "not a scheme char" rather than an
+  // enumerated delimiter list means `key=https://...`, `label:https://...`, list and
+  // bracket contexts, etc. are all recognized as a URL path, not a local drive.
   const uriPrefix = decodedAligned
     .slice(0, matchStart)
-    .match(/(?:^|[\s"'([{<])[a-z][a-z0-9+.-]*:\/\/[^\s"'([{<]*$/i)?.[0];
+    .match(/(?:^|[^a-z0-9+.-])[a-z][a-z0-9+.-]*:\/\/[^\s"'([{<]*$/i)?.[0];
 
   return Boolean(uriPrefix && !uriPrefix.includes('?') && !uriPrefix.includes('#'));
 }
