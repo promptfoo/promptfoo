@@ -193,15 +193,15 @@ tests:
 
 The image content is formatted for the grader's API automatically. Validated grader families:
 
-| Grader                    | Example id                                           | Image format sent        |
-| ------------------------- | ---------------------------------------------------- | ------------------------ |
-| OpenAI (chat)             | `openai:gpt-4o-mini`                                 | `image_url` data URI     |
-| OpenAI (responses)        | `openai:responses:gpt-4o-mini`                       | `input_image`            |
-| Anthropic                 | `anthropic:messages:claude-haiku-4-5`                | base64 `image` block     |
-| Amazon Bedrock (Claude)   | `bedrock:us.anthropic.claude-haiku-4-5-...`          | base64 `image` block     |
-| Amazon Bedrock (Nova)     | `bedrock:amazon.nova-lite-v1:0`                      | Nova `image` bytes block |
-| Google AI Studio / Vertex | `google:gemini-2.5-flash`, `vertex:gemini-2.5-flash` | `inlineData`             |
-| Promptfoo remote grader   | _(default when no grader is configured)_             | data URI                 |
+| Grader                    | Example id                                            | Image format sent        |
+| ------------------------- | ----------------------------------------------------- | ------------------------ |
+| OpenAI (chat)             | `openai:gpt-4o-mini`                                  | `image_url` data URI     |
+| OpenAI (responses)        | `openai:responses:gpt-4o-mini`                        | `input_image`            |
+| Anthropic                 | `anthropic:messages:claude-haiku-4-5`                 | base64 `image` block     |
+| Amazon Bedrock (Claude)   | `bedrock:us.anthropic.claude-haiku-4-5-...`           | base64 `image` block     |
+| Amazon Bedrock (Nova)     | `bedrock:amazon.nova-lite-v1:0`                       | Nova `image` bytes block |
+| Google AI Studio / Vertex | `google:gemini-2.5-flash`, `vertex:gemini-2.5-flash`  | `inlineData`             |
+| Promptfoo remote grader   | _(red team evals only, when no grader is configured)_ | data URI                 |
 
 Large image outputs are externalized to the local blob store before assertions run; `llm-rubric`
 resolves those blobs automatically, so this works out of the box. Only inline base64 / data-URI image
@@ -209,10 +209,17 @@ output (or its blob reference) is supported. Remote `http(s)://` image URLs are 
 never fetches arbitrary URLs — configure the provider to return inline base64/data-URI image output
 instead.
 
+For ordinary (non-red-team) evals, image grading uses your **local** default grader — the
+credential-backed vision model promptfoo selects from your configured API keys (or whatever you set via
+`provider` / `--grader`). Promptfoo's remote Cloud grader is used only for red team evals when no grader
+provider is configured; it is not the default for a plain `llm-rubric` assertion.
+
 ### Image grading limits
 
-These limits guard against oversized payloads when grading **locally**. Each value is an **integer
-byte count** (or count) — unit suffixes like `20MB` are not parsed (`20MB` is read as `20`).
+These limits guard against oversized image payloads. They are enforced **client-side**, before the
+grader is called, so they constrain **both** local grader requests and uploads to Promptfoo's remote
+grader. Each value is an **integer byte count** (or count) — unit suffixes like `20MB` are not parsed
+(`20MB` is read as `20`).
 
 | Variable                                      | Default                      | Purpose                                      |
 | --------------------------------------------- | ---------------------------- | -------------------------------------------- |
@@ -223,11 +230,15 @@ byte count** (or count) — unit suffixes like `20MB` are not parsed (`20MB` is 
 | `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | derived from max total bytes | Max combined raw characters across images    |
 
 :::note
-These variables apply to **local** grading only. When grading runs on Promptfoo's **remote** grader
-(the default when no grader provider is configured), the image data is uploaded to that grader, which
-enforces its own fixed caps (4 images, 20 MiB per image and in total) and does not read these
-variables. Configure a local vision grader (as above) to tune the limits or to keep the image on your
-own provider.
+These variables are applied **client-side** to every grading request — both local grader calls and
+uploads to Promptfoo's remote grader (used only for red team evals when no grader provider is
+configured). Lowering them below the remote caps tightens what is sent remotely too; for example
+`PROMPTFOO_GRADING_MAX_IMAGES=0` rejects the request locally before any upload.
+
+The remote Cloud grader additionally enforces its own **fixed** server-side caps (4 images, 20 MiB per
+image and in total) that these variables cannot raise. To grade larger images, or to keep image data on
+your own infrastructure, configure a local vision grader (as above) so the image is sent only to your
+chosen provider.
 :::
 
 ## Customizing the rubric prompt

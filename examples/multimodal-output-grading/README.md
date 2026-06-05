@@ -44,4 +44,4 @@ defaultTest:
     # provider: vertex:gemini-2.5-flash
 ```
 
-Only base64 / data-URI image outputs are supported. Remote `http(s)://` image URLs and blob-backed outputs are rejected so the grader never fetches arbitrary URLs. See the [llm-rubric docs](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded/llm-rubric/#grading-image-multimodal-outputs) for the full provider matrix and the `PROMPTFOO_GRADING_IMAGE_*` size limits.
+Inline base64 / data-URI image outputs are supported, as are the `promptfoo://blob/<hash>` blob references promptfoo derives from them when it externalizes large image outputs — `llm-rubric` resolves those blobs back to inline data URIs before grading, so this works out of the box. Remote `http(s)://` image URLs are rejected so the grader never fetches arbitrary URLs. See the [llm-rubric docs](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded/llm-rubric/#grading-image-multimodal-outputs) for the full provider matrix and the `PROMPTFOO_GRADING_IMAGE_*` size limits.
