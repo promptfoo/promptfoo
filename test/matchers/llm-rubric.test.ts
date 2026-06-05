@@ -615,6 +615,80 @@ describe('matchesLlmRubric', () => {
     ]);
   });
 
+  it('should normalize supported existing image content shapes for Gemini grading providers', async () => {
+    const provider = createMockProvider({
+      id: 'google:gemini-2.5-pro',
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: JSON.stringify([
+          {
+            role: 'user',
+            content: [
+              'Literal chat content',
+              { type: 'text', text: 'Grade this output: {{ output }}' },
+              { type: 'input_image', image_url: 'data:image/jpeg;base64,input123' },
+              { type: 'input_image', image_url: 'not-a-data-uri' },
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/webp',
+                  data: 'anthro123',
+                },
+              },
+              { inlineData: { mimeType: 'image/gif', data: 'inline123' } },
+              { inline_data: { mime_type: 'image/png', data: 'snake123' } },
+              { unexpected: 'value' },
+              null,
+            ],
+          },
+        ]),
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Literal chat content' },
+          { type: 'text', text: 'Grade this output: Generated image' },
+          { inlineData: { mimeType: 'image/jpeg', data: 'input123' } },
+          {
+            type: 'text',
+            text: '{"type":"input_image","image_url":"not-a-data-uri"}',
+          },
+          { inlineData: { mimeType: 'image/webp', data: 'anthro123' } },
+          { inlineData: { mimeType: 'image/gif', data: 'inline123' } },
+          { inlineData: { mimeType: 'image/png', data: 'snake123' } },
+          { type: 'text', text: '{"unexpected":"value"}' },
+          { type: 'text', text: 'null' },
+          {
+            type: 'text',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+          },
+          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+        ],
+      },
+    ]);
+  });
+
   it('should use Responses image parts for Responses grading providers', async () => {
     const provider = createMockProvider({
       id: 'openai:responses:gpt-5.4',
