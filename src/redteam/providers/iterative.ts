@@ -595,7 +595,7 @@ export async function runRedteamConversation({
         // Fallback to just tracing context if no exfil data found
         if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
           gradingContext = {
-            ...(gradingContext ?? {}),
+            ...gradingContext,
             traceContext,
             traceSummary: graderTraceSummary,
           };
