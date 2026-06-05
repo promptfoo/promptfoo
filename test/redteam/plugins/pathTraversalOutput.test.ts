@@ -165,6 +165,17 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       ).toContain('windows-direct-sensitive-path');
     });
 
+    it('flags a UNC payload glued directly to a colon label', () => {
+      // `path:\\server\...` folds to `path://server/...`. The UNC rule must still
+      // match it (the `\\` is preserved in the decoded-aligned view), while a
+      // forward-slash URL authority like `path://host` stays skipped.
+      expect(
+        detectPathTraversalOutput(String.raw`path:\\server\C$\Windows\System32\config\SAM`).map(
+          (m) => m.id,
+        ),
+      ).toContain('windows-direct-sensitive-path');
+    });
+
     it('flags null-byte truncation paired with traversal', () => {
       const matches = detectPathTraversalOutput(`../uploads/file.jpg${NUL}.php`);
       const ids = matches.map((m) => m.id);
@@ -649,7 +660,16 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
   });
 
   it('rejects adjacent unbounded quantifiers over the same expression (polynomial ReDoS)', () => {
-    for (const pattern of ['^a*a*$', '^a+a+$', String.raw`\w*\w*`, '[a-z]+[a-z]+']) {
+    // Includes the JS-only `[^]` ("any char") and `[\s\S]` classes, which the class
+    // tokenizer must treat as single opaque atoms (no PCRE "leading `]` is literal").
+    for (const pattern of [
+      '^a*a*$',
+      '^a+a+$',
+      String.raw`\w*\w*`,
+      '[a-z]+[a-z]+',
+      '^[^]+[^]+Z$',
+      String.raw`[\s\S]+[\s\S]+`,
+    ]) {
       expect(() =>
         validatePathTraversalOutputPluginConfig({
           examples: ['Return custom traversal only.'],
@@ -659,18 +679,20 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     }
   });
 
-  it('rejects unbounded quantified backreferences', () => {
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos-backref', pattern: String.raw`^([a]+)\1+$` }],
-      }),
-    ).toThrow(/quantified backreferences/);
+  it('rejects unbounded quantified backreferences (numeric and named)', () => {
+    for (const pattern of [String.raw`^([a]+)\1+$`, String.raw`^(?<n>a+)\k<n>+$`]) {
+      expect(() =>
+        validatePathTraversalOutputPluginConfig({
+          examples: ['Return custom traversal only.'],
+          pathTraversalOutputPatterns: [{ id: 'redos-backref', pattern }],
+        }),
+      ).toThrow(/quantified backreferences/);
+    }
   });
 
   it('accepts bounded and non-overlapping quantifier sequences', () => {
-    // Guard against over-rejection: distinct adjacent atoms and a single separator
-    // between unbounded atoms are linear, so they must stay valid.
+    // Guard against over-rejection: distinct adjacent atoms, a single separator
+    // between unbounded atoms, and an escaped literal `]` class are all linear.
     expect(() =>
       validatePathTraversalOutputPluginConfig({
         examples: ['Return a custom sensitive path payload only.'],
@@ -678,6 +700,8 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
           { id: 'distinct-atoms', pattern: 'a+b+' },
           { id: 'separated-atoms', pattern: String.raw`\w+/\w+` },
           { id: 'single-unbounded', pattern: 'corp-secret-[a-z]+' },
+          { id: 'distinct-classes', pattern: '[a-z]+[A-Z]+' },
+          { id: 'escaped-bracket-class', pattern: String.raw`[\]]+` },
         ],
       }),
     ).not.toThrow();

@@ -172,9 +172,10 @@ const NESTED_QUANTIFIER =
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
-// Matches an unbounded-quantified backreference such as `\1+`, `\1*`, or `\1{2,}`,
-// which can drive super-linear backtracking, e.g. `^([a]+)\1+$`.
-const QUANTIFIED_BACKREFERENCE = /\\[1-9]\d*(?:[*+]|\{\d+,\})/;
+// Matches an unbounded-quantified backreference — numeric (`\1+`, `\1{2,}`) or named
+// (`\k<name>+`) — which can drive super-linear backtracking, e.g. `^([a]+)\1+$` or
+// `^(?<n>a+)\k<n>+$`.
+const QUANTIFIED_BACKREFERENCE = /\\(?:[1-9]\d*|k<[^>]+>)(?:[*+]|\{\d+,\})/;
 
 function decodeJsonHexUnicode(input: string): string {
   // \uXXXX (4 hex)
@@ -403,13 +404,15 @@ const POSIX_TRAVERSAL = String.raw`${TRAVERSAL_LEFT_BOUNDARY}(?:\.\.(?:/|;/)){1,
 const CONNECTOR_SHORT = String.raw`[\w$%./-]{0,120}`;
 const CONNECTOR_LONG = String.raw`[\w$%./-]{0,200}`;
 
-// Leading `(?<![\w:])` rejects two false-positive shapes:
-//   1. URL scheme `https:` matching the `[a-z]:/` drive alternative on the `s`/`p` etc.
-//   2. URL authority `://example.com/share/...` matching the regular-UNC `//...` alternative.
-// Both fail the lookbehind because the byte immediately before is either a word char
-// (URL scheme letter) or a colon (URL scheme separator).
+// Leading `(?<!\w)` rejects the URL-scheme false positive where `https:` matches the
+// `[a-z]:/` drive alternative on the `s`/`p` etc. — the byte before is a word char.
+// A URL authority `scheme://host/...` matching the regular-UNC `//...` alternative is
+// NOT rejected here (the byte before `//` is `:`); it is distinguished from a real
+// `\\host\share` UNC downstream in `findRuleEvidence` via the `decodedAligned` view,
+// which preserves the original `\\` vs `//`. Excluding `:` in the lookbehind would
+// also drop genuine UNC payloads glued to a colon label, e.g. `path:\\server\C$\...`.
 const WINDOWS_DIRECT_PREFIX = String.raw`(?:[a-z]:/|//\?/[a-z]:/|//\?/unc/[\w.-]+/[\w$.-]+/|//[\w.-]+/[\w$.-]+/)`;
-const WINDOWS_DIRECT_LEFT = String.raw`(?<![\w:])${WINDOWS_DIRECT_PREFIX}`;
+const WINDOWS_DIRECT_LEFT = String.raw`(?<!\w)${WINDOWS_DIRECT_PREFIX}`;
 // Leading `(?<!\w)` rejects schemes whose name happens to end in `file`, e.g.
 // `profile://...`. The bare `file://...` form is preceded by start-of-string,
 // whitespace, or punctuation in every legitimate case.
@@ -637,11 +640,11 @@ interface QuantifiedAtom {
 const STRUCTURAL_REGEX_CHARS = new Set(['(', ')', '|', '^', '$']);
 
 function readCharClassEnd(source: string, start: number): number {
+  // JavaScript char-class semantics: `[]` is the empty class and `[^]` matches any
+  // char, so the first unescaped `]` always closes (no PCRE "leading `]` is literal"
+  // rule). A literal `]` must be escaped (`[\]]`) and is handled by the escape skip.
   let cursor = start + 1;
   if (source[cursor] === '^') {
-    cursor++;
-  }
-  if (source[cursor] === ']') {
     cursor++;
   }
   while (cursor < source.length && source[cursor] !== ']') {
