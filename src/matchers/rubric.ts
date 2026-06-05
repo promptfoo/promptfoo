@@ -153,10 +153,14 @@ export async function renderLlmRubricPrompt(
 type MultimodalPromptPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'input_text'; text: string }
+  | { type: 'input_image'; image_url: string }
   | {
       type: 'image';
       source: { type: 'base64'; media_type: string; data: string };
     };
+
+type MultimodalPromptFormat = 'anthropic' | 'openai' | 'responses';
 
 type ChatMessageLike = {
   role?: unknown;
@@ -379,25 +383,31 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
 function appendImagesToContent(
   content: unknown,
   imageParts: MultimodalPromptPart[],
+  format: MultimodalPromptFormat,
 ): MultimodalPromptPart[] {
   if (Array.isArray(content)) {
-    return [...content, ...imageParts] as MultimodalPromptPart[];
+    const normalizedContent =
+      format === 'responses' ? content.map(toResponsesContentPart) : content;
+    return [...normalizedContent, ...imageParts] as MultimodalPromptPart[];
   }
 
   if (typeof content === 'string') {
-    return [{ type: 'text', text: content }, ...imageParts];
+    return [buildTextPart(content, format), ...imageParts];
   }
 
   if (content === undefined || content === null) {
     return imageParts;
   }
 
-  return [{ type: 'text', text: JSON.stringify(content) }, ...imageParts];
+  return [buildTextPart(stringifyContentPart(content), format), ...imageParts];
 }
 
-function getMultimodalPromptFormat(provider: ApiProvider): 'anthropic' | 'openai' {
+function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
   try {
     const providerId = provider.id();
+    if (/(^|:)responses(?::|$)/i.test(providerId)) {
+      return 'responses';
+    }
     if (/^anthropic(?::|$)/i.test(providerId)) {
       return 'anthropic';
     }
@@ -408,11 +418,26 @@ function getMultimodalPromptFormat(provider: ApiProvider): 'anthropic' | 'openai
   return 'openai';
 }
 
+function buildTextPart(text: string, format: MultimodalPromptFormat): MultimodalPromptPart {
+  if (format === 'responses') {
+    return { type: 'input_text', text };
+  }
+
+  return { type: 'text', text };
+}
+
 function buildImageParts(
   images: { dataUri: string; base64Data: string; mimeType: string }[],
-  format: 'anthropic' | 'openai',
+  format: MultimodalPromptFormat,
 ): MultimodalPromptPart[] {
   return images.map<MultimodalPromptPart>((image) => {
+    if (format === 'responses') {
+      return {
+        type: 'input_image',
+        image_url: image.dataUri,
+      };
+    }
+
     if (format === 'anthropic') {
       return {
         type: 'image',
@@ -431,16 +456,68 @@ function buildImageParts(
   });
 }
 
+function toResponsesContentPart(part: unknown): MultimodalPromptPart {
+  if (typeof part === 'string') {
+    return { type: 'input_text', text: part };
+  }
+
+  if (!part || typeof part !== 'object' || Array.isArray(part)) {
+    return { type: 'input_text', text: stringifyContentPart(part) };
+  }
+
+  const contentPart = part as Record<string, unknown>;
+  if (contentPart.type === 'input_text' && typeof contentPart.text === 'string') {
+    return { type: 'input_text', text: contentPart.text };
+  }
+  if (contentPart.type === 'text' && typeof contentPart.text === 'string') {
+    return { type: 'input_text', text: contentPart.text };
+  }
+  if (contentPart.type === 'input_image' && typeof contentPart.image_url === 'string') {
+    return { type: 'input_image', image_url: contentPart.image_url };
+  }
+  if (
+    contentPart.type === 'image_url' &&
+    contentPart.image_url &&
+    typeof contentPart.image_url === 'object' &&
+    typeof (contentPart.image_url as { url?: unknown }).url === 'string'
+  ) {
+    return {
+      type: 'input_image',
+      image_url: (contentPart.image_url as { url: string }).url,
+    };
+  }
+  if (
+    contentPart.type === 'image' &&
+    contentPart.source &&
+    typeof contentPart.source === 'object'
+  ) {
+    const source = contentPart.source as { type?: unknown; media_type?: unknown; data?: unknown };
+    if (
+      source.type === 'base64' &&
+      typeof source.media_type === 'string' &&
+      typeof source.data === 'string'
+    ) {
+      return {
+        type: 'input_image',
+        image_url: `data:${source.media_type};base64,${source.data}`,
+      };
+    }
+  }
+
+  return { type: 'input_text', text: stringifyContentPart(part) };
+}
+
+function stringifyContentPart(part: unknown): string {
+  return JSON.stringify(part) ?? String(part);
+}
+
 function appendImagesToChatPrompt(
   renderedPrompt: string,
   images: { dataUri: string; base64Data: string; mimeType: string }[],
-  format: 'anthropic' | 'openai',
+  format: MultimodalPromptFormat,
 ): string {
   const imageParts: MultimodalPromptPart[] = [
-    {
-      type: 'text',
-      text: MULTIMODAL_GRADING_INSTRUCTION,
-    },
+    buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, format),
     ...buildImageParts(images, format),
   ];
 
@@ -469,7 +546,7 @@ function appendImagesToChatPrompt(
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendImagesToContent(userMessage.content, imageParts),
+        content: appendImagesToContent(userMessage.content, imageParts, format),
       };
     } else {
       messages.push({ role: 'user', content: imageParts });
@@ -481,7 +558,7 @@ function appendImagesToChatPrompt(
   return JSON.stringify([
     {
       role: 'user',
-      content: [{ type: 'text', text: renderedPrompt }, ...imageParts],
+      content: [buildTextPart(renderedPrompt, format), ...imageParts],
     },
   ]);
 }

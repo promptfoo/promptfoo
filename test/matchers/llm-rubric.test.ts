@@ -477,6 +477,99 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should use Responses image parts for Responses grading providers', async () => {
+    const provider = createMockProvider({
+      id: 'openai:responses:gpt-5.4',
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'Grade this output: Generated image' },
+          {
+            type: 'input_text',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+          },
+          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+        ],
+      },
+    ]);
+  });
+
+  it('should convert existing chat content parts when using Responses grading providers', async () => {
+    const provider = createMockProvider({
+      id: 'openai:responses:gpt-5.4',
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: JSON.stringify([
+          { role: 'system', content: 'Return JSON.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Grade this output: {{ output }}' },
+              { type: 'image_url', image_url: { url: 'data:image/png;base64,existing' } },
+            ],
+          },
+        ]),
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)).toEqual([
+      { role: 'system', content: 'Return JSON.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'Grade this output: Generated image' },
+          { type: 'input_image', image_url: 'data:image/png;base64,existing' },
+          {
+            type: 'input_text',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+          },
+          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+        ],
+      },
+    ]);
+  });
+
   it('should append a user message when a JSON chat rubric has no user message', async () => {
     const provider = createMockProvider({
       response: {
