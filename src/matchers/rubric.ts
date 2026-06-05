@@ -6,6 +6,7 @@ import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
+import { parseChatPrompt } from '../providers/shared';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
@@ -16,6 +17,7 @@ import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
+  ApiProvider,
   Assertion,
   CallApiContextParams,
   GradingConfig,
@@ -29,6 +31,12 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+const DATA_URI_METADATA_MAX_CHARS = 256;
+const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
+  Math.ceil(DEFAULT_GRADING_IMAGE_MAX_BYTES / 3) * 4 + DATA_URI_METADATA_MAX_CHARS;
+const DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS =
+  Math.ceil(DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES / 3) * 4 +
+  DEFAULT_GRADING_MAX_IMAGES * DATA_URI_METADATA_MAX_CHARS;
 const MULTIMODAL_GRADING_INSTRUCTION =
   'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
@@ -144,7 +152,11 @@ export async function renderLlmRubricPrompt(
 
 type MultimodalPromptPart =
   | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
+  | { type: 'image_url'; image_url: { url: string } }
+  | {
+      type: 'image';
+      source: { type: 'base64'; media_type: string; data: string };
+    };
 
 type ChatMessageLike = {
   role?: unknown;
@@ -164,13 +176,62 @@ function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
   );
 }
 
-function normalizeBase64ImageData(data: string, mimeType?: string): string {
-  const trimmed = data.trim();
-  if (trimmed.startsWith('data:')) {
-    return trimmed;
+function isValidBase64Payload(data: string): boolean {
+  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+    return false;
   }
 
-  return `data:${mimeType || 'image/png'};base64,${trimmed}`;
+  const firstPaddingIndex = data.indexOf('=');
+  if (firstPaddingIndex === -1) {
+    return true;
+  }
+
+  const padding = data.slice(firstPaddingIndex);
+  return padding.length <= 2 && /^=+$/.test(padding);
+}
+
+function normalizeBase64ImageData(
+  data: string,
+  mimeType?: string,
+): { dataUri: string; base64Data: string; mimeType: string; decodedBytes: number } {
+  const trimmed = data.trim();
+  if (!trimmed) {
+    throw new Error('Image output data must contain non-empty base64 image data.');
+  }
+
+  let normalizedMimeType = mimeType || 'image/png';
+  let payload = trimmed;
+  if (trimmed.startsWith('data:')) {
+    const [metadata, rawPayload] = trimmed.split(',', 2);
+    if (!rawPayload || !metadata.toLowerCase().includes(';base64')) {
+      throw new Error(
+        'Only base64-encoded data URI image outputs are supported for multimodal grading.',
+      );
+    }
+    if (!metadata.toLowerCase().startsWith('data:image/')) {
+      throw new Error('Only image data URI outputs are supported for multimodal grading.');
+    }
+
+    normalizedMimeType = metadata.slice('data:'.length).split(';', 1)[0].trim();
+    payload = rawPayload;
+  }
+
+  const base64Data = payload.replace(/\s/g, '');
+  if (!isValidBase64Payload(base64Data)) {
+    throw new Error('Image output data must contain valid, non-empty base64 image data.');
+  }
+
+  const decodedBytes = getBase64DecodedBytes(base64Data);
+  if (decodedBytes <= 0) {
+    throw new Error('Image output data must contain non-empty base64 image data.');
+  }
+
+  return {
+    dataUri: `data:${normalizedMimeType};base64,${base64Data}`,
+    base64Data,
+    mimeType: normalizedMimeType,
+    decodedBytes,
+  };
 }
 
 function hasBlobRefImageValue(value: unknown): boolean {
@@ -193,38 +254,16 @@ function hasBlobRefImageValue(value: unknown): boolean {
   return false;
 }
 
-function getBase64ImageData(data: string): string {
-  const trimmed = data.trim();
-  if (!trimmed.startsWith('data:')) {
-    return trimmed;
-  }
-
-  const [metadata, payload] = trimmed.split(',', 2);
-  if (!payload || !metadata.toLowerCase().includes(';base64')) {
-    throw new Error(
-      'Only base64-encoded data URI image outputs are supported for multimodal grading.',
-    );
-  }
-  if (!metadata.toLowerCase().startsWith('data:image/')) {
-    throw new Error('Only image data URI outputs are supported for multimodal grading.');
-  }
-
-  return payload;
-}
-
 function getBase64DecodedBytes(base64Data: string): number {
-  const normalized = base64Data.replace(/\s/g, '');
-  if (!normalized) {
-    return 0;
-  }
-
-  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
-  return Math.floor((normalized.length * 3) / 4) - padding;
+  const padding = base64Data.endsWith('==') ? 2 : base64Data.endsWith('=') ? 1 : 0;
+  return Math.floor((base64Data.length * 3) / 4) - padding;
 }
 
 function imageOutputToImageUrl(
   image: ImageOutput,
-): { output: ImageOutput; url: string; decodedBytes: number } | undefined {
+):
+  | { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string; rawChars: number }
+  | undefined {
   if (image.blobRef || hasBlobRefImageValue(image.data)) {
     throw new Error(
       'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
@@ -239,14 +278,16 @@ function imageOutputToImageUrl(
       );
     }
 
-    const url = normalizeBase64ImageData(image.data, image.mimeType);
+    const normalized = normalizeBase64ImageData(image.data, image.mimeType);
     return {
       output: {
-        data: url,
-        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+        data: normalized.dataUri,
+        mimeType: normalized.mimeType,
       },
-      url,
-      decodedBytes: getBase64DecodedBytes(getBase64ImageData(image.data)),
+      dataUri: normalized.dataUri,
+      base64Data: normalized.base64Data,
+      mimeType: normalized.mimeType,
+      rawChars: image.data.length,
     };
   }
 
@@ -255,10 +296,10 @@ function imageOutputToImageUrl(
 
 export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   imageOutputs: ImageOutput[];
-  imageUrls: string[];
+  imageData: { dataUri: string; base64Data: string; mimeType: string }[];
 } {
   if (!images?.length) {
-    return { imageOutputs: [], imageUrls: [] };
+    return { imageOutputs: [], imageData: [] };
   }
 
   const maxImages = getEnvInt('PROMPTFOO_GRADING_MAX_IMAGES', DEFAULT_GRADING_MAX_IMAGES);
@@ -276,30 +317,62 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES',
     DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES,
   );
-  const materializedImages = images
-    .map(imageOutputToImageUrl)
-    .filter((image): image is { output: ImageOutput; url: string; decodedBytes: number } =>
-      Boolean(image),
-    );
+  const maxRawChars = getEnvInt(
+    'PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS',
+    DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS,
+  );
+  const maxTotalRawChars = getEnvInt(
+    'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS',
+    DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS,
+  );
+  const materializedImages = images.map(imageOutputToImageUrl).filter(
+    (
+      image,
+    ): image is {
+      output: ImageOutput;
+      dataUri: string;
+      base64Data: string;
+      mimeType: string;
+      rawChars: number;
+    } => Boolean(image),
+  );
 
   let totalImageBytes = 0;
+  let totalRawChars = 0;
   for (const image of materializedImages) {
-    if (image.decodedBytes > maxImageBytes) {
+    const decodedBytes = getBase64DecodedBytes(image.base64Data);
+    if (decodedBytes > maxImageBytes) {
       throw new Error(
-        `Image output exceeds multimodal grading size limit: ${image.decodedBytes} bytes, maximum is ${maxImageBytes}.`,
+        `Image output exceeds multimodal grading size limit: ${decodedBytes} bytes, maximum is ${maxImageBytes}.`,
       );
     }
-    totalImageBytes += image.decodedBytes;
+    const imageRawChars = Math.max(image.rawChars, image.dataUri.length);
+    if (imageRawChars > maxRawChars) {
+      throw new Error(
+        `Image output raw data exceeds multimodal grading size limit: ${imageRawChars} characters, maximum is ${maxRawChars}.`,
+      );
+    }
+    totalImageBytes += decodedBytes;
     if (totalImageBytes > maxTotalImageBytes) {
       throw new Error(
         `Image outputs exceed multimodal grading total size limit: ${totalImageBytes} bytes, maximum is ${maxTotalImageBytes}.`,
+      );
+    }
+    totalRawChars += imageRawChars;
+    if (totalRawChars > maxTotalRawChars) {
+      throw new Error(
+        `Image outputs raw data exceeds multimodal grading total size limit: ${totalRawChars} characters, maximum is ${maxTotalRawChars}.`,
       );
     }
   }
 
   return {
     imageOutputs: materializedImages.map((image) => image.output),
-    imageUrls: materializedImages.map((image) => image.url),
+    imageData: materializedImages.map((image) => ({
+      dataUri: image.dataUri,
+      base64Data: image.base64Data,
+      mimeType: image.mimeType,
+    })),
   };
 }
 
@@ -322,44 +395,87 @@ function appendImagesToContent(
   return [{ type: 'text', text: JSON.stringify(content) }, ...imageParts];
 }
 
-function appendImagesToChatPrompt(renderedPrompt: string, imageUrls: string[]): string {
+function getMultimodalPromptFormat(provider: ApiProvider): 'anthropic' | 'openai' {
+  try {
+    const providerId = provider.id();
+    if (/^anthropic(?::|$)/i.test(providerId)) {
+      return 'anthropic';
+    }
+  } catch {
+    // Fall back to the broadly supported OpenAI-compatible shape.
+  }
+
+  return 'openai';
+}
+
+function buildImageParts(
+  images: { dataUri: string; base64Data: string; mimeType: string }[],
+  format: 'anthropic' | 'openai',
+): MultimodalPromptPart[] {
+  return images.map<MultimodalPromptPart>((image) => {
+    if (format === 'anthropic') {
+      return {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: image.mimeType,
+          data: image.base64Data,
+        },
+      };
+    }
+
+    return {
+      type: 'image_url',
+      image_url: { url: image.dataUri },
+    };
+  });
+}
+
+function appendImagesToChatPrompt(
+  renderedPrompt: string,
+  images: { dataUri: string; base64Data: string; mimeType: string }[],
+  format: 'anthropic' | 'openai',
+): string {
   const imageParts: MultimodalPromptPart[] = [
     {
       type: 'text',
       text: MULTIMODAL_GRADING_INSTRUCTION,
     },
-    ...imageUrls.map<MultimodalPromptPart>((url) => ({
-      type: 'image_url',
-      image_url: { url },
-    })),
+    ...buildImageParts(images, format),
   ];
 
-  try {
-    const parsed = JSON.parse(renderedPrompt);
-    if (isChatMessageArray(parsed)) {
-      const messages = parsed.map((message) => ({ ...message }));
-      let userMessageIndex = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
-          userMessageIndex = i;
-          break;
-        }
-      }
-
-      if (userMessageIndex >= 0) {
-        const userMessage = messages[userMessageIndex];
-        messages[userMessageIndex] = {
-          ...userMessage,
-          content: appendImagesToContent(userMessage.content, imageParts),
-        };
-      } else {
-        messages.push({ role: 'user', content: imageParts });
-      }
-
-      return JSON.stringify(messages);
+  let parsed: ChatMessageLike[] | undefined;
+  const trimmedPrompt = renderedPrompt.trim();
+  if (trimmedPrompt.startsWith('- role:')) {
+    parsed = parseChatPrompt<ChatMessageLike[] | undefined>(renderedPrompt, undefined);
+  } else {
+    try {
+      parsed = JSON.parse(renderedPrompt);
+    } catch {
+      // Non-JSON prompts are still valid text prompts. Wrap them below.
     }
-  } catch {
-    // Non-JSON prompts are still valid text prompts. Wrap them below.
+  }
+  if (isChatMessageArray(parsed)) {
+    const messages = parsed.map((message) => ({ ...message }));
+    let userMessageIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        userMessageIndex = i;
+        break;
+      }
+    }
+
+    if (userMessageIndex >= 0) {
+      const userMessage = messages[userMessageIndex];
+      messages[userMessageIndex] = {
+        ...userMessage,
+        content: appendImagesToContent(userMessage.content, imageParts),
+      };
+    } else {
+      messages.push({ role: 'user', content: imageParts });
+    }
+
+    return JSON.stringify(messages);
   }
 
   return JSON.stringify([
@@ -373,20 +489,22 @@ function appendImagesToChatPrompt(renderedPrompt: string, imageUrls: string[]): 
 async function buildGradingProviderPrompt(
   renderedPrompt: string,
   images?: ImageOutput[],
+  provider?: ApiProvider,
 ): Promise<{ prompt: string; imageCount: number }> {
   if (!images?.length) {
     return { prompt: renderedPrompt, imageCount: 0 };
   }
 
-  const { imageUrls } = materializeImageOutputsForGrading(images);
+  const { imageData } = materializeImageOutputsForGrading(images);
 
-  if (imageUrls.length === 0) {
+  if (imageData.length === 0) {
     return { prompt: renderedPrompt, imageCount: 0 };
   }
 
+  const promptFormat = provider ? getMultimodalPromptFormat(provider) : 'openai';
   return {
-    prompt: appendImagesToChatPrompt(renderedPrompt, imageUrls),
-    imageCount: imageUrls.length,
+    prompt: appendImagesToChatPrompt(renderedPrompt, imageData, promptFormat),
+    imageCount: imageData.length,
   };
 }
 
@@ -457,10 +575,6 @@ export async function runJsonGradingPrompt({
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
-  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
-    renderedPrompt,
-    images,
-  );
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -470,6 +584,11 @@ export async function runJsonGradingPrompt({
     grading.provider,
     defaultProvider,
     checkName,
+  );
+  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
+    renderedPrompt,
+    images,
+    finalProvider,
   );
   const resp = await callProviderWithContext(
     finalProvider,

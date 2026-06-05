@@ -8,6 +8,8 @@ import {
 } from '../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../src/remoteGrading';
 
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
+
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
@@ -23,6 +25,12 @@ vi.mock('../src/providers/shared', () => ({
 vi.mock('../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationHeaders: vi.fn(),
   getRemoteGenerationUrl: vi.fn(),
+}));
+
+vi.mock('../src/logger', () => ({
+  default: {
+    debug: mockLoggerDebug,
+  },
 }));
 
 describe('doRemoteGrading', () => {
@@ -67,6 +75,47 @@ describe('doRemoteGrading', () => {
       expect.objectContaining({
         method: 'POST',
         headers: { authorization: 'Bearer test' },
+      }),
+      1234,
+    );
+  });
+
+  it('redacts inline image data from remote grading debug logs', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    await doRemoteGrading({
+      task: 'llm-rubric',
+      rubric: 'Only pass if the response is correct.',
+      output: 'Example output',
+      vars: {},
+      images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+    });
+
+    expect(mockLoggerDebug).toHaveBeenCalledWith('Performing remote grading', {
+      body: expect.objectContaining({
+        images: [{ data: '[REDACTED_IMAGE_DATA]', mimeType: 'image/png' }],
+      }),
+    });
+    expect(JSON.stringify(mockLoggerDebug.mock.calls)).not.toContain('abc123');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://api.promptfoo.test/task',
+      expect.objectContaining({
+        body: expect.stringContaining('abc123'),
       }),
       1234,
     );
