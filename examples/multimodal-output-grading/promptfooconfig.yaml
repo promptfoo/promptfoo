@@ -14,8 +14,9 @@ providers:
 defaultTest:
   options:
     # Any vision-capable grader works: OpenAI (chat/responses), Anthropic,
-    # Bedrock Claude/Nova, Google Gemini (AI Studio or Vertex), or the default
-    # remote grader. Swap this id to grade with a different provider.
+    # Bedrock Claude/Nova, or Google Gemini (AI Studio or Vertex). Without a
+    # provider, ordinary llm-rubric uses your local default grader. Swap this id
+    # to grade with a different provider.
     provider: openai:gpt-4o-mini
 
 tests:
