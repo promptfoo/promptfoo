@@ -166,6 +166,65 @@ applies to other model-graded assertions that use a text judge; see the
 [model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
 for the full metric list.
 
+## Grading image (multimodal) outputs
+
+When a provider returns image outputs (for example image-generation models, or a target that
+attaches images to its response), `llm-rubric` automatically attaches those images to the grading
+prompt so a vision-capable grader can judge the visual content directly. The base64/data-URI text is
+replaced with a short placeholder in the text channel and the real image is sent as a proper
+multimodal message part, so multi-megabyte base64 never bloats the prompt or the stored results.
+
+Point the grader at a vision-capable model and write the rubric against what should be visible:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - openai:image:gpt-image-1
+defaultTest:
+  options:
+    // highlight-next-line
+    provider: openai:gpt-4o-mini # a vision-capable grader
+prompts:
+  - 'A red bicycle on a beach at sunset'
+tests:
+  - assert:
+      - type: llm-rubric
+        value: The image shows a red bicycle on a beach.
+```
+
+The image content is formatted for the grader's API automatically. Validated grader families:
+
+| Grader                    | Example id                                           | Image format sent        |
+| ------------------------- | ---------------------------------------------------- | ------------------------ |
+| OpenAI (chat)             | `openai:gpt-4o-mini`                                 | `image_url` data URI     |
+| OpenAI (responses)        | `openai:responses:gpt-4o-mini`                       | `input_image`            |
+| Anthropic                 | `anthropic:messages:claude-haiku-4-5`                | base64 `image` block     |
+| Amazon Bedrock (Claude)   | `bedrock:us.anthropic.claude-haiku-4-5-...`          | base64 `image` block     |
+| Amazon Bedrock (Nova)     | `bedrock:amazon.nova-lite-v1:0`                      | Nova `image` bytes block |
+| Google AI Studio / Vertex | `google:gemini-2.5-flash`, `vertex:gemini-2.5-flash` | `inlineData`             |
+| Promptfoo remote grader   | _(default when no grader is configured)_             | data URI                 |
+
+Only base64 or data-URI image outputs are supported. Remote `http(s)://` image URLs and blob-backed
+outputs are rejected (to avoid the grader fetching arbitrary URLs); configure the provider to return
+inline base64/data-URI image output instead.
+
+### Image grading limits
+
+These limits guard against oversized payloads and can be tuned via environment variables:
+
+| Variable                                      | Default                      | Purpose                                      |
+| --------------------------------------------- | ---------------------------- | -------------------------------------------- |
+| `PROMPTFOO_GRADING_MAX_IMAGES`                | `4`                          | Max images attached to one grading prompt    |
+| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20MB`                       | Max decoded size of a single image           |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20MB`                       | Max combined decoded size of all images      |
+| `PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS`       | derived from max bytes       | Max raw base64/data-URI characters per image |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | derived from max total bytes | Max combined raw characters across images    |
+
+:::note
+When grading runs on Promptfoo's remote grader (the default when no grader provider is configured),
+the image data is uploaded to that grader. Configure a local vision grader (as above) if you need the
+image to stay on your own provider.
+:::
+
 ## Customizing the rubric prompt
 
 For more control over the `llm-rubric` evaluation, you can set a custom prompt using the `rubricPrompt` property:
