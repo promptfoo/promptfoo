@@ -292,7 +292,7 @@ describe('matchesLlmRubric', () => {
           { type: 'text', text: 'Grade this output: Generated image' },
           {
             type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
           { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
         ],
@@ -309,6 +309,44 @@ describe('matchesLlmRubric', () => {
     );
     expect(result.metadata).toEqual({
       renderedGradingPrompt: 'Grade this output: Generated image',
+      renderedGradingPromptImages: 1,
+    });
+  });
+
+  it('should replace image data URI text output when attaching image outputs to the grading provider prompt', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const imageOutput = 'data:image/png;base64,abc123';
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      imageOutput,
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: imageOutput,
+          images: [{ data: imageOutput, mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)[0].content[0]).toEqual({
+      type: 'text',
+      text: 'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
+    });
+    expect(result.metadata).toEqual({
+      renderedGradingPrompt:
+        'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
       renderedGradingPromptImages: 1,
     });
   });
@@ -349,7 +387,7 @@ describe('matchesLlmRubric', () => {
           { type: 'text', text: 'Grade this output: Generated image' },
           {
             type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
           { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
         ],
@@ -389,7 +427,7 @@ describe('matchesLlmRubric', () => {
         content: [
           {
             type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as part of <Output>. Grade visual content as well as any text according to the rubric.',
+            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
           { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
         ],
@@ -1706,6 +1744,36 @@ Evaluate the response
     });
     expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote multimodal grading passed');
+  });
+
+  it('should replace image data URI text output for remote multimodal grading', async () => {
+    const rubric = 'Does the image match?';
+    const llmOutput = 'data:image/webp;base64,abc123';
+    const grading = {};
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote multimodal grading passed',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    await matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, {
+      providerResponse: {
+        output: llmOutput,
+        images: [{ data: llmOutput, mimeType: 'image/webp' }],
+      },
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: '[Image output attached. Inspect the attached image directly for visual grading.]',
+      vars: {},
+      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+    });
   });
 
   it('should use local multimodal grading when a local grading provider is configured', async () => {

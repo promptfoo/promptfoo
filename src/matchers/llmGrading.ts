@@ -38,6 +38,9 @@ type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
 };
 
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
+
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
   B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
@@ -121,6 +124,43 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
   };
 }
 
+function getDataUriPayload(data: string): string | undefined {
+  const [metadata, payload] = data.trim().split(',', 2);
+  if (!payload || !metadata.toLowerCase().startsWith('data:image/')) {
+    return undefined;
+  }
+  return payload;
+}
+
+function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
+  if (!imageOutputs?.length) {
+    return llmOutput;
+  }
+
+  const trimmedOutput = llmOutput.trim();
+  if (!trimmedOutput) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  if (/^data:image\/[^;,]+;base64,/i.test(trimmedOutput)) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  if (
+    imageOutputs.some((image) => {
+      if (!image.data) {
+        return false;
+      }
+      const imageData = image.data.trim();
+      return imageData === trimmedOutput || getDataUriPayload(imageData) === trimmedOutput;
+    })
+  ) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  return llmOutput;
+}
+
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -147,6 +187,7 @@ export async function matchesLlmRubric(
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
   const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
+  const gradingOutput = getGradingOutputForImages(llmOutput, imageOutputs);
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -159,7 +200,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          output: llmOutput,
+          output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
         })),
@@ -184,7 +225,7 @@ export async function matchesLlmRubric(
       throwOnError: options?.throwOnError,
       images: imageOutputs,
       vars: {
-        output: tryParse(llmOutput),
+        output: tryParse(gradingOutput),
         rubric,
         ...(vars || {}),
       },
