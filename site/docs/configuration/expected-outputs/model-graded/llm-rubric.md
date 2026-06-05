@@ -203,26 +203,31 @@ The image content is formatted for the grader's API automatically. Validated gra
 | Google AI Studio / Vertex | `google:gemini-2.5-flash`, `vertex:gemini-2.5-flash` | `inlineData`             |
 | Promptfoo remote grader   | _(default when no grader is configured)_             | data URI                 |
 
-Only base64 or data-URI image outputs are supported. Remote `http(s)://` image URLs and blob-backed
-outputs are rejected (to avoid the grader fetching arbitrary URLs); configure the provider to return
-inline base64/data-URI image output instead.
+Large image outputs are externalized to the local blob store before assertions run; `llm-rubric`
+resolves those blobs automatically, so this works out of the box. Only inline base64 / data-URI image
+output (or its blob reference) is supported. Remote `http(s)://` image URLs are rejected so the grader
+never fetches arbitrary URLs — configure the provider to return inline base64/data-URI image output
+instead.
 
 ### Image grading limits
 
-These limits guard against oversized payloads and can be tuned via environment variables:
+These limits guard against oversized payloads when grading **locally**. Each value is an **integer
+byte count** (or count) — unit suffixes like `20MB` are not parsed (`20MB` is read as `20`).
 
 | Variable                                      | Default                      | Purpose                                      |
 | --------------------------------------------- | ---------------------------- | -------------------------------------------- |
 | `PROMPTFOO_GRADING_MAX_IMAGES`                | `4`                          | Max images attached to one grading prompt    |
-| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20MB`                       | Max decoded size of a single image           |
-| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20MB`                       | Max combined decoded size of all images      |
+| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20971520` (20 MiB)          | Max decoded size of a single image           |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20971520` (20 MiB)          | Max combined decoded size of all images      |
 | `PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS`       | derived from max bytes       | Max raw base64/data-URI characters per image |
 | `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | derived from max total bytes | Max combined raw characters across images    |
 
 :::note
-When grading runs on Promptfoo's remote grader (the default when no grader provider is configured),
-the image data is uploaded to that grader. Configure a local vision grader (as above) if you need the
-image to stay on your own provider.
+These variables apply to **local** grading only. When grading runs on Promptfoo's **remote** grader
+(the default when no grader provider is configured), the image data is uploaded to that grader, which
+enforces its own fixed caps (4 images, 20 MiB per image and in total) and does not read these
+variables. Configure a local vision grader (as above) to tune the limits or to keep the image on your
+own provider.
 :::
 
 ## Customizing the rubric prompt
