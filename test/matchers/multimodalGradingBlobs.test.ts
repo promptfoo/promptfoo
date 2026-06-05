@@ -3,8 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
+import { setGradingBlobResolver } from '../../src/matchers/imageBlobResolver';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { createMockProvider } from '../factories/provider';
 
@@ -20,10 +21,17 @@ describe('multimodal grading with blob-backed (externalized) image outputs', () 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-blob-grading-'));
     provider = new FilesystemBlobStorageProvider({ basePath: tempDir });
     setBlobStorageProvider(provider);
+    // The matcher resolves blobs via an injected resolver (registered by the evaluator
+    // at runtime); wire it to the real store so this test exercises the full round-trip.
+    setGradingBlobResolver(async (hash) => {
+      const blob = await getBlobByHash(hash);
+      return { data: blob.data, mimeType: blob.metadata.mimeType };
+    });
   });
 
   afterEach(() => {
     resetBlobStorageProvider();
+    setGradingBlobResolver(undefined);
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 

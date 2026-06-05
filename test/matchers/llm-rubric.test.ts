@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { setGradingBlobResolver } from '../../src/matchers/imageBlobResolver';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -24,11 +25,9 @@ vi.mock('../../src/remoteGrading', () => ({
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
-const { mockGetBlobByHash } = vi.hoisted(() => ({ mockGetBlobByHash: vi.fn() }));
-vi.mock('../../src/blobs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/blobs')>()),
-  getBlobByHash: mockGetBlobByHash,
-}));
+// The matcher resolves blob-backed images via an injected resolver (registered by the
+// evaluator at runtime). Register a mock resolver per-test instead of mocking the store.
+const mockBlobResolver = vi.fn();
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -71,6 +70,7 @@ describe('matchesLlmRubric', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
+    setGradingBlobResolver(mockBlobResolver);
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
 
@@ -1034,10 +1034,7 @@ describe('matchesLlmRubric', () => {
 
   it('should resolve blob-backed image outputs and attach them to the grader', async () => {
     const hash = 'a'.repeat(64);
-    mockGetBlobByHash.mockResolvedValue({
-      data: Buffer.from('hello'),
-      metadata: { mimeType: 'image/png' },
-    });
+    mockBlobResolver.mockResolvedValue({ data: Buffer.from('hello'), mimeType: 'image/png' });
     const provider = createMockProvider({
       response: {
         output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
@@ -1070,7 +1067,7 @@ describe('matchesLlmRubric', () => {
       },
     );
 
-    expect(mockGetBlobByHash).toHaveBeenCalledWith(hash);
+    expect(mockBlobResolver).toHaveBeenCalledWith(hash);
     const prompt = provider.callApi.mock.calls[0][0] as string;
     const content = JSON.parse(prompt)[0].content;
     // The resolved blob is attached as an image part...
@@ -1088,7 +1085,7 @@ describe('matchesLlmRubric', () => {
 
   it('should fail clearly when a blob-backed image output cannot be resolved', async () => {
     const hash = 'b'.repeat(64);
-    mockGetBlobByHash.mockRejectedValue(new Error('blob not found'));
+    mockBlobResolver.mockRejectedValue(new Error('blob not found'));
     const provider = createMockProvider({
       response: {
         output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
@@ -1120,6 +1117,127 @@ describe('matchesLlmRubric', () => {
         },
       ),
     ).rejects.toThrow('Failed to load blob-backed image output for multimodal grading');
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  const blobRefFor = (hash: string, sizeBytes: number) => ({
+    uri: `promptfoo://blob/${hash}`,
+    hash,
+    mimeType: 'image/png',
+    sizeBytes,
+    provider: 'filesystem',
+  });
+
+  it('should reject too many blob-backed images before reading any blob', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_MAX_IMAGES: '1' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ blobRef: blobRefFor('a'.repeat(64), 5) }, { blobRef: blobRefFor('b'.repeat(64), 5) }],
+            },
+          },
+        ),
+      ).rejects.toThrow('Too many images for multimodal grading: received 2, maximum is 1.');
+    } finally {
+      restoreEnv();
+    }
+    expect(mockBlobResolver).not.toHaveBeenCalled();
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should reject a blob image whose declared sizeBytes exceeds the limit before reading it', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ blobRef: blobRefFor('c'.repeat(64), 30) }],
+            },
+          },
+        ),
+      ).rejects.toThrow('Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.');
+    } finally {
+      restoreEnv();
+    }
+    expect(mockBlobResolver).not.toHaveBeenCalled();
+  });
+
+  it('should reject a blob whose actual read size exceeds the limit even if sizeBytes under-reports', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10' });
+    mockBlobResolver.mockResolvedValue({ data: Buffer.alloc(30), mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    const hash = 'd'.repeat(64);
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ blobRef: blobRefFor(hash, 1) }],
+            },
+          },
+        ),
+      ).rejects.toThrow('Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.');
+    } finally {
+      restoreEnv();
+    }
+    expect(mockBlobResolver).toHaveBeenCalledWith(hash);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should count mimeType length in the raw-char cap for raw base64 image outputs', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '20' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              // Tiny base64 payload, huge mimeType: only caught once mimeType counts toward the cap.
+              images: [{ data: 'abc', mimeType: `image/${'x'.repeat(30)}` }],
+            },
+          },
+        ),
+      ).rejects.toThrow('Image output raw data exceeds multimodal grading size limit');
+    } finally {
+      restoreEnv();
+    }
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 

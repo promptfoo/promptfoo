@@ -13,6 +13,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { getBlobByHash } from './blobs';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -21,6 +22,7 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
+import { setGradingBlobResolver } from './matchers/imageBlobResolver';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
@@ -122,6 +124,14 @@ import type {
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
+
+// Wire the core grading matcher to the blob store so it can resolve blob-backed image
+// outputs (externalized before assertions run) without importing storage itself. The
+// adapter (StoredBlob -> { data, mimeType }) lives here, in the layer that owns persistence.
+setGradingBlobResolver(async (hash) => {
+  const blob = await getBlobByHash(hash);
+  return { data: blob.data, mimeType: blob.metadata.mimeType };
+});
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
