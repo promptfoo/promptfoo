@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade image (multimodal) outputs with a vision-capable LLM judge
+
+prompts:
+  - 'A {{color}} bicycle leaning against a brick wall'
+
+# The target generates an image. Its image output is attached to the grading
+# prompt automatically so the judge can inspect the actual pixels.
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024
+
+defaultTest:
+  options:
+    # Any vision-capable grader works: OpenAI (chat/responses), Anthropic,
+    # Bedrock Claude/Nova, Google Gemini (AI Studio or Vertex), or the default
+    # remote grader. Swap this id to grade with a different provider.
+    provider: openai:gpt-4o-mini
+
+tests:
+  - vars:
+      color: red
+    assert:
+      - type: llm-rubric
+        # The grader sees the generated image, not the base64 text.
+        value: The image shows a predominantly red bicycle.
+  - vars:
+      color: blue
+    assert:
+      - type: llm-rubric
+        value: The image shows a predominantly blue bicycle.

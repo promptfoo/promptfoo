@@ -59,6 +59,19 @@ type EnvVars = {
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
+
+  // Multimodal (image) output grading limits — see src/matchers/rubric.ts.
+  /** Max number of image outputs attached to a single grading prompt. Default: 4. */
+  PROMPTFOO_GRADING_MAX_IMAGES?: number;
+  /** Max decoded size (bytes) of a single attached grading image. Default: 20MB. */
+  PROMPTFOO_GRADING_IMAGE_MAX_BYTES?: number;
+  /** Max combined decoded size (bytes) of all attached grading images. Default: 20MB. */
+  PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES?: number;
+  /** Max raw base64/data-URI characters for a single grading image. Default: derived from PROMPTFOO_GRADING_IMAGE_MAX_BYTES. */
+  PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS?: number;
+  /** Max combined raw base64/data-URI characters for all grading images. Default: derived from PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES. */
+  PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS?: number;
+
   PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
   PROMPTFOO_STRIP_METADATA?: boolean;
   PROMPTFOO_STRIP_PROMPT_TEXT?: boolean;

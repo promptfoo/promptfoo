@@ -313,6 +313,74 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should accept URL-safe base64 image outputs and canonicalize them to standard base64', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    // `q-_z` is valid base64url; canonicalized to standard base64 it is `q+/z`.
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'q-_z', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const imagePart = JSON.parse(prompt)[0].content.at(-1);
+    expect(imagePart).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,q+/z' },
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+    expect(provider.callApi).toHaveBeenCalled();
+  });
+
+  it('should accept URL-safe base64 inside a data URI image output', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,q-_z', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const imagePart = JSON.parse(prompt)[0].content.at(-1);
+    expect(imagePart).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,q+/z' },
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+  });
+
   it('should replace image data URI text output when attaching image outputs to the grading provider prompt', async () => {
     const provider = createMockProvider({
       response: {

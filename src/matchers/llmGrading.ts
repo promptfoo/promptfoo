@@ -23,7 +23,13 @@ import {
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import {
+  ATTACHED_IMAGE_OUTPUT_PLACEHOLDER,
+  fail,
+  graderFail,
+  normalizeMatcherTokenUsage,
+  tryParse,
+} from './shared';
 
 import type {
   Assertion,
@@ -37,9 +43,6 @@ import type {
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
 };
-
-const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
-  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',

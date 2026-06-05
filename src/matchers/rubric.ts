@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
+import { toDataUri } from '../util/dataUrl';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
@@ -14,7 +15,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { graderFail, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, MULTIMODAL_GRADING_INSTRUCTION, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   ApiProvider,
@@ -31,14 +32,9 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+// Headroom added per image for the `data:image/...;base64,` prefix when deriving
+// the raw-character cap from a byte limit.
 const DATA_URI_METADATA_MAX_CHARS = 256;
-const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
-  Math.ceil(DEFAULT_GRADING_IMAGE_MAX_BYTES / 3) * 4 + DATA_URI_METADATA_MAX_CHARS;
-const DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS =
-  Math.ceil(DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES / 3) * 4 +
-  DEFAULT_GRADING_MAX_IMAGES * DATA_URI_METADATA_MAX_CHARS;
-const MULTIMODAL_GRADING_INSTRUCTION =
-  'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/i;
 const RESPONSES_PROVIDER_CLASS_NAMES = new Set([
@@ -192,7 +188,10 @@ function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
 }
 
 function isValidBase64Payload(data: string): boolean {
-  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+  // Accept both the standard (`+`/`/`) and URL-safe (`-`/`_`) base64 alphabets.
+  // Providers that forward upstream bytes (HTTP/custom/Python) commonly emit
+  // base64url, and `ImageOutput.data` is documented as "data URI or base64".
+  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/_-]*={0,2}$/.test(data)) {
     return false;
   }
 
@@ -203,6 +202,17 @@ function isValidBase64Payload(data: string): boolean {
 
   const padding = data.slice(firstPaddingIndex);
   return padding.length <= 2 && /^=+$/.test(padding);
+}
+
+/**
+ * Canonicalize a (possibly URL-safe, possibly unpadded) base64 string to the
+ * standard alphabet with padding, so downstream data URI / Anthropic / Google
+ * payloads are always well-formed regardless of the encoding the provider used.
+ */
+function toStandardBase64(base64: string): string {
+  const standardized = base64.replace(/-/g, '+').replace(/_/g, '/');
+  const remainder = standardized.length % 4;
+  return remainder === 0 ? standardized : standardized + '='.repeat(4 - remainder);
 }
 
 function normalizeBase64ImageData(
@@ -217,7 +227,11 @@ function normalizeBase64ImageData(
   let normalizedMimeType = mimeType || 'image/png';
   let payload = trimmed;
   if (trimmed.startsWith('data:')) {
-    const [metadata, rawPayload] = trimmed.split(',', 2);
+    // Split on the first comma only; the base64 alphabet never contains a comma,
+    // so anything after it is part of the payload (`split(',', 2)` would drop it).
+    const commaIndex = trimmed.indexOf(',');
+    const metadata = commaIndex === -1 ? '' : trimmed.slice(0, commaIndex);
+    const rawPayload = commaIndex === -1 ? '' : trimmed.slice(commaIndex + 1);
     if (!rawPayload || !metadata.toLowerCase().includes(';base64')) {
       throw new Error(
         'Only base64-encoded data URI image outputs are supported for multimodal grading.',
@@ -231,10 +245,17 @@ function normalizeBase64ImageData(
     payload = rawPayload;
   }
 
-  const base64Data = payload.replace(/\s/g, '');
-  if (!isValidBase64Payload(base64Data)) {
-    throw new Error('Image output data must contain valid, non-empty base64 image data.');
+  // Strip whitespace (some providers line-wrap base64) and accept both the
+  // standard and URL-safe alphabets. URL-safe input is canonicalized to standard
+  // base64 (with padding) so downstream data URI / provider payloads are
+  // well-formed; standard base64 is left untouched to preserve existing outputs.
+  const rawBase64 = payload.replace(/\s/g, '');
+  if (!isValidBase64Payload(rawBase64)) {
+    throw new Error(
+      'Image output data is not valid base64. Provide a base64 or base64url encoded image, optionally wrapped in a data: URI.',
+    );
   }
+  const base64Data = /[-_]/.test(rawBase64) ? toStandardBase64(rawBase64) : rawBase64;
 
   const decodedBytes = getBase64DecodedBytes(base64Data);
   if (decodedBytes <= 0) {
@@ -242,7 +263,7 @@ function normalizeBase64ImageData(
   }
 
   return {
-    dataUri: `data:${normalizedMimeType};base64,${base64Data}`,
+    dataUri: toDataUri(normalizedMimeType, base64Data),
     base64Data,
     mimeType: normalizedMimeType,
     decodedBytes,
@@ -302,7 +323,9 @@ function imageOutputToImageUrl(
       dataUri: normalized.dataUri,
       base64Data: normalized.base64Data,
       mimeType: normalized.mimeType,
-      rawChars: image.data.length,
+      // Measure the canonical data URI rather than the raw input so line-wrapping
+      // whitespace can't inflate the count and falsely trip the raw-char limit.
+      rawChars: normalized.dataUri.length,
     };
   }
 
@@ -332,13 +355,16 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES',
     DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES,
   );
+  // Derive the raw-char caps from the *resolved* byte limits (not the compile-time
+  // defaults) so raising PROMPTFOO_GRADING_IMAGE_MAX_BYTES alone is sufficient and
+  // isn't silently clamped by a separate raw-char default.
   const maxRawChars = getEnvInt(
     'PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS',
-    DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS,
+    Math.ceil(maxImageBytes / 3) * 4 + DATA_URI_METADATA_MAX_CHARS,
   );
   const maxTotalRawChars = getEnvInt(
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS',
-    DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS,
+    Math.ceil(maxTotalImageBytes / 3) * 4 + maxImages * DATA_URI_METADATA_MAX_CHARS,
   );
   const materializedImages = images.map(imageOutputToImageUrl).filter(
     (
