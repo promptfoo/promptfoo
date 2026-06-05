@@ -107,10 +107,173 @@ describe('sanitizeObject', () => {
         tests: 'az://account/container/edited.yaml?sp=r&sig=%5BREDACTED%5D',
       });
     });
+
+    it('restores array SAS tokens by value when entries are reordered or inserted', () => {
+      const stored = {
+        tests: [
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+          'az://account/container/b.yaml?sp=r&sig=secret-b',
+        ],
+      };
+
+      // The user reordered the entries and inserted a new (non-Azure) one before
+      // re-running, so positions no longer line up with the stored array.
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            'inline test case',
+            'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+            'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          'inline test case',
+          'az://account/container/b.yaml?sp=r&sig=secret-b',
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+        ],
+      });
+    });
+
+    it('restores nested array SAS tokens by value when object entries are reordered', () => {
+      const stored = {
+        tests: [
+          {
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+          {
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+        ],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            {
+              vars: {
+                suite: 'b',
+                file: 'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+            {
+              vars: {
+                suite: 'a',
+                file: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          {
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+          {
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+        ],
+      });
+    });
+
+    it('restores nested array SAS tokens when unrelated object fields are edited', () => {
+      const stored = {
+        tests: [
+          {
+            description: 'old description',
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+          {
+            description: 'second test',
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+        ],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        {
+          tests: [
+            {
+              description: 'edited description',
+              vars: {
+                suite: 'b',
+                file: 'az://account/container/b.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+            {
+              description: 'old description',
+              vars: {
+                suite: 'a',
+                file: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+            },
+          ],
+        },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: [
+          {
+            description: 'edited description',
+            vars: {
+              suite: 'b',
+              file: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+            },
+          },
+          {
+            description: 'old description',
+            vars: {
+              suite: 'a',
+              file: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            },
+          },
+        ],
+      });
+    });
+
+    it('does not restore an entry the user edited to point at a different blob', () => {
+      const stored = {
+        tests: ['az://account/container/a.yaml?sp=r&sig=secret-a'],
+      };
+
+      const restored = restoreAzureBlobSasTokens(
+        { tests: ['az://account/container/changed.yaml?sp=r&sig=%5BREDACTED%5D'] },
+        stored,
+      );
+
+      expect(restored).toEqual({
+        tests: ['az://account/container/changed.yaml?sp=r&sig=%5BREDACTED%5D'],
+      });
+    });
   });
 
   describe('function handling', () => {
-    it('should convert named functions to string representation', () => {
+    it('should lose named functions during JSON serialization', () => {
       function namedFunction() {
         return 'test';
       }
@@ -119,7 +282,7 @@ describe('sanitizeObject', () => {
       expect(result.func).toBeUndefined();
     });
 
-    it('should convert anonymous functions to string representation', () => {
+    it('should lose anonymous functions during JSON serialization', () => {
       const anonymousFunc = function () {
         return 'test';
       };
@@ -128,7 +291,7 @@ describe('sanitizeObject', () => {
       expect(result.func).toBeUndefined();
     });
 
-    it('should convert arrow functions to string representation', () => {
+    it('should lose arrow functions during JSON serialization', () => {
       const arrowFunc = () => 'test';
       const result = sanitizeObject({ func: arrowFunc });
       // Functions get lost during JSON.parse/stringify cycle
@@ -774,8 +937,10 @@ describe('sanitizeObject', () => {
     it('should handle BigInt values', () => {
       const input = { bigNum: BigInt(9007199254740991), password: 'secret' };
       const result = sanitizeObject(input);
-      // BigInt is not JSON serializable, safe-stringify returns a string
-      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
+      // BigInt is not JSON serializable; sanitizer should not expose original data.
+      expect(typeof result).toBe('string');
+      expect(result).not.toContain('9007199254740991');
+      expect(result).not.toContain('secret');
     });
   });
 

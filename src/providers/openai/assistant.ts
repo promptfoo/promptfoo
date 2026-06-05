@@ -4,7 +4,12 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
@@ -102,15 +107,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
+    const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
@@ -223,6 +220,27 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.assistantConfig.modelName || this.assistantId,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: { temperature: this.assistantConfig.temperature ?? undefined },
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
@@ -235,7 +253,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
-      defaultHeaders: this.assistantConfig.headers,
+      defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),
     });
 
     const messages = parseChatPrompt(prompt, [

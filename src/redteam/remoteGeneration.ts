@@ -30,6 +30,24 @@ export function getRemoteGenerationUrl(): string {
 }
 
 /**
+ * Builds headers for a remote-generation request.
+ *
+ * Authentication is injected centrally at the fetch layer (monkeyPatchFetch, mirrored
+ * in cache.ts for cache-key parity) and only when the request URL's origin matches the
+ * configured Promptfoo Cloud host (cloudConfig.getApiHost(), incl. on-prem). Keeping
+ * this helper auth-free prevents cloud credentials from leaking to custom
+ * remote-generation endpoints.
+ */
+export function getRemoteGenerationHeaders(
+  extraHeaders?: Record<string, string>,
+): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  };
+}
+
+/**
  * Check if remote generation should never be used.
  * Respects both the general and redteam-specific disable flags.
  * @returns true if remote generation is disabled
