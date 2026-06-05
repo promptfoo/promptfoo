@@ -730,6 +730,80 @@ describe('matchesLlmRubric', () => {
     ]);
   });
 
+  it.each([
+    ['azure:my-deployment', 'AzureResponsesProvider'],
+    ['bedrock:openai.gpt-5.5', 'BedrockOpenAiResponsesProvider'],
+    ['openai:gpt-5.5', 'OpenAiResponsesProvider'],
+  ])('should use Responses image parts for %s when provider class is %s', async (id, providerClassName) => {
+    const provider = createMockProvider({
+      id,
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+    Object.defineProperty(provider, 'constructor', {
+      value: { name: providerClassName },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)[0].content).toContainEqual({
+      type: 'input_image',
+      image_url: 'data:image/png;base64,abc123',
+    });
+  });
+
+  it('should not use Responses image parts for Bedrock completion providers', async () => {
+    const provider = createMockProvider({
+      id: 'bedrock:completion:openai.gpt-oss-120b-1:0',
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+    Object.defineProperty(provider, 'constructor', {
+      value: { name: 'AwsBedrockCompletionProvider' },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)[0].content).toContainEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,abc123' },
+    });
+  });
+
   it('should convert existing chat content parts when using Responses grading providers', async () => {
     const provider = createMockProvider({
       id: 'openai:responses:gpt-5.4',

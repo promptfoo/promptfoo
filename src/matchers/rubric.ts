@@ -41,6 +41,14 @@ const MULTIMODAL_GRADING_INSTRUCTION =
   'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/i;
+const RESPONSES_PROVIDER_CLASS_NAMES = new Set([
+  'AzureResponsesProvider',
+  'BedrockOpenAiResponsesProvider',
+  'GroqResponsesProvider',
+  'OpenAiResponsesProvider',
+  'OpenClawResponsesProvider',
+  'XAIResponsesProvider',
+]);
 
 export class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -412,7 +420,7 @@ function appendImagesToContent(
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
   try {
     const providerId = provider.id();
-    if (/(^|:)responses(?::|$)/i.test(providerId)) {
+    if (isResponsesCompatibleProvider(provider, providerId)) {
       return 'responses';
     }
     if (isAnthropicCompatibleProviderId(providerId)) {
@@ -426,6 +434,14 @@ function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptForma
   }
 
   return 'openai';
+}
+
+function isResponsesCompatibleProvider(provider: ApiProvider, providerId: string): boolean {
+  const className = provider.constructor?.name;
+  return (
+    /(^|:)responses(?::|$)/i.test(providerId) ||
+    (className !== undefined && RESPONSES_PROVIDER_CLASS_NAMES.has(className))
+  );
 }
 
 function isAnthropicCompatibleProviderId(providerId: string): boolean {
