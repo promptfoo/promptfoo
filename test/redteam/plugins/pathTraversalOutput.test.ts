@@ -244,7 +244,7 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
     });
 
     it('truncates inputs over 200KB but still fires on early content', () => {
-      // Use a separator that survives control-stripping AND provides a word boundary so the
+      // Use a separator that survives normalization AND provides a word boundary so the
       // right-boundary lookahead on the sensitive-target token matches.
       const filler = 'x '.repeat(75_000); // ~150KB, with spaces interleaved
       const payload = `${filler}../../etc/passwd ${filler}`;
@@ -417,6 +417,15 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
         detectPathTraversalOutput('Bad example:\n```\n../../etc/passwd\n```').map((m) => m.id),
       ).toContain('posix-traversal-to-sensitive-target');
     });
+
+    it('flags traversal payloads followed by control-character delimiters and more text', () => {
+      expect(
+        detectPathTraversalOutput('Payload:\n../../etc/passwd\nDo not use this.').map((m) => m.id),
+      ).toContain('posix-traversal-to-sensitive-target');
+      expect(
+        detectPathTraversalOutput('Payload: ../../etc/passwd\tDo not use this.').map((m) => m.id),
+      ).toContain('posix-traversal-to-sensitive-target');
+    });
   });
 
   describe('custom rule override', () => {
@@ -543,6 +552,11 @@ describe('path-traversal-output / normalize', () => {
   it('preserves NUL bytes in the `folded` view', () => {
     const { folded } = normalize(`foo.jpg${NUL}.php`);
     expect(folded).toContain(NUL);
+  });
+
+  it('preserves control characters as delimiters in the `stripped` view', () => {
+    const { stripped } = normalize('Payload:\n../../etc/passwd\nDo not use this.');
+    expect(stripped).toContain('payload: ../../etc/passwd do not use this.');
   });
 
   it('keeps `decodedAligned` index-aligned with `folded` after separator collapse', () => {
@@ -695,6 +709,11 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
       // hex-spelled repeat (`\x63` = `c`) is recognized as the same footgun as `c+c+`.
       String.raw`^\x63+\x63+$`,
       String.raw`[\x63-\x65]+[\x64-\x66]+`,
+      '^(?:a+a+)$',
+      '^(a)+(a)+$',
+      '^([a])+([a])+$',
+      '^(?:a)+(?:a)+$',
+      '^(a)+a+$',
     ]) {
       expect(() =>
         validatePathTraversalOutputPluginConfig({
@@ -703,6 +722,19 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         }),
       ).toThrow(/adjacent unbounded quantifiers/);
     }
+  });
+
+  it('rejects unsafe custom patterns and targets on the detector path without requiring examples', () => {
+    expect(() =>
+      detectPathTraversalOutput('a'.repeat(24) + '!', {
+        pathTraversalOutputPatterns: [{ id: 'redos', pattern: '^(a+)+$' }],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      detectPathTraversalOutput('../../secret', {
+        pathTraversalOutputTargets: ['(?:a+)+$'],
+      }),
+    ).toThrow(/nested quantified groups/);
   });
 
   it('rejects unbounded quantified backreferences (numeric and named)', () => {

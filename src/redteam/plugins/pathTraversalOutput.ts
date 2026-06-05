@@ -313,6 +313,10 @@ export interface NormalizationResult {
   stripped: string;
 }
 
+function createStrippedView(folded: string): string {
+  return folded.toLowerCase().replace(/[\u0000-\u001F\u007F]+/g, ' ');
+}
+
 export function normalize(raw: string): NormalizationResult {
   const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
 
@@ -330,7 +334,7 @@ export function normalize(raw: string): NormalizationResult {
 
   const decoded = working;
   const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
-  const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
+  const stripped = createStrippedView(folded);
 
   return { capped, decoded, decodedAligned, folded, stripped };
 }
@@ -339,7 +343,7 @@ function createRawViews(raw: string): NormalizationResult {
   const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
   const decoded = capped;
   const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
-  const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
+  const stripped = createStrippedView(folded);
   return { capped, decoded, decodedAligned, folded, stripped };
 }
 
@@ -489,7 +493,7 @@ function compileCustomRules(
   return patterns.map(({ id, pattern, description, flags }) => ({
     id,
     description: description ?? id,
-    pattern: new RegExp(pattern, flags ?? 'i'),
+    pattern: compileSafeConfiguredRegex(pattern, flags ?? 'i', `pattern "${id}"`),
     // Keep configured case semantics: built-in rules are intentionally case-insensitive,
     // whereas a custom rule may omit `i`.
     view: 'folded',
@@ -681,18 +685,22 @@ function readCharClassEnd(source: string, start: number): number {
 }
 
 function readQuantifier(source: string, index: number): { unbounded: boolean; next: number } {
+  const withLazySuffix = (quantifier: { unbounded: boolean; next: number }) => ({
+    ...quantifier,
+    next: source[quantifier.next] === '?' ? quantifier.next + 1 : quantifier.next,
+  });
   const quantifier = source[index];
   if (quantifier === '*' || quantifier === '+') {
-    return { unbounded: true, next: index + 1 };
+    return withLazySuffix({ unbounded: true, next: index + 1 });
   }
   if (quantifier === '?') {
-    return { unbounded: false, next: index + 1 };
+    return withLazySuffix({ unbounded: false, next: index + 1 });
   }
   if (quantifier === '{') {
     const braced = /^\{\d+(?:,(\d*))?\}/.exec(source.slice(index));
     if (braced) {
       // Unbounded only for the open form `{n,}` (captured group is the empty string).
-      return { unbounded: braced[1] === '', next: index + braced[0].length };
+      return withLazySuffix({ unbounded: braced[1] === '', next: index + braced[0].length });
     }
   }
   return { unbounded: false, next: index };
@@ -703,8 +711,20 @@ function tokenizeQuantifiedAtoms(source: string): QuantifiedAtom[] {
   // atom carries whether its trailing quantifier is unbounded.
   const tokens: QuantifiedAtom[] = [];
   let index = 0;
+  const groupSpansByStart = new Map(
+    getRegexGroupSpans(source).map((group) => [group.start, group]),
+  );
   while (index < source.length) {
     const character = source[index];
+    const group = groupSpansByStart.get(index);
+    if (group) {
+      const atom = source.slice(group.start, group.end + 1);
+      index = group.end + 1;
+      const quantifier = readQuantifier(source, index);
+      index = quantifier.next;
+      tokens.push({ text: atom, unbounded: quantifier.unbounded });
+      continue;
+    }
     if (STRUCTURAL_REGEX_CHARS.has(character)) {
       tokens.push({ text: character, unbounded: false });
       index++;
@@ -846,6 +866,12 @@ function atomRepresentativeChars(atom: string): string[] {
     }
     return chars;
   }
+  if (atom.startsWith('(') && atom.endsWith(')')) {
+    const body = getRegexGroupBody(atom, { start: 0, end: atom.length - 1 });
+    return tokenizeQuantifiedAtoms(body).flatMap((token) =>
+      STRUCTURAL_REGEX_CHARS.has(token.text) ? [] : atomRepresentativeChars(token.text),
+    );
+  }
   return [];
 }
 
@@ -863,6 +889,44 @@ function atomsCanMatchCommonChar(first: string, second: string): boolean {
   return false;
 }
 
+function getRegexGroupBody(source: string, group: RegexGroupSpan): string {
+  const body = source.slice(group.start + 1, group.end);
+  if (body.startsWith('?:') || body.startsWith('?=') || body.startsWith('?!')) {
+    return body.slice(2);
+  }
+  if (body.startsWith('?<=') || body.startsWith('?<!')) {
+    return body.slice(3);
+  }
+  const namedCapture = /^\?<[^>]+>/.exec(body);
+  if (namedCapture) {
+    return body.slice(namedCapture[0].length);
+  }
+  return body;
+}
+
+function getGroupQuantifiedAtoms(source: string, group: RegexGroupSpan): QuantifiedAtom[] {
+  return tokenizeQuantifiedAtoms(getRegexGroupBody(source, group)).filter(
+    (atom) => !STRUCTURAL_REGEX_CHARS.has(atom.text),
+  );
+}
+
+function groupsCanMatchCommonChar(
+  source: string,
+  first: RegexGroupSpan,
+  second: RegexGroupSpan,
+): boolean {
+  const firstAtoms = getGroupQuantifiedAtoms(source, first);
+  const secondAtoms = getGroupQuantifiedAtoms(source, second);
+  for (const firstAtom of firstAtoms) {
+    for (const secondAtom of secondAtoms) {
+      if (atomsCanMatchCommonChar(firstAtom.text, secondAtom.text)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
   // Detect the canonical polynomial-ReDoS shape: two adjacent unbounded-quantified
   // atoms whose character sets OVERLAP (`a*a*`, `\w*\w*`, `[a-z]+[a-z]+`, and
@@ -875,6 +939,34 @@ function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
     const current = tokens[position];
     const next = tokens[position + 1];
     if (current.unbounded && next.unbounded && atomsCanMatchCommonChar(current.text, next.text)) {
+      return true;
+    }
+  }
+
+  for (const group of getRegexGroupSpans(source)) {
+    if (hasAdjacentUnboundedOverlappingQuantifiers(getRegexGroupBody(source, group))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasAdjacentUnboundedOverlappingQuantifiedGroups(source: string): boolean {
+  const groupSpans = getRegexGroupSpans(source).sort((first, second) => first.start - second.start);
+  const groupsByStart = new Map(groupSpans.map((group) => [group.start, group]));
+
+  for (const group of groupSpans) {
+    const quantifier = readQuantifier(source, group.end + 1);
+    if (!quantifier.unbounded) {
+      continue;
+    }
+    const nextGroup = groupsByStart.get(quantifier.next);
+    if (!nextGroup) {
+      continue;
+    }
+    const nextQuantifier = readQuantifier(source, nextGroup.end + 1);
+    if (nextQuantifier.unbounded && groupsCanMatchCommonChar(source, group, nextGroup)) {
       return true;
     }
   }
@@ -913,9 +1005,26 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
   }
   // Run the adjacency check against the raw source so character-class atoms stay
   // intact for the identical-atom comparison.
-  if (hasAdjacentUnboundedOverlappingQuantifiers(source)) {
+  if (
+    hasAdjacentUnboundedOverlappingQuantifiers(source) ||
+    hasAdjacentUnboundedOverlappingQuantifiedGroups(source)
+  ) {
     throw new Error(
       `Invalid path-traversal-output ${label}: adjacent unbounded quantifiers over the same expression are not allowed`,
+    );
+  }
+}
+
+function compileSafeConfiguredRegex(source: string, flags: string, label: string): RegExp {
+  try {
+    validateConfiguredRegexSafety(source, label);
+    return new RegExp(source, flags);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      message.startsWith('Invalid path-traversal-output ')
+        ? message
+        : `Invalid path-traversal-output ${label}: ${message}`,
     );
   }
 }
@@ -930,6 +1039,14 @@ function getRules(config?: PluginConfig): PathTraversalOutputRule[] {
   const extraTargets = Array.isArray(config?.pathTraversalOutputTargets)
     ? config.pathTraversalOutputTargets
     : [];
+  for (const target of extraTargets) {
+    if (typeof target !== 'string' || target.length === 0) {
+      throw new Error(
+        'path-traversal-output config.pathTraversalOutputTargets entries must be non-empty strings',
+      );
+    }
+    compileSafeConfiguredRegex(target, 'i', `target "${target}"`);
+  }
   return compileBuiltinRules(extraTargets);
 }
 

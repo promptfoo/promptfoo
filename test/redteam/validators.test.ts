@@ -797,7 +797,7 @@ describe('redteamConfigSchema', () => {
     });
 
     it('should include path-traversal-output in OWASP LLM05 aliases', () => {
-      for (const alias of ['owasp:llm', 'owasp:llm:05']) {
+      for (const alias of ['owasp:llm', 'owasp:llm:05', 'owasp:llm:redteam:system']) {
         const result = RedteamConfigSchema.safeParse({
           plugins: [alias],
           numTests: 3,
