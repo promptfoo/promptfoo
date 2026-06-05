@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { novaOutputFromMessage, novaParseMessages } from '../../../src/providers/bedrock/util';
+import {
+  novaNormalizeContent,
+  novaOutputFromMessage,
+  novaParseMessages,
+} from '../../../src/providers/bedrock/util';
 
 describe('novaOutputFromMessage', () => {
   it('should handle tool use blocks', () => {
@@ -105,5 +109,80 @@ describe('novaParseMessages', () => {
         content: [{ text: 'Message 1' }, { text: 'Message 2' }],
       },
     ]);
+  });
+
+  it('should convert OpenAI image_url content parts to Nova image blocks', () => {
+    const messages = JSON.stringify([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aGVsbG8=' } },
+        ],
+      },
+    ]);
+
+    const result = novaParseMessages(messages);
+    expect(result.extractedMessages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { text: 'Describe this' },
+          { image: { format: 'png', source: { bytes: 'aGVsbG8=' } } },
+        ],
+      },
+    ]);
+  });
+});
+
+describe('novaNormalizeContent', () => {
+  it('wraps string content as a single text block', () => {
+    expect(novaNormalizeContent('hello')).toEqual([{ text: 'hello' }]);
+  });
+
+  it('converts OpenAI text and image_url parts', () => {
+    expect(
+      novaNormalizeContent([
+        { type: 'text', text: 'hi' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/' } },
+      ]),
+    ).toEqual([{ text: 'hi' }, { image: { format: 'jpeg', source: { bytes: '/9j/' } } }]);
+  });
+
+  it('converts Responses input_text and input_image parts', () => {
+    expect(
+      novaNormalizeContent([
+        { type: 'input_text', text: 'hi' },
+        { type: 'input_image', image_url: 'data:image/webp;base64,UklGRg==' },
+      ]),
+    ).toEqual([{ text: 'hi' }, { image: { format: 'webp', source: { bytes: 'UklGRg==' } } }]);
+  });
+
+  it('converts Anthropic image source parts', () => {
+    expect(
+      novaNormalizeContent([
+        { type: 'image', source: { type: 'base64', media_type: 'image/gif', data: 'R0lGOD' } },
+      ]),
+    ).toEqual([{ image: { format: 'gif', source: { bytes: 'R0lGOD' } } }]);
+  });
+
+  it('converts Google inlineData parts', () => {
+    expect(
+      novaNormalizeContent([{ inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } }]),
+    ).toEqual([{ image: { format: 'png', source: { bytes: 'aGVsbG8=' } } }]);
+  });
+
+  it('passes through parts already in Nova shape and tool blocks', () => {
+    const content = [
+      { text: 'plain' },
+      { image: { format: 'png', source: { bytes: 'abc' } } },
+      { toolUse: { name: 't', toolUseId: '1', input: {} } },
+    ];
+    expect(novaNormalizeContent(content)).toEqual(content);
+  });
+
+  it('leaves unsupported image formats untouched so existing behavior is preserved', () => {
+    const svg = { type: 'image_url', image_url: { url: 'data:image/svg+xml;base64,PHN2Zz4=' } };
+    expect(novaNormalizeContent([svg])).toEqual([svg]);
   });
 });

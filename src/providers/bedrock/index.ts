@@ -12,7 +12,7 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { novaOutputFromMessage, novaParseMessages } from './util';
+import { novaNormalizeContent, novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
   ApiEmbeddingProvider,
@@ -1293,7 +1293,7 @@ export const BEDROCK_MODEL = {
           messages = parsed
             .map((msg) => ({
               role: msg.role,
-              content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
+              content: novaNormalizeContent(msg.content),
             }))
             .filter((msg) => msg.role !== 'system');
           const systemMessage = parsed.find((msg) => msg.role === 'system');
@@ -1380,7 +1380,7 @@ export const BEDROCK_MODEL = {
           messages = parsed
             .map((msg) => ({
               role: msg.role,
-              content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
+              content: novaNormalizeContent(msg.content),
             }))
             .filter((msg) => msg.role !== 'system');
           const systemMessage = parsed.find((msg) => msg.role === 'system');

@@ -137,6 +137,139 @@ interface MessageParam {
   role: 'user' | 'assistant';
 }
 
+/** Amazon Nova accepts these image formats in `{ image: { format, source } }` blocks. */
+function novaImageFormat(mimeType?: string): ImageBlockParam['image']['format'] | undefined {
+  const subtype = mimeType?.toLowerCase().split('/')[1]?.split(';')[0]?.trim();
+  switch (subtype) {
+    case 'jpg':
+    case 'jpeg':
+      return 'jpeg';
+    case 'png':
+      return 'png';
+    case 'gif':
+      return 'gif';
+    case 'webp':
+      return 'webp';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Build a Nova image block from a data URI or raw base64 string. Returns
+ * undefined when the MIME type isn't a Nova-supported image format, so callers
+ * can leave the original part untouched.
+ */
+function novaImageBlock(base64OrDataUri: string, mimeType?: string): ImageBlockParam | undefined {
+  let mime = mimeType;
+  let bytes = base64OrDataUri.trim();
+  const match = /^data:([^;,]+)(?:;[^,]*)?;base64,(.*)$/is.exec(bytes);
+  if (match) {
+    mime = match[1];
+    bytes = match[2];
+  }
+  const format = novaImageFormat(mime);
+  if (!format) {
+    return undefined;
+  }
+  return { image: { format, source: { bytes: bytes.replace(/\s/g, '') } } };
+}
+
+/**
+ * Normalize a single message content part into Amazon Nova's content-block
+ * shape. Converts OpenAI (`image_url`/`text`), Responses (`input_image`/
+ * `input_text`), Anthropic (`image`/`text`), and Google (`inlineData`) parts to
+ * Nova `{ text }` / `{ image: { format, source: { bytes } } }` blocks. Parts
+ * already in Nova shape, tool blocks, and unrecognized parts pass through
+ * unchanged so existing behavior is preserved.
+ */
+function novaNormalizeContentPart(part: unknown): unknown {
+  if (typeof part === 'string') {
+    return { text: part };
+  }
+  if (!part || typeof part !== 'object') {
+    return part;
+  }
+  const block = part as Record<string, unknown>;
+
+  // Already Nova-shaped, or a tool block -> leave untouched.
+  if (typeof block.text === 'string' && !('type' in block)) {
+    return block;
+  }
+  if ('image' in block || 'toolUse' in block || 'toolResult' in block) {
+    return block;
+  }
+
+  const type = typeof block.type === 'string' ? block.type : undefined;
+
+  if ((type === 'text' || type === 'input_text') && typeof block.text === 'string') {
+    return { text: block.text };
+  }
+
+  // OpenAI: { type: 'image_url', image_url: { url } }
+  if (
+    type === 'image_url' &&
+    block.image_url &&
+    typeof block.image_url === 'object' &&
+    typeof (block.image_url as { url?: unknown }).url === 'string'
+  ) {
+    const novaBlock = novaImageBlock((block.image_url as { url: string }).url);
+    if (novaBlock) {
+      return novaBlock;
+    }
+  }
+
+  // Responses: { type: 'input_image', image_url: 'data:...' }
+  if (type === 'input_image' && typeof block.image_url === 'string') {
+    const novaBlock = novaImageBlock(block.image_url);
+    if (novaBlock) {
+      return novaBlock;
+    }
+  }
+
+  // Anthropic: { type: 'image', source: { type: 'base64', media_type, data } }
+  if (type === 'image' && block.source && typeof block.source === 'object') {
+    const source = block.source as { media_type?: unknown; data?: unknown };
+    if (typeof source.data === 'string') {
+      const novaBlock = novaImageBlock(
+        source.data,
+        typeof source.media_type === 'string' ? source.media_type : undefined,
+      );
+      if (novaBlock) {
+        return novaBlock;
+      }
+    }
+  }
+
+  // Google: { inlineData: { mimeType, data } }
+  if (block.inlineData && typeof block.inlineData === 'object') {
+    const inline = block.inlineData as { mimeType?: unknown; data?: unknown };
+    if (typeof inline.data === 'string') {
+      const novaBlock = novaImageBlock(
+        inline.data,
+        typeof inline.mimeType === 'string' ? inline.mimeType : undefined,
+      );
+      if (novaBlock) {
+        return novaBlock;
+      }
+    }
+  }
+
+  return part;
+}
+
+/**
+ * Normalize an Amazon Nova message's `content` into an array of Nova content
+ * blocks. String content becomes a single text block (matching prior behavior);
+ * array content has each part normalized via {@link novaNormalizeContentPart}.
+ */
+export function novaNormalizeContent(content: unknown): MessageParam['content'] {
+  if (Array.isArray(content)) {
+    return content.map(novaNormalizeContentPart) as MessageParam['content'];
+  }
+  return [{ text: content as string }];
+}
+
 export function novaParseMessages(messages: string): {
   system?: TextBlockParam[];
   extractedMessages: MessageParam[];
@@ -150,7 +283,7 @@ export function novaParseMessages(messages: string): {
           .filter((msg) => msg.role !== 'system')
           .map((msg) => ({
             role: msg.role,
-            content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
+            content: novaNormalizeContent(msg.content),
           })),
         system: systemMessage
           ? Array.isArray(systemMessage.content)
