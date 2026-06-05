@@ -1951,6 +1951,89 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
+    it('should grade empty responses when provider response images are present', async () => {
+      const mockResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Image violates policy',
+      };
+      const images = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images,
+          },
+        },
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.any(Object),
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images,
+          },
+        },
+      );
+    });
+
+    it('should grade empty responses when strategy image outputs are present', async () => {
+      const mockResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Image violates policy',
+      };
+      const imageOutputs = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          imageOutputs,
+          providerResponse: {
+            output: '',
+            images: [{ data: 'data:image/png;base64,ignored', mimeType: 'image/png' }],
+          },
+        },
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.any(Object),
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images: imageOutputs,
+          },
+        },
+      );
+    });
+
     it('should auto-pass JSON empty object responses', async () => {
       const result = await grader.getResult('test prompt', '{}', mockTest, undefined, undefined);
 
