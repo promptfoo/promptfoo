@@ -2,7 +2,6 @@ import path from 'path';
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
-import * as blobs from '../../src/blobs';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
@@ -11,7 +10,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
-import { TestGrader } from '../util/utils';
+import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type { Assertion, GradingConfig } from '../../src/types/index';
 
@@ -456,22 +455,127 @@ describe('matchesLlmRubric', () => {
         },
       ),
     ).rejects.toThrow(
-      'Remote image URLs are not supported for multimodal grading. Provide local image output as a data URI, raw base64 string, or promptfoo blobRef instead.',
+      'Remote image URLs are not supported for multimodal grading. Provide local image output as a data URI or raw base64 string instead.',
     );
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
-  it('should resolve blob-backed image outputs before grading', async () => {
+  it('should reject blob-backed image outputs before grading', async () => {
     const hash = 'a'.repeat(64);
-    vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
-      data: Buffer.from('image-bytes'),
-      metadata: {
-        mimeType: 'image/png',
-        sizeBytes: 11,
-        createdAt: '2026-06-04T00:00:00.000Z',
-        provider: 'filesystem',
-        key: hash,
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
       },
+    });
+
+    await expect(
+      matchesLlmRubric(
+        'Does the image match?',
+        'Generated image',
+        {
+          rubricPrompt: 'Grade this output',
+          provider,
+        },
+        {},
+        undefined,
+        {
+          providerResponse: {
+            output: 'Generated image',
+            images: [
+              {
+                blobRef: {
+                  uri: `promptfoo://blob/${hash}`,
+                  hash,
+                  mimeType: 'image/png',
+                  sizeBytes: 11,
+                  provider: 'filesystem',
+                },
+              },
+            ],
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
+    );
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should reject too many image outputs before grading', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_MAX_IMAGES: '1' });
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          {
+            rubricPrompt: 'Grade this output',
+            provider,
+          },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [
+                { data: 'abc123', mimeType: 'image/png' },
+                { data: 'def456', mimeType: 'image/png' },
+              ],
+            },
+          },
+        ),
+      ).rejects.toThrow('Too many images for multimodal grading: received 2, maximum is 1.');
+    } finally {
+      restoreEnv();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should reject oversized inline image outputs before grading', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '4' });
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          {
+            rubricPrompt: 'Grade this output',
+            provider,
+          },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' }],
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        'Image output exceeds multimodal grading size limit: 5 bytes, maximum is 4.',
+      );
+    } finally {
+      restoreEnv();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should reject inline image outputs that exceed the total size limit before grading', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10',
+      PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES: '9',
     });
     const provider = createMockProvider({
       response: {
@@ -479,41 +583,34 @@ describe('matchesLlmRubric', () => {
       },
     });
 
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
-      {
-        rubricPrompt: 'Grade this output',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [
-            {
-              blobRef: {
-                uri: `promptfoo://blob/${hash}`,
-                hash,
-                mimeType: 'image/png',
-                sizeBytes: 11,
-                provider: 'filesystem',
-              },
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          {
+            rubricPrompt: 'Grade this output',
+            provider,
+          },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [
+                { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
+                { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
+              ],
             },
-          ],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(blobs.getBlobByHash).toHaveBeenCalledWith(hash);
-    expect(JSON.parse(prompt)[0].content[2]).toEqual({
-      type: 'image_url',
-      image_url: {
-        url: `data:image/png;base64,${Buffer.from('image-bytes').toString('base64')}`,
-      },
-    });
+          },
+        ),
+      ).rejects.toThrow(
+        'Image outputs exceed multimodal grading total size limit: 10 bytes, maximum is 9.',
+      );
+    } finally {
+      restoreEnv();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
   });
 
   it('should render rubric when provided as an object', async () => {
