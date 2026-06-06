@@ -1,6 +1,6 @@
 import useApiConfig from '@app/stores/apiConfig';
+import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
 import type { ResultDetailResponse, UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
-import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/types/api/user';
 
 export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
