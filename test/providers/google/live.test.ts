@@ -56,7 +56,7 @@ vi.mock('child_process', async (importOriginal) => {
     })),
   };
 });
-vi.mock('../../../src/util/fetch', async (importOriginal) => {
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     fetchWithProxy: vi.fn(),
@@ -1788,6 +1788,59 @@ describe('GoogleLiveProvider', () => {
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
       expect(response.output.text).toBe('External function result');
+    });
+
+    it('should load external function callbacks from Windows-style file paths', async () => {
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'external_function', args: { param: 'test_value' }, id: 'function-call-win-1' },
+          ]);
+          simulateTextMessage(mockWs, 'Windows result');
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const mockExternalFunction = vi.fn().mockResolvedValue('Windows result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { param: { type: 'STRING' } },
+                    required: ['param'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            external_function: 'file://C:/test/callbacks.js:testFunction',
+          },
+        },
+      });
+
+      const response = await provider.callApi('Call external function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'C:/test/callbacks.js'),
+        'testFunction',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
+      expect(response.output.text).toBe('Windows result');
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {

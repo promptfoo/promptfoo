@@ -2,14 +2,14 @@ const gatewayUrl = (process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789'
   /\/$/,
   '',
 );
-const authToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+const authSecret = process.env.OPENCLAW_GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_PASSWORD;
 
-if (!authToken) {
-  throw new Error('OPENCLAW_GATEWAY_TOKEN is required');
+if (!authSecret) {
+  throw new Error('OPENCLAW_GATEWAY_TOKEN or OPENCLAW_GATEWAY_PASSWORD is required');
 }
 
 const headers = {
-  Authorization: `Bearer ${authToken}`,
+  Authorization: `Bearer ${authSecret}`,
   'Content-Type': 'application/json',
 };
 
@@ -174,7 +174,7 @@ const checks = [];
     ],
     tool_choice: {
       type: 'function',
-      function: { name: 'get_probe_token' },
+      name: 'get_probe_token',
     },
   });
   assert(first.response.ok, 'function tool request failed');

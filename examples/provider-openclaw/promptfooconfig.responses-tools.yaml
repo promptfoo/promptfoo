@@ -9,8 +9,7 @@ providers:
     config:
       tool_choice:
         type: function
-        function:
-          name: addNumbers
+        name: addNumbers
       tools:
         - type: function
           name: addNumbers
@@ -34,4 +33,12 @@ tests:
           const call = context.providerResponse?.raw?.output?.find(
             (item) => item.type === 'function_call',
           );
-          return call?.name === 'addNumbers' && call?.arguments === '{"a":17,"b":25}';
+          if (call?.name !== 'addNumbers' || typeof call.arguments !== 'string') {
+            return false;
+          }
+          try {
+            const args = JSON.parse(call.arguments);
+            return args.a === 17 && args.b === 25;
+          } catch {
+            return false;
+          }

@@ -141,6 +141,9 @@ OPENCLAW_GATEWAY_TOKEN=your-token-here \
 node scripts/probe-openresponses.mjs
 ```
 
+For password-mode gateways, set `OPENCLAW_GATEWAY_PASSWORD` instead of
+`OPENCLAW_GATEWAY_TOKEN`.
+
 ## Skills
 
 Promptfoo does not upload skills per request. To eval skill behavior, configure the skill set in
