@@ -289,6 +289,18 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const deploymentName = splits[2];
 
+      // Azure model types that have no sensible default deployment must name one in
+      // the provider path (`azure:<type>:<name>`). Without this, the registry would
+      // build a provider with an undefined deployment that fails later with an opaque
+      // error (e.g. a `model: undefined` request body or `undefined.toLowerCase()`).
+      const requirePathSegment = (type: string, label: string, placeholder: string) => {
+        if (!deploymentName) {
+          throw new Error(
+            `Azure ${type} provider requires ${label}. Use azure:${type}:<${placeholder}>.`,
+          );
+        }
+      };
+
       if (modelType === 'moderation') {
         if (providerPath.startsWith('azureopenai:')) {
           throw new Error(
@@ -308,12 +320,15 @@ export const providerMap: ProviderFactory[] = [
         return new AzureModerationProvider(resolvedDeployment, providerOptions);
       }
       if (modelType === 'chat') {
+        requirePathSegment('chat', 'a deployment name', 'deployment');
         return new AzureChatCompletionProvider(deploymentName, providerOptions);
       }
       if (modelType === 'assistant') {
+        requirePathSegment('assistant', 'an assistant ID', 'assistant-id');
         return new AzureAssistantProvider(deploymentName, providerOptions);
       }
       if (modelType === 'foundry-agent') {
+        requirePathSegment('foundry-agent', 'an agent ID', 'agent-id');
         return new AzureFoundryAgentProvider(deploymentName, providerOptions);
       }
       if (modelType === 'image') {
@@ -325,6 +340,7 @@ export const providerMap: ProviderFactory[] = [
             'azureopenai:image is not supported. MAI image models are Microsoft Foundry models — use azure:image:<deployment> instead.',
           );
         }
+        requirePathSegment('image', 'a deployment name', 'deployment');
         return new AzureImageProvider(deploymentName, providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
@@ -334,6 +350,7 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (modelType === 'completion') {
+        requirePathSegment('completion', 'a deployment name', 'deployment');
         return new AzureCompletionProvider(deploymentName, providerOptions);
       }
       if (modelType === 'responses') {

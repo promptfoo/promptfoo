@@ -254,15 +254,28 @@ export async function doEval(
     }
 
     if (cmdObj.config !== undefined) {
+      // Normalize to an array up front (Commander's variadic --config already yields one) so
+      // the in-place directory resolution below — and the array operations on cmdObj.config
+      // later in this function — stay safe regardless of the caller's input shape.
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      cmdObj.config = configPaths;
       for (const configPath of configPaths) {
         const configStats = await fs.stat(configPath).catch(() => undefined);
         if (configStats?.isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {
-            cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
-            cmdObj.config.push(newConfigPath);
+            // Replace the directory entry in place so the original --config ordering is
+            // preserved. combineConfigs() applies configs in array order (later entries
+            // override earlier ones), so removing the directory and appending the resolved
+            // path to the end would change precedence when a directory is passed alongside
+            // other --config files (e.g. `--config base.yaml dir/ override.yaml`).
+            const configIndex = cmdObj.config.indexOf(configPath);
+            if (configIndex === -1) {
+              cmdObj.config.push(newConfigPath);
+            } else {
+              cmdObj.config[configIndex] = newConfigPath;
+            }
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
             logger.warn(
