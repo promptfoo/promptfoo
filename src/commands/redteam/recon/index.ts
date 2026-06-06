@@ -7,10 +7,6 @@ import opener from 'opener';
 import ora from 'ora';
 import { getDefaultPort, getLocalAppUrl } from '../../../constants';
 import logger from '../../../logger';
-import { startServer } from '../../../server/server';
-import { writePromptfooConfig } from '../../../util/config/writer';
-import { fetchWithProxy } from '../../../util/fetch/index';
-import { BrowserBehavior, checkServerRunning } from '../../../util/server';
 import { buildRedteamConfig } from '../../../redteam/commands/recon/config';
 import { displayResults } from '../../../redteam/commands/recon/output';
 import {
@@ -28,9 +24,13 @@ import {
 } from '../../../redteam/commands/recon/providers';
 import { createScratchpad } from '../../../redteam/commands/recon/scratchpad';
 import { prepareReconTarget } from '../../../redteam/commands/recon/target';
+import { startServer } from '../../../server/server';
+import { writePromptfooConfig } from '../../../util/config/writer';
+import { fetchWithProxy } from '../../../util/fetch/index';
+import { BrowserBehavior, checkServerRunning } from '../../../util/server';
 
-import type { ReconResult } from '../../../validators/recon';
 import type { ReconOptions } from '../../../redteam/commands/recon/types';
+import type { ReconResult } from '../../../validators/recon';
 
 const SERVER_START_TIMEOUT_MS = 10_000;
 const SERVER_START_POLL_MS = 250;
