@@ -8,7 +8,6 @@ import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
-import { trimTableCellForApi } from '../../util/exportToFile';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -17,6 +16,7 @@ import {
   getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
+import { trimTableCellForApi } from '../../util/exportToFile';
 import invariant from '../../util/invariant';
 import {
   redactAzureBlobSasTokens,

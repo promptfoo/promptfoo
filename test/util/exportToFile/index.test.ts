@@ -498,7 +498,13 @@ describe('exportToFile utils', () => {
     });
 
     it('should preserve media fields rendered by the table', () => {
-      const audio = { id: 'audio-1', format: 'mp3' };
+      const audio = {
+        id: 'audio-1',
+        format: 'mp3',
+        data: 'large-base64-audio',
+        blobRef: { hash: 'audio-hash' },
+        transcript: 'Audio transcript',
+      };
       const video = { id: 'video-1', format: 'mp4' };
       const images = [
         {
@@ -509,7 +515,14 @@ describe('exportToFile utils', () => {
         { data: 'data:image/png;base64,direct', mimeType: 'image/png' },
       ];
       const trimmed = trimTableCellForApi(makeCell({ audio, video, images } as any));
-      expect(trimmed.audio).toEqual(audio);
+      expect(trimmed.audio).toEqual({
+        id: 'audio-1',
+        format: 'mp3',
+        data: undefined,
+        blobRef: { hash: 'audio-hash' },
+        transcript: 'Audio transcript',
+      });
+      expect(JSON.stringify(trimmed.audio)).not.toContain('large-base64-audio');
       expect(trimmed.video).toEqual(video);
       expect(trimmed.images).toEqual([
         { blobRef: { hash: 'other-image-hash' }, mimeType: 'image/png' },

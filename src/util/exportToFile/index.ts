@@ -82,8 +82,8 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
  * for the table view (raw HTTP response, internal IDs). Stripping these fields prevents
  * RangeError crashes from JSON.stringify on large evals (e.g. base64 images
  * repeated across every cell) and dramatically reduces payload size.
- * Structured `images` are preserved because the table renders them directly,
- * but duplicate inline data is dropped when a blob reference is available.
+ * Structured media is preserved because the table renders it directly, but
+ * duplicate inline image/audio data is dropped when a blob reference is available.
  * The rendered prompt is retained for normal table requests; the server's
  * serialization fallback strips oversized prompts only when needed.
  *
@@ -108,6 +108,12 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
   const trimmedImages = cell.images?.map((image) =>
     image.blobRef ? { blobRef: image.blobRef, mimeType: image.mimeType } : image,
   );
+  const trimmedAudio = cell.audio?.blobRef
+    ? {
+        ...cell.audio,
+        data: undefined,
+      }
+    : cell.audio;
 
   const trimmed: EvaluateTableOutput = {
     id: cell.id,
@@ -129,7 +135,7 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     // testCase is already in row.test; preserve provider only for the override badge.
     testCase: trimmedTestCase,
     response: trimmedResponse,
-    audio: cell.audio,
+    audio: trimmedAudio,
     video: cell.video,
     images: trimmedImages,
   };
