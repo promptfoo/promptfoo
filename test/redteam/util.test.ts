@@ -21,6 +21,10 @@ import type { CallApiContextParams, ProviderResponse } from '../../src/types/ind
 vi.mock('../../src/cache');
 
 describe('fetchRemoteRedteamDataset', () => {
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
   it('returns text responses from the shared fetch cache', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"id":"example"}',
