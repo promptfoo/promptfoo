@@ -1,6 +1,7 @@
 ---
 title: OpenAI Guardrails Plugin
 sidebar_label: OpenAI Guardrails
+sidebar_position: 35
 description: Red team jailbreak resistance using OpenAI's eval dataset to test LLM responses to role-playing attacks, system manipulation, and obfuscation techniques
 ---
 
