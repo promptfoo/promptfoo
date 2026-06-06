@@ -5,11 +5,10 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import opener from 'opener';
 import ora from 'ora';
-import { getEnvString, isNonInteractive } from '../envars';
+import { getEnvInt, getEnvString, isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { getRequestTimeoutMs } from '../providers/shared';
 import {
   canCreateTargets,
   getUserTeams,
@@ -51,7 +50,7 @@ type DeviceTokenResponse = DeviceTokenSuccessResponse | DeviceTokenErrorResponse
 
 const DEVICE_CLIENT_ID = 'promptfoo-cli';
 const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
-const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getRequestTimeoutMs();
+const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const DEVICE_POLL_SLOW_DOWN_SECONDS = 5;
 const DEVICE_AUTH_SILENT_HEADER = { 'x-promptfoo-silent': 'true' } as const;
