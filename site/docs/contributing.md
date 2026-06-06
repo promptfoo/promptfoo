@@ -410,7 +410,7 @@ This will generate static content in the `build` directory that can be served us
 
 ### Database
 
-Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `~/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database/schema.ts` and migrations are stored in `drizzle/`. Note that the migrations are all generated and you should not access these files directly.
+Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `~/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database/tables.ts` and migrations are stored in `drizzle/`. Note that the migrations are all generated and you should not access these files directly.
 
 #### Main Tables
 
@@ -424,7 +424,7 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
 
 #### Adding a Migration
 
-1. **Modify Schema**: Make changes to your schema in `src/database/schema.ts`.
+1. **Modify Schema**: Make changes to your schema in `src/database/tables.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
 
    ```bash
