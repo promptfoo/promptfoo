@@ -5,7 +5,7 @@ import { fetchWithProxy } from '../../../util/fetch/index';
 import invariant from '../../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
-import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
 import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
 import { messagesToRedteamHistory } from '../shared';
 
@@ -59,7 +59,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
             version: VERSION,
             email: getUserEmail(),
           }),
-          headers: { 'Content-Type': 'application/json' },
+          headers: getRemoteGenerationHeaders(),
           method: 'POST',
         },
         options?.abortSignal,
