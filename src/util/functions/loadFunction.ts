@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 
 import cliState from '../../cliState';
-import { getEnvBool } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
@@ -189,6 +188,13 @@ export class CallbackPathTraversalError extends Error {
   }
 }
 
+function isCallbackPathGuardDisabled(): boolean {
+  const value = process.env.PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD;
+  return (
+    value !== undefined && ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase())
+  );
+}
+
 /**
  * Resolves a file path against the active basePath and asserts it stays inside
  * that base directory.
@@ -222,7 +228,7 @@ export function resolveCallbackPath(filePath: string, basePath?: string): string
   const normalizedBase = path.resolve(effectiveBase);
   const resolvedPath = path.resolve(normalizedBase, filePath);
 
-  if (getEnvBool('PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD', false)) {
+  if (isCallbackPathGuardDisabled()) {
     return resolvedPath;
   }
 
