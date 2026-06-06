@@ -2186,10 +2186,10 @@ describe('HttpProvider', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-      const result = await provider.callApi('test prompt', {
+      const result = await provider.callApi('username=bob&password=original-secret', {
         debug: true,
         vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
+        prompt: { raw: 'username=bob&password=original-secret', label: 'test' },
       });
 
       expect(result.metadata?.transformedRequest).toContain('username=alice');
@@ -2205,6 +2205,7 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
       const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('original-secret');
       expect(debugOutput).not.toContain('plain-secret');
       expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
@@ -2235,10 +2236,10 @@ describe('HttpProvider', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-      const result = await provider.callApi('test prompt', {
+      const result = await provider.callApi('username=bob&password=original-secret', {
         debug: true,
         vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
+        prompt: { raw: 'username=bob&password=original-secret', label: 'test' },
       });
 
       expect(result.metadata?.transformedRequest).toContain('username=alice');
@@ -2254,6 +2255,7 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
       const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('original-secret');
       expect(debugOutput).not.toContain('plain-secret');
       expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
@@ -3439,6 +3441,38 @@ describe('HttpProvider - Sanitization', () => {
     expect(contextStr).toContain('"user-agent":"test-agent"'); // lowercase
     // Note: timeout and maxRetries are not included in the rendered config that gets logged
     expect(contextStr).not.toContain('[REDACTED]');
+  });
+
+  it('should sanitize form-urlencoded bodies with raw spaces in debug logs', async () => {
+    const provider = new HttpProvider(testUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'username=alice&password=plain-secret&note=hello world',
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{"result": "test"}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await provider.callApi('test prompt');
+
+    const debugCall = loggerDebugSpy.mock.calls.find(
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+    );
+    expect(debugCall).toBeDefined();
+
+    const contextStr = JSON.stringify(debugCall?.[1]);
+    expect(contextStr).toContain('username=alice');
+    expect(contextStr).toContain('password=%5BREDACTED%5D');
+    expect(contextStr).toContain('note=hello world');
+    expect(contextStr).not.toContain('plain-secret');
   });
 
   describe('Header sanitization in logs', () => {

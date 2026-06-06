@@ -2713,8 +2713,9 @@ export class HttpProvider implements ApiProvider {
       transformedPrompt,
       headers,
     );
+    const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
@@ -2780,8 +2781,14 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
+    const sanitizedRenderedConfig = sanitizeObject(renderedConfig, {
+      context: 'request config',
+    }) as Partial<HttpProviderConfig>;
+    sanitizedRenderedConfig.body = sanitizeRequestBodyForMetadata(renderedConfig.body, headers) as
+      | HttpProviderConfig['body']
+      | undefined;
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
-      config: sanitizeObject(renderedConfig, { context: 'request config' }),
+      config: sanitizedRenderedConfig,
     });
 
     const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
@@ -2956,8 +2963,12 @@ export class HttpProvider implements ApiProvider {
       transformedPrompt,
       parsedRequest.headers,
     );
+    const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(
+      prompt,
+      parsedRequest.headers,
+    );
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
     );
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';

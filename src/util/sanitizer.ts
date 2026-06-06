@@ -428,12 +428,13 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
 const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$/;
 
 function looksLikeUrlEncodedFormData(value: string): boolean {
-  // Form-urlencoded data has no raw whitespace (spaces are `+` or `%20`) and
-  // every non-empty separator-delimited chunk is a `key=value` pair with safe
-  // key characters. Empty chunks (leading/trailing/consecutive separators)
-  // are tolerated. Without this gate, prose containing `=` gets re-serialized
-  // and emerges URL-encoded.
-  if (!value.includes('=') || /\s/.test(value)) {
+  // Every non-empty separator-delimited chunk must be a `key=value` pair with
+  // safe key characters. Values may contain raw spaces because some clients
+  // emit non-canonical form bodies instead of encoding them as `+` or `%20`.
+  // Empty chunks (leading/trailing/consecutive separators) are tolerated.
+  // The strict key shape keeps prose and shell commands containing `=` from
+  // being treated as form data.
+  if (!value.includes('=')) {
     return false;
   }
   const segments = value.split(/[&;]/).filter((segment) => segment.length > 0);

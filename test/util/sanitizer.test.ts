@@ -1163,6 +1163,17 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).not.toContain('sk-123456789012345678901234567890');
     });
 
+    it('should sanitize URL-encoded request bodies with raw spaces', () => {
+      const result = sanitizeObject({
+        requestBody: 'username=alice&password=plain-secret&note=hello world',
+      });
+
+      expect(result.requestBody).toContain('username=alice');
+      expect(result.requestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.requestBody).toContain('note=hello world');
+      expect(result.requestBody).not.toContain('plain-secret');
+    });
+
     it('should not URL-encode prose strings that happen to contain "="', () => {
       // Regression: previously, any string containing `=` was parsed by
       // URLSearchParams and re-serialized, mangling prose like shell commands
