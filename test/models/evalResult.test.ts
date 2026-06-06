@@ -1481,7 +1481,7 @@ describe('EvalResult', () => {
     });
   });
 
-  describe('createManyFromEvaluateResult', () => {
+  describe('createManyFromEvaluateResult inline media imports', () => {
     it('preserves inline b64_json image response JSON during bulk import persistence', async () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
       const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';

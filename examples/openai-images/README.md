@@ -134,7 +134,7 @@ Use `promptfooconfig.judge.yaml` to grade generated images with a vision-capable
 PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml
 ```
 
-This config uses `llm-rubric` with GPT-5 as a grader to evaluate whether generated images match the prompt. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
+This config uses `llm-rubric` with GPT-5.4 mini as a grader to evaluate whether generated images match the prompt. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
 
 ## Documentation
 

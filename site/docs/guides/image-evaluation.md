@@ -15,11 +15,11 @@ Promptfoo generates images via an image provider, then grades the output using `
 
 1. **Image provider** generates images from prompts
 2. **`PROMPTFOO_INLINE_MEDIA=true`** keeps images as inline data URIs instead of externalizing to disk
-3. **Vision-capable grader** (e.g., `openai:chat:gpt-5`) evaluates the image using a multimodal rubric prompt
+3. **Vision-capable grader** (e.g., `openai:chat:gpt-5.4-mini`) evaluates the image using a multimodal rubric prompt
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 20.20+ or 22.22+
 - API key for your image provider (e.g., `OPENAI_API_KEY`)
 - API key for a vision-capable grader model
 
@@ -43,7 +43,7 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:chat:gpt-5
+    provider: openai:chat:gpt-5.4-mini
     rubricPrompt: |
       [
         {
@@ -99,7 +99,7 @@ providers:
   - id: google:image:imagen-3.0-generate-002
 ```
 
-The grader provider must be vision-capable. Good options include `openai:chat:gpt-5`, `anthropic:messages:claude-sonnet-4-5-20250929`, or `google:gemini-2.0-flash`.
+The grader provider must be vision-capable. Good options include `openai:chat:gpt-5.4-mini`, `anthropic:messages:claude-sonnet-4-6`, or `google:gemini-2.5-flash`.
 
 ## Tips
 

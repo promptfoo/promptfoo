@@ -391,7 +391,7 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:chat:gpt-5`.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:chat:gpt-5.4-mini`.
 
 #### Grading text about a known image
 
@@ -400,7 +400,7 @@ Use an `image_url` block referencing a URL or variable to include a pre-existing
 ```yaml
 defaultTest:
   options:
-    provider: openai:chat:gpt-5
+    provider: openai:chat:gpt-5.4-mini
     rubricPrompt: |
       [
         { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
@@ -416,7 +416,7 @@ defaultTest:
 
 #### Grading generated image outputs
 
-To grade images produced by an image generation provider (e.g., `openai:image:gpt-image-1`), set `PROMPTFOO_INLINE_MEDIA=true` so the generated image is kept as a data URI in `{{output}}`:
+To grade images produced by an image generation provider (e.g., `openai:image:gpt-image-2`), set `PROMPTFOO_INLINE_MEDIA=true` so the generated image is kept as a data URI in `{{output}}`:
 
 ```sh
 PROMPTFOO_INLINE_MEDIA=true promptfoo eval
@@ -427,7 +427,7 @@ Then pass `{{output}}` directly as the image URL in your rubric prompt:
 ```yaml
 defaultTest:
   options:
-    provider: openai:chat:gpt-5
+    provider: openai:chat:gpt-5.4-mini
     rubricPrompt: |
       [
         {

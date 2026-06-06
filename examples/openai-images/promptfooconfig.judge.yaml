@@ -20,7 +20,7 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:chat:gpt-5
+    provider: openai:chat:gpt-5.4-mini
     rubricPrompt: |
       [
         {
