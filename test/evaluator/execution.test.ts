@@ -948,7 +948,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('writes per-test timeout rows to jsonl output', async () => {
+  it('persists per-test timeout rows without streaming intermediate jsonl output', async () => {
     vi.useFakeTimers();
     const outputPath = `/tmp/pr6344-per-test-timeout-${randomUUID()}.jsonl`;
     const provider: ApiProvider = {
@@ -956,7 +956,7 @@ describeEvaluator('evaluator execution control', () => {
       callApi: vi.fn(
         () =>
           new Promise<ProviderResponse>(() => {
-            // Keep the provider pending so the per-test timeout path writes the row.
+            // Keep the provider pending so the per-test timeout path persists the row.
           }),
       ),
     };
@@ -975,9 +975,10 @@ describeEvaluator('evaluator execution control', () => {
       await vi.advanceTimersByTimeAsync(50);
       await evalPromise;
 
-      const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
-      expect(lines).toHaveLength(1);
-      expect(JSON.parse(lines[0])).toEqual(
+      expect(fs.existsSync(outputPath)).toBe(false);
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
         expect.objectContaining({
           error: expect.stringContaining('Evaluation timed out after 50ms'),
           failureReason: ResultFailureReason.ERROR,

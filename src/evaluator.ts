@@ -3531,6 +3531,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     options?: {
       getReplacement?: () => EvaluateResult | undefined;
       onStorePersisted?: () => void;
+      writeOutput?: boolean;
     },
   ): Promise<void> {
     try {
@@ -3547,6 +3548,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         error,
         resultSummary,
       });
+    }
+
+    if (options?.writeOutput === false) {
+      this.trackFinalJsonlResult(options.getReplacement?.() ?? row);
+      return;
     }
 
     for (const writer of this.fileWriters) {
@@ -3746,12 +3752,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     index,
     notifyProgress = true,
     row,
+    writeOutput = true,
   }: {
     context: EvalProcessingContext;
     evalStep: RunEvalOptions;
     index: number;
     notifyProgress?: boolean;
     row: EvaluateResult;
+    writeOutput?: boolean;
   }): Promise<boolean> {
     if (context.processedIndices.has(index) || context.finalizingRows.has(index)) {
       return false;
@@ -3788,6 +3796,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         onStorePersisted: () => {
           finalizingState.storePersisted = true;
         },
+        writeOutput,
       });
       context.processedIndices.add(index);
 
@@ -3947,6 +3956,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       evalStep,
       index,
       row: timeoutResult,
+      writeOutput: false,
     });
   }
 
