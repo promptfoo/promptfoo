@@ -172,10 +172,12 @@ const NESTED_QUANTIFIER =
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
-// Matches an unbounded-quantified backreference — numeric (`\1+`, `\1{2,}`) or named
-// (`\k<name>+`) — which can drive super-linear backtracking, e.g. `^([a]+)\1+$` or
-// `^(?<n>a+)\k<n>+$`.
-const QUANTIFIED_BACKREFERENCE = /\\(?:[1-9]\d*|k<[^>]+>)(?:[*+]|\{\d+,\})/;
+// Matches a quantified backreference — numeric (`\1+`, `\1{2,}`, `\1{0,9}`) or named
+// (`\k<name>+`) — which can drive super-linear backtracking, e.g. `^([a]+)\1+$`,
+// `^(?<n>a+)\k<n>+$`, or the finite-range form `^([a]+)\1{0,9}\1{0,9}$`. Any brace
+// quantifier counts: a repeated backref re-matches the captured span and backtracks like
+// an adjacent unbounded atom the character sampler cannot model.
+const QUANTIFIED_BACKREFERENCE = /\\(?:[1-9]\d*|k<[^>]+>)(?:[*+]|\{\d+(?:,\d*)?\})/;
 
 function decodeJsonHexUnicode(input: string): string {
   // \uXXXX (4 hex)
@@ -697,10 +699,26 @@ function readQuantifier(source: string, index: number): { unbounded: boolean; ne
     return withLazySuffix({ unbounded: false, next: index + 1 });
   }
   if (quantifier === '{') {
-    const braced = /^\{\d+(?:,(\d*))?\}/.exec(source.slice(index));
+    const braced = /^\{(\d+)(?:,(\d*))?\}/.exec(source.slice(index));
     if (braced) {
-      // Unbounded only for the open form `{n,}` (captured group is the empty string).
-      return withLazySuffix({ unbounded: braced[1] === '', next: index + braced[0].length });
+      const [, lowerText, upperText] = braced;
+      const hasComma = braced[0].includes(',');
+      // Fixed-length repeats never backtrack: `{n}` and `{n,n}` (lower === upper) match an
+      // exact count. A VARIABLE repeat — the open `{m,}` or a range `{m,n}` with n > m and
+      // n >= 2 — backtracks like `*`/`+` when adjacent to an overlapping atom, so treat it
+      // as unbounded for the overlap checks regardless of how large the finite bound is.
+      // This keeps adjacent ranges such as `a{0,9999}a{0,9999}` (and chains) from slipping
+      // through while leaving `a{2,2}a{2,2}` (fixed) and `a{0,1}` (max one rep) accepted.
+      const isOpenRange = hasComma && upperText === '';
+      const isVariableRange =
+        hasComma &&
+        upperText !== '' &&
+        Number(upperText) >= 2 &&
+        Number(upperText) !== Number(lowerText);
+      return withLazySuffix({
+        unbounded: isOpenRange || isVariableRange,
+        next: index + braced[0].length,
+      });
     }
   }
   return { unbounded: false, next: index };
@@ -778,10 +796,17 @@ const ATOM_OVERLAP_SAMPLES = [
   'é',
 ];
 
-function atomMatchesChar(atom: string, character: string): boolean {
+// The probe regex always uses `s` (so `.`/negated classes treat newline like any char)
+// and mirrors the configured regex's case (`i`) and unicode (`u`) flags so overlap is
+// judged exactly as the real engine would match — e.g. `[a-z]`/`[A-Z]` under `i`, or
+// `ſ`/`S` under `iu`.
+function probeFlagsFor(flags: string): string {
+  return `s${flags.includes('i') ? 'i' : ''}${flags.includes('u') ? 'u' : ''}`;
+}
+
+function atomMatchesChar(atom: string, character: string, flags = ''): boolean {
   try {
-    // `s` flag so `.` and negated classes treat newline like any other char.
-    return new RegExp(`^(?:${atom})$`, 's').test(character);
+    return new RegExp(`^(?:${atom})$`, probeFlagsFor(flags)).test(character);
   } catch {
     return false;
   }
@@ -875,14 +900,14 @@ function atomRepresentativeChars(atom: string): string[] {
   return [];
 }
 
-function atomsCanMatchCommonChar(first: string, second: string): boolean {
+function atomsCanMatchCommonChar(first: string, second: string, flags = ''): boolean {
   const candidates = new Set([
     ...ATOM_OVERLAP_SAMPLES,
     ...atomRepresentativeChars(first),
     ...atomRepresentativeChars(second),
   ]);
   for (const character of candidates) {
-    if (atomMatchesChar(first, character) && atomMatchesChar(second, character)) {
+    if (atomMatchesChar(first, character, flags) && atomMatchesChar(second, character, flags)) {
       return true;
     }
   }
@@ -914,12 +939,13 @@ function groupsCanMatchCommonChar(
   source: string,
   first: RegexGroupSpan,
   second: RegexGroupSpan,
+  flags = '',
 ): boolean {
   const firstAtoms = getGroupQuantifiedAtoms(source, first);
   const secondAtoms = getGroupQuantifiedAtoms(source, second);
   for (const firstAtom of firstAtoms) {
     for (const secondAtom of secondAtoms) {
-      if (atomsCanMatchCommonChar(firstAtom.text, secondAtom.text)) {
+      if (atomsCanMatchCommonChar(firstAtom.text, secondAtom.text, flags)) {
         return true;
       }
     }
@@ -927,7 +953,7 @@ function groupsCanMatchCommonChar(
   return false;
 }
 
-function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
+function hasAdjacentUnboundedOverlappingQuantifiers(source: string, flags = ''): boolean {
   // Detect the canonical polynomial-ReDoS shape: two adjacent unbounded-quantified
   // atoms whose character sets OVERLAP (`a*a*`, `\w*\w*`, `[a-z]+[a-z]+`, and
   // semantically-equivalent spellings such as `[\s\S]+[^]+` or `[ab]+[bc]+`). The
@@ -938,13 +964,17 @@ function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
   for (let position = 0; position + 1 < tokens.length; position++) {
     const current = tokens[position];
     const next = tokens[position + 1];
-    if (current.unbounded && next.unbounded && atomsCanMatchCommonChar(current.text, next.text)) {
+    if (
+      current.unbounded &&
+      next.unbounded &&
+      atomsCanMatchCommonChar(current.text, next.text, flags)
+    ) {
       return true;
     }
   }
 
   for (const group of getRegexGroupSpans(source)) {
-    if (hasAdjacentUnboundedOverlappingQuantifiers(getRegexGroupBody(source, group))) {
+    if (hasAdjacentUnboundedOverlappingQuantifiers(getRegexGroupBody(source, group), flags)) {
       return true;
     }
   }
@@ -952,7 +982,7 @@ function hasAdjacentUnboundedOverlappingQuantifiers(source: string): boolean {
   return false;
 }
 
-function hasAdjacentUnboundedOverlappingQuantifiedGroups(source: string): boolean {
+function hasAdjacentUnboundedOverlappingQuantifiedGroups(source: string, flags = ''): boolean {
   const groupSpans = getRegexGroupSpans(source).sort((first, second) => first.start - second.start);
   const groupsByStart = new Map(groupSpans.map((group) => [group.start, group]));
 
@@ -966,7 +996,7 @@ function hasAdjacentUnboundedOverlappingQuantifiedGroups(source: string): boolea
       continue;
     }
     const nextQuantifier = readQuantifier(source, nextGroup.end + 1);
-    if (nextQuantifier.unbounded && groupsCanMatchCommonChar(source, group, nextGroup)) {
+    if (nextQuantifier.unbounded && groupsCanMatchCommonChar(source, group, nextGroup, flags)) {
       return true;
     }
   }
@@ -974,7 +1004,7 @@ function hasAdjacentUnboundedOverlappingQuantifiedGroups(source: string): boolea
   return false;
 }
 
-function validateConfiguredRegexSafety(source: string, label: string): void {
+function validateConfiguredRegexSafety(source: string, label: string, flags = ''): void {
   const sourceWithoutCharacterClasses = stripCharacterClasses(source);
 
   if (
@@ -1006,8 +1036,8 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
   // Run the adjacency check against the raw source so character-class atoms stay
   // intact for the identical-atom comparison.
   if (
-    hasAdjacentUnboundedOverlappingQuantifiers(source) ||
-    hasAdjacentUnboundedOverlappingQuantifiedGroups(source)
+    hasAdjacentUnboundedOverlappingQuantifiers(source, flags) ||
+    hasAdjacentUnboundedOverlappingQuantifiedGroups(source, flags)
   ) {
     throw new Error(
       `Invalid path-traversal-output ${label}: adjacent unbounded quantifiers over the same expression are not allowed`,
@@ -1017,7 +1047,7 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
 
 function compileSafeConfiguredRegex(source: string, flags: string, label: string): RegExp {
   try {
-    validateConfiguredRegexSafety(source, label);
+    validateConfiguredRegexSafety(source, label, flags);
     return new RegExp(source, flags);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1209,8 +1239,9 @@ function validateCustomPatterns(customPatterns: unknown, examples: unknown): unk
       );
     }
     try {
-      validateConfiguredRegexSafety(rule.pattern, `pattern "${rule.id}"`);
-      new RegExp(rule.pattern, rule.flags ?? 'i');
+      const ruleFlags = (rule.flags ?? 'i') as string;
+      validateConfiguredRegexSafety(rule.pattern, `pattern "${rule.id}"`, ruleFlags);
+      new RegExp(rule.pattern, ruleFlags);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Invalid path-traversal-output pattern "${rule.id}": ${message}`);
@@ -1244,7 +1275,9 @@ function validateCustomTargets(extraTargets: unknown, examples: unknown): unknow
       );
     }
     try {
-      validateConfiguredRegexSafety(target, `target "${target}"`);
+      // Configured targets always compile case-insensitively (see below), so the safety
+      // checks must analyze overlap under `i` as well.
+      validateConfiguredRegexSafety(target, `target "${target}"`, 'i');
       new RegExp(target, 'i');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

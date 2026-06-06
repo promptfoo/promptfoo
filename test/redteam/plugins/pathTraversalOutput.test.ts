@@ -395,6 +395,16 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       expect(ids).toContain('windows-direct-sensitive-path');
     });
 
+    it('flags Windows drive payloads camouflaged behind a protocol-relative URL authority', () => {
+      // A protocol-relative `//host/` authority is NOT treated as a benign URL-path
+      // context for the drive rule: suppressing it would let a model hide a real
+      // `C:\\Windows\\System32\\config\\SAM` leak behind a throwaway `//x/` prefix.
+      // Detection (a false positive at worst) is the safer failure mode than a bypass.
+      expect(
+        detectPathTraversalOutput('leaked: //x/C:/Windows/System32/config/SAM').map((m) => m.id),
+      ).toContain('windows-direct-sensitive-path');
+    });
+
     it('flags a payload followed by sentence punctuation', () => {
       const matches = detectPathTraversalOutput('Unsafe payload: ../../etc/passwd.');
       const ids = matches.map((match) => match.id);
@@ -737,8 +747,14 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/nested quantified groups/);
   });
 
-  it('rejects unbounded quantified backreferences (numeric and named)', () => {
-    for (const pattern of [String.raw`^([a]+)\1+$`, String.raw`^(?<n>a+)\k<n>+$`]) {
+  it('rejects quantified backreferences (unbounded and finite range)', () => {
+    for (const pattern of [
+      String.raw`^([a]+)\1+$`,
+      String.raw`^(?<n>a+)\k<n>+$`,
+      // Finite-range repeats of a backref still re-match the captured span and backtrack.
+      String.raw`^([a]+)\1{0,9}\1{0,9}$`,
+      String.raw`^(?<n>a+)\k<n>{2,5}$`,
+    ]) {
       expect(() =>
         validatePathTraversalOutputPluginConfig({
           examples: ['Return custom traversal only.'],
@@ -746,6 +762,17 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         }),
       ).toThrow(/quantified backreferences/);
     }
+  });
+
+  it('rejects opposite-case overlaps under the unicode + case-insensitive (`iu`) flags', () => {
+    // `ſ` (ſ) folds to `S`/`s` only under full Unicode case folding (`iu`), so the
+    // overlap probe must honor the effective `u` flag, not just `i`.
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos-iu', pattern: '^\\u017F+S+$', flags: 'iu' }],
+      }),
+    ).toThrow(/adjacent unbounded quantifiers/);
   });
 
   it('accepts bounded and non-overlapping quantifier sequences', () => {
@@ -759,9 +786,68 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
           { id: 'distinct-literals', pattern: 'c+d+' },
           { id: 'separated-atoms', pattern: String.raw`\w+/\w+` },
           { id: 'single-unbounded', pattern: 'corp-secret-[a-z]+' },
-          { id: 'distinct-classes', pattern: '[a-z]+[A-Z]+' },
+          // Disjoint even under case folding, so safe with the default `i` flag.
           { id: 'disjoint-ranges', pattern: '[a-c]+[x-z]+' },
+          // `[a-z]+[A-Z]+` is intentionally NOT here: it overlaps under `i` (see the
+          // case-insensitive overlap rejection test below).
           { id: 'escaped-bracket-class', pattern: String.raw`[\]]+` },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects opposite-case class overlaps that only collide under the default `i` flag', () => {
+    // `[a-z]+` and `[A-Z]+` look disjoint case-sensitively, but the plugin compiles
+    // custom patterns/targets with `i` by default, so they overlap at match time and
+    // backtrack polynomially. The overlap analysis must honor the effective flags.
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos-ci', pattern: '[a-z]+[A-Z]+$' }],
+      }),
+    ).toThrow(/adjacent unbounded quantifiers/);
+    // Targets are always compiled case-insensitively, so they are rejected the same way.
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return ../../internal/private_keys/demo.pem only.'],
+        pathTraversalOutputTargets: ['[a-z]+[A-Z]+$'],
+      }),
+    ).toThrow(/adjacent unbounded quantifiers/);
+    // An explicitly case-sensitive pattern (`flags: ''`) keeps the classes disjoint and
+    // stays accepted, confirming the rejection is driven by the effective flags.
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'cs-ok', pattern: '[a-z]+[A-Z]+$', flags: '' }],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects adjacent overlapping variable-range repeats of any size, including chains', () => {
+    // A range `{m,n}` (or open `{m,}`) is variable: once it can match two or more reps it
+    // backtracks like `*`/`+` against an adjacent overlapping atom, regardless of how large
+    // the finite bound is. Chains are caught because each adjacent pair is flagged.
+    for (const pattern of [
+      'a{0,1000000}a{0,1000000}$',
+      'a{0,500}a{0,500}a{0,500}$',
+      'a{0,2}a{0,2}$',
+    ]) {
+      expect(() =>
+        validatePathTraversalOutputPluginConfig({
+          examples: ['Return custom traversal only.'],
+          pathTraversalOutputPatterns: [{ id: 'redos-range', pattern }],
+        }),
+      ).toThrow(/adjacent unbounded quantifiers/);
+    }
+    // Fixed-length exact repeats never backtrack, and `{0,1}` matches at most one rep (like
+    // `?`), so both adjacent forms stay accepted.
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [
+          { id: 'exact-ok', pattern: 'a{200000}a{200000}$' },
+          { id: 'exact-range-ok', pattern: 'a{2,2}a{2,2}$' },
+          { id: 'atmostone-ok', pattern: 'a{0,1}a{0,1}$' },
         ],
       }),
     ).not.toThrow();
