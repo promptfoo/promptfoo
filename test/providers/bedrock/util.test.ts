@@ -172,6 +172,12 @@ describe('novaNormalizeContent', () => {
     ).toEqual([{ image: { format: 'png', source: { bytes: 'aGVsbG8=' } } }]);
   });
 
+  it('converts Google REST-style inline_data parts', () => {
+    expect(
+      novaNormalizeContent([{ inline_data: { mime_type: 'image/jpeg', data: '/9j/' } }]),
+    ).toEqual([{ image: { format: 'jpeg', source: { bytes: '/9j/' } } }]);
+  });
+
   it('passes through parts already in Nova shape and tool blocks', () => {
     const content = [
       { text: 'plain' },

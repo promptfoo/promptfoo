@@ -12,7 +12,7 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { novaNormalizeContent, novaOutputFromMessage, novaParseMessages } from './util';
+import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
   ApiEmbeddingProvider,
@@ -1285,35 +1285,7 @@ export const BEDROCK_MODEL = {
       _stop?: string[],
       _modelName?: string,
     ) => {
-      let messages;
-      let systemPrompt;
-      try {
-        const parsed = JSON.parse(prompt);
-        if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
-              role: msg.role,
-              content: novaNormalizeContent(msg.content),
-            }))
-            .filter((msg) => msg.role !== 'system');
-          const systemMessage = parsed.find((msg) => msg.role === 'system');
-          if (systemMessage) {
-            systemPrompt = [{ text: systemMessage.content }];
-          }
-        } else {
-          const { system, extractedMessages } = novaParseMessages(prompt);
-          messages = extractedMessages;
-          if (system) {
-            systemPrompt = [{ text: system }];
-          }
-        }
-      } catch {
-        const { system, extractedMessages } = novaParseMessages(prompt);
-        messages = extractedMessages;
-        if (system) {
-          systemPrompt = [{ text: system }];
-        }
-      }
+      const { system: systemPrompt, extractedMessages: messages } = novaParseMessages(prompt);
 
       const params: any = { messages };
       if (systemPrompt) {
@@ -1372,35 +1344,7 @@ export const BEDROCK_MODEL = {
       _stop?: string[],
       _modelName?: string,
     ) => {
-      let messages;
-      let systemPrompt;
-      try {
-        const parsed = JSON.parse(prompt);
-        if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
-              role: msg.role,
-              content: novaNormalizeContent(msg.content),
-            }))
-            .filter((msg) => msg.role !== 'system');
-          const systemMessage = parsed.find((msg) => msg.role === 'system');
-          if (systemMessage) {
-            systemPrompt = [{ text: systemMessage.content }];
-          }
-        } else {
-          const { system, extractedMessages } = novaParseMessages(prompt);
-          messages = extractedMessages;
-          if (system) {
-            systemPrompt = [{ text: system }];
-          }
-        }
-      } catch {
-        const { system, extractedMessages } = novaParseMessages(prompt);
-        messages = extractedMessages;
-        if (system) {
-          systemPrompt = [{ text: system }];
-        }
-      }
+      const { system: systemPrompt, extractedMessages: messages } = novaParseMessages(prompt);
 
       const params: any = { messages };
       if (systemPrompt) {

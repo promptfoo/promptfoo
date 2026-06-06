@@ -283,7 +283,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -298,7 +298,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -352,6 +352,34 @@ describe('matchesLlmRubric', () => {
     expect(provider.callApi).toHaveBeenCalled();
   });
 
+  it('should pad unpadded standard base64 image outputs', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      { rubricPrompt: 'Grade this output: {{ output }}', provider },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'qg', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)[0].content.at(-1)).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,qg==' },
+    });
+  });
+
   it('should accept URL-safe base64 inside a data URI image output', async () => {
     const provider = createMockProvider({
       response: {
@@ -392,7 +420,7 @@ describe('matchesLlmRubric', () => {
       },
     });
 
-    const imageOutput = 'data:image/png;base64,abc123';
+    const imageOutput = 'data:image/png;base64,YWJjMTIz';
 
     const result = await matchesLlmRubric(
       'Does the image match?',
@@ -445,7 +473,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/webp' }],
+          images: [{ data: 'YWJjMTIz', mimeType: 'image/webp' }],
         },
       },
     );
@@ -461,7 +489,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/webp;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -491,7 +519,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/webp' }],
+          images: [{ data: 'YWJjMTIz', mimeType: 'image/webp' }],
         },
       },
     );
@@ -507,7 +535,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/webp;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -533,7 +561,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -544,7 +572,7 @@ describe('matchesLlmRubric', () => {
       source: {
         type: 'base64',
         media_type: 'image/png',
-        data: 'abc123',
+        data: 'YWJjMTIz',
       },
     });
   });
@@ -575,7 +603,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -586,7 +614,7 @@ describe('matchesLlmRubric', () => {
       source: {
         type: 'base64',
         media_type: 'image/png',
-        data: 'abc123',
+        data: 'YWJjMTIz',
       },
     });
   });
@@ -614,7 +642,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -629,7 +657,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+          { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
         ],
       },
     ]);
@@ -664,7 +692,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
+          images: [{ data: 'YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -681,7 +709,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+          { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
         ],
       },
     ]);
@@ -729,7 +757,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
+          images: [{ data: 'YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -755,7 +783,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+          { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
         ],
       },
     ]);
@@ -781,7 +809,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -796,7 +824,7 @@ describe('matchesLlmRubric', () => {
             type: 'input_text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+          { type: 'input_image', image_url: 'data:image/png;base64,YWJjMTIz' },
         ],
       },
     ]);
@@ -829,7 +857,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -837,7 +865,7 @@ describe('matchesLlmRubric', () => {
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(JSON.parse(prompt)[0].content).toContainEqual({
       type: 'input_image',
-      image_url: 'data:image/png;base64,abc123',
+      image_url: 'data:image/png;base64,YWJjMTIz',
     });
   });
 
@@ -864,7 +892,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -872,7 +900,7 @@ describe('matchesLlmRubric', () => {
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(JSON.parse(prompt)[0].content).toContainEqual({
       type: 'image_url',
-      image_url: { url: 'data:image/png;base64,abc123' },
+      image_url: { url: 'data:image/png;base64,YWJjMTIz' },
     });
   });
 
@@ -905,7 +933,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
+          images: [{ data: 'YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -922,7 +950,7 @@ describe('matchesLlmRubric', () => {
             type: 'input_text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+          { type: 'input_image', image_url: 'data:image/png;base64,YWJjMTIz' },
         ],
       },
     ]);
@@ -947,7 +975,7 @@ describe('matchesLlmRubric', () => {
       {
         providerResponse: {
           output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
         },
       },
     );
@@ -962,7 +990,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -1224,6 +1252,89 @@ describe('matchesLlmRubric', () => {
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
+  it('should include inline bytes in the cumulative limit before encoding a blob', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10',
+      PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES: '9',
+    });
+    const blob = Buffer.alloc(5);
+    const toStringSpy = vi.spyOn(blob, 'toString');
+    mockBlobResolver.mockResolvedValue({ data: blob, mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    const hash = 'e'.repeat(64);
+
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [
+                { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
+                { blobRef: blobRefFor(hash, 1) },
+              ],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow(
+        'Image outputs exceed multimodal grading total size limit: 10 bytes, maximum is 9.',
+      );
+      expect(toStringSpy).not.toHaveBeenCalledWith('base64');
+    } finally {
+      restoreEnv();
+      toStringSpy.mockRestore();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should enforce cumulative raw characters before encoding a blob', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '30',
+      PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS: '38',
+    });
+    const blob = Buffer.alloc(3);
+    const toStringSpy = vi.spyOn(blob, 'toString');
+    mockBlobResolver.mockResolvedValue({ data: blob, mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    const hash = 'f'.repeat(64);
+
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ data: 'AAAA', mimeType: 'image/png' }, { blobRef: blobRefFor(hash, 3) }],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow(
+        'Image outputs raw data exceeds multimodal grading total size limit: 39 characters, maximum is 38.',
+      );
+      expect(toStringSpy).not.toHaveBeenCalledWith('base64');
+    } finally {
+      restoreEnv();
+      toStringSpy.mockRestore();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should count mimeType length in the raw-char cap for raw base64 image outputs', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '20' });
     const provider = createMockProvider({
@@ -1311,7 +1422,7 @@ describe('matchesLlmRubric', () => {
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(JSON.parse(prompt)[0].content).toContainEqual({
       type: 'image_url',
-      image_url: { url: 'data:image/png;base64,abc123' },
+      image_url: { url: 'data:image/png;base64,abc123==' },
     });
   });
 
@@ -1365,7 +1476,7 @@ describe('matchesLlmRubric', () => {
           {
             providerResponse: {
               output: 'Generated image',
-              images: [{ data: `abc123${' '.repeat(20)}`, mimeType: 'image/png' }],
+              images: [{ data: `YWJjMTIz${' '.repeat(20)}`, mimeType: 'image/png' }],
             },
           },
         ),
@@ -1399,7 +1510,7 @@ describe('matchesLlmRubric', () => {
             providerResponse: {
               output: 'Generated image',
               images: [
-                { data: 'abc123', mimeType: 'image/png' },
+                { data: 'YWJjMTIz', mimeType: 'image/png' },
                 { data: 'def456', mimeType: 'image/png' },
               ],
             },
@@ -2568,7 +2679,7 @@ Evaluate the response
     const result = await matchesLlmRubric(rubric, llmOutput, grading, vars, undefined, {
       providerResponse: {
         output: llmOutput,
-        images: [{ data: 'abc123', mimeType: 'image/webp' }],
+        images: [{ data: 'YWJjMTIz', mimeType: 'image/webp' }],
       },
     });
 
@@ -2577,7 +2688,7 @@ Evaluate the response
       rubric,
       output: llmOutput,
       vars,
-      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+      images: [{ data: 'data:image/webp;base64,YWJjMTIz', mimeType: 'image/webp' }],
     });
     expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote multimodal grading passed');
@@ -2585,7 +2696,7 @@ Evaluate the response
 
   it('should replace image data URI text output for remote multimodal grading', async () => {
     const rubric = 'Does the image match?';
-    const llmOutput = 'data:image/webp;base64,abc123';
+    const llmOutput = 'data:image/webp;base64,YWJjMTIz';
     const grading = {};
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
@@ -2609,7 +2720,7 @@ Evaluate the response
       rubric,
       output: '[Image output attached. Inspect the attached image directly for visual grading.]',
       vars: {},
-      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+      images: [{ data: 'data:image/webp;base64,YWJjMTIz', mimeType: 'image/webp' }],
     });
   });
 
@@ -2632,7 +2743,7 @@ Evaluate the response
     const result = await matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, {
       providerResponse: {
         output: llmOutput,
-        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
       },
     });
 
@@ -2646,7 +2757,7 @@ Evaluate the response
           content: expect.arrayContaining([
             {
               type: 'image_url',
-              image_url: { url: 'data:image/png;base64,abc123' },
+              image_url: { url: 'data:image/png;base64,YWJjMTIz' },
             },
           ]),
         }),

@@ -175,6 +175,58 @@ function novaImageBlock(base64OrDataUri: string, mimeType?: string): ImageBlockP
   return { image: { format, source: { bytes: bytes.replace(/\s/g, '') } } };
 }
 
+function normalizeOpenAiImageUrlPart(
+  block: Record<string, unknown>,
+  type?: string,
+): ImageBlockParam | undefined {
+  if (type !== 'image_url' || !block.image_url || typeof block.image_url !== 'object') {
+    return undefined;
+  }
+  const imageUrl = block.image_url as { url?: unknown };
+  return typeof imageUrl.url === 'string' ? novaImageBlock(imageUrl.url) : undefined;
+}
+
+function normalizeResponsesImagePart(
+  block: Record<string, unknown>,
+  type?: string,
+): ImageBlockParam | undefined {
+  return type === 'input_image' && typeof block.image_url === 'string'
+    ? novaImageBlock(block.image_url)
+    : undefined;
+}
+
+function normalizeAnthropicImagePart(
+  block: Record<string, unknown>,
+  type?: string,
+): ImageBlockParam | undefined {
+  if (type !== 'image' || !block.source || typeof block.source !== 'object') {
+    return undefined;
+  }
+  const source = block.source as { media_type?: unknown; data?: unknown };
+  return typeof source.data === 'string'
+    ? novaImageBlock(
+        source.data,
+        typeof source.media_type === 'string' ? source.media_type : undefined,
+      )
+    : undefined;
+}
+
+function normalizeGoogleImagePart(block: Record<string, unknown>): ImageBlockParam | undefined {
+  const inlineData = block.inlineData ?? block.inline_data;
+  if (!inlineData || typeof inlineData !== 'object') {
+    return undefined;
+  }
+  const inline = inlineData as {
+    mimeType?: unknown;
+    mime_type?: unknown;
+    data?: unknown;
+  };
+  const mimeType = inline.mimeType ?? inline.mime_type;
+  return typeof inline.data === 'string'
+    ? novaImageBlock(inline.data, typeof mimeType === 'string' ? mimeType : undefined)
+    : undefined;
+}
+
 /**
  * Normalize a single message content part into Amazon Nova's content-block
  * shape. Converts OpenAI (`image_url`/`text`), Responses (`input_image`/
@@ -206,53 +258,13 @@ function novaNormalizeContentPart(part: unknown): unknown {
     return { text: block.text };
   }
 
-  // OpenAI: { type: 'image_url', image_url: { url } }
-  if (
-    type === 'image_url' &&
-    block.image_url &&
-    typeof block.image_url === 'object' &&
-    typeof (block.image_url as { url?: unknown }).url === 'string'
-  ) {
-    const novaBlock = novaImageBlock((block.image_url as { url: string }).url);
-    if (novaBlock) {
-      return novaBlock;
-    }
-  }
-
-  // Responses: { type: 'input_image', image_url: 'data:...' }
-  if (type === 'input_image' && typeof block.image_url === 'string') {
-    const novaBlock = novaImageBlock(block.image_url);
-    if (novaBlock) {
-      return novaBlock;
-    }
-  }
-
-  // Anthropic: { type: 'image', source: { type: 'base64', media_type, data } }
-  if (type === 'image' && block.source && typeof block.source === 'object') {
-    const source = block.source as { media_type?: unknown; data?: unknown };
-    if (typeof source.data === 'string') {
-      const novaBlock = novaImageBlock(
-        source.data,
-        typeof source.media_type === 'string' ? source.media_type : undefined,
-      );
-      if (novaBlock) {
-        return novaBlock;
-      }
-    }
-  }
-
-  // Google: { inlineData: { mimeType, data } }
-  if (block.inlineData && typeof block.inlineData === 'object') {
-    const inline = block.inlineData as { mimeType?: unknown; data?: unknown };
-    if (typeof inline.data === 'string') {
-      const novaBlock = novaImageBlock(
-        inline.data,
-        typeof inline.mimeType === 'string' ? inline.mimeType : undefined,
-      );
-      if (novaBlock) {
-        return novaBlock;
-      }
-    }
+  const normalizedImage =
+    normalizeOpenAiImageUrlPart(block, type) ??
+    normalizeResponsesImagePart(block, type) ??
+    normalizeAnthropicImagePart(block, type) ??
+    normalizeGoogleImagePart(block);
+  if (normalizedImage) {
+    return normalizedImage;
   }
 
   return part;
