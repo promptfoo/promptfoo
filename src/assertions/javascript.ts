@@ -459,6 +459,7 @@ function buildWorkerContext(assertionValueContext: AssertionParams['assertionVal
     test: toWorkerValue(assertionValueContext.test) || {},
     logProbs: toWorkerValue(assertionValueContext.logProbs),
     config: toWorkerValue(assertionValueContext.config),
+    metadata: toWorkerValue(assertionValueContext.metadata),
     provider,
     providerResponse: toWorkerValue(assertionValueContext.providerResponse),
     trace: toWorkerValue(assertionValueContext.trace),

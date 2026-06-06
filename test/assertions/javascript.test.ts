@@ -1786,6 +1786,27 @@ return isCallable && typeof callResult === 'string' && callResult.length > 0 && 
       expect(result.score).toBe(1);
     });
 
+    it('should preserve the context.metadata shortcut in worker mode', async () => {
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'javascript',
+          value:
+            'context.metadata?.toolCalls === 5 && context.providerResponse?.metadata?.toolCalls === 5',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: 'test output',
+          metadata: { toolCalls: 5 },
+        },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
     it('should preserve context.provider.callApi in worker mode', async () => {
       const callApi = vi.fn().mockResolvedValue({ output: 'provider response' });
       const provider = {
