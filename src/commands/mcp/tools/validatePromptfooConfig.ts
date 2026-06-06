@@ -57,7 +57,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         // Use the same logic as the validate command
         const configPathsArray =
           configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
-        configPathsArray?.forEach(validateMcpConfigFile);
+        configPathsArray?.forEach((configPath) => validateMcpConfigFile(configPath));
 
         const { config, testSuite } = await resolveConfigs(
           { config: configPathsArray },

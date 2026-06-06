@@ -116,8 +116,11 @@ export function validateFilePath(filePath: string, basePath?: string): void {
  * arbitrary host paths outside the project the user selected when starting the
  * MCP server.
  */
-export function validateMcpFilePath(filePath: string, resolutionBasePath = process.cwd()): void {
-  const basePath = process.cwd();
+function validateMcpFilePathWithinWorkspace(
+  filePath: string,
+  basePath: string,
+  resolutionBasePath: string,
+): void {
   validateFilePath(filePath);
 
   const resolvedBase = fs.realpathSync(basePath);
@@ -137,6 +140,10 @@ export function validateMcpFilePath(filePath: string, resolutionBasePath = proce
   if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new ConfigurationError(`Path must be within base directory: ${basePath}`, filePath);
   }
+}
+
+export function validateMcpFilePath(filePath: string, resolutionBasePath = process.cwd()): void {
+  validateMcpFilePathWithinWorkspace(filePath, process.cwd(), resolutionBasePath);
 }
 
 function hasProviderFileExtension(filePath: string): boolean {
@@ -673,12 +680,12 @@ export function validateProviderReference(provider: unknown, env?: EnvOverrides)
  * Validates static promptfoo configuration contents before resolution can read
  * referenced prompt, test, transform, or provider files.
  */
-export function validateMcpConfigFile(configPath: string): void {
-  validateMcpFilePath(configPath);
+export function validateMcpConfigFile(configPath: string, workspacePath = process.cwd()): void {
+  validateMcpFilePathWithinWorkspace(configPath, workspacePath, workspacePath);
 
   const matchedConfigPaths = globSync(configPath, {
     absolute: true,
-    cwd: process.cwd(),
+    cwd: workspacePath,
     nodir: true,
     windowsPathsNoEscape: true,
   });
@@ -687,12 +694,12 @@ export function validateMcpConfigFile(configPath: string): void {
   }
 
   const state: ProviderValidationState = {
-    basePath: process.cwd(),
+    basePath: workspacePath,
     validatedConfigFiles: new Set(),
   };
 
   for (const matchedConfigPath of matchedConfigPaths) {
-    validateMcpFilePath(matchedConfigPath);
+    validateMcpFilePathWithinWorkspace(matchedConfigPath, workspacePath, workspacePath);
     const extension = path.extname(matchedConfigPath).toLowerCase();
     if (!STATIC_CONFIG_EXTENSIONS.has(extension)) {
       throw new ConfigurationError(

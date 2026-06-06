@@ -435,12 +435,11 @@ describe('MCP Security', () => {
           ],
         }),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.json')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -461,12 +460,11 @@ describe('MCP Security', () => {
           '',
         ].join('\n'),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -487,12 +485,9 @@ describe('MCP Security', () => {
           '',
         ].join('\n'),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).not.toThrow();
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).not.toThrow();
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -511,29 +506,30 @@ describe('MCP Security', () => {
         path.join(workspace, 'promptfooconfig.yaml'),
         ['prompts: [hello]', 'providers:', '  - $ref: ./provider.yaml', ''].join('\n'),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
 
     it('should reject dynamic config files before importing them', () => {
-      const workspace = fs.mkdtempSync(path.join(process.cwd(), '.promptfoo-mcp-security-'));
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      fs.mkdirSync(workspace);
       fs.writeFileSync(
         path.join(workspace, 'promptfooconfig.js'),
         'export default { prompts: ["hello"], providers: ["echo"] };\n',
       );
 
       try {
-        expect(() => validateMcpConfigFile(path.join(workspace, 'promptfooconfig.js'))).toThrow(
+        expect(() => validateMcpConfigFile('promptfooconfig.js', workspace)).toThrow(
           /Dynamic JavaScript and TypeScript config files are not allowed/,
         );
       } finally {
-        fs.rmSync(workspace, { force: true, recursive: true });
+        fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
 
@@ -549,12 +545,11 @@ describe('MCP Security', () => {
         path.join(configs, 'unsafe.yaml'),
         `prompts: [hello]\nproviders: [file://${path.join(outside, 'evil.py')}]\n`,
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('configs/*.yaml')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('configs/*.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -565,8 +560,6 @@ describe('MCP Security', () => {
       const outside = path.join(tempRoot, 'outside');
       fs.mkdirSync(workspace);
       fs.mkdirSync(outside);
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
         fs.writeFileSync(
           path.join(workspace, 'promptfooconfig.yaml'),
@@ -574,7 +567,9 @@ describe('MCP Security', () => {
             '\n',
           ),
         );
-        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
 
         fs.writeFileSync(
           path.join(workspace, 'promptfooconfig.yaml'),
@@ -585,9 +580,10 @@ describe('MCP Security', () => {
             '',
           ].join('\n'),
         );
-        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -608,12 +604,11 @@ describe('MCP Security', () => {
           '',
         ].join('\n'),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -633,12 +628,11 @@ describe('MCP Security', () => {
           tests: path.join(outside, 'tests.yaml'),
         }),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.json')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
@@ -654,12 +648,11 @@ describe('MCP Security', () => {
           providers: ['echo'],
         }),
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
-
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.json')).toThrow(ConfigurationError);
+        expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
-        cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
     });
