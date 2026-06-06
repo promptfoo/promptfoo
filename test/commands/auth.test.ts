@@ -169,7 +169,11 @@ describe('auth command', () => {
       expect(fetchWithTimeout).toHaveBeenNthCalledWith(
         1,
         'https://api.promptfoo.app/api/v1/auth/device/code',
-        expect.objectContaining({ method: 'POST', skipCloudAuth: true }),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'x-promptfoo-silent': 'true' }),
+          skipCloudAuth: true,
+        }),
         expect.any(Number),
       );
       expect(JSON.parse(String(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body))).toEqual({
@@ -178,8 +182,12 @@ describe('auth command', () => {
       expect(fetchWithTimeout).toHaveBeenNthCalledWith(
         2,
         'https://api.promptfoo.app/api/v1/auth/device/token',
-        expect.objectContaining({ method: 'POST', skipCloudAuth: true }),
-        expect.any(Number),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'x-promptfoo-silent': 'true' }),
+          skipCloudAuth: true,
+        }),
+        55_000,
       );
       expect(JSON.parse(String(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body))).toEqual({
         device_code: 'device-code',
@@ -271,6 +279,61 @@ describe('auth command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to request device code: invalid response from server'),
       );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should reject device codes with terminal control characters before displaying them', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {
+            device_code: 'device-code',
+            user_code: 'ABCD\u001B[2JEFGH',
+            verification_uri: 'https://www.promptfoo.app/device',
+            expires_in: 60,
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd!.parseAsync(['node', 'test']);
+
+      expect(opener).not.toHaveBeenCalled();
+      expect(process.stdout.write).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to request device code: invalid response from server'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should not include a failed device-code response body in the user-facing error', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+          body: {
+            device_code: 'secret-device-code',
+            error_description: 'secret-user-code',
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd!.parseAsync(['node', 'test']);
+
+      const errorLogs = JSON.stringify(vi.mocked(logger.error).mock.calls);
+      expect(errorLogs).toContain('Failed to request device code: 400 Bad Request');
+      expect(errorLogs).not.toContain('secret-device-code');
+      expect(errorLogs).not.toContain('secret-user-code');
       expect(process.exitCode).toBe(1);
     });
 
@@ -572,6 +635,50 @@ describe('auth command', () => {
       expect(logger.error).not.toHaveBeenCalledWith(
         expect.stringContaining('unexpected html token'),
       );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should not include a device-token error description in the user-facing error', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              expires_in: 60,
+              interval: 5,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            body: {
+              error: 'invalid_request',
+              error_description: 'secret-device-code',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      const errorLogs = JSON.stringify(vi.mocked(logger.error).mock.calls);
+      expect(errorLogs).toContain(
+        'Authentication failed: Device authorization failed (invalid_request): 400 Bad Request',
+      );
+      expect(errorLogs).not.toContain('secret-device-code');
       expect(process.exitCode).toBe(1);
     });
 

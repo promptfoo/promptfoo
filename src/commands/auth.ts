@@ -54,13 +54,22 @@ const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getRequestTimeoutMs();
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const DEVICE_POLL_SLOW_DOWN_SECONDS = 5;
+const DEVICE_AUTH_SILENT_HEADER = { 'x-promptfoo-silent': 'true' } as const;
+
+function hasControlCharacters(value: string): boolean {
+  return /[\u0000-\u001F\u007F-\u009F]/u.test(value);
+}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isSafeCredentialString(value: unknown): value is string {
+  return isNonEmptyString(value) && !hasControlCharacters(value);
+}
+
 function isSafeVerificationUrl(value: unknown): value is string {
-  if (!isNonEmptyString(value)) {
+  if (!isNonEmptyString(value) || hasControlCharacters(value)) {
     return false;
   }
 
@@ -312,7 +321,7 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
     `${apiHost}/api/v1/auth/device/code`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...DEVICE_AUTH_SILENT_HEADER },
       body: JSON.stringify({ client_id: DEVICE_CLIENT_ID }),
       skipCloudAuth: true,
     },
@@ -320,8 +329,9 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
   );
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to request device code: ${error || response.statusText}`);
+    throw new Error(
+      `Failed to request device code: ${response.status} ${response.statusText}`.trim(),
+    );
   }
 
   let data: unknown;
@@ -334,8 +344,8 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
   if (
     !data ||
     typeof data !== 'object' ||
-    !isNonEmptyString((data as DeviceCodeResponse).device_code) ||
-    !isNonEmptyString((data as DeviceCodeResponse).user_code) ||
+    !isSafeCredentialString((data as DeviceCodeResponse).device_code) ||
+    !isSafeCredentialString((data as DeviceCodeResponse).user_code) ||
     !isSafeVerificationUrl((data as DeviceCodeResponse).verification_uri) ||
     ((data as DeviceCodeResponse).verification_uri_complete !== undefined &&
       !isSafeVerificationUrl((data as DeviceCodeResponse).verification_uri_complete)) ||
@@ -371,11 +381,16 @@ async function pollForDeviceToken(
       break;
     }
 
+    const requestTimeoutMs = Math.min(
+      DEVICE_AUTH_REQUEST_TIMEOUT_MS,
+      Math.max(1, expiresAtMs - Date.now()),
+    );
+
     const response = await fetchWithTimeout(
       `${apiHost}/api/v1/auth/device/token`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...DEVICE_AUTH_SILENT_HEADER },
         body: JSON.stringify({
           device_code: deviceCode,
           grant_type: DEVICE_GRANT_TYPE,
@@ -383,7 +398,7 @@ async function pollForDeviceToken(
         }),
         skipCloudAuth: true,
       },
-      DEVICE_AUTH_REQUEST_TIMEOUT_MS,
+      requestTimeoutMs,
     );
 
     let rawData: unknown;
@@ -403,7 +418,7 @@ async function pollForDeviceToken(
 
     const data = rawData as DeviceTokenResponse;
 
-    if (response.ok && 'access_token' in data && isNonEmptyString(data.access_token)) {
+    if (response.ok && 'access_token' in data && isSafeCredentialString(data.access_token)) {
       return data;
     }
 
@@ -424,9 +439,12 @@ async function pollForDeviceToken(
       throw new Error('Authorization was denied.');
     }
 
+    const errorCode =
+      'error' in data && typeof data.error === 'string' && /^[A-Za-z0-9._-]+$/u.test(data.error)
+        ? ` (${data.error})`
+        : '';
     throw new Error(
-      ('error_description' in data && data.error_description) ||
-        `Device authorization failed: ${response.status} ${response.statusText}`,
+      `Device authorization failed${errorCode}: ${response.status} ${response.statusText}`.trim(),
     );
   }
 
