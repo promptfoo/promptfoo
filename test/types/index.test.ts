@@ -702,11 +702,44 @@ describe('CommandLineOptionsSchema', () => {
       filterProviders: 'provider1',
       filterRange: '1:3',
       filterSample: 5,
+      filterSampleSeed: 42,
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+
+  it('should coerce numeric filter sample seed arguments to numbers', () => {
+    expect(
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: '42',
+      }),
+    ).toMatchObject({
+      filterSampleSeed: 42,
+    });
+  });
+
+  it('should reject nonnumeric filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: 'repeatable-run',
+      }),
+    ).toThrow();
+  });
+
+  it('should reject unsafe integer filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow();
   });
 
   it('should reject invalid filterRange values', () => {
@@ -851,6 +884,23 @@ describe('TestSuiteConfigSchema', () => {
         : { id: 'test-provider', config: { someConfig: true } };
 
       expect(Object.keys(testProvider)).toContain('env');
+    });
+  });
+
+  describe('tracing property', () => {
+    it('defaults the OTLP HTTP receiver to loopback', () => {
+      const result = TestSuiteConfigSchema.parse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {},
+          },
+        },
+      });
+
+      expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
     });
   });
 
