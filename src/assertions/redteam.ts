@@ -119,9 +119,7 @@ export const handleRedteam = async ({
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
   // Thread the blob resolver (injected by the evaluator) so redteam graders can resolve
   // externalized image outputs, mirroring the standard llm-rubric assertion path.
-  if (providerCallContext?.resolveImageBlob) {
-    gradingContext.resolveImageBlob = providerCallContext.resolveImageBlob;
-  }
+  gradingContext.resolveImageBlob = providerCallContext?.resolveImageBlob;
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);
