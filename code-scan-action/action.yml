@@ -12,13 +12,11 @@ inputs:
     required: false
     default: https://api.promptfoo.app
   min-severity:
-    description: 'Minimum severity level to report (low|medium|high|critical)'
+    description: 'Minimum severity level to report (low|medium|high|critical). Defaults to medium when neither min-severity nor minimum-severity is set.'
     required: false
-    default: 'medium'
   minimum-severity:
-    description: 'Alias for min-severity (low|medium|high|critical)'
+    description: 'Alias for min-severity (low|medium|high|critical). Has no default; takes effect only when min-severity is not set.'
     required: false
-    default: 'medium'
   config-path:
     description: 'Path to YAML configuration file'
     required: false

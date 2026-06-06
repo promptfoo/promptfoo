@@ -5,7 +5,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { cn } from '@app/lib/utils';
 import { getThresholdLabel } from '@app/utils/assertSetThreshold';
 import { Check, ChevronDown, Minus, X } from 'lucide-react';
-import type { GradingResult } from '@promptfoo/types';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
 
 interface AssertionChipProps {
   /** The metric name to display */
@@ -21,7 +22,7 @@ interface AssertionChipProps {
   /** Label describing the threshold type (e.g., "Either/Or", "ALL must pass") */
   thresholdLabel?: string;
   /** Child assertion results for assert-sets */
-  childResults?: GradingResult[];
+  childResults?: AssertionHierarchyResult[];
   /** Optional tooltip content (e.g., for policy metrics) */
   tooltipContent?: ReactNode;
   /** Click handler for filtering */
@@ -29,7 +30,7 @@ interface AssertionChipProps {
 }
 
 /** Get the display label for a child result. */
-function getChildLabel(child: GradingResult, index: number): string {
+function getChildLabel(child: AssertionHierarchyResult, index: number): string {
   return (
     child.assertion?.metric ||
     child.metadata?.assertSetMetric ||
@@ -125,7 +126,7 @@ function AssertionChip({
             <span className="font-medium">{score.toFixed(2)}</span>
             {threshold !== undefined && (
               <>
-                <span className="text-muted-foreground">≥</span>
+                <span className="text-muted-foreground">{score >= threshold ? '≥' : '<'}</span>
                 <span className="text-muted-foreground">{threshold.toFixed(2)}</span>
               </>
             )}

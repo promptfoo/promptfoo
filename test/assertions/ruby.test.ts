@@ -183,6 +183,35 @@ describe('Ruby assertions', () => {
     });
   });
 
+  it('should pass provider metadata shortcut to a ruby assert', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.rb');
+    vi.mocked(path.extname).mockReturnValue('.rb');
+    vi.mocked(runRuby).mockResolvedValueOnce(true);
+
+    const metadata = { http: { status: 200, statusText: 'OK' }, customField: 5 };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: { type: 'ruby', value: 'file:///path/to/assert.rb' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output', metadata },
+    });
+
+    expect(runRuby).toHaveBeenCalledWith('/path/to/assert.rb', 'get_assert', [
+      'Expected output',
+      expect.objectContaining({
+        metadata,
+        providerResponse: expect.objectContaining({ metadata }),
+      }),
+    ]);
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should not leak rendered template variables in failed inline ruby assertion reasons', async () => {
     vi.mocked(runRubyCode).mockResolvedValueOnce(false);
 

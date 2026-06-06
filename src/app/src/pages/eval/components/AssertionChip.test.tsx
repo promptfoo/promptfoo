@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionChip, getThresholdLabel } from './AssertionChip';
-import type { GradingResult } from '@promptfoo/types';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -97,7 +98,7 @@ describe('AssertionChip', () => {
   });
 
   it('renders assert-set with chevron for expansion', () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -123,7 +124,7 @@ describe('AssertionChip', () => {
   });
 
   it('displays child results in popover with pass/fail indicators', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 0.9,
@@ -161,7 +162,7 @@ describe('AssertionChip', () => {
   });
 
   it('shows neutral indicator for failed children when parent passed', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 0.9,
@@ -213,7 +214,7 @@ describe('AssertionChip', () => {
   });
 
   it('displays threshold comparison in popover', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -241,6 +242,31 @@ describe('AssertionChip', () => {
     expect(screen.getByText('0.50')).toBeInTheDocument();
   });
 
+  it('uses a less-than comparison when the assert-set misses its threshold', async () => {
+    render(
+      <AssertionChip
+        metric="failed-threshold-set"
+        score={0.25}
+        passed={false}
+        isAssertSet={true}
+        threshold={0.5}
+        childResults={[
+          {
+            pass: false,
+            score: 0.25,
+            reason: 'Failed',
+            assertion: { type: 'equals', metric: 'child' },
+          },
+        ]}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show failed-threshold-set details'));
+
+    expect(screen.getByText('<')).toBeInTheDocument();
+    expect(screen.queryByText('≥')).not.toBeInTheDocument();
+  });
+
   it('renders tooltip when tooltipContent is provided', async () => {
     render(
       <TooltipProvider delayDuration={0}>
@@ -264,7 +290,7 @@ describe('AssertionChip', () => {
 
   it('splits click targets for assert-sets with children', async () => {
     const handleClick = vi.fn();
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -298,7 +324,7 @@ describe('AssertionChip', () => {
 
   it('calls onClick handler when Enter or Space is pressed on an assert-set chip body', async () => {
     const handleClick = vi.fn();
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -339,7 +365,7 @@ describe('AssertionChip', () => {
   });
 
   it('renders tooltip for assert-sets with children', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -369,7 +395,7 @@ describe('AssertionChip', () => {
   });
 
   it('shows failed child indicator when parent assert-set failed', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: false,
         score: 0,
@@ -396,7 +422,7 @@ describe('AssertionChip', () => {
   });
 
   it('uses assertion type as fallback for child metric name', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -423,7 +449,7 @@ describe('AssertionChip', () => {
   });
 
   it('uses assert-set metadata for a nested child label', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -449,7 +475,7 @@ describe('AssertionChip', () => {
   });
 
   it('uses generated fallback when child has no assertion label', async () => {
-    const childResults: GradingResult[] = [
+    const childResults: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,

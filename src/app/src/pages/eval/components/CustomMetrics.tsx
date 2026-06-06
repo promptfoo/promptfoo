@@ -7,7 +7,6 @@ import {
   isPolicyMetric,
   makeCustomPolicyCloudUrl,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import type { GradingResult } from '@promptfoo/types';
 import './CustomMetrics.css';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -18,6 +17,8 @@ import AssertionChip, { getThresholdLabel } from './AssertionChip';
 import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
 
+import type { AssertionHierarchyResult } from './assertionHierarchy';
+
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -26,7 +27,7 @@ interface CustomMetricsProps {
    * Component results from the grading result, provides hierarchy context for assert-sets.
    * When provided, chips will be color-coded (pass/fail) and assert-sets will be expandable.
    */
-  componentResults?: GradingResult[];
+  componentResults?: AssertionHierarchyResult[];
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
@@ -74,17 +75,21 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
  * Build a lookup from metric names to their GradingResult data.
  * This maps metrics to their pass/fail status, whether they're assert-sets, and child results.
  */
-function buildMetricResultLookup(componentResults: GradingResult[] | undefined): Map<
+function buildMetricResultLookup(componentResults: AssertionHierarchyResult[] | undefined): Map<
   string,
   {
-    result: GradingResult;
+    result: AssertionHierarchyResult;
     isAssertSet: boolean;
-    childResults: GradingResult[];
+    childResults: AssertionHierarchyResult[];
   }
 > {
   const lookup = new Map<
     string,
-    { result: GradingResult; isAssertSet: boolean; childResults: GradingResult[] }
+    {
+      result: AssertionHierarchyResult;
+      isAssertSet: boolean;
+      childResults: AssertionHierarchyResult[];
+    }
   >();
   const ambiguousMetrics = new Set<string>();
 
@@ -93,7 +98,7 @@ function buildMetricResultLookup(componentResults: GradingResult[] | undefined):
   }
 
   const indexedResults = componentResults.map((result, index) => ({ result, index }));
-  const childResultsByParentIndex = new Map<number, GradingResult[]>();
+  const childResultsByParentIndex = new Map<number, AssertionHierarchyResult[]>();
 
   for (const { result } of indexedResults) {
     const parentIndex = result?.metadata?.parentAssertSetIndex;

@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { AssertSetCard } from './AssertSetCard';
-import type { GradingResult } from '@promptfoo/types';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
 
 // Import the functions we're testing
 // Note: These are not exported, so we test them indirectly through the component
@@ -10,7 +11,7 @@ import type { GradingResult } from '@promptfoo/types';
 
 describe('AssertSetCard - getThresholdLabel logic', () => {
   it('describes default no-threshold behavior', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'All passed',
@@ -24,7 +25,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
   });
 
   it('displays an explicit full score threshold', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'All passed',
@@ -38,7 +39,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
   });
 
   it('does not describe a weighted score threshold as either-or', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.5,
       reason: 'One passed',
@@ -52,7 +53,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
   });
 
   it('displays a low aggregate score threshold explicitly', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.3,
       reason: 'At least one passed',
@@ -66,7 +67,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
   });
 
   it('does not infer child counts from a weighted score threshold', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.75,
       reason: 'Most passed',
@@ -80,7 +81,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
   });
 
   it('displays a high aggregate score threshold explicitly', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.8,
       reason: 'Most passed',
@@ -94,7 +95,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
   });
 
   it('displays a zero score threshold explicitly', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -110,7 +111,7 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
 describe('AssertSetCard - formatScoreThreshold logic', () => {
   it('displays score as percentage without threshold', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.75,
       reason: 'Passed',
@@ -124,7 +125,7 @@ describe('AssertSetCard - formatScoreThreshold logic', () => {
   });
 
   it('displays score with >= comparison when score meets threshold', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.75,
       reason: 'Passed',
@@ -138,7 +139,7 @@ describe('AssertSetCard - formatScoreThreshold logic', () => {
   });
 
   it('displays score with < comparison when score below threshold', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: false,
       score: 0.3,
       reason: 'Failed',
@@ -152,7 +153,7 @@ describe('AssertSetCard - formatScoreThreshold logic', () => {
   });
 
   it('rounds percentages correctly', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.667,
       reason: 'Passed',
@@ -169,7 +170,7 @@ describe('AssertSetCard - formatScoreThreshold logic', () => {
 
 describe('AssertSetCard component', () => {
   it('renders passed assert-set with green styling', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'All passed',
@@ -185,7 +186,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('renders failed assert-set with red styling', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: false,
       score: 0.3,
       reason: 'Failed',
@@ -201,7 +202,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('displays child assertions when expanded', async () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: false,
       score: 0.5,
       reason: 'Some failed',
@@ -209,7 +210,7 @@ describe('AssertSetCard component', () => {
       metadata: { assertSetThreshold: 1 },
     };
 
-    const children: GradingResult[] = [
+    const children: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -233,7 +234,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('collapses and expands on click', async () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -241,7 +242,7 @@ describe('AssertSetCard component', () => {
       metadata: { assertSetThreshold: 1 },
     };
 
-    const children: GradingResult[] = [
+    const children: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -272,7 +273,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('defaults to expanded for failed assert-sets', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: false,
       score: 0,
       reason: 'Failed',
@@ -280,7 +281,7 @@ describe('AssertSetCard component', () => {
       metadata: { assertSetThreshold: 1 },
     };
 
-    const children: GradingResult[] = [
+    const children: AssertionHierarchyResult[] = [
       {
         pass: false,
         score: 0,
@@ -296,7 +297,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('defaults to collapsed for passed assert-sets', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -304,7 +305,7 @@ describe('AssertSetCard component', () => {
       metadata: { assertSetThreshold: 1 },
     };
 
-    const children: GradingResult[] = [
+    const children: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -320,7 +321,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('shows neutral indicator for failed children when parent passed', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 0.5,
       reason: 'Either/Or passed',
@@ -328,7 +329,7 @@ describe('AssertSetCard component', () => {
       metadata: { assertSetThreshold: 0.5 },
     };
 
-    const children: GradingResult[] = [
+    const children: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,
@@ -352,7 +353,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('uses assertSetMetric from metadata as fallback', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -366,7 +367,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('uses threshold from assertion as fallback', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -381,7 +382,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('displays "assert-set" as default metric name', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -395,7 +396,7 @@ describe('AssertSetCard component', () => {
   });
 
   it('displays child assertion type as fallback for metric', () => {
-    const result: GradingResult = {
+    const result: AssertionHierarchyResult = {
       pass: true,
       score: 1,
       reason: 'Passed',
@@ -403,7 +404,7 @@ describe('AssertSetCard component', () => {
       metadata: { assertSetThreshold: 1 },
     };
 
-    const children: GradingResult[] = [
+    const children: AssertionHierarchyResult[] = [
       {
         pass: true,
         score: 1,

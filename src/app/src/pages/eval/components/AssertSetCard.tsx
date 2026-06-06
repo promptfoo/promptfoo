@@ -3,17 +3,18 @@ import { useId, useState } from 'react';
 import { cn } from '@app/lib/utils';
 import { formatScoreThreshold, getThresholdLabel } from '@app/utils/assertSetThreshold';
 import { ChevronDown, CircleCheck, CircleX, Minus } from 'lucide-react';
-import type { GradingResult } from '@promptfoo/types';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
 
 interface AssertSetCardProps {
-  result: GradingResult;
-  children: GradingResult[];
+  result: AssertionHierarchyResult;
+  children: AssertionHierarchyResult[];
   defaultExpanded?: boolean;
 }
 
-function getChildResults(result: GradingResult): GradingResult[] {
+function getChildResults(result: AssertionHierarchyResult): AssertionHierarchyResult[] {
   return (
-    result.componentResults?.filter((childResult): childResult is GradingResult =>
+    result.componentResults?.filter((childResult): childResult is AssertionHierarchyResult =>
       Boolean(childResult),
     ) ?? []
   );
@@ -24,7 +25,7 @@ function AssertionRow({
   parentPassed,
   isChild = false,
 }: {
-  result: GradingResult;
+  result: AssertionHierarchyResult;
   parentPassed?: boolean;
   isChild?: boolean;
 }) {

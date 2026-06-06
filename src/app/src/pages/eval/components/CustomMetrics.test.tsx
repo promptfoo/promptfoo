@@ -9,7 +9,8 @@ import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomMetrics from './CustomMetrics';
-import type { GradingResult } from '@promptfoo/types';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
 
 // Mock the hooks that make API calls or use crypto
 vi.mock('./store', () => ({
@@ -368,7 +369,7 @@ describe('CustomMetrics', () => {
   describe('buildMetricResultLookup integration', () => {
     it('renders AssertionChip with color coding when componentResults provided', () => {
       const lookup = { 'test-metric': 0.75 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 0.75,
@@ -388,7 +389,7 @@ describe('CustomMetrics', () => {
 
     it('renders AssertionChip with red styling for failed assertions', () => {
       const lookup = { 'failed-metric': 0.3 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: false,
           score: 0.3,
@@ -408,7 +409,7 @@ describe('CustomMetrics', () => {
 
     it('keeps aggregated duplicate metrics neutral instead of selecting one result', () => {
       const lookup = { Accuracy: 0.5 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 1,
@@ -432,7 +433,7 @@ describe('CustomMetrics', () => {
 
     it('identifies assert-sets and renders with chevron', () => {
       const lookup = { 'assert-set': 1 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 1,
@@ -458,7 +459,7 @@ describe('CustomMetrics', () => {
 
     it('uses hierarchy result data for child metrics that are shown separately', () => {
       const lookup = { parent: 1, child: 1 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 1,
@@ -485,7 +486,7 @@ describe('CustomMetrics', () => {
 
     it('uses assertSetMetric from metadata as metric name', () => {
       const lookup = { 'metadata-metric': 1 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 1,
@@ -502,7 +503,7 @@ describe('CustomMetrics', () => {
 
     it('falls back to assertion type when metric not available', () => {
       const lookup = { 'test-type': 0.5 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 0.5,
@@ -527,8 +528,8 @@ describe('CustomMetrics', () => {
 
     it('handles null/undefined results in componentResults', () => {
       const lookup = { metric1: 10 };
-      const componentResults: GradingResult[] = [
-        null as unknown as GradingResult,
+      const componentResults: AssertionHierarchyResult[] = [
+        null as unknown as AssertionHierarchyResult,
         {
           pass: true,
           score: 10,
@@ -544,7 +545,7 @@ describe('CustomMetrics', () => {
 
     it('groups multiple children under same parent assert-set', () => {
       const lookup = { parent: 0.67 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 0.67,
@@ -585,7 +586,7 @@ describe('CustomMetrics', () => {
 
     it('falls back to neutral styling when metric not in componentResults', () => {
       const lookup = { 'metric-not-in-results': 10, 'metric-in-results': 5 };
-      const componentResults: GradingResult[] = [
+      const componentResults: AssertionHierarchyResult[] = [
         {
           pass: true,
           score: 5,
