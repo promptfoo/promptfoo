@@ -58,6 +58,7 @@ function createLegacyV2Summary() {
       head: {
         prompts: [
           {
+            display: 'head-prompt-display-secret',
             raw: 'head-prompt-secret {{safe}}',
             label: 'head-prompt-label-secret',
             provider: 'provider',
@@ -110,8 +111,13 @@ function createLegacyV2Summary() {
                 },
               },
               response: {
+                audio: { data: 'response-audio-secret' },
+                images: [{ data: 'response-image-secret' }],
                 output: 'response-output-secret',
+                prompt: 'provider-prompt-secret',
+                video: { url: 'response-video-secret' },
                 metadata: {
+                  blobUris: ['promptfoo://blob/secret-media'],
                   headers: {
                     'x-request-id': 'legacy_should_not_persist',
                     'x-safe-debug': 'keep-legacy',
@@ -436,6 +442,8 @@ describe('writeOutput', () => {
       const eval_ = new Eval({});
       await eval_.addPrompts([
         {
+          id: 'a'.repeat(64),
+          display: 'summary-prompt-display-secret',
           raw: 'summary-prompt-secret',
           label: 'summary-prompt-label-secret',
           provider: 'provider',
@@ -464,10 +472,13 @@ describe('writeOutput', () => {
       const summaryPrompt = JSON.parse(written).results.prompts[0];
       expect(summaryPrompt.raw).toBe('[prompt stripped]');
       expect(summaryPrompt.label).toBe('[prompt stripped]');
+      expect(summaryPrompt.display).toBe('[prompt stripped]');
+      expect(summaryPrompt.id).toBe('a'.repeat(64));
       expect(summaryPrompt.config.apiKey).toBe('[REDACTED]');
       expect(summaryPrompt.config.temperature).toBe(0.1);
       expect(written).not.toContain('summary-prompt-secret');
       expect(written).not.toContain('summary-prompt-label-secret');
+      expect(written).not.toContain('summary-prompt-display-secret');
       expect(written).not.toContain('summary-prompt-api-key-secret');
     } finally {
       restoreEnv();
@@ -555,6 +566,7 @@ describe('writeOutput', () => {
       const output = table.body[0].outputs[0];
       expect(table.head.prompts[0].raw).toBe('[prompt stripped]');
       expect(table.head.prompts[0].label).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].display).toBe('[prompt stripped]');
       expect(table.body[0].vars).toEqual(['', '', '']);
       expect(table.body[0].test.vars).toBeUndefined();
       expect(output.vars).toEqual({});
@@ -562,14 +574,25 @@ describe('writeOutput', () => {
       expect(output.prompt).toBe('[prompt stripped]');
       expect(output.text).toBe('[output stripped]');
       expect(output.response.output).toBe('[output stripped]');
+      expect(output.response.prompt).toBe('[prompt stripped]');
+      expect(output.response.audio).toBeUndefined();
+      expect(output.response.images).toBeUndefined();
+      expect(output.response.video).toBeUndefined();
+      expect(output.response.metadata.blobUris).toBeUndefined();
       expect(output.audio).toBeUndefined();
       expect(output.video).toBeUndefined();
       expect(output.images).toBeUndefined();
       expect(written).not.toContain('head-prompt-secret');
       expect(written).not.toContain('head-prompt-label-secret');
+      expect(written).not.toContain('head-prompt-display-secret');
       expect(written).not.toContain('rendered-prompt-secret');
       expect(written).not.toContain('response-text-secret');
       expect(written).not.toContain('response-output-secret');
+      expect(written).not.toContain('provider-prompt-secret');
+      expect(written).not.toContain('response-audio-secret');
+      expect(written).not.toContain('response-image-secret');
+      expect(written).not.toContain('response-video-secret');
+      expect(written).not.toContain('promptfoo://blob/secret-media');
       expect(written).not.toContain('audio-output-secret');
       expect(written).not.toContain('video-output-secret');
       expect(written).not.toContain('image-output-secret');

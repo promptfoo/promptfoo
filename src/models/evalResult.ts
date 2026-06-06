@@ -42,13 +42,13 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
 
 function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean },
+  options: { stripMetadata: boolean; stripOutput: boolean; stripPrompt: boolean },
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  if (!options.stripMetadata && !options.stripOutput && !options.stripPrompt) {
     return response;
   }
 
@@ -58,6 +58,17 @@ function projectProviderResponse(
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
+    delete projectedResponse.audio;
+    delete projectedResponse.images;
+    delete projectedResponse.video;
+    if (projectedResponse.metadata) {
+      const { blobUris: _blobUris, ...metadata } = projectedResponse.metadata;
+      projectedResponse.metadata = metadata;
+    }
+  }
+
+  if (options.stripPrompt) {
+    projectedResponse.prompt = '[prompt stripped]';
   }
 
   return projectedResponse;
@@ -68,6 +79,7 @@ function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T
     stripPromptText
       ? {
           ...prompt,
+          ...('display' in prompt ? { display: '[prompt stripped]' } : {}),
           label: '[prompt stripped]',
           raw: '[prompt stripped]',
         }
@@ -79,7 +91,11 @@ export function sanitizePromptForArtifact<T extends Prompt>(
   prompt: T,
   stripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
 ): T {
-  return projectPrompt(sanitizeForDbWithSecrets(prompt), stripPromptText);
+  const sanitized = sanitizeForDbWithSecrets(prompt);
+  if ('id' in prompt) {
+    sanitized.id = prompt.id;
+  }
+  return projectPrompt(sanitized, stripPromptText);
 }
 
 function projectTestCase(
@@ -579,6 +595,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
+    stripPrompt: shouldStripPromptText,
   });
 
   return {
@@ -710,6 +727,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
       response: projectProviderResponse(redacted.response ?? undefined, {
         stripMetadata: shouldStripMetadata,
         stripOutput: shouldStripResponseOutput,
+        stripPrompt: shouldStripPromptText,
       }),
       gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
       metadata: shouldStripMetadata ? {} : redacted.metadata,

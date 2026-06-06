@@ -20,7 +20,6 @@ import {
   sanitizeResultForJsonlArtifact,
   sanitizeTableForArtifact,
 } from '../models/evalResult';
-import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type CsvRow,
@@ -28,6 +27,7 @@ import {
   type OutputFile,
   ResultFailureReason,
 } from '../types';
+import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
