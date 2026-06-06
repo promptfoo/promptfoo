@@ -1,8 +1,10 @@
 type TestDatabaseClient = Pick<import('@libsql/client/node').Client, 'close' | 'execute'>;
 
 const TEST_DATABASE_CLIENTS_KEY = '__promptfooTestDatabaseClients';
+const TEST_DATABASE_OPERATION_QUEUE_KEY = '__promptfooTestDatabaseOperationQueue';
 type TestDatabaseGlobal = typeof globalThis & {
   [TEST_DATABASE_CLIENTS_KEY]?: Set<TestDatabaseClient>;
+  [TEST_DATABASE_OPERATION_QUEUE_KEY]?: Promise<void>;
 };
 
 function getTestDatabaseClients(): Set<TestDatabaseClient> {
@@ -10,8 +12,22 @@ function getTestDatabaseClients(): Set<TestDatabaseClient> {
   return (testGlobal[TEST_DATABASE_CLIENTS_KEY] ??= new Set<TestDatabaseClient>());
 }
 
-export function registerTestDatabaseClient(client: TestDatabaseClient): void {
-  getTestDatabaseClients().add(client);
+function enqueueTestDatabaseOperation<T>(operation: () => Promise<T> | T): Promise<T> {
+  const testGlobal = globalThis as TestDatabaseGlobal;
+  const result = (testGlobal[TEST_DATABASE_OPERATION_QUEUE_KEY] ?? Promise.resolve()).then(
+    operation,
+  );
+  testGlobal[TEST_DATABASE_OPERATION_QUEUE_KEY] = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+export async function registerTestDatabaseClient(client: TestDatabaseClient): Promise<void> {
+  await enqueueTestDatabaseOperation(() => {
+    getTestDatabaseClients().add(client);
+  });
 }
 
 export function unregisterTestDatabaseClient(client: TestDatabaseClient): void {
@@ -42,15 +58,44 @@ export async function resetTestDatabaseClient(client: TestDatabaseClient): Promi
   }
 }
 
-export async function closeTestDatabaseClients(): Promise<void> {
-  const clients = (globalThis as TestDatabaseGlobal)[TEST_DATABASE_CLIENTS_KEY];
-  if (!clients) {
-    return;
-  }
+export async function closeTestDatabaseClient(client: TestDatabaseClient): Promise<void> {
+  await enqueueTestDatabaseOperation(async () => {
+    const clients = (globalThis as TestDatabaseGlobal)[TEST_DATABASE_CLIENTS_KEY];
+    if (!clients?.delete(client)) {
+      client.close();
+      return;
+    }
 
-  for (const client of clients) {
-    await resetTestDatabaseClient(client);
-    client.close();
-  }
-  clients.clear();
+    try {
+      // libsql requires a process-wide shared in-memory cache for its internal
+      // connections. Reset it only after the final module graph has stopped using it.
+      if (clients.size === 0) {
+        await resetTestDatabaseClient(client);
+      }
+    } finally {
+      client.close();
+    }
+  });
+}
+
+export async function closeTestDatabaseClients(): Promise<void> {
+  await enqueueTestDatabaseOperation(async () => {
+    const clients = (globalThis as TestDatabaseGlobal)[TEST_DATABASE_CLIENTS_KEY];
+    if (!clients?.size) {
+      return;
+    }
+
+    const clientsToClose = [...clients];
+    const resetClient = clientsToClose.pop()!;
+    clients.clear();
+
+    try {
+      for (const client of clientsToClose) {
+        client.close();
+      }
+      await resetTestDatabaseClient(resetClient);
+    } finally {
+      resetClient.close();
+    }
+  });
 }
