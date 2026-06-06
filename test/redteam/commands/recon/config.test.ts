@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isValueMeaningful } from '../../../../src/contracts/recon-constants';
 import {
   applicationDefinitionToPurpose,
   buildApplicationDefinition,
@@ -9,9 +10,8 @@ import {
   isValidPlugin,
   SUGGESTED_PLUGIN_LIST,
 } from '../../../../src/redteam/commands/recon/config';
-import { isValueMeaningful } from '../../../../src/validators/recon-constants';
 
-import type { ReconResult } from '../../../../src/validators/recon';
+import type { ReconResult } from '../../../../src/contracts/recon';
 
 // Mock logger to suppress expected warnings during tests
 vi.mock('../../../../src/logger', () => ({

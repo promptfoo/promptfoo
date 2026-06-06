@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Promptfoo Local Server API",
-    "version": "0.121.13",
+    "version": "0.121.15",
     "description": "OpenAPI document generated from the shared Zod DTO schemas used by the Promptfoo local server and web UI."
   },
   "servers": [
@@ -780,7 +780,7 @@
                   },
                   "packageVersion": {
                     "type": "string",
-                    "default": "0.121.13"
+                    "default": "0.121.15"
                   },
                   "properties": {
                     "type": "object",

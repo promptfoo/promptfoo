@@ -107,6 +107,8 @@ export async function createOpenAIReconProvider(
     );
   }
 
+  const codexHome = getEnvString('CODEX_HOME');
+
   // SECURITY: Recon is observation-only. The read-only sandbox applies to both the
   // temporary working directory and the analyzed repository in additional_directories.
   const provider = new OpenAICodexSDKProvider({
@@ -119,6 +121,7 @@ export async function createOpenAIReconProvider(
       approval_policy: 'never',
       network_access_enabled: false,
       web_search_mode: 'disabled',
+      ...(codexHome ? { cli_env: { CODEX_HOME: codexHome } } : {}),
       output_schema: ReconOutputSchema,
       enable_streaming: !!onProgress,
       on_event: onProgress

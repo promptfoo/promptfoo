@@ -4,9 +4,9 @@ import type { ChildProcess } from 'child_process';
 import confirm from '@inquirer/confirm';
 import opener from 'opener';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { doRecon } from '../../../../src/commands/redteam/recon/index';
 import logger from '../../../../src/logger';
 import { buildRedteamConfig } from '../../../../src/redteam/commands/recon/config';
-import { doRecon } from '../../../../src/redteam/commands/recon/index';
 import { displayResults } from '../../../../src/redteam/commands/recon/output';
 import {
   buildPendingConfig,

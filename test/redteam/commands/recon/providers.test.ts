@@ -615,6 +615,22 @@ describe('recon provider factories', () => {
     );
   });
 
+  it('forwards a custom CODEX_HOME to the spawned Codex CLI', async () => {
+    mockedGetEnvString.mockImplementation((key: string) =>
+      key === 'CODEX_HOME' ? '/tmp/custom-codex-home' : undefined,
+    );
+    providerMocks.openAiCallApi.mockResolvedValue({ output: '{}' });
+
+    const provider = await createOpenAIReconProvider('/repo', scratchpad);
+    await provider.analyze('/repo', 'prompt');
+
+    expect(providerMocks.openAiConfig).toEqual(
+      expect.objectContaining({
+        cli_env: { CODEX_HOME: '/tmp/custom-codex-home' },
+      }),
+    );
+  });
+
   it('creates an Anthropic provider with progress hooks and parses output', async () => {
     const onProgress = vi.fn();
     providerMocks.anthropicCallApi.mockResolvedValue({

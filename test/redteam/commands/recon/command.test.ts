@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { reconCommand } from '../../../../src/commands/redteam/recon';
+import { doRecon } from '../../../../src/commands/redteam/recon/index';
 import logger from '../../../../src/logger';
-import { reconCommand } from '../../../../src/redteam/commands/recon';
-import { doRecon } from '../../../../src/redteam/commands/recon/index';
 import telemetry from '../../../../src/telemetry';
 
 vi.mock('../../../../src/logger', () => ({
@@ -17,7 +17,7 @@ vi.mock('../../../../src/telemetry', () => ({
   },
 }));
 
-vi.mock('../../../../src/redteam/commands/recon/index', () => ({
+vi.mock('../../../../src/commands/redteam/recon/index', () => ({
   doRecon: vi.fn(),
 }));
 

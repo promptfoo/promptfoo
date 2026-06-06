@@ -469,7 +469,7 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent -y
 
 ## Key Files Reference
 
-### CLI (src/redteam/commands/recon/)
+### CLI (`src/commands/redteam/recon.ts` and `src/commands/redteam/recon/`)
 
 | File           | Purpose                                           |
 | -------------- | ------------------------------------------------- |

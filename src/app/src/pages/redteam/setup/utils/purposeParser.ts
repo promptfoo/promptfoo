@@ -1,7 +1,4 @@
-import {
-  DEFAULT_APPLICATION_DEFINITION,
-  SECTION_HEADER_TO_FIELD,
-} from '@promptfoo/validators/recon-constants';
+import { DEFAULT_APPLICATION_DEFINITION, SECTION_HEADER_TO_FIELD } from '@promptfoo/contracts';
 
 import type { ApplicationDefinition } from '../types';
 

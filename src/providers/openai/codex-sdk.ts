@@ -17,11 +17,23 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  applyApiKeyToCliEnv,
+  shouldInjectApiKey,
+  usesCustomModelProvider,
+} from './codexApiKeyGating';
+import {
+  buildCodexSkillMetadata,
+  extractCodexSkillPathCandidates,
+  getCodexSkillMetadataFields,
+  getCodexSkillRootPrefixes,
+} from './codexSkillMetadata';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -29,7 +41,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-  SkillCallEntry,
 } from '../../types/index';
 
 /**
@@ -114,6 +125,8 @@ type CodexPromptInput = string | CodexPromptInputItem[];
 interface CodexStreamingState {
   items: any[];
   usage: any;
+  turnCompleted: boolean;
+  lastStreamError?: string;
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
@@ -188,6 +201,11 @@ export interface OpenAICodexSDKConfig {
   base_url?: string;
 
   /**
+   * Maximum scheduler retry attempts for retryable Codex SDK rate limit failures.
+   */
+  maxRetries?: number;
+
+  /**
    * Working directory for Codex to operate in
    * Defaults to process.cwd()
    */
@@ -210,9 +228,21 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
+   * provider's model id instead (e.g., 'openai.gpt-5.5' for Amazon Bedrock).
    */
   model?: string;
+
+  /**
+   * Codex model provider to route through, mapped to the CLI's `model_provider` config.
+   * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.5'` and AWS credentials in `cli_env`).
+   * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
+   *
+   * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
+   */
+  model_provider?: string;
 
   /**
    * Sandbox access level controlling filesystem permissions
@@ -366,11 +396,13 @@ const OpenAICodexSDKConfigShape = {
   linkedTargetId: z.string().optional(),
   apiKey: z.string().min(1).optional(),
   base_url: z.string().min(1).optional(),
+  maxRetries: z.number().int().nonnegative().optional(),
   working_dir: z.string().min(1).optional(),
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
   network_access_enabled: z.boolean().optional(),
@@ -426,6 +458,120 @@ function getMinimalProcessEnv(): Record<string, string> {
     }
   }
   return env;
+}
+
+const CODEX_RATE_LIMIT_CODES = [
+  'rate_limit_exceeded',
+  'insufficient_quota',
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'access_terminated',
+  'quota_exceeded',
+] as const;
+
+// Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
+const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
+
+const CODEX_RATE_LIMIT_PATTERNS = [
+  /\b429\b/,
+  /\brate[\s_-]*limit(?:ed|ing| reached| exceeded)?\b/i,
+  /\btoo many requests\b/i,
+  /\btokens per (?:minute|min)\b/i,
+  /\brequests per (?:minute|min)\b/i,
+  /\bexceeded your current quota\b/i,
+];
+
+function extractCodexRateLimitCode(message: string): string | undefined {
+  const lowerMessage = message.toLowerCase();
+  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
+  if (explicitCode) {
+    return explicitCode;
+  }
+
+  if (
+    /\bexceeded your current quota\b/i.test(message) ||
+    /\bcheck your plan and billing details\b/i.test(message)
+  ) {
+    return 'insufficient_quota';
+  }
+
+  return undefined;
+}
+
+function extractCodexRetryAfterMs(message: string): number | undefined {
+  const match = message.match(
+    /\b(?:please\s+)?(?:try\s+again\s+in|retry(?:\s+again)?\s+(?:after|in))\s+(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m)\b/i,
+  );
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return undefined;
+  }
+
+  const unit = match[2].toLowerCase();
+  const multiplier =
+    unit.startsWith('m') && unit !== 'ms' && !unit.startsWith('milli')
+      ? 60_000
+      : unit.startsWith('s')
+        ? 1000
+        : 1;
+  return Math.ceil(amount * multiplier);
+}
+
+function buildCodexRateLimitResponse(
+  error: unknown,
+  message: string,
+): ProviderResponse | undefined {
+  const errorRecord =
+    typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : undefined;
+  const status =
+    typeof errorRecord?.status === 'number'
+      ? errorRecord.status
+      : typeof errorRecord?.statusCode === 'number'
+        ? errorRecord.statusCode
+        : undefined;
+  const rawCode =
+    typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  const code =
+    rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
+      ? rawCode
+      : extractCodexRateLimitCode(message);
+
+  if (
+    status !== 429 &&
+    code === undefined &&
+    !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
+  ) {
+    return undefined;
+  }
+
+  const retryAfterMs = extractCodexRetryAfterMs(message);
+  const rateLimitError = new HttpRateLimitError({
+    status: status ?? 429,
+    retryAfterMs,
+    code,
+  });
+  const schedulerRetryAfterMs =
+    rateLimitError.kind === 'rate_limit'
+      ? (retryAfterMs ?? CODEX_DEFAULT_RATE_LIMIT_WAIT_MS)
+      : undefined;
+  const headers: Record<string, string> =
+    schedulerRetryAfterMs === undefined ? {} : { 'retry-after-ms': String(schedulerRetryAfterMs) };
+
+  return {
+    error: formatRateLimitErrorMessage(rateLimitError, message),
+    metadata: {
+      rateLimitKind: rateLimitError.kind,
+      http: {
+        status: rateLimitError.status,
+        statusText: rateLimitError.statusText,
+        headers,
+      },
+    },
+  };
 }
 
 /**
@@ -536,7 +682,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.providerId = id ?? this.providerId;
     providerRegistry.register(this);
 
-    if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
+    if (
+      this.config.model &&
+      !usesCustomModelProvider(this.config) &&
+      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
+    ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
   }
@@ -652,13 +802,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject only the resolved Codex/OpenAI API key from provider env/config.
-    // Other promptfoo env overrides should be passed explicitly via cli_env so
-    // unrelated secrets are not exposed to shell commands.
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
@@ -718,156 +862,44 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode) {
+    if (!config.cli_config && !config.collaboration_mode && !config.model_provider) {
       return undefined;
     }
 
     return {
       ...(config.cli_config ?? {}),
+      // The first-class `model_provider` option takes precedence over any value
+      // supplied through raw `cli_config`.
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
-    const prefixes = new Set<string>();
+    const resolvedWorkingDir = workingDir
+      ? path.resolve(workingDir).replace(/\\/g, '/')
+      : undefined;
 
-    const addPrefix = (candidate?: string) => {
-      if (!candidate) {
-        return;
-      }
-
-      const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
-      if (normalized) {
-        prefixes.add(normalized);
-      }
-    };
-
-    addPrefix(env.CODEX_HOME);
-    // Codex's system skill root is documented as /etc/codex/skills.
-    addPrefix('/etc/codex');
-
-    if (workingDir) {
-      const resolvedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
-      addPrefix(path.posix.join(resolvedWorkingDir, '.agents'));
-
-      const gitRoot = this.findGitRepositoryRoot(resolvedWorkingDir);
-      if (gitRoot) {
-        addPrefix(path.posix.join(gitRoot.replace(/\\/g, '/'), '.agents'));
-      }
-    }
-
-    const homeDir = env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE;
-    if (homeDir) {
-      addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
-    }
-
-    return Array.from(prefixes);
-  }
-
-  private isValidCodexSkillName(name: string): boolean {
-    return /^[A-Za-z0-9._:-]+$/.test(name);
-  }
-
-  private extractSkillPathCandidates(
-    text: string,
-    skillRootPrefixes: readonly string[] = [],
-  ): Array<{ name: string; path: string }> {
-    const matches = new Map<string, { name: string; path: string }>();
-
-    for (const rawToken of text.split(/\s+/)) {
-      const token = rawToken.replace(/^[`"'([{<]+|[`"',;:)\]}>]+$/g, '').trim();
-      if (!token) {
-        continue;
-      }
-
-      const normalizedPath = token.replace(/\\/g, '/');
-      const repoMatch = normalizedPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
-      if (repoMatch) {
-        if (this.isValidCodexSkillName(repoMatch[1])) {
-          matches.set(normalizedPath, { name: repoMatch[1], path: normalizedPath });
-        }
-        continue;
-      }
-
-      const matchingRoot = skillRootPrefixes.find((prefix) =>
-        normalizedPath.startsWith(`${prefix}/skills/`),
-      );
-      if (!matchingRoot) {
-        continue;
-      }
-
-      const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
-      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-      if (customRootMatch && this.isValidCodexSkillName(customRootMatch[1])) {
-        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
-      }
-    }
-
-    return Array.from(matches.values());
-  }
-
-  private extractSkillCallsFromItems(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-    options: { requireSuccessfulCommand?: boolean } = {},
-  ): SkillCallEntry[] {
-    const skillCalls = new Map<
-      string,
-      {
-        name: string;
-        path: string;
-      }
-    >();
-
-    for (const item of items) {
-      if (item?.type !== 'command_execution') {
-        continue;
-      }
-      if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
-        continue;
-      }
-
-      const command =
-        typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
-      if (!command) {
-        continue;
-      }
-
-      for (const skillPath of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
-        const existing = skillCalls.get(skillPath.path) ?? {
-          name: skillPath.name,
-          path: skillPath.path,
-        };
-
-        skillCalls.set(skillPath.path, existing);
-      }
-    }
-
-    return Array.from(skillCalls.values()).map((skillCall) => ({
-      name: skillCall.name,
-      path: skillCall.path,
-      source: 'heuristic',
-    }));
-  }
-
-  private buildSkillMetadata(
-    items: any[],
-    skillRootPrefixes: readonly string[] = [],
-  ): { attemptedSkillCalls: SkillCallEntry[]; skillCalls: SkillCallEntry[] } | undefined {
-    if (!Array.isArray(items) || items.length === 0) {
-      return undefined;
-    }
-
-    const attemptedSkillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes);
-    const skillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes, {
-      requireSuccessfulCommand: true,
+    return getCodexSkillRootPrefixes({
+      codexHome: env.CODEX_HOME,
+      gitRepositoryRoot: resolvedWorkingDir
+        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        : undefined,
+      homeDir: env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE,
+      workingDir: resolvedWorkingDir,
     });
+  }
 
-    if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
-      return undefined;
-    }
-
-    return { attemptedSkillCalls, skillCalls };
+  private buildSkillMetadata(items: any[], skillRootPrefixes: readonly string[] = []) {
+    return buildCodexSkillMetadata(items, skillRootPrefixes, {
+      getCommand: (item: any) =>
+        item?.type === 'command_execution' &&
+        typeof item.command === 'string' &&
+        item.command.trim()
+          ? item.command
+          : undefined,
+      isSuccessfulCommand: (item: any) => this.isSuccessfulCommandExecution(item),
+    });
   }
 
   private isSuccessfulCommandExecution(item: any): boolean {
@@ -942,9 +974,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): Record<string, any> {
     const cliConfig = this.getResolvedCliConfig(config);
 
+    // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
+    // CODEX_API_KEY. Gate it with the same predicate as the env injection so an ambient
+    // OPENAI_API_KEY / CODEX_API_KEY isn't leaked to the agent shell when routing through a
+    // non-OpenAI model_provider (Bedrock authenticates via AWS credentials in cli_env).
     return {
       env,
-      ...(apiKey ? { apiKey } : {}),
+      ...(shouldInjectApiKey(config, apiKey) ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(cliConfig ? { config: cliConfig } : {}),
@@ -1060,6 +1096,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         this.handleStreamingEvent(event, state, tracer, eventTime, skillRootPrefixes);
         state.lastEventTime = eventTime;
       }
+
+      if (!state.turnCompleted) {
+        if (state.lastStreamError) {
+          if (!state.activeTurnSpan) {
+            this.startTurnSpan(state, tracer, state.lastEventTime);
+          }
+          this.endTurnSpan(state, state.lastEventTime, undefined, state.lastStreamError);
+          throw new Error(`Codex stream ended after error: ${state.lastStreamError}`);
+        }
+        throw new Error('Codex stream ended before turn completion');
+      }
     } finally {
       this.endUnclosedStreamingSpans(state);
     }
@@ -1071,6 +1118,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       items: [],
       usage: undefined,
+      turnCompleted: false,
+      lastStreamError: undefined,
       activeSpans: new Map(),
       itemStartTimes: new Map(),
       lastEventTime: Date.now(),
@@ -1106,6 +1155,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return;
       case 'turn.completed':
         state.usage = event.usage;
+        state.turnCompleted = true;
         if (!state.activeTurnSpan) {
           // Some Codex SDK streams emit `turn.completed` without a prior
           // `turn.started`. Lazily synthesize a turn span so the
@@ -1122,19 +1172,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         this.endTurnSpan(state, eventTime, undefined, errorMsg);
         logger.error('Codex turn failed', { error: errorMsg });
-        throw new Error(`Codex turn failed: ${errorMsg}`);
+        const previousStreamError =
+          state.lastStreamError && state.lastStreamError !== errorMsg
+            ? ` Previous stream error: ${state.lastStreamError}`
+            : '';
+        throw new Error(`Codex turn failed: ${errorMsg}${previousStreamError}`);
       }
       case 'error': {
         const errorMsg =
           typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
-        if (!state.activeTurnSpan) {
-          // Mirror `turn.failed`: a stream error before any `turn.started`
-          // should still surface an errored turn span.
-          this.startTurnSpan(state, tracer, state.lastEventTime);
-        }
-        this.endTurnSpan(state, eventTime, undefined, errorMsg);
-        logger.error('Codex stream error', { error: errorMsg });
-        throw new Error(`Codex stream error: ${errorMsg}`);
+        state.lastStreamError = errorMsg;
+        logger.debug('Codex stream error event received; waiting for terminal event', {
+          error: errorMsg,
+        });
+        return;
       }
       case 'thread.started':
         return;
@@ -1568,7 +1619,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const skillCandidates = new Map<string, { name: string; path: string }>();
 
     if (command) {
-      for (const skill of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+      for (const skill of extractCodexSkillPathCandidates(command, skillRootPrefixes)) {
         skillCandidates.set(skill.path, skill);
       }
     }
@@ -2157,9 +2208,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Safely extract error message - error may not be an Error object
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
-      return {
-        error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
-      };
+      return (
+        buildCodexRateLimitResponse(error, errorMessage) ?? {
+          error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
+        }
+      );
     } finally {
       await this.cleanupCodexTurn(resolvedConfig, cacheKey, useLocalInstance, localInstance);
     }
@@ -2304,12 +2357,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
-    return {
-      ...(skillMetadata.skillCalls.length > 0 ? { skillCalls: skillMetadata.skillCalls } : {}),
-      ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
-        ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
-        : {}),
-    };
+    return getCodexSkillMetadataFields(skillMetadata);
   }
 
   private buildCodexTokenUsage(turnUsage: any): ProviderResponse['tokenUsage'] {

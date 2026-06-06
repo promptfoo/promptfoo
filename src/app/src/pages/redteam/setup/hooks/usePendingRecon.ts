@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SETUP_TAB_INDICES } from '../constants';
 import { countPopulatedFields } from '../utils/applicationDefinition';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './useRedTeamConfig';
-import type { GetPendingReconResponse } from '@promptfoo/validators/recon';
+import type { GetPendingReconResponse } from '@promptfoo/contracts';
 
 import type { Config, ReconContext } from '../types';
 

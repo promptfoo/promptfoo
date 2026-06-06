@@ -27,8 +27,8 @@ const MAX_TOOLS_IN_PURPOSE = 20;
  * This is persisted in the YAML output under `metadata:`.
  *
  * Note: This uses the same field structure as PendingReconMetadata from
- * validators/recon.ts but with slightly different field names for YAML output.
- * The source schema (validators/recon.ts) is the canonical source of truth.
+ * contracts/recon.ts but with slightly different field names for YAML output.
+ * The source schema (contracts/recon.ts) is the canonical source of truth.
  */
 interface ReconMetadata {
   version: 1;
@@ -41,7 +41,7 @@ interface ReconMetadata {
 
 /**
  * Application definition fields for YAML metadata output.
- * Mirrors ApplicationDefinition from validators/recon.ts.
+ * Mirrors ApplicationDefinition from contracts/recon.ts.
  */
 interface ReconApplicationDefinition {
   purpose?: string;
@@ -88,7 +88,7 @@ const APPLICATION_DEFINITION_STRING_FIELDS: readonly (keyof ReconApplicationDefi
 
 /**
  * Recon details for YAML metadata output.
- * Mirrors the reconDetails structure from validators/recon.ts.
+ * Mirrors the reconDetails structure from contracts/recon.ts.
  */
 interface ReconDetails {
   stateful?: boolean;
@@ -338,7 +338,7 @@ function formatSection(
  * Converts a ReconResult to the purpose string format expected by promptfoo redteam
  *
  * This matches the format used by the web UI's applicationDefinitionToPurpose function.
- * Uses SECTION_HEADERS from validators/recon-constants for header strings.
+ * Uses SECTION_HEADERS from contracts/recon-constants for header strings.
  * Skips sections with placeholder values to reduce verbosity.
  */
 export function applicationDefinitionToPurpose(result: ReconResult): string {
