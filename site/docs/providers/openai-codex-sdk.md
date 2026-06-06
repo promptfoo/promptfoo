@@ -97,6 +97,38 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 
 :::
 
+### Option 3: Run on Amazon Bedrock
+
+Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: openai.gpt-5.5 # Bedrock model id (note the openai. prefix)
+      model_provider: amazon-bedrock
+      sandbox_mode: read-only
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+
+prompts:
+  - 'Write a Python function that calculates the factorial of a number'
+```
+
+Notes:
+
+- **Model ids are Bedrock ids**: use `openai.gpt-5.5` / `openai.gpt-5.4`, not the bare `gpt-5.5`. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`), which is separate from the classic `bedrock-runtime` `InvokeModel` API used by the [`bedrock:` provider](/docs/providers/aws-bedrock/).
+- **Region matters**: GPT-5.5 is available in `us-east-2`; GPT-5.4 in `us-east-2` and `us-west-2`. Request model access first.
+- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. The `bedrock:` provider, by contrast, uses the AWS SDK credential chain directly and does not need this.
+
+:::warning
+
+Credentials placed in `cli_env` are exposed to the Codex agent's shell environment. Scope the IAM permissions to Bedrock inference and prefer short-lived credentials.
+
+:::
+
 ## Quick Start
 
 ### Basic Usage
@@ -181,9 +213,11 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
 | `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
 | `base_url`               | string   | Custom API base URL                                                                                  | None                 |
+| `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
 | `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
 | `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
 | `model`                  | string   | Model to use                                                                                         | SDK default          |
+| `model_provider`         | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
 | `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
 | `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
 | `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |
@@ -202,6 +236,8 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
 | `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
+
+During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
 
 ### Sandbox Modes
 
@@ -914,6 +950,7 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 - [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) - Evaluate local Codex skills with `skill-used` and traced skill evidence
 - [Thread persistence](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/thread-persistence) - Reuse one prompt-template thread across multiple tests
 - [Sandbox enforcement](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/sandbox) - Verify `read-only` mode blocks writes in a sample workspace
+- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex against OpenAI frontier models (gpt-5.5 / gpt-5.4) on Amazon Bedrock
 - [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ### Verified end-to-end example runs

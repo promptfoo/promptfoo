@@ -274,8 +274,7 @@ export class OpenAiModerationProvider
       'Content-Type': 'application/json',
       'x-promptfoo-silent': 'true',
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-      ...this.config.headers,
+      ...this.getOpenAiRequestHeaders(),
     };
 
     try {

@@ -1,13 +1,18 @@
 import './setup';
 
 import { randomUUID } from 'crypto';
-import fs from 'fs';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate, runEval } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -17,6 +22,7 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
 import { mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -75,6 +81,102 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('closes JSONL writers after evaluation', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const closeSpy = vi.spyOn(JsonlFileWriter.prototype, 'close');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      fs.writeFileSync(outputPath, 'stale row\n');
+      const evalRecord = new Eval({ outputPath });
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(closeSpy).toHaveBeenCalledOnce();
+      const output = fs.readFileSync(outputPath, 'utf8');
+      expect(output).not.toContain('stale row');
+      expect(output.trim()).not.toBe('');
+    } finally {
+      closeSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('continues cleanup after a JSONL writer fails to close', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const originalClose = JsonlFileWriter.prototype.close;
+    const closeSpy = vi
+      .spyOn(JsonlFileWriter.prototype, 'close')
+      .mockImplementationOnce(async function (this: JsonlFileWriter) {
+        await originalClose.call(this);
+        throw new Error('simulated close failure');
+      });
+    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalRecord = new Eval({ outputPath });
+      await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow('simulated close failure');
+      expect(shutdownSpy).toHaveBeenCalledOnce();
+    } finally {
+      closeSpy.mockRestore();
+      shutdownSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
+  it('appends JSONL rows when resuming an evaluation', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      fs.writeFileSync(outputPath, 'existing row\n');
+      cliState.resume = true;
+
+      const evalRecord = new Eval({ outputPath });
+      await evaluate(testSuite, evalRecord, {});
+
+      const output = fs.readFileSync(outputPath, 'utf8');
+      expect(output).toContain('existing row');
+      expect(output.trim().split('\n')).toHaveLength(2);
+    } finally {
+      cliState.resume = false;
+      fs.rmSync(outputPath, { force: true });
+    }
+  });
+
   it('keeps raw SVG text available to llm-rubric judges while indexing media metadata', async () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
     const provider: ApiProvider = {
@@ -127,7 +229,11 @@ describeEvaluator('evaluator execution control', () => {
     callApi: ReturnType<typeof vi.fn>;
   };
 
-  async function runConcurrencyProbe(rawPrompt: string, testCount = 4): Promise<ConcurrencyProbe> {
+  async function runConcurrencyProbe(
+    rawPrompt: string,
+    testCount = 4,
+    providerOverrides: Partial<ApiProvider> = {},
+  ): Promise<ConcurrencyProbe> {
     let activeCalls = 0;
     let maxActiveCalls = 0;
     // Explicit barrier so every concurrent slot actually observes peak
@@ -167,6 +273,7 @@ describeEvaluator('evaluator execution control', () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi,
+      ...providerOverrides,
     };
 
     const tests = Array.from({ length: testCount }, (_, idx) => ({
@@ -242,6 +349,24 @@ describeEvaluator('evaluator execution control', () => {
     );
 
     expect(maxActiveCalls).toBe(1);
+  });
+
+  it('forces concurrency to 1 for browser providers with persistent sessions', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe('Ask: {{ question }}', 2, {
+      config: { persistSession: true },
+      id: vi.fn().mockReturnValue('browser-provider'),
+    });
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('keeps non-persistent browser provider calls concurrent', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe('Ask: {{ question }}', 2, {
+      config: { persistSession: false },
+      id: vi.fn().mockReturnValue('browser-provider'),
+    });
+
+    expect(maxActiveCalls).toBeGreaterThan(1);
   });
 
   it('falls back to serial execution when a prompt that mentions _conversation fails to parse', async () => {
@@ -553,6 +678,8 @@ describeEvaluator('evaluator execution control', () => {
           }),
         }),
       );
+      expect(evalRecord.resultPersistenceFailed).toBe(true);
+      expect(evalRecord.hasResultPersistenceFailure({ promptIdx: 0, testIdx: 0 })).toBe(true);
     } finally {
       mockAddResult.mockRestore();
       errorSpy.mockRestore();
@@ -1083,6 +1210,90 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('does not persist raw vars when setup times out during transformVars', async () => {
+    vi.useFakeTimers();
+    vi.mocked(transform).mockImplementationOnce(
+      async () => new Promise<Record<string, string>>(() => {}),
+    );
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ derived }}')],
+      defaultTest: {
+        options: {
+          transformVars: 'vars',
+        },
+      },
+      tests: [{ vars: { raw: 'untransformed' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(0);
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not duplicate completed resume rows when setup timeout precedes resume filtering', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Completed output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxEvalTimeMs: 0, timeoutMs: 0 });
+    const completedIndexSpy = vi
+      .spyOn(EvalResult, 'getCompletedIndexPairs')
+      .mockImplementation(() => new Promise<Set<string>>(() => {}));
+
+    try {
+      cliState.resume = true;
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          response: expect.objectContaining({ output: 'Completed output' }),
+          success: true,
+        }),
+      );
+    } finally {
+      cliState.resume = false;
+      completedIndexSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('protects setup with an automatic max timeout before row sizing completes', async () => {
     vi.useFakeTimers();
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
@@ -1580,7 +1791,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('does not append a max-duration row after the completed result is already persisted', async () => {
+  it('converts a row to max-duration failure when JSONL finalization crosses the deadline', async () => {
     vi.useFakeTimers();
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('completed-provider'),
@@ -1625,12 +1836,13 @@ describeEvaluator('evaluator execution control', () => {
       const summary = await evalRecord.toEvaluateSummary();
       expect(summary.results).toHaveLength(1);
       expect(summary.stats).toEqual(
-        expect.objectContaining({ errors: 0, failures: 0, successes: 1 }),
+        expect.objectContaining({ errors: 1, failures: 0, successes: 0 }),
       );
       expect(summary.results[0]).toEqual(
         expect.objectContaining({
-          response: expect.objectContaining({ output: 'Completed output' }),
-          success: true,
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
         }),
       );
     } finally {
