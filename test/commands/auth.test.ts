@@ -247,6 +247,33 @@ describe('auth command', () => {
       expect(stdout).not.toContain('undefined');
     });
 
+    it('should reject non-HTTP verification URLs before opening them', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {
+            device_code: 'device-code',
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'custom-app://authorize',
+            expires_in: 60,
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd!.parseAsync(['node', 'test']);
+
+      expect(opener).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to request device code: invalid response from server'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
     it('should use configured cloud API host for the cloud device-code option', async () => {
       vi.useFakeTimers();
       vi.mocked(isNonInteractive).mockReturnValue(false);

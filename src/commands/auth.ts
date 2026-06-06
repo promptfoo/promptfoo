@@ -55,6 +55,23 @@ const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getRequestTimeoutMs();
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const DEVICE_POLL_SLOW_DOWN_SECONDS = 5;
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isSafeVerificationUrl(value: unknown): value is string {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 function getOrganizationTeams(
   teams: UserTeam[],
   requestedOrganizationId: string | undefined,
@@ -317,11 +334,11 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
   if (
     !data ||
     typeof data !== 'object' ||
-    typeof (data as DeviceCodeResponse).device_code !== 'string' ||
-    typeof (data as DeviceCodeResponse).user_code !== 'string' ||
-    typeof (data as DeviceCodeResponse).verification_uri !== 'string' ||
+    !isNonEmptyString((data as DeviceCodeResponse).device_code) ||
+    !isNonEmptyString((data as DeviceCodeResponse).user_code) ||
+    !isSafeVerificationUrl((data as DeviceCodeResponse).verification_uri) ||
     ((data as DeviceCodeResponse).verification_uri_complete !== undefined &&
-      typeof (data as DeviceCodeResponse).verification_uri_complete !== 'string') ||
+      !isSafeVerificationUrl((data as DeviceCodeResponse).verification_uri_complete)) ||
     !Number.isFinite((data as DeviceCodeResponse).expires_in) ||
     (data as DeviceCodeResponse).expires_in <= 0 ||
     ((data as DeviceCodeResponse).interval !== undefined &&
@@ -386,7 +403,7 @@ async function pollForDeviceToken(
 
     const data = rawData as DeviceTokenResponse;
 
-    if (response.ok && 'access_token' in data && typeof data.access_token === 'string') {
+    if (response.ok && 'access_token' in data && isNonEmptyString(data.access_token)) {
       return data;
     }
 
