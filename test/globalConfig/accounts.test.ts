@@ -58,6 +58,7 @@ describe('accounts', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -702,14 +703,11 @@ describe('accounts', () => {
 
     it('should use the configured cloud host when one is already authenticated', async () => {
       vi.mocked(isCI).mockReturnValue(false);
-      vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
-        cloud: {
-          apiKey: 'worker-token',
-          apiHost: 'http://127.0.0.1:3201',
-        },
       });
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('http://127.0.0.1:3201');
       vi.mocked(fetchWithTimeout).mockResolvedValue(
         new Response(JSON.stringify({ status: 'ok' }), {
           status: 200,
