@@ -74,24 +74,28 @@ describeEvaluator('evaluator basic flows', () => {
 
   it('warns only once per reserved runtime var across evaluation steps', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('{{__evalStepId}} one'), toPrompt('{{__evalStepId}} two')],
-      tests: [
-        {
-          vars: { __evalStepId: 'spoofed-step-id' },
-        },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{__evalStepId}} one'), toPrompt('{{__evalStepId}} two')],
+        tests: [
+          {
+            vars: { __evalStepId: 'spoofed-step-id' },
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, { repeat: 2 });
+      await evaluate(testSuite, evalRecord, { repeat: 2 });
 
-    const collisionWarnings = warnSpy.mock.calls.filter(([message]) =>
-      String(message).includes('__evalStepId'),
-    );
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
-    expect(collisionWarnings).toHaveLength(1);
+      const collisionWarnings = warnSpy.mock.calls.filter(([message]) =>
+        String(message).includes('__evalStepId'),
+      );
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+      expect(collisionWarnings).toHaveLength(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('evaluate with vars - no escaping', async () => {
