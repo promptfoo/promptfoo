@@ -4,6 +4,7 @@ import { getUserEmail, isLoggedIntoCloud } from '../../../src/globalConfig/accou
 import logger from '../../../src/logger';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
@@ -55,6 +56,10 @@ describe('gcg strategy', () => {
     mockIsLoggedIntoCloud.mockReturnValue(true);
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    }));
     mockGetRemoteGenerationExplicitlyDisabledError.mockImplementation(
       (strategyName) =>
         `${strategyName} requires remote generation, which has been explicitly disabled.`,
