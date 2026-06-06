@@ -106,6 +106,7 @@ describe('OpenAI Provider', () => {
       );
 
       const [, requestOptions] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(new Headers(requestOptions?.headers).get('x-openai-originator')).toBe('promptfoo');
       expect(JSON.parse(String(requestOptions?.body))).toEqual({
         input: 'test text',
         model: 'text-embedding-3-small',

@@ -70,6 +70,7 @@ describe('OpenAiImageProvider', () => {
       expect(request.url).toContain('/images/generations');
       expect(request.body.prompt).toBe('Generate a cat');
       expect(request.headers.get('authorization')).toBe('Bearer test-key');
+      expect(request.headers.get('x-openai-originator')).toBe('promptfoo');
       expect(request.responseType).toBe('json');
       expect(request.bustCache).toBe(false);
 

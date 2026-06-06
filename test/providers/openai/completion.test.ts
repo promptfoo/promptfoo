@@ -204,6 +204,7 @@ describe('OpenAI Provider', () => {
       const [, requestOptions] = mockFetchWithCache.mock.calls[0];
       const requestHeaders = requestOptions?.headers as Headers;
       expect(requestHeaders.get('content-type')).toBe('application/json');
+      expect(requestHeaders.get('x-openai-originator')).toBe('promptfoo');
       expect(requestHeaders.get('x-test-header')).toBe('test-value');
     });
 

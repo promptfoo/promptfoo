@@ -5,6 +5,7 @@ import {
   generateChatKitHTML,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 // Mock Playwright - we don't want to actually launch browsers in unit tests
@@ -216,6 +217,28 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('session route', () => {
+    it('adds Promptfoo request headers when minting a client secret', async () => {
+      const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(
+        new Response(JSON.stringify({ client_secret: 'secret-123' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      const provider = new OpenAiChatKitProvider('wf_test123', {
+        config: { apiKey: 'test-key' },
+      });
+
+      try {
+        const secret = await (provider as any).createChatKitClientSecret('wf_test123', 'user-123');
+
+        expect(secret).toBe('secret-123');
+        const [, requestInit] = fetchSpy.mock.calls[0];
+        expect(new Headers(requestInit?.headers).get('x-openai-originator')).toBe('promptfoo');
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
     it('returns client secrets through the local provider route', async () => {
       const provider = new OpenAiChatKitProvider('wf_test123', {
         config: { apiKey: 'test-key' },

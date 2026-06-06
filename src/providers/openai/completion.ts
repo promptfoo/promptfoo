@@ -74,7 +74,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
-        headers: this.config.headers,
+        headers: this.getOpenAiRequestHeaders(this.config.headers),
         bustCache: context?.bustCache ?? context?.debug,
         maxRetries: this.config.maxRetries,
       },

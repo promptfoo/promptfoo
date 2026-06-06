@@ -347,6 +347,9 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.thumbnail).toContain('storageRef:');
       expect(result.video?.spritesheet).toContain('storageRef:');
       expect(result.cost).toBeGreaterThan(0);
+      const createRequest = mockFetchWithProxy.mock.calls.find(([url]) => /\/videos$/.test(url));
+      expect(createRequest).toBeDefined();
+      expect(new Headers(createRequest?.[1]?.headers).get('x-openai-originator')).toBe('promptfoo');
     });
 
     it('should handle invalid video size', async () => {

@@ -3,7 +3,7 @@ import path from 'path';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 
 import type {
@@ -214,16 +214,7 @@ export class FunctionCallbackHandler {
    * Loads a function from an external file
    */
   private async loadExternalFunction(fileRef: string): Promise<FunctionCallback> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    // Parse file:function format
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
+    const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);

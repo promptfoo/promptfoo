@@ -225,7 +225,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       allowMissingApiKey: !this.requiresApiKey(),
       organization: this.getOrganization(),
       baseURL: this.getApiUrl(),
-      headers,
+      headers: this.getOpenAiRequestHeaders(headers),
       // `fetchWithProxy` already owns transient retry behavior for this transport.
       // Keep SDK retries off here so create/remix requests do not multiply attempts.
       maxRetries: 0,

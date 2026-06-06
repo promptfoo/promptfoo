@@ -785,6 +785,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       apiKey,
       organization: this.getOrganization(),
       baseURL: this.getApiUrl(),
+      headers: this.getOpenAiRequestHeaders(this.config.headers),
       // Keep ChatKit session minting on Promptfoo's proxy-aware transport.
       // The pre-SDK browser fetch had no implicit retries, so preserve that unless configured.
       maxRetries: 0,

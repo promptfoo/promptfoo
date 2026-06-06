@@ -157,6 +157,7 @@ describe('OpenAiTranscriptionProvider', () => {
       const request = getTranscriptionRequest();
       expect(request.url).toContain('/audio/transcriptions');
       expect(request.headers.get('authorization')).toBe('Bearer test-key');
+      expect(request.headers.get('x-openai-originator')).toBe('promptfoo');
       expect(request.responseType).toBe('json');
       expect(request.bustCache).toBe(false);
 

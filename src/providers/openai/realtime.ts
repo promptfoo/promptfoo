@@ -714,6 +714,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         headers: {
           'User-Agent': 'promptfoo Realtime API Client',
           Origin: this.getWebSocketOrigin(),
+          ...this.getOpenAiRequestHeaders(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
@@ -1391,6 +1392,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           Authorization: `Bearer ${this.getApiKey()}`,
           'User-Agent': 'promptfoo Realtime API Client',
           Origin: this.getWebSocketOrigin(),
+          ...this.getOpenAiRequestHeaders(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
@@ -1984,6 +1986,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         Authorization: `Bearer ${this.getApiKey()}`,
         'User-Agent': 'promptfoo Realtime API Client',
         Origin: this.getWebSocketOrigin(),
+        ...this.getOpenAiRequestHeaders(),
       },
       handshakeTimeout: 10000,
       perMessageDeflate: false,

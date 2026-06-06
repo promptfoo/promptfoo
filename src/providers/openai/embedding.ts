@@ -54,7 +54,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
-        headers: this.config.headers,
+        headers: this.getOpenAiRequestHeaders(this.config.headers),
         maxRetries: this.config.maxRetries,
       },
       (client) => client.embeddings.create(body),

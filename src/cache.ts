@@ -7,14 +7,13 @@ import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
-import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
+import { getCloudBearerToken } from './util/fetch/monkeyPatchFetch';
 import { isSecretField, looksLikeSecret } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -288,7 +287,6 @@ type PreparedFetchResponse = {
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
-const FETCH_CACHE_SECRET_HMAC_KEY = crypto.randomBytes(32);
 // Headers that describe the transport/runtime rather than the selected
 // representation. Excluded from cache keys so caches stay portable across SDK
 // upgrades, Node versions, and OS/arch. `accept` intentionally stays in the
@@ -297,6 +295,15 @@ const FETCH_CACHE_SECRET_HMAC_KEY = crypto.randomBytes(32);
 // the key so promptfoo upgrades remain a deliberate invalidation boundary.
 const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding']);
 const SDK_USER_AGENT_PATTERN = /^OpenAI\/JS \S+$/;
+// A fixed, compiled-in salt (NOT a secret). It must be deterministic across
+// processes so that a request carrying a static secret — or a binary body —
+// hashes to the same on-disk cache key on every run and stays cacheable. A
+// per-process random key broke that: each `promptfoo eval` run produced a new
+// key and re-hit the upstream endpoint. The salt only domain-separates the
+// one-way HMAC so raw secrets are never written into the cache key; it does not
+// need to be unpredictable, and this matches the pre-existing (pre-isolation)
+// behavior of hashing the value directly.
+const FETCH_CACHE_SECRET_HMAC_SALT = 'promptfoo:fetch-cache-secret-hmac-salt:v1';
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
@@ -321,7 +328,7 @@ function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
 function fingerprintFetchCacheSecret(value: string) {
   return {
     __promptfooSecretFingerprint: crypto
-      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_SALT)
       .update(FETCH_CACHE_SECRET_HMAC_CONTEXT)
       .update('\0')
       .update(value)
@@ -423,11 +430,12 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  if (isPromptfooCloudApiHost(url)) {
-    const token = cloudConfig.getApiKey();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
+  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
+  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
+  // without overriding a caller-supplied Authorization.
+  const cloudAuth = getCloudBearerToken(url);
+  if (cloudAuth && !headers.has('Authorization')) {
+    headers.set('Authorization', cloudAuth);
   }
 
   return Array.from(headers.entries())
@@ -450,7 +458,7 @@ function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
   return {
     byteLength: buffer.byteLength,
     hmacSha256: crypto
-      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_SALT)
       .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:bytes`)
       .update('\0')
       .update(buffer)

@@ -277,7 +277,7 @@ export class OpenAiModerationProvider
             baseURL: this.getApiUrl(),
             headers: {
               'x-promptfoo-silent': 'true',
-              ...this.config.headers,
+              ...this.getOpenAiRequestHeaders(this.config.headers),
             },
             bustCache: true,
             maxRetries: this.config.maxRetries,

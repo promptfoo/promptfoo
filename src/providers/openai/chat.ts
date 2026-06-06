@@ -31,7 +31,7 @@ import {
   isOpenAiOSeriesReasoningModel,
   isOpenAiReasoningModel,
 } from './modelCapabilities';
-import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -206,6 +206,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.functions, vars);
+  }
+
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
@@ -235,6 +239,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
     return this.modelName;
+  }
+
+  protected getGenAISystem(): string {
+    return 'openai';
   }
 
   private getRequestLimits(
@@ -479,7 +487,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'openai',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
@@ -633,7 +641,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     }
 
-    if (message.reasoning && (this.config.showThinking ?? true)) {
+    if (message.reasoning && typeof output === 'string' && (this.config.showThinking ?? true)) {
       output = `Thinking: ${message.reasoning}\n\n${output}`;
     }
     if (
@@ -828,7 +836,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
-        headers: config.headers,
+        headers: this.getOpenAiRequestHeaders(config.headers),
         bustCache: context?.bustCache ?? context?.debug,
         maxRetries: this.config.maxRetries,
       },

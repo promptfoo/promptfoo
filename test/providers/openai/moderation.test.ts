@@ -103,6 +103,7 @@ describe('OpenAiModerationProvider', () => {
       expect(request.body.model).toBe('text-moderation-latest');
       expect(request.headers.get('authorization')).toBe('Bearer test-key');
       expect(request.headers.get('x-promptfoo-silent')).toBe('true');
+      expect(request.headers.get('x-openai-originator')).toBe('promptfoo');
       expect(request.responseType).toBe('json');
       expect(request.bustCache).toBe(true);
     });

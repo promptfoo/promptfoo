@@ -66,6 +66,7 @@ describe('OpenAiResponsesProvider request building', () => {
     const requestHeaders = requestOptions?.headers as Headers;
     expect(requestHeaders.get('content-type')).toBe('application/json');
     expect(requestHeaders.get('authorization')).toBe('Bearer test-key');
+    expect(requestHeaders.get('x-openai-originator')).toBe('promptfoo');
 
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('This is a test response');

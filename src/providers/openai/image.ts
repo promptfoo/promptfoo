@@ -827,7 +827,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
-        headers: config.headers,
+        headers: this.getOpenAiRequestHeaders(config.headers),
         bustCache: context?.bustCache ?? context?.debug,
         maxRetries: this.config.maxRetries,
       },

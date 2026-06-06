@@ -1,5 +1,10 @@
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
 import { fetchWithRetries } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
@@ -175,12 +180,22 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
+  /**
+   * Model id used for capability and billing lookups. Subclasses can strip a
+   * vendor prefix while preserving the actual request model in `this.modelName`.
+   */
+  protected getCapabilityModelName(): string {
+    return this.modelName;
+  }
+
   protected isGPT5Model(): boolean {
-    return isOpenAiGpt5Model(this.modelName);
+    return isOpenAiGpt5Model(this.getCapabilityModelName());
   }
 
   protected isReasoningModel(): boolean {
-    return isOpenAiReasoningModel(this.modelName, { includeCodexMiniLatest: true });
+    return isOpenAiReasoningModel(this.getCapabilityModelName(), {
+      includeCodexMiniLatest: true,
+    });
   }
 
   protected supportsTemperature(): boolean {
@@ -190,7 +205,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+    return this.getCapabilityModelName();
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -382,7 +397,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private validateDeepResearchConfig(
     config: OpenAiCompletionOptions,
   ): ProviderResponse | undefined {
-    if (!this.modelName.includes('deep-research')) {
+    if (!this.getCapabilityModelName().includes('deep-research')) {
       return undefined;
     }
 
@@ -404,8 +419,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getTimeoutMs(): number {
-    const isDeepResearchModel = this.modelName.includes('deep-research');
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const capabilityModelName = this.getCapabilityModelName();
+    const isDeepResearchModel = capabilityModelName.includes('deep-research');
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(capabilityModelName);
     if (!isDeepResearchModel && !isGpt5ProModel) {
       return getRequestTimeoutMs();
     }
@@ -428,7 +444,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
-        headers: config.headers,
+        headers: this.getOpenAiRequestHeaders(config.headers),
         maxRetries: 0,
         timeout,
         fetch: (url, init = {}) =>
@@ -458,7 +474,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
-        headers: config.headers,
+        headers: this.getOpenAiRequestHeaders(config.headers),
         bustCache: context?.bustCache ?? context?.debug,
         maxRetries: this.config.maxRetries,
         timeout,
@@ -656,7 +672,37 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const effectiveBody = resolved.body as Record<string, any>;
+    const asNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' ? value : undefined;
+
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.modelName,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: {
+        maxTokens: asNumber(effectiveBody.max_output_tokens),
+        temperature: asNumber(effectiveBody.temperature),
+        topP: asNumber(effectiveBody.top_p),
+        stopSequences: Array.isArray(effectiveBody.stop) ? effectiveBody.stop : undefined,
+      },
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(context, resolved),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    context: CallApiContextParams | undefined,
+    prepared: Awaited<ReturnType<OpenAiResponsesProvider['getOpenAiBody']>>,
+  ): Promise<ProviderResponse> {
+    const { body, config } = prepared;
 
     const deepResearchValidation = this.validateDeepResearchConfig(config);
     if (deepResearchValidation) {
