@@ -1438,10 +1438,13 @@ test_packaged_assets() {
     [[ -d "$ROOT_DIR/bundle/tracing/proto" ]] &&
     [[ -f "$ROOT_DIR/bundle/app/index.html" ]] &&
     [[ -f "$ROOT_DIR/bundle/tableOutput.html" ]] &&
+    [[ -f "$ROOT_DIR/bundle/node_modules/libsql/index.js" ]] &&
+    find "$ROOT_DIR/bundle/node_modules/@libsql" -maxdepth 2 -name '*.node' -type f | grep -q . &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/better-sqlite3" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/sharp" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/@huggingface/transformers" ]] &&
     [[ ! -e "$ROOT_DIR/bundle/node_modules/onnxruntime-node" ]]; then
-    log_pass "bundle contains runtime assets and omits npm-only Transformers dependencies"
+    log_pass "bundle contains libsql and runtime assets while omitting npm-only dependencies"
     return 0
   fi
 

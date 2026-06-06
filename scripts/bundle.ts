@@ -5,7 +5,7 @@
  * for distribution via pip install or a standalone installer. Providers that
  * require optional packages remain available through the npm distribution.
  *
- * Runtime modules (better-sqlite3 and tsx) are kept external and shipped alongside.
+ * Runtime modules (libsql and tsx) are kept external and shipped alongside.
  *
  * Usage:
  *   npx tsx scripts/bundle.ts
@@ -58,7 +58,7 @@ try {
  * These will be loaded at runtime from the extracted location.
  */
 const NATIVE_EXTERNALS = [
-  'better-sqlite3',
+  'libsql',
   'sharp',
   'playwright',
   'playwright-core',
@@ -209,7 +209,7 @@ function copyRuntimeModules(): void {
   console.log('\n[bundle] Copying runtime modules...');
 
   // Modules that must be shipped alongside the bundle.
-  const runtimeModules = ['better-sqlite3', 'tsx'];
+  const runtimeModules = ['libsql', 'tsx'];
 
   const nodeModulesDir = path.join(ROOT, 'node_modules');
   const bundleNodeModulesDir = path.join(BUNDLE_DIR, 'node_modules');
@@ -532,7 +532,7 @@ const __BUNDLE_ASSETS__ = path.join(__EXEC_DIR__, 'assets');
 
 // Override require for native modules in SEA mode
 if (isSEA) {
-  const nativeModules = ['better-sqlite3'];
+  const nativeModules = ['libsql'];
   const originalRequire = Module.prototype.require;
   Module.prototype.require = function(id) {
     if (nativeModules.includes(id)) {
@@ -859,7 +859,7 @@ async function main(): Promise<void> {
   console.log('\n[bundle] Copying assets...');
   copyAssets();
 
-  // Copy runtime modules (better-sqlite3, tsx, and their dependencies).
+  // Copy runtime modules (libsql, tsx, and their dependencies).
   copyRuntimeModules();
 
   // Create ESM bundle (default)

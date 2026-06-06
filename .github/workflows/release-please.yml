@@ -230,11 +230,9 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             archive: tar.gz
-            manylinux_image: quay.io/pypa/manylinux_2_28_x86_64@sha256:f5aac11b7b2e48e4bb417cbc9c65f7cd923514d6e9914e7066ce4613c3dd77b6
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             archive: tar.gz
-            manylinux_image: quay.io/pypa/manylinux_2_28_aarch64@sha256:78c91b48c278d82bab9a4b0e82e84fb2485a890bf62196d50bb0d91d550a64ad
           - os: macos-15-intel
             platform: darwin-x64
             archive: tar.gz
@@ -260,27 +258,6 @@ jobs:
 
       - run: npm install -g npm@11.11.0
       - run: npm ci
-
-      - name: Rebuild native module for manylinux compatibility
-        if: runner.os == 'Linux'
-        shell: bash
-        env:
-          MANYLINUX_IMAGE: ${{ matrix.manylinux_image }}
-        run: |
-          set -euo pipefail
-          native_build_dir="$RUNNER_TEMP/better-sqlite3-manylinux"
-          node_root="$(dirname "$(dirname "$(command -v node)")")"
-          cp -R node_modules/better-sqlite3 "$native_build_dir"
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --env HOME=/tmp \
-            --volume "$native_build_dir:/module" \
-            --volume "$node_root:/opt/node:ro" \
-            --workdir /module \
-            "$MANYLINUX_IMAGE" \
-            /bin/bash -lc 'export PATH=/opt/node/bin:$PATH; node /opt/node/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release --nodedir=/opt/node'
-          rm -rf node_modules/better-sqlite3/build
-          cp -R "$native_build_dir/build" node_modules/better-sqlite3/build
 
       - name: Build bundle
         run: npm run bundle:sea
@@ -359,12 +336,10 @@ jobs:
             # The bundled Node 24 runtime requires GLIBC_2.28.
             wheel_platform: manylinux_2_28_x86_64
             binary_name: promptfoo
-            manylinux_image: quay.io/pypa/manylinux_2_28_x86_64@sha256:f5aac11b7b2e48e4bb417cbc9c65f7cd923514d6e9914e7066ce4613c3dd77b6
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             wheel_platform: manylinux_2_28_aarch64
             binary_name: promptfoo
-            manylinux_image: quay.io/pypa/manylinux_2_28_aarch64@sha256:78c91b48c278d82bab9a4b0e82e84fb2485a890bf62196d50bb0d91d550a64ad
           - os: macos-15-intel
             platform: darwin-x64
             # Bundled Node 24 requires macOS 13.5+, which wheel tags cannot
@@ -400,27 +375,6 @@ jobs:
 
       - run: npm install -g npm@11.11.0
       - run: npm ci
-
-      - name: Rebuild native module for manylinux compatibility
-        if: runner.os == 'Linux'
-        shell: bash
-        env:
-          MANYLINUX_IMAGE: ${{ matrix.manylinux_image }}
-        run: |
-          set -euo pipefail
-          native_build_dir="$RUNNER_TEMP/better-sqlite3-manylinux"
-          node_root="$(dirname "$(dirname "$(command -v node)")")"
-          cp -R node_modules/better-sqlite3 "$native_build_dir"
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --env HOME=/tmp \
-            --volume "$native_build_dir:/module" \
-            --volume "$node_root:/opt/node:ro" \
-            --workdir /module \
-            "$MANYLINUX_IMAGE" \
-            /bin/bash -lc 'export PATH=/opt/node/bin:$PATH; node /opt/node/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release --nodedir=/opt/node'
-          rm -rf node_modules/better-sqlite3/build
-          cp -R "$native_build_dir/build" node_modules/better-sqlite3/build
 
       - name: Build SEA binary
         run: npm run bundle:sea
