@@ -14,14 +14,6 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import {
-  estimateStreamingTokensPerSecond,
-  type FirstTokenDetector,
-  fetchWithRetries,
-  processStreamingResponse,
-  type StreamFormat,
-  type StreamingMetrics,
-} from '../util/fetch';
-import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
   pathExists,
@@ -41,6 +33,14 @@ import {
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  estimateProviderStreamingTokensPerSecond,
+  fetchProviderWithRetries,
+  type ProviderFirstTokenDetector,
+  type ProviderStreamFormat,
+  type ProviderStreamingMetrics,
+  processProviderStreamingResponse,
+} from './fetch';
 import {
   HttpMultipartConfigSchema,
   type RenderedHttpMultipartBody,
@@ -1913,12 +1913,12 @@ function requestsStreamingTransport(body: unknown): boolean {
 
 function buildFirstTokenDetectionOptions(
   customPattern: string | undefined,
-  format: StreamFormat | undefined,
+  format: ProviderStreamFormat | undefined,
 ):
   | {
-      firstTokenDetector?: FirstTokenDetector;
+      firstTokenDetector?: ProviderFirstTokenDetector;
       firstTokenDetectorWindowChars?: number;
-      streamFormat?: StreamFormat;
+      streamFormat?: ProviderStreamFormat;
     }
   | undefined {
   if (customPattern) {
@@ -1946,9 +1946,9 @@ export class HttpProvider implements ApiProvider {
   >;
   private validateStatus: Promise<(status: number) => boolean>;
   private firstTokenDetectionOptions?: {
-    firstTokenDetector?: FirstTokenDetector;
+    firstTokenDetector?: ProviderFirstTokenDetector;
     firstTokenDetectorWindowChars?: number;
-    streamFormat?: StreamFormat;
+    streamFormat?: ProviderStreamFormat;
   };
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
@@ -2029,16 +2029,19 @@ export class HttpProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     isStreaming: boolean,
     multipartBody: boolean = false,
-  ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
+  ): Promise<{
+    response: FetchWithCacheResult<string>;
+    streamingMetrics?: ProviderStreamingMetrics;
+  }> {
     if (isStreaming) {
       const requestStartTime = Date.now();
-      const rawResponse = await fetchWithRetries(
+      const rawResponse = await fetchProviderWithRetries(
         url,
         fetchOptions,
         getRequestTimeoutMs(),
         this.config.maxRetries,
       );
-      const { text, streamingMetrics } = await processStreamingResponse(
+      const { text, streamingMetrics } = await processProviderStreamingResponse(
         rawResponse,
         requestStartTime,
         this.firstTokenDetectionOptions,
@@ -3329,7 +3332,7 @@ export class HttpProvider implements ApiProvider {
    * would overcount by 20-60x for non-string transform outputs.
    */
   private populateStreamingCompletionMetrics(
-    streamingMetrics: StreamingMetrics,
+    streamingMetrics: ProviderStreamingMetrics,
     parsedOutput: unknown,
   ): void {
     // Without an explicit transform, SSE/NDJSON framing is indistinguishable
@@ -3345,7 +3348,7 @@ export class HttpProvider implements ApiProvider {
     }
     streamingMetrics.completionChars = completionText.length;
     if (streamingMetrics.multiChunkDelivery) {
-      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+      streamingMetrics.tokensPerSecond = estimateProviderStreamingTokensPerSecond(
         completionText.length,
         streamingMetrics.totalStreamTime,
       );

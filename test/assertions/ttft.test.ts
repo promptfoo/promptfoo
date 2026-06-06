@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleTtft } from '../../src/assertions/ttft';
+import { handleTtft } from '../../src/assertions/latency';
 
 import type { AssertionParams } from '../../src/types/index';
 

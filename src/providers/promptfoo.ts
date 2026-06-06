@@ -10,7 +10,7 @@ import {
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
-import { fetchWithRetries } from '../util/fetch/index';
+import { fetchProviderWithRetries } from './fetch';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -90,7 +90,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
       );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
-      const response = await fetchWithRetries(
+      const response = await fetchProviderWithRetries(
         getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
@@ -207,7 +207,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const response = await fetchWithRetries(
+      const response = await fetchProviderWithRetries(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -323,7 +323,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     };
 
     try {
-      const response = await fetchWithRetries(
+      const response = await fetchProviderWithRetries(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

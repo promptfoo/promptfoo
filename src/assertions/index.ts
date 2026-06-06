@@ -67,7 +67,7 @@ import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
-import { handleLatency } from './latency';
+import { handleLatency, handleTtft } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
@@ -97,7 +97,6 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { handleTtft } from './ttft';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
