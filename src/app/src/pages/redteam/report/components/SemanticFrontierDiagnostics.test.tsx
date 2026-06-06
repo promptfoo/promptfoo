@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import SemanticFrontierDiagnostics from './SemanticFrontierDiagnostics';
-import type { SemanticFrontierDiagnostic } from '@promptfoo/redteam/generation/frontierDiagnostics';
+
+import type { SemanticFrontierDiagnostic } from './shared';
 
 describe('SemanticFrontierDiagnostics', () => {
   it('does not render when no diagnostics are available', () => {

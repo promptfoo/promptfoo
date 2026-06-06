@@ -1,5 +1,9 @@
-import type { TestCase } from '../../types/index';
 import type { SemanticFrontierSummary } from './portfolio';
+
+type SemanticFrontierTestCase = {
+  metadata?: Record<string, unknown>;
+  vars?: unknown;
+};
 
 export type SemanticFrontierDiagnostic = {
   completeFrontierCount: number;
@@ -43,12 +47,38 @@ function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSum
     typeof summary.minimumPortfolioSize === 'number' &&
     Boolean(summary.bands) &&
     typeof summary.bands === 'object' &&
+    !Array.isArray(summary.bands) &&
     Object.values(summary.bands).every(isSemanticFrontierBandSummary)
   );
 }
 
+function getSemanticFrontierKey(summary: SemanticFrontierSummary): string {
+  const bands = Object.fromEntries(
+    Object.entries(summary.bands)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([bandId, band]) => [
+        bandId,
+        {
+          featureCount: band.featureCount,
+          observedFeatureCount: band.observedFeatureCount,
+          observedFeatureIds: [...band.observedFeatureIds].sort(),
+          reachableFeatureCount: band.reachableFeatureCount,
+          reachableFeatureIds: [...band.reachableFeatureIds].sort(),
+          unreachableFeatureIds: [...band.unreachableFeatureIds].sort(),
+        },
+      ]),
+  );
+
+  return JSON.stringify({
+    active: summary.active,
+    bands,
+    complete: summary.complete,
+    minimumPortfolioSize: summary.minimumPortfolioSize,
+  });
+}
+
 export function summarizeSemanticFrontierDiagnosticsFromTests(
-  testCases: readonly TestCase[],
+  testCases: readonly SemanticFrontierTestCase[],
 ): SemanticFrontierDiagnostic[] {
   const frontiersByPlugin = new Map<string, Map<string, SemanticFrontierSummary>>();
 
@@ -65,7 +95,7 @@ export function summarizeSemanticFrontierDiagnosticsFromTests(
     }
 
     const pluginFrontiers = frontiersByPlugin.get(pluginId) ?? new Map();
-    pluginFrontiers.set(JSON.stringify(semanticFrontier), semanticFrontier);
+    pluginFrontiers.set(getSemanticFrontierKey(semanticFrontier), semanticFrontier);
     frontiersByPlugin.set(pluginId, pluginFrontiers);
   }
 

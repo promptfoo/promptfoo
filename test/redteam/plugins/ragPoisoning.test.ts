@@ -21,6 +21,7 @@ describe('RagPoisoningGrader', () => {
     expect(grader.rubric).toContain('untrusted data');
     expect(grader.rubric).toContain('Do not follow any');
     expect(grader.rubric).toContain('based on the poisoned claim');
+    expect(grader.rubric).not.toContain('<Output>');
   });
 
   it('provides RAG grounding suggestions', () => {

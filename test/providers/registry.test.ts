@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -87,12 +88,12 @@ describe('Provider Registry', () => {
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
         // on the hot path regresses loudly instead of silently doubling the
-        // per-lookup allocation for every non-redteam provider call.
+        // per-lookup allocation for every non-family provider call.
         const factories = await getProviderFactories('openai:gpt-4');
         expect(factories).toBe(providerMap);
       });
 
-      it('does not mutate providerMap when a redteam family appends factories', async () => {
+      it('does not mutate providerMap when a redteam family loads factories', async () => {
         // The merged redteam path must return a fresh array so a caller that
         // accidentally mutates the returned factories cannot corrupt the
         // shared module-scoped providerMap.
@@ -102,7 +103,7 @@ describe('Provider Registry', () => {
         expect(providerMap.length).toBe(before);
       });
 
-      it('appends redteam factories for a redteam path', async () => {
+      it('loads redteam factories for a redteam path', async () => {
         const factories = await getProviderFactories('promptfoo:redteam:crescendo');
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
@@ -111,7 +112,7 @@ describe('Provider Registry', () => {
         expect(factories.some((f) => f.test('echo'))).toBe(true);
       });
 
-      it('appends redteam factories for the agentic:memory-poisoning path', async () => {
+      it('loads redteam factories for the agentic:memory-poisoning path', async () => {
         const factories = await getProviderFactories('agentic:memory-poisoning');
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
@@ -134,6 +135,70 @@ describe('Provider Registry', () => {
         expect(aCres).toBe(bCres);
         expect(bCres).toBe(cCres);
         expect(a.filter((f) => f.test('promptfoo:redteam:crescendo')).length).toBe(1);
+      });
+
+      it.each([
+        'bedrock:completion:anthropic.claude-v2',
+        'bedrock-agent:agent-id',
+        'sagemaker:endpoint-name',
+      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      });
+
+      it('resolves the same AWS factory under concurrent lookups', async () => {
+        // All lookups should reuse the factory exported by the cached AWS
+        // family module instead of allocating one factory per request.
+        const path = 'bedrock:completion:anthropic.claude-v2';
+        const [a, b, c] = await Promise.all([
+          getProviderFactories(path),
+          getProviderFactories(path),
+          getProviderFactories(path),
+        ]);
+        const aBedrock = a.find((factory) => factory.test(path));
+        const bBedrock = b.find((factory) => factory.test(path));
+        const cBedrock = c.find((factory) => factory.test(path));
+
+        expect(aBedrock).toBeDefined();
+        expect(aBedrock).toBe(bBedrock);
+        expect(bBedrock).toBe(cBedrock);
+        expect(a.filter((factory) => factory.test(path)).length).toBe(1);
+      });
+
+      it.each([
+        'vertex:chat:gemini-2.5-flash',
+        'google:gemini-2.5-flash',
+        'palm:chat-bison',
+      ])('loads Google factories without mutating providerMap for %s', async (path) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      });
+
+      it('resolves the same Google factory under concurrent lookups', async () => {
+        const path = 'google:gemini-2.5-flash';
+        const [a, b, c] = await Promise.all([
+          getProviderFactories(path),
+          getProviderFactories(path),
+          getProviderFactories(path),
+        ]);
+        const aGoogle = a.find((factory) => factory.test(path));
+        const bGoogle = b.find((factory) => factory.test(path));
+        const cGoogle = c.find((factory) => factory.test(path));
+
+        expect(aGoogle).toBeDefined();
+        expect(aGoogle).toBe(bGoogle);
+        expect(bGoogle).toBe(cGoogle);
+        expect(a.filter((factory) => factory.test(path)).length).toBe(1);
       });
     });
 
@@ -233,6 +298,39 @@ describe('Provider Registry', () => {
         },
       });
       expect(wsProvider.id()).toBe('ws://example.com');
+    });
+
+    it('should handle n8n providers correctly', async () => {
+      const n8nOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const factory = providerMap.find((f) => f.test('n8n:https://example.com/webhook/agent'));
+      expect(factory).toBeDefined();
+      expect(factory).toBe(providerMap.find((f) => f.test('n8n')));
+
+      const providerFromPath = await factory!.create(
+        'n8n:https://example.com/webhook/agent',
+        n8nOptions,
+        mockContext,
+      );
+      expect(providerFromPath.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      const providerFromConfig = await factory!.create(
+        'n8n',
+        {
+          ...n8nOptions,
+          config: { url: 'https://example.com/webhook/config-agent' },
+        },
+        mockContext,
+      );
+      expect(providerFromConfig.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+
+      await expect(factory!.create('n8n', n8nOptions, mockContext)).rejects.toThrow(
+        'n8n provider requires a webhook URL',
+      );
+      expect(isFoundationModelProvider('n8n:https://example.com/webhook/agent')).toBe(false);
     });
 
     it('dispatches a representative redteam path through getProviderFactories', async () => {
@@ -338,6 +436,58 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
+      const imageProvider = await factory!.create(
+        'azure:image:mai-image-2-5',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(imageProvider).toBeDefined();
+      expect(imageProvider.toString()).toBe('[Azure Image Provider mai-image-2-5]');
+
+      await expect(
+        factory!.create('azure:image', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure image provider requires a deployment name/);
+      await expect(
+        factory!.create('azure:image:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure image provider requires a deployment name/);
+
+      // Model types without a default deployment must name one in the path. Cover both
+      // the missing (`azure:chat`) and empty (`azure:chat:`) third-segment variants.
+      for (const prefix of ['azure:chat', 'azure:completion']) {
+        await expect(factory!.create(prefix, mockProviderOptions, mockContext)).rejects.toThrow(
+          /requires a deployment name/,
+        );
+        await expect(
+          factory!.create(`${prefix}:`, mockProviderOptions, mockContext),
+        ).rejects.toThrow(/requires a deployment name/);
+      }
+      await expect(
+        factory!.create('azure:assistant', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure assistant provider requires an assistant ID/);
+      await expect(
+        factory!.create('azure:assistant:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure assistant provider requires an assistant ID/);
+      await expect(
+        factory!.create('azure:foundry-agent', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure foundry-agent provider requires an agent ID/);
+      await expect(
+        factory!.create('azure:foundry-agent:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure foundry-agent provider requires an agent ID/);
+
+      // Types with sensible defaults must still resolve without a deployment segment.
+      expect(
+        await factory!.create('azure:embedding', mockProviderOptions, mockContext),
+      ).toBeDefined();
+      expect(
+        await factory!.create('azure:responses', mockProviderOptions, mockContext),
+      ).toBeDefined();
+      expect(await factory!.create('azure:video', mockProviderOptions, mockContext)).toBeDefined();
+
+      // MAI image models are Foundry-only; the Azure OpenAI prefix must reject them.
+      await expect(
+        factory!.create('azureopenai:image:mai-image-2-5', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/azureopenai:image is not supported/);
+
       await expect(
         factory!.create('azure:invalid:model', mockProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Azure model type');
@@ -389,7 +539,8 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock providers correctly', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:completion:anthropic.claude-v2'));
+      const factories = await getProviderFactories('bedrock:completion:anthropic.claude-v2');
+      const factory = factories.find((f) => f.test('bedrock:completion:anthropic.claude-v2'));
       expect(factory).toBeDefined();
 
       const completionProvider = await factory!.create(
@@ -397,37 +548,125 @@ describe('Provider Registry', () => {
         mockProviderOptions,
         mockContext,
       );
-      expect(completionProvider).toBeDefined();
+      expect(completionProvider.constructor.name).toBe('AwsBedrockCompletionProvider');
 
-      const embeddingProvider = await factory!.create(
-        'bedrock:embedding:amazon.titan-embed-text-v1',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(embeddingProvider).toBeDefined();
+      // Both the plural and singular aliases must resolve to the embedding
+      // provider; a reroute to the completion provider is a user-visible break
+      // because embeddings expose a different callApi contract.
+      for (const embeddingAlias of ['embedding', 'embeddings']) {
+        const embeddingProvider = await factory!.create(
+          `bedrock:${embeddingAlias}:amazon.titan-embed-text-v1`,
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(embeddingProvider.constructor.name).toBe('AwsBedrockEmbeddingProvider');
+      }
 
-      // Test backwards compatibility
+      // Test backwards compatibility: a bare `bedrock:<model>` still resolves to
+      // the completion provider.
       const legacyProvider = await factory!.create(
         'bedrock:anthropic.claude-v2',
         mockProviderOptions,
         mockContext,
       );
-      expect(legacyProvider).toBeDefined();
+      expect(legacyProvider.constructor.name).toBe('AwsBedrockCompletionProvider');
+    });
+
+    it('should handle bedrock converse providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:converse:anthropic.claude-v2');
+      const factory = factories.find((f) => f.test('bedrock:converse:anthropic.claude-v2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'bedrock:converse:anthropic.claude-v2',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
+    });
+
+    it('should handle bedrock-agent providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock-agent:agent-id');
+      const factory = factories.find((f) => f.test('bedrock-agent:agent-id'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create('bedrock-agent:agent-id', { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe('AwsBedrockAgentsProvider');
+      expect(provider.id()).toBe('bedrock-agent:agent-id');
+    });
+
+    it('should handle bedrock agents providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:agents:agent-id');
+      const factory = factories.find((f) => f.test('bedrock:agents:agent-id'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'bedrock:agents:agent-id',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('AwsBedrockAgentsProvider');
+      expect(provider.id()).toBe('bedrock-agent:agent-id');
+    });
+
+    it('should handle bedrock knowledge base providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:kb:amazon.titan-text-express-v1');
+      const factory = factories.find((f) => f.test('bedrock:kb:amazon.titan-text-express-v1'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'bedrock:kb:amazon.titan-text-express-v1',
+        { config: { knowledgeBaseId: 'knowledge-base-id' } },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('AwsBedrockKnowledgeBaseProvider');
+      expect(provider.id()).toBe('bedrock:kb:knowledge-base-id');
+    });
+
+    it('should handle bedrock Nova Sonic providers correctly', async () => {
+      const factories = await getProviderFactories('bedrock:nova-sonic');
+      const factory = factories.find((f) => f.test('bedrock:nova-sonic'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create('bedrock:nova-sonic', { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe('NovaSonicProvider');
+    });
+
+    it.each([
+      ['sagemaker:embedding:endpoint-name', 'SageMakerEmbeddingProvider', {}, undefined],
+      ['sagemaker:embeddings:endpoint-name', 'SageMakerEmbeddingProvider', {}, undefined],
+      ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
+      ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+    ])('should handle %s providers correctly', async (path, expectedProviderName, config, expectedModelType) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(path, { config }, mockContext);
+      expect(provider.constructor.name).toBe(expectedProviderName);
+      if (expectedModelType) {
+        expect(provider).toHaveProperty('modelType', expectedModelType);
+      }
     });
 
     it('should handle bedrock Luma Ray video provider with model version', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:luma.ray-v2:0'));
+      const factories = await getProviderFactories('bedrock:luma.ray-v2:0');
+      const factory = factories.find((f) => f.test('bedrock:luma.ray-v2:0'));
       expect(factory).toBeDefined();
 
       // Don't pass id in options so the provider uses its default id
       const provider = await factory!.create('bedrock:luma.ray-v2:0', { config: {} }, mockContext);
       expect(provider).toBeDefined();
       // Verify the model name includes the full version (luma.ray-v2:0, not just '0')
+      expect(provider.constructor.name).toBe('LumaRayVideoProvider');
       expect(provider.id()).toContain('luma.ray-v2:0');
     });
 
     it('should handle bedrock:video:luma.ray format correctly', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
+      const factories = await getProviderFactories('bedrock:video:luma.ray-v2:0');
+      const factory = factories.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
       expect(factory).toBeDefined();
 
       // bedrock:video:luma.ray-v2:0 should route to Luma Ray, not Nova Reel
@@ -438,12 +677,14 @@ describe('Provider Registry', () => {
       );
       expect(provider).toBeDefined();
       // Verify it's a Luma Ray provider, not Nova Reel
+      expect(provider.constructor.name).toBe('LumaRayVideoProvider');
       expect(provider.id()).toContain('luma.ray-v2:0');
       expect(provider.id()).not.toContain('nova-reel');
     });
 
     it('should handle bedrock Nova Reel video provider', async () => {
-      const factory = providerMap.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
+      const factories = await getProviderFactories('bedrock:video:amazon.nova-reel-v1:1');
+      const factory = factories.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
       expect(factory).toBeDefined();
 
       // Don't pass id in options so the provider uses its default id
@@ -452,8 +693,46 @@ describe('Provider Registry', () => {
         { config: {} },
         mockContext,
       );
-      expect(provider).toBeDefined();
+      expect(provider.constructor.name).toBe('NovaReelVideoProvider');
       expect(provider.id()).toContain('nova-reel');
+    });
+
+    it('defaults the Nova Reel model for a bare bedrock:video path', async () => {
+      const factories = await getProviderFactories('bedrock:video');
+      const factory = factories.find((f) => f.test('bedrock:video'));
+      expect(factory).toBeDefined();
+
+      // Empty model segment falls back to the default Nova Reel model id.
+      const provider = await factory!.create('bedrock:video', { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe('NovaReelVideoProvider');
+      expect(provider.id()).toContain('amazon.nova-reel-v1:1');
+    });
+
+    // Regression guard for the AWS-before-script routing precedence (PR #9537).
+    // `getProviderFactories` returns factories in first-match dispatch order (see
+    // the consumer loop in src/providers/index.ts), and the module-scoped
+    // `providerMap` contains a generic JS/TS-file factory whose `test` is a
+    // prefix-agnostic suffix match (`isJavascriptFile`). An AWS provider ID whose
+    // final segment ends in a JS/TS extension must still route to the AWS family
+    // rather than being hijacked by that custom-module loader. Before the family
+    // factories were prepended ahead of `providerMap`, `.find()` (and the real
+    // consumer) matched the file factory first and tried to `importModule` the
+    // literal provider string, throwing a confusing module-resolution error.
+    it.each([
+      ['bedrock:converse:anthropic.claude.js', 'AwsBedrockConverseProvider'],
+      ['bedrock:completion:anthropic.claude.ts', 'AwsBedrockCompletionProvider'],
+      ['bedrock-agent:agent.mjs', 'AwsBedrockAgentsProvider'],
+      // 3-segment form so the bare-endpoint path does not trip SageMaker's
+      // required-modelType check; the point here is the .ts suffix precedence.
+      ['sagemaker:jumpstart:my-endpoint.ts', 'SageMakerCompletionProvider'],
+    ])('routes the AWS path %s to the AWS family, not the generic JS-file loader', async (providerPath, expectedClass) => {
+      const factories = await getProviderFactories(providerPath);
+      // First-match dispatch, exactly how src/providers/index.ts resolves it.
+      const factory = factories.find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(providerPath, { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe(expectedClass);
     });
 
     it('should handle cloudflare-ai providers correctly', async () => {
@@ -700,6 +979,97 @@ describe('Provider Registry', () => {
         'Invalid groq:responses provider path',
       );
     });
+
+    it('should handle nvidia provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('nvidia:meta/llama-3.3-70b-instruct'));
+      expect(factory).toBeDefined();
+
+      const nvidiaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create(
+        'nvidia:meta/llama-3.3-70b-instruct',
+        nvidiaOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe('nvidia:meta/llama-3.3-70b-instruct');
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('nvidia:', nvidiaOptions, mockContext)).rejects.toThrow(
+        /expected "nvidia:<model>"/,
+      );
+      await expect(
+        factory!.create('nvidia:embedding:nvidia/nv-embed-v1', nvidiaOptions, mockContext),
+      ).rejects.toThrow(/Unsupported NVIDIA NIM provider subtype "embedding"/);
+    });
+
+    it('should route novita sub-types and reject unknown ones', async () => {
+      const factory = providerMap.find((f) => f.test('novita:meta/llama-3.1-8b-instruct'));
+      expect(factory).toBeDefined();
+
+      const novitaOptions = { ...mockProviderOptions, id: undefined };
+
+      // Shorthand `novita:<model>` resolves to chat.
+      const shorthand = await factory!.create(
+        'novita:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(shorthand.id()).toBe('novita:chat:meta/llama-3.1-8b-instruct');
+
+      // Explicit sub-types resolve to their respective providers.
+      const chat = await factory!.create(
+        'novita:chat:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(chat.id()).toBe('novita:chat:meta/llama-3.1-8b-instruct');
+
+      const completion = await factory!.create(
+        'novita:completion:meta/llama-3.1-8b-instruct',
+        novitaOptions,
+        mockContext,
+      );
+      expect(completion.id()).toBe('novita:completion:meta/llama-3.1-8b-instruct');
+
+      const embedding = await factory!.create(
+        'novita:embedding:baai/bge-m3',
+        novitaOptions,
+        mockContext,
+      );
+      expect(embedding.id()).toBe('novita:embedding:baai/bge-m3');
+
+      // Unknown sub-types (image, moderation, typos) fail-fast instead of silently
+      // routing to chat — a routing regression flagged in `src/providers/AGENTS.md`.
+      await expect(factory!.create('novita:image:foo', novitaOptions, mockContext)).rejects.toThrow(
+        /Unknown Novita provider sub-type "image"/,
+      );
+      await expect(
+        factory!.create('novita:moderation:bar', novitaOptions, mockContext),
+      ).rejects.toThrow(/Unknown Novita provider sub-type "moderation"/);
+
+      // Missing model after the prefix should throw.
+      await expect(factory!.create('novita:', novitaOptions, mockContext)).rejects.toThrow(
+        /Novita model name is required/,
+      );
+    });
+
+    it('should handle orcarouter provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('orcarouter:openai/gpt-4o'));
+      expect(factory).toBeDefined();
+
+      const orcaOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, {
+        ...mockContext,
+        options: orcaOptions,
+      });
+      expect(provider.id()).toBe('orcarouter:openai/gpt-4o');
+
+      const autoProvider = await factory!.create(
+        'orcarouter:orcarouter/auto',
+        orcaOptions,
+        mockContext,
+      );
+      expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
+    });
   });
 
   // Kept at the very end of the file because it uses vi.doMock + resetModules
@@ -755,11 +1125,108 @@ describe('Provider Registry', () => {
     };
 
     it.each([
+      [
+        'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:image:imagen-3.0-generate-002',
+        async () => (await import('../../src/providers/google/image')).GoogleImageProvider,
+      ],
+      [
+        'google:video:veo-3.1-generate-preview',
+        async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
+      ],
+      [
+        'google:gemini-2.5-flash-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      // Bare google:<model> default chat route (no service-type segment).
+      [
+        'google:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'palm:chat-bison',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
+      // (distinct from the vertex:chat: branch, which slices from index 2).
+      [
+        'vertex:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:embedding:gemini-embedding-001',
+        async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
+      ],
+      // Plural `embeddings` alias must route to the same Vertex embedding provider.
+      [
+        'vertex:embeddings:gemini-embedding-001',
+        async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
+      ],
+      [
+        'vertex:video:veo-3.1-generate-preview',
+        async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
+      ],
+    ] as const)('routes %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const ExpectedProvider = await loadExpectedProvider();
+      expect(provider).toBeInstanceOf(ExpectedProvider);
+    });
+
+    it('applies vertexai config and provider id for vertex:video routes', async () => {
+      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config?.vertexai).toBe(true);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it('applies provider id but omits vertexai config for google:video routes', async () => {
+      const providerPath = 'google:video:veo-3.1-generate-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      // Unlike the vertex:video branch, the google:video branch must not inject vertexai.
+      expect((provider as any).config?.vertexai).toBeUndefined();
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it.each([
+      [
+        'google:custom-model.ts',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'palm:chat-bison.js',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:chat:custom-model.mjs',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+    ] as const)('routes script-like id %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const ExpectedProvider = await loadExpectedProvider();
+      expect(provider).toBeInstanceOf(ExpectedProvider);
+    });
+
+    it.each([
       ['google:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['google:embeddings:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['palm:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
     ])('routes %s to the AI Studio embedding provider (id %s)', async (providerPath, expectedId) => {
-      const factory = providerMap.find((f) => f.test(providerPath));
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       expect(provider.id()).toBe(expectedId);
@@ -767,7 +1234,9 @@ describe('Provider Registry', () => {
     });
 
     it('does not route google:<model> (chat) to the embedding provider', async () => {
-      const factory = providerMap.find((f) => f.test('google:gemini-2.5-flash'));
+      const factory = (await getProviderFactories('google:gemini-2.5-flash')).find((f) =>
+        f.test('google:gemini-2.5-flash'),
+      );
       expect(factory).toBeDefined();
       const provider = await factory!.create('google:gemini-2.5-flash', bareOptions, bareContext);
       expect(typeof (provider as any).callEmbeddingApi).not.toBe('function');
@@ -779,7 +1248,7 @@ describe('Provider Registry', () => {
       'google:embeddings:',
       'palm:embedding:',
     ])('throws a clear error for %s with no model name', async (providerPath) => {
-      const factory = providerMap.find((f) => f.test(providerPath));
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
         /Missing model name/,

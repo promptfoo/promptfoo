@@ -61,6 +61,46 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
     ]);
   });
 
+  it('deduplicates equivalent frontier metadata regardless of key or feature ordering', () => {
+    const summary = createSummary(true);
+    const reorderedSummary: SemanticFrontierSummary = {
+      bands: {
+        relationship: {
+          unreachableFeatureIds: [],
+          reachableFeatureIds: ['claimsSelfRelationship', 'claimsFamilyRelationship'],
+          reachableFeatureCount: 2,
+          observedFeatureIds: ['claimsSelfRelationship', 'claimsFamilyRelationship'],
+          observedFeatureCount: 2,
+          featureCount: 2,
+        },
+      },
+      minimumPortfolioSize: 3,
+      complete: true,
+      active: true,
+    };
+
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: { pluginId: 'pii:social', semanticFrontier: summary },
+          vars: { prompt: 'first test' },
+        },
+        {
+          metadata: { pluginId: 'pii:social', semanticFrontier: reorderedSummary },
+          vars: { prompt: 'second test' },
+        },
+      ]),
+    ).toEqual([
+      {
+        completeFrontierCount: 1,
+        frontierCount: 1,
+        pluginId: 'pii:social',
+        structurallyDegraded: false,
+        unreachableFeatureIds: [],
+      },
+    ]);
+  });
+
   it('omits inactive frontiers from operator diagnostics', () => {
     const inactiveSummary = { ...createSummary(false), active: false };
 

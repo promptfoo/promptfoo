@@ -42,7 +42,6 @@ import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
@@ -54,18 +53,23 @@ import {
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
+import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { summarizeSemanticFrontierDiagnosticsFromTests } from '../generation/frontierDiagnostics';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import { PartialGenerationError, ProbeLimitExceededError } from '../types';
+import {
+  accumulateGenerationTokenUsage,
+  PartialGenerationError,
+  ProbeLimitExceededError,
+} from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
-import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
+  GenerationTokenUsage,
   PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -258,7 +262,7 @@ async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
   // Check monthly probe limit for non-cloud users
-  const probeLimitResult = checkRedteamProbeLimit();
+  const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
     logger.error(dedent`
       ${chalk.red.bold('Monthly probe limit reached')}
@@ -608,9 +612,22 @@ async function doGenerateRedteamInternal(
   let purposeDetails = '';
   let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
   try {
+    const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
+    if (a2aAgentCardInfo) {
+      purposeDetails += a2aAgentCardInfo;
+      logger.info('Added A2A Agent Card information to red team purpose');
+    }
+  } catch (error) {
+    logger.warn(
+      `Failed to extract A2A Agent Card information: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
-      purposeDetails = mcpToolsInfo;
+      purposeDetails += mcpToolsInfo;
       logger.info('Added MCP tools information to red team purpose');
       augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
@@ -627,7 +644,7 @@ async function doGenerateRedteamInternal(
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
-  const generationTokenUsage: TokenUsage = {
+  const generationTokenUsage: GenerationTokenUsage = {
     cached: 0,
     completion: 0,
     numRequests: 0,
@@ -677,7 +694,7 @@ async function doGenerateRedteamInternal(
       if (contextResult.failedPlugins.length > 0) {
         allFailedPlugins.push(...contextResult.failedPlugins);
       }
-      accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
+      accumulateGenerationTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
       firstContextPurpose ??= contextResult.purpose;
 
       // Tag each test with context metadata and merge context vars
@@ -743,7 +760,7 @@ async function doGenerateRedteamInternal(
     entities = result.entities;
     finalInjectVar = result.injectVar;
     failedPlugins = result.failedPlugins;
-    accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
+    accumulateGenerationTokenUsage(generationTokenUsage, result.generationTokenUsage);
   }
 
   /**

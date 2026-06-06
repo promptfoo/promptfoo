@@ -12,7 +12,6 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -55,6 +54,7 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
+import { accumulateGenerationResponseTokenUsage } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -62,9 +62,10 @@ import {
 } from './util';
 
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs, TokenUsage } from '../types/shared';
+import type { Inputs } from '../types/shared';
 import type {
   FailedPluginInfo,
+  GenerationTokenUsage,
   Policy,
   RedteamPluginObject,
   RedteamStrategyObject,
@@ -73,11 +74,14 @@ import type {
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 
-function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
+function trackGenerationTokenUsage(
+  provider: ApiProvider,
+  tokenUsage: GenerationTokenUsage,
+): ApiProvider {
   const callApi = provider.callApi.bind(provider);
   const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
     const response = await callApi(...args);
-    accumulateResponseTokenUsage(tokenUsage, response);
+    accumulateGenerationResponseTokenUsage(tokenUsage, response);
     return response;
   };
   trackedCallApi.label = provider.callApi.label;
@@ -1033,7 +1037,7 @@ export async function synthesize({
   testCases: TestCaseWithPlugin[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
-  generationTokenUsage?: TokenUsage;
+  generationTokenUsage?: GenerationTokenUsage;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1118,7 +1122,7 @@ export async function synthesize({
   const providerForGeneration = await redteamProviderManager.getProvider({
     provider,
   });
-  const generationTokenUsage: TokenUsage = {
+  const generationTokenUsage: GenerationTokenUsage = {
     cached: 0,
     completion: 0,
     numRequests: 0,
