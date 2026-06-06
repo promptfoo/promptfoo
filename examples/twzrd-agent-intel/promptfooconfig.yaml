@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'TWZRD Agent Intel MCP — trust scoring tool evaluation'
+
+# Tests the free score_agent and preflight_check tools exposed by
+# the TWZRD Agent Intel MCP server (https://intel.twzrd.xyz).
+# No API key required for these tools.
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: mcp
+    label: 'TWZRD Agent Intel'
+    config:
+      enabled: true
+      servers:
+        - name: twzrd-agent-intel
+          url: 'https://intel.twzrd.xyz/mcp'
+          transport: streamable-http
+      verbose: true
+
+tests:
+  # score_agent returns a numeric trust score 0-100
+  - description: 'score_agent returns a valid trust score'
+    vars:
+      prompt: '{"tool": "score_agent", "args": {"wallet": "D1QkbFJKiPsymJ65RKHhF6DFB8sPMfpBaFBzuHKfJGWi"}}'
+    assert:
+      - type: javascript
+        value: 'output && output.trim().length > 0'
+      - type: javascript
+        value: 'const parsed = JSON.parse(output); typeof parsed.score === "number" && parsed.score >= 0 && parsed.score <= 100'
+
+  # preflight_check returns pass/fail
+  - description: 'preflight_check returns a structured result'
+    vars:
+      prompt: '{"tool": "preflight_check", "args": {"wallet": "D1QkbFJKiPsymJ65RKHhF6DFB8sPMfpBaFBzuHKfJGWi"}}'
+    assert:
+      - type: javascript
+        value: 'output && output.trim().length > 0'
+      - type: javascript
+        value: 'const r = JSON.parse(output); r.hasOwnProperty("pass") || r.hasOwnProperty("status")'
+
+  # Invalid wallet format should return an error, not crash
+  - description: 'invalid wallet returns error gracefully'
+    vars:
+      prompt: '{"tool": "score_agent", "args": {"wallet": "not-a-valid-wallet"}}'
+    assert:
+      - type: javascript
+        value: 'output && output.trim().length > 0'
+      - type: javascript
+        value: 'const r = JSON.parse(output); r.hasOwnProperty("error") || r.score === 0'
+
+  # Empty wallet should be rejected
+  - description: 'empty wallet is rejected'
+    vars:
+      prompt: '{"tool": "preflight_check", "args": {"wallet": ""}}'
+    assert:
+      - type: javascript
+        value: 'output && output.trim().length > 0'
+      - type: javascript
+        value: 'const r = JSON.parse(output); r.hasOwnProperty("error") || r.pass === false'
