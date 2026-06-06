@@ -188,10 +188,10 @@
       "mute-stream": "3.0.0"
     },
     "webpack": "5.107.2",
-    "dompurify": "3.4.5",
+    "dompurify": "3.4.7",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.5"
+      "dompurify": "3.4.7"
     }
   },
   "devDependencies": {
