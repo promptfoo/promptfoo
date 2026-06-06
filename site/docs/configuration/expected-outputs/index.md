@@ -27,6 +27,8 @@ In machine learning, "Accuracy" is a metric that measures the proportion of corr
 
 To use assertions in your test cases, add an `assert` property to the test case with an array of assertion objects. Each assertion object should have a `type` property indicating the assertion type and any additional properties required for that assertion type.
 
+For a quick reference to available checks, jump to [Assertion types](#assertion-types).
+
 Example:
 
 ```yaml
@@ -346,9 +348,10 @@ type AssertionValueFunctionContext = {
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  metadata?: ProviderResponse['metadata']; // Shortcut to providerResponse?.metadata
 };
 type AssertionResponse = string | boolean | number | GradingResult;
-type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertResponse;
+type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertionResponse;
 ```
 
 See [GradingResult definition](/docs/configuration/reference#gradingresult).
@@ -460,7 +463,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-5.5
   - localai:chat:vicuna
 tests:
   - vars:
