@@ -1,6 +1,7 @@
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -145,6 +146,8 @@ export const RAG_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'agent-rubric',
+  'not-agent-rubric',
   'llm-rubric',
   'not-llm-rubric',
   'g-eval',

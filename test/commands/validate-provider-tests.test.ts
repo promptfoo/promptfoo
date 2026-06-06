@@ -2,10 +2,10 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
+import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
-import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';
@@ -16,7 +16,7 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
   resolveConfigs: vi.fn(),
 }));
 vi.mock('../../src/providers/index');
-vi.mock('../../src/validators/testProvider');
+vi.mock('../../src/node/testProvider');
 vi.mock('../../src/util/cloud');
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -124,6 +124,79 @@ describe('Validate Command Provider Tests', () => {
       // Session test is skipped when connectivity fails
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Session test (skipped - connectivity failed)'),
+      );
+    });
+
+    it('should display connectivity suggestions and transformed request details', async () => {
+      const mockStatelessHttpProvider = createMockProvider({
+        id: 'http://example.com',
+        config: { stateful: false },
+      });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockStatelessHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: false,
+        message: 'Configuration needs changes',
+        providerResponse: { output: 'test' },
+        transformedRequest: {
+          url: 'http://example.com/api',
+          method: 'POST',
+        },
+        analysis: {
+          changes_needed: true,
+          changes_needed_reason: 'Response format needs changes',
+          changes_needed_suggestions: ['Add transformResponse'],
+        },
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Response format needs changes'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Add transformResponse'));
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('URL: http://example.com/api'),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Method: POST'));
+    });
+
+    it('should ignore malformed connectivity suggestions', async () => {
+      const mockStatelessHttpProvider = createMockProvider({
+        id: 'http://example.com',
+        config: { stateful: false },
+      });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockStatelessHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: false,
+        message: 'Configuration needs changes',
+        analysis: {
+          changes_needed: true,
+          changes_needed_suggestions: 'Add transformResponse' as unknown as string[],
+        },
+      });
+
+      await expect(
+        doValidateTarget({ target: 'http://example.com' }, defaultConfig),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should display the reason for a failed session test', async () => {
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: true,
+        message: 'Connectivity test passed',
+      });
+      vi.mocked(testProviderSession).mockResolvedValue({
+        success: false,
+        message: 'Session test failed',
+        reason: 'The target did not preserve context',
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Reason: The target did not preserve context'),
       );
     });
 

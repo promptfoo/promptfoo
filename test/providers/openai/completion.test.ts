@@ -195,6 +195,7 @@ describe('OpenAI Provider', () => {
         expect.objectContaining({
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
+            'X-OpenAI-Originator': 'promptfoo',
             'X-Test-Header': 'test-value',
           }),
         }),

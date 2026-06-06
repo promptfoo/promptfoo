@@ -2,7 +2,7 @@
 title: MiniMax Provider
 sidebar_label: MiniMax
 sidebar_position: 50
-description: Configure MiniMax's OpenAI-compatible API with high-performance M2.7 and M2.5 models featuring 204K context windows and prompt caching for LLM testing.
+description: Configure MiniMax's OpenAI-compatible API with the flagship M3 model and prior M2.7 routes, featuring large context windows and prompt caching for LLM testing.
 ---
 
 # MiniMax
@@ -20,13 +20,13 @@ Basic configuration example:
 
 ```yaml
 providers:
-  - id: minimax:MiniMax-M2.7
+  - id: minimax:MiniMax-M3
     config:
       temperature: 0.7
       max_completion_tokens: 2048
       apiKey: YOUR_MINIMAX_API_KEY
 
-  - id: minimax:MiniMax-M2.7-highspeed
+  - id: minimax:MiniMax-M2.7
     config:
       max_completion_tokens: 2048
 ```
@@ -43,9 +43,22 @@ When MiniMax reports prompt-cache reads, promptfoo calculates cost using the ret
 
 ## Available Models
 
-### MiniMax-M2.7 (Default)
+### MiniMax-M3 (Default)
 
-- Latest flagship model with enhanced reasoning and coding
+- Latest flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
+- Multimodal: supports text, image, and video input
+- Input: $0.12/1M (cache hit), $0.6/1M (cache miss)
+- Output: $2.4/1M
+
+:::note
+
+M3 is the default and costs roughly 2x M2.7 per token. For cost-sensitive workloads, pin `minimax:MiniMax-M2.7` (or `MiniMax-M2.7-highspeed`) explicitly.
+
+:::
+
+### MiniMax-M2.7
+
+- Previous-generation flagship model
 - 204,800 token context window
 - Input: $0.06/1M (cache hit), $0.3/1M (cache miss)
 - Output: $1.2/1M
@@ -57,27 +70,13 @@ When MiniMax reports prompt-cache reads, promptfoo calculates cost using the ret
 - Input: $0.06/1M (cache hit), $0.6/1M (cache miss)
 - Output: $2.4/1M
 
-### MiniMax-M2.5
-
-- Peak performance model with ultimate value
-- 204,800 token context window
-- Input: $0.03/1M (cache hit), $0.3/1M (cache miss)
-- Output: $1.2/1M
-
-### MiniMax-M2.5-highspeed
-
-- Same performance, faster and more agile
-- 204,800 token context window
-- Input: $0.03/1M (cache hit), $0.6/1M (cache miss)
-- Output: $2.4/1M
-
 ## Example Usage
 
 Here's an example comparing MiniMax with OpenAI:
 
 ```yaml
 providers:
-  - id: minimax:MiniMax-M2.7
+  - id: minimax:MiniMax-M3
     config:
       temperature: 0.7
       max_completion_tokens: 2048
