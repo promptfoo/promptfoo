@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AssertsForm from './AssertsForm';
+import { GenerateAssertionsDialog } from './generation';
 import TestCaseForm from './TestCaseDialog';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
@@ -26,6 +27,7 @@ vi.mock('./AssertsForm', () => ({
 
 const mockVarsForm = vi.mocked(VarsForm);
 const mockAssertsForm = vi.mocked(AssertsForm);
+const mockGenerateAssertionsDialog = vi.mocked(GenerateAssertionsDialog);
 
 describe('TestCaseForm', () => {
   const onAdd = vi.fn();
@@ -72,6 +74,25 @@ describe('TestCaseForm', () => {
     expect(screen.getByText('Edit Test Case')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Update Test Case' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Add Another' })).toBeNull();
+  });
+
+  it('keeps generated assertions in the remounted assertions form', async () => {
+    renderComponent({
+      initialValues: {
+        assert: [{ type: 'equals', value: 'existing' }],
+      },
+    });
+
+    act(() => {
+      mockGenerateAssertionsDialog.mock.lastCall?.[0].onGenerated([
+        { type: 'contains', value: 'generated' },
+      ]);
+    });
+
+    expect(mockAssertsForm.mock.lastCall?.[0].initialValues).toEqual([
+      { type: 'equals', value: 'existing' },
+      { type: 'contains', value: 'generated' },
+    ]);
   });
 
   it('keeps dialog actions visible while the test case form scrolls independently', () => {
@@ -253,9 +274,15 @@ describe('TestCaseForm', () => {
       assertsFormProps.onAdd(testAsserts);
     });
 
-    await act(async () => {
-      onCancel();
-    });
+    rerender(
+      <TestCaseForm
+        open={false}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues}
+      />,
+    );
 
     rerender(
       <TestCaseForm

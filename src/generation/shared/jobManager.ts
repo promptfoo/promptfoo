@@ -17,6 +17,7 @@ import type {
  * Jobs are tracked for async operations via the server API.
  */
 export const generationJobs = new Map<string, GenerationJob>();
+const jobAbortControllers = new Map<string, AbortController>();
 
 /**
  * Event emitter for streaming job events.
@@ -64,17 +65,28 @@ export interface JobErrorEvent {
   error: string;
 }
 
+export interface JobCancelledEvent {
+  type: 'cancelled';
+  jobId: string;
+}
+
 export type JobEvent =
   | JobProgressEvent
   | JobTestCaseEvent
   | JobAssertionEvent
   | JobCompleteEvent
-  | JobErrorEvent;
+  | JobErrorEvent
+  | JobCancelledEvent;
 
 /**
  * Emits a job event for SSE streaming.
  */
 export function emitJobEvent(event: JobEvent): void {
+  const job = generationJobs.get(event.jobId);
+  if (job?.status === 'cancelled' && event.type !== 'cancelled') {
+    return;
+  }
+
   jobEventEmitter.emit(`job:${event.jobId}`, event);
   logger.debug(`Job event emitted: ${event.type} for job ${event.jobId}`);
 }
@@ -128,6 +140,7 @@ export function createJob(type: GenerationJobType): GenerationJob {
   };
 
   generationJobs.set(id, job);
+  jobAbortControllers.set(id, new AbortController());
   logger.debug(`Created generation job: ${id} (type: ${type})`);
 
   return job;
@@ -150,6 +163,9 @@ export function updateJobProgress(
   const job = generationJobs.get(jobId);
   if (!job) {
     logger.warn(`Cannot update progress for unknown job: ${jobId}`);
+    return;
+  }
+  if (job.status === 'cancelled') {
     return;
   }
 
@@ -188,11 +204,15 @@ export function completeJob(
     logger.warn(`Cannot complete unknown job: ${jobId}`);
     return;
   }
+  if (job.status === 'cancelled') {
+    return;
+  }
 
   job.status = 'complete';
   job.result = result;
   job.updatedAt = new Date();
   job.progress = job.total;
+  jobAbortControllers.delete(jobId);
 
   // Emit complete event for SSE streaming
   emitJobEvent({
@@ -216,12 +236,16 @@ export function failJob(jobId: string, error: string | Error): void {
     logger.warn(`Cannot fail unknown job: ${jobId}`);
     return;
   }
+  if (job.status === 'cancelled') {
+    return;
+  }
 
   const errorMessage = typeof error === 'string' ? error : error.message;
   job.status = 'error';
   job.error = errorMessage;
   job.logs.push(`Error: ${errorMessage}`);
   job.updatedAt = new Date();
+  jobAbortControllers.delete(jobId);
 
   // Emit error event for SSE streaming
   emitJobEvent({
@@ -259,6 +283,28 @@ export function getJob(jobId: string): GenerationJob | undefined {
   return generationJobs.get(jobId);
 }
 
+export function getJobAbortSignal(jobId: string): AbortSignal | undefined {
+  return jobAbortControllers.get(jobId)?.signal;
+}
+
+/** Cancel an active job and abort any provider request using its signal. */
+export function cancelJob(jobId: string): boolean {
+  const job = generationJobs.get(jobId);
+  if (!job || job.status === 'complete' || job.status === 'error' || job.status === 'cancelled') {
+    return false;
+  }
+
+  jobAbortControllers.get(jobId)?.abort();
+  jobAbortControllers.delete(jobId);
+  job.status = 'cancelled';
+  job.phase = 'Cancelled';
+  job.updatedAt = new Date();
+  job.logs.push('Generation cancelled');
+  emitJobEvent({ type: 'cancelled', jobId });
+  logger.info(`Generation job ${jobId} cancelled`);
+  return true;
+}
+
 /**
  * Updates the status of a job.
  *
@@ -269,6 +315,9 @@ export function updateJobStatus(jobId: string, status: GenerationJobStatus): voi
   const job = generationJobs.get(jobId);
   if (!job) {
     logger.warn(`Cannot update status for unknown job: ${jobId}`);
+    return;
+  }
+  if (job.status === 'cancelled' && status !== 'cancelled') {
     return;
   }
 
@@ -284,6 +333,8 @@ export function updateJobStatus(jobId: string, status: GenerationJobStatus): voi
  * @returns true if the job was deleted, false if not found
  */
 export function deleteJob(jobId: string): boolean {
+  jobAbortControllers.get(jobId)?.abort();
+  jobAbortControllers.delete(jobId);
   return generationJobs.delete(jobId);
 }
 
@@ -326,10 +377,11 @@ export function cleanupOldJobs(maxAgeMs: number = 60 * 60 * 1000): number {
 
   for (const [id, job] of generationJobs.entries()) {
     if (
-      (job.status === 'complete' || job.status === 'error') &&
+      (job.status === 'complete' || job.status === 'error' || job.status === 'cancelled') &&
       now - job.updatedAt.getTime() > maxAgeMs
     ) {
       generationJobs.delete(id);
+      jobAbortControllers.delete(id);
       cleaned++;
     }
   }

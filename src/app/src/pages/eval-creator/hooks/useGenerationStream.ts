@@ -44,12 +44,18 @@ export interface StreamErrorEvent {
   error: string;
 }
 
+export interface StreamCancelledEvent {
+  type: 'cancelled';
+  jobId: string;
+}
+
 export type StreamEvent =
   | StreamProgressEvent
   | StreamTestCaseEvent
   | StreamAssertionEvent
   | StreamCompleteEvent
-  | StreamErrorEvent;
+  | StreamErrorEvent
+  | StreamCancelledEvent;
 
 export interface UseGenerationStreamOptions {
   /** Called when progress updates */
@@ -191,6 +197,10 @@ export function useGenerationStream(
             disconnect();
             setConnectionError(data.error);
             onError?.(data.error);
+            break;
+
+          case 'cancelled':
+            disconnect();
             break;
         }
       } catch (err) {

@@ -132,7 +132,7 @@ describe('GenerateTestCasesDialog', () => {
     await waitFor(() => {
       expect(mockGetGenerationCapabilities).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByText(/Generate 15 test cases with assertions/)).toBeInTheDocument();
+    expect(screen.getByText(/Generate 25 test cases with assertions/)).toBeInTheDocument();
   });
 
   it('starts combined generation with the detected assertion type', async () => {
@@ -156,6 +156,7 @@ describe('GenerateTestCasesDialog', () => {
         edgeCases: {
           enabled: true,
           types: ['boundary', 'format', 'empty', 'special-chars'],
+          count: 10,
         },
         diversity: { enabled: true, targetScore: 0.7 },
       },
@@ -197,6 +198,7 @@ describe('GenerateTestCasesDialog', () => {
       edgeCases: {
         enabled: true,
         types: ['boundary', 'format', 'empty', 'special-chars'],
+        count: 10,
       },
       diversity: { enabled: true, targetScore: 0.7 },
     });

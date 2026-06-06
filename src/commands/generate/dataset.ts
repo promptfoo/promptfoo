@@ -13,7 +13,11 @@ import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
-import { validatePositiveIntegerOption, validateProbabilityOption } from './options';
+import {
+  validateAssertionTypeOption,
+  validatePositiveIntegerOption,
+  validateProbabilityOption,
+} from './options';
 import type { Command } from 'commander';
 
 import type { DatasetGenerationOptions } from '../../generation/types';
@@ -135,6 +139,11 @@ function buildDatasetOptions(options: DatasetGenerateOptions): Partial<DatasetGe
     };
   }
   if (options.iterative) {
+    datasetOptions.concepts = {
+      maxTopics: 5,
+      maxEntities: 10,
+      extractRelationships: true,
+    };
     datasetOptions.iterative = { enabled: true, maxRounds: 2, targetDiversity: 0.7 };
   }
   return datasetOptions;
@@ -170,8 +179,10 @@ async function generateEnhancedWithAssertions(
   const genResult = await generateTestSuite(testSuite.prompts, testSuite.tests || [], {
     dataset: buildDatasetOptions(options),
     assertions: {
+      instructions: options.instructions,
       type: settings.effectiveAssertionType,
       numAssertions: settings.numAssertions,
+      provider: options.provider,
     },
   });
   const configTests = buildGeneratedConfigTests(
@@ -350,6 +361,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   validatePositiveIntegerOption(options.numTestCasesPerPersona, '--numTestCasesPerPersona');
   validatePositiveIntegerOption(options.numAssertions, '--num-assertions');
   validateProbabilityOption(options.diversityTarget, '--diversity-target');
+  validateAssertionTypeOption(options.assertionType, '--assertion-type');
 
   setupEnv(options.envFile);
   if (!options.cache) {

@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getJobStatus } from '../api/generation';
+import { cancelGenerationJob, getJobStatus } from '../api/generation';
 
 import type { GenerationJob, GenerationResult } from '../api/generation';
 
@@ -28,8 +28,8 @@ export interface UseGenerationJobReturn {
     type: 'dataset' | 'assertions' | 'tests',
     startJobFn: () => Promise<{ jobId: string }>,
   ) => Promise<string>;
-  /** Cancel the current job polling (doesn't cancel server-side job) */
-  cancelJob: () => void;
+  /** Cancel the current client and server-side generation job. */
+  cancelJob: () => Promise<void>;
   /** Current job ID */
   jobId: string | null;
   /** Current job status */
@@ -69,11 +69,15 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
+      const activeJobId = activeJobIdRef.current;
       isMountedRef.current = false;
       lifecycleRef.current++;
       activeJobIdRef.current = null;
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
+      }
+      if (activeJobId) {
+        void Promise.resolve(cancelGenerationJob(activeJobId)).catch(() => {});
       }
     };
   }, []);
@@ -135,6 +139,11 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
           const errorMsg = job.error || 'Generation failed';
           setError(errorMsg);
           onError?.(errorMsg);
+        } else if (job.status === 'cancelled') {
+          activeJobIdRef.current = null;
+          stopPolling();
+          setStatus('idle');
+          setPhase('');
         } else if (job.status === 'in-progress') {
           setStatus('in-progress');
         }
@@ -158,8 +167,12 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
       type: 'dataset' | 'assertions' | 'tests',
       startJobFn: () => Promise<{ jobId: string }>,
     ): Promise<string> => {
+      const previousJobId = activeJobIdRef.current;
       // Reset state
       reset();
+      if (previousJobId) {
+        await cancelGenerationJob(previousJobId);
+      }
       const lifecycle = lifecycleRef.current;
       setStatus('pending');
       setJobType(type);
@@ -199,17 +212,29 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
     [reset, pollInterval, pollJobStatus, onError],
   );
 
-  const cancelJob = useCallback(() => {
+  const cancelJob = useCallback(async () => {
+    const activeJobId = activeJobIdRef.current;
     lifecycleRef.current++;
     activeJobIdRef.current = null;
     stopPolling();
-    // Note: This doesn't cancel the server-side job, just stops polling
-    // The job will continue to completion on the server
     if (status === 'pending' || status === 'in-progress') {
       setStatus('idle');
       setPhase('');
     }
-  }, [stopPolling, status]);
+    if (!activeJobId) {
+      return;
+    }
+
+    try {
+      await cancelGenerationJob(activeJobId);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to cancel generation';
+      setStatus('error');
+      setError(errorMsg);
+      onError?.(errorMsg);
+      throw err;
+    }
+  }, [onError, stopPolling, status]);
 
   return {
     startJob,

@@ -8,6 +8,7 @@ import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { extractVariablesFromTemplates } from '../../util/templates';
+import { withAbortSignal } from '../shared/cancellableProvider';
 import { ProgressReporter } from '../shared/progressReporter';
 import { extractConcepts } from './conceptExtractor';
 import { identifyGaps, measureDiversity } from './diversityMeasurement';
@@ -21,8 +22,8 @@ import type {
   DatasetGenerationResult,
   DiversityMetrics,
   EdgeCase,
+  GenerationCallbacks,
   Persona,
-  ProgressCallback,
 } from '../types';
 
 // Re-export sub-modules
@@ -154,7 +155,7 @@ export async function generateDataset(
   prompts: Prompt[],
   existingTests: TestCase[],
   options: Partial<DatasetGenerationOptions> = {},
-  callbacks?: { onProgress?: ProgressCallback; jobId?: string },
+  callbacks?: GenerationCallbacks,
 ): Promise<DatasetGenerationResult> {
   const startTime = Date.now();
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
@@ -183,7 +184,10 @@ export async function generateDataset(
   );
 
   // Load provider
-  const provider = await loadProvider(mergedOptions.provider);
+  const provider = withAbortSignal(
+    await loadProvider(mergedOptions.provider),
+    callbacks?.abortSignal,
+  );
   const providerName = provider.id?.() || mergedOptions.provider || 'default';
 
   // Extract variables from prompts

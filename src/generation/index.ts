@@ -37,7 +37,7 @@ import { generateDataset } from './dataset';
 
 import type { Prompt, TestCase } from '../types';
 import type {
-  ProgressCallback,
+  GenerationCallbacks,
   TestSuiteGenerationOptions,
   TestSuiteGenerationResult,
 } from './types';
@@ -190,7 +190,7 @@ export async function generateTestSuite(
   prompts: Prompt[],
   existingTests: TestCase[],
   options: Partial<TestSuiteGenerationOptions> = {},
-  callbacks?: { onProgress?: ProgressCallback; jobId?: string },
+  callbacks?: GenerationCallbacks,
 ): Promise<TestSuiteGenerationResult> {
   const startTime = Date.now();
 

@@ -173,6 +173,25 @@ describe('useGenerationStream', () => {
     expect(onError).toHaveBeenCalledWith('generation failed');
   });
 
+  it('disconnects cleanly when the server cancels the job', async () => {
+    const { result } = renderHook(() => useGenerationStream());
+
+    act(() => {
+      result.current.connect('job-cancelled');
+    });
+    const eventSource = MockEventSource.instances[0];
+    act(() => {
+      eventSource.onopen?.();
+      eventSource.onmessage?.({
+        data: JSON.stringify({ type: 'cancelled', jobId: 'job-cancelled' }),
+      } as MessageEvent);
+    });
+
+    await waitFor(() => expect(result.current.isConnected).toBe(false));
+    expect(eventSource.close).toHaveBeenCalled();
+    expect(result.current.connectionError).toBeNull();
+  });
+
   it('ignores events queued by a stream that was replaced by a newer job', () => {
     const onComplete = vi.fn();
     const onTestCase = vi.fn();

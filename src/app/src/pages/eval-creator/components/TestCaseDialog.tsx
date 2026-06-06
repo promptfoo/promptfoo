@@ -47,6 +47,9 @@ const TestCaseForm = ({
   const [generateAssertionsOpen, setGenerateAssertionsOpen] = useState(false);
 
   React.useEffect(() => {
+    if (!open) {
+      return;
+    }
     if (initialValues) {
       setDescription(initialValues.description || '');
       setVars(initialValues.vars || {});
@@ -56,7 +59,7 @@ const TestCaseForm = ({
       setVars({});
       setAsserts([]);
     }
-  }, [initialValues]);
+  }, [initialValues, open]);
 
   const handleAdd = (close: boolean) => {
     onAdd(
@@ -141,11 +144,7 @@ const TestCaseForm = ({
             <AssertsForm
               key={assertsFormKey}
               onAdd={(newAsserts) => setAsserts(newAsserts)}
-              initialValues={
-                ((initialValues?.assert || []).filter(
-                  (item) => item.type !== 'assert-set',
-                ) as Assertion[]) || []
-              }
+              initialValues={asserts.filter((item) => item.type !== 'assert-set') as Assertion[]}
             />
           </div>
         </div>

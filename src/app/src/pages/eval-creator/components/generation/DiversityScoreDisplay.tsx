@@ -26,25 +26,25 @@ const SCORE_BANDS = [
     minScore: 0.8,
     label: 'Excellent',
     colorClass: 'text-emerald-600 dark:text-emerald-400',
-    bgClass: 'bg-emerald-500',
+    progressClass: '[&>div]:bg-emerald-500',
   },
   {
     minScore: 0.6,
     label: 'Good',
     colorClass: 'text-emerald-600 dark:text-emerald-400',
-    bgClass: 'bg-emerald-500',
+    progressClass: '[&>div]:bg-emerald-500',
   },
   {
     minScore: 0.4,
     label: 'Fair',
     colorClass: 'text-amber-600 dark:text-amber-400',
-    bgClass: 'bg-amber-500',
+    progressClass: '[&>div]:bg-amber-500',
   },
   {
     minScore: 0,
     label: 'Low',
     colorClass: 'text-red-600 dark:text-red-400',
-    bgClass: 'bg-red-500',
+    progressClass: '[&>div]:bg-red-500',
   },
 ] as const;
 
@@ -66,7 +66,9 @@ export function DiversityScoreDisplay({
   const showGaps = gapItems.length > 0;
   /* v8 ignore stop */
   // The final score band starts at 0, so every normalized diversity score matches.
-  const { label, colorClass, bgClass } = SCORE_BANDS.find(({ minScore }) => score >= minScore)!;
+  const { label, colorClass, progressClass } = SCORE_BANDS.find(
+    ({ minScore }) => score >= minScore,
+  )!;
 
   if (compact) {
     /* v8 ignore start -- JSX source maps misattribute these rendered lines as uncovered. */
@@ -114,7 +116,7 @@ export function DiversityScoreDisplay({
       </div>
 
       <div className="space-y-1">
-        <Progress value={scorePercent} className={cn('h-2', `[&>div]:${bgClass}`)} />
+        <Progress value={scorePercent} className={cn('h-2', progressClass)} />
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>{scorePercent}%</span>
           {(diversity.clusters ?? 0) > 0 && <span>{diversity.clusters} clusters</span>}

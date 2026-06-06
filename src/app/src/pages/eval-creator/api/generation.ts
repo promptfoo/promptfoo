@@ -30,7 +30,7 @@ const GenerateJobResponseSchema = z.object({
 const GenerationJobSchema = z.object({
   id: z.string(),
   type: z.enum(['dataset', 'assertions', 'combined']),
-  status: z.enum(['pending', 'in-progress', 'complete', 'error']),
+  status: z.enum(['pending', 'in-progress', 'complete', 'error', 'cancelled']),
   progress: z.number().default(0),
   total: z.number().default(0),
   phase: z.string().default('Initializing...'),
@@ -248,7 +248,7 @@ export interface TestSuiteGenerationOptions {
 }
 
 // Job status types
-export type GenerationJobStatus = 'pending' | 'in-progress' | 'complete' | 'error';
+export type GenerationJobStatus = 'pending' | 'in-progress' | 'complete' | 'error' | 'cancelled';
 
 export interface GenerationJob {
   id: string;
@@ -434,6 +434,21 @@ export async function getJobStatus(
 
   // Cast result to GenerationJob type - the schema validates the structure
   return normalizedJob as GenerationJob;
+}
+
+export async function cancelGenerationJob(jobId: string): Promise<GenerationJob> {
+  const fetchResponse = await callApi(`/generation/jobs/${jobId}/cancel`, { method: 'POST' });
+  const json = await fetchResponse.json();
+  const result = JobStatusResponseSchema.safeParse(json);
+
+  if (!result.success) {
+    throw new Error('Invalid response from server: ' + result.error.message);
+  }
+  if (!result.data.success || !result.data.data?.job) {
+    throw new Error(result.data.error || 'Failed to cancel generation job');
+  }
+
+  return normalizeJobResult(result.data.data.job) as GenerationJob;
 }
 
 // Synchronous analysis endpoints (for quick insights)

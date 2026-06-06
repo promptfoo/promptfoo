@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addJobLog,
+  cancelJob,
   cleanupOldJobs,
   completeJob,
   createJob,
@@ -10,6 +11,7 @@ import {
   failJob,
   generationJobs,
   getJob,
+  getJobAbortSignal,
   jobEventEmitter,
   listJobs,
   updateJobProgress,
@@ -145,6 +147,45 @@ describe('jobManager', () => {
 
     it('should ignore failures for unknown jobs', () => {
       expect(() => failJob('missing-job', 'missing')).not.toThrow();
+    });
+  });
+
+  describe('cancelJob', () => {
+    it('aborts active work, emits cancellation, and ignores late terminal updates', () => {
+      const job = createJob('dataset');
+      const signal = getJobAbortSignal(job.id);
+      const listener = vi.fn();
+      jobEventEmitter.on(`job:${job.id}`, listener);
+
+      expect(cancelJob(job.id)).toBe(true);
+      expect(signal?.aborted).toBe(true);
+      expect(job).toMatchObject({ status: 'cancelled', phase: 'Cancelled' });
+      expect(listener).toHaveBeenCalledWith({ type: 'cancelled', jobId: job.id });
+
+      completeJob(job.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
+      failJob(job.id, 'late failure');
+      updateJobProgress(job.id, 1, 1, 'Late progress');
+      emitTestCase(job.id, { late: 'test case' }, 0);
+      emitAssertion(job.id, { type: 'contains', value: 'late assertion' }, 0);
+
+      expect(job.status).toBe('cancelled');
+      expect(job.result).toBeUndefined();
+      expect(job.error).toBeUndefined();
+      expect(listener).toHaveBeenCalledTimes(1);
+      jobEventEmitter.removeListener(`job:${job.id}`, listener);
+    });
+
+    it('does not cancel missing or terminal jobs', () => {
+      expect(cancelJob('missing')).toBe(false);
+      const job = createJob('dataset');
+      completeJob(job.id, {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+      });
+      expect(cancelJob(job.id)).toBe(false);
     });
   });
 

@@ -146,11 +146,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
   /**
    * Build authorization headers for API requests
    */
-  private getAuthHeaders(): Record<string, string> {
-    const organization = this.getOrganization();
+  private getAuthHeaders(customHeaders?: Record<string, string>): Record<string, string> {
     return {
       Authorization: `Bearer ${this.getApiKey()}`,
-      ...(organization ? { 'OpenAI-Organization': organization } : {}),
+      ...this.getOpenAiRequestHeaders(customHeaders),
     };
   }
 
@@ -200,8 +199,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...this.getAuthHeaders(),
-      ...config.headers,
+      ...this.getAuthHeaders(config.headers),
     };
 
     try {

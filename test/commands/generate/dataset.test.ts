@@ -249,6 +249,63 @@ describe('dataset generation', () => {
       );
     });
 
+    it('enables concepts for iterative generation and forwards assertion provider settings', async () => {
+      const configPath = 'config.yaml';
+      vi.mocked(generateTestSuite).mockResolvedValue({
+        dataset: {
+          testCases: [],
+          metadata: { totalGenerated: 0, durationMs: 1, provider: 'custom-provider' },
+        },
+        assertions: {
+          assertions: [],
+          metadata: {
+            totalGenerated: 0,
+            durationMs: 1,
+            pythonConverted: 0,
+            provider: 'custom-provider',
+          },
+        },
+        metadata: { totalDurationMs: 1, provider: 'custom-provider' },
+      } as never);
+
+      await doGenerateDataset({
+        cache: true,
+        config: configPath,
+        enhanced: true,
+        iterative: true,
+        instructions: 'Focus on finance workflows',
+        provider: 'custom-provider',
+        assertionType: 'g-eval',
+        numAssertions: '4',
+        numPersonas: '1',
+        numTestCasesPerPersona: '1',
+        write: false,
+        defaultConfig: {},
+        defaultConfigPath: configPath,
+      });
+
+      expect(generateTestSuite).toHaveBeenCalledWith(
+        mockTestSuite.prompts,
+        mockTestSuite.tests,
+        expect.objectContaining({
+          dataset: expect.objectContaining({
+            concepts: {
+              maxTopics: 5,
+              maxEntities: 10,
+              extractRelationships: true,
+            },
+            iterative: expect.objectContaining({ enabled: true }),
+          }),
+          assertions: expect.objectContaining({
+            instructions: 'Focus on finance workflows',
+            provider: 'custom-provider',
+            type: 'g-eval',
+            numAssertions: 4,
+          }),
+        }),
+      );
+    });
+
     it('should preserve edge cases when enhanced generation skips assertions', async () => {
       const configPath = 'config.yaml';
       vi.mocked(generateDataset).mockResolvedValue({
@@ -355,6 +412,23 @@ describe('dataset generation', () => {
         }),
       ).rejects.toThrow('Option --numPersonas must be a positive integer.');
       expect(generateDataset).not.toHaveBeenCalled();
+      expect(generateTestSuite).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsupported assertion types before generating', async () => {
+      await expect(
+        doGenerateDataset({
+          cache: true,
+          config: 'config.yaml',
+          enhanced: true,
+          assertionType: 'unsupported' as never,
+          numPersonas: '1',
+          numTestCasesPerPersona: '1',
+          write: false,
+          defaultConfig: {},
+          defaultConfigPath: 'config.yaml',
+        }),
+      ).rejects.toThrow('Option --assertion-type must be one of: pi, g-eval, llm-rubric.');
       expect(generateTestSuite).not.toHaveBeenCalled();
     });
   });

@@ -11,12 +11,20 @@ import path from 'node:path';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
-import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
+import {
+  hasDeleteComponent,
+  hasUnscopedUpdate,
+  isAllEvalsDeleted,
+  readSignalFile,
+  setupSignalWatcher,
+  updateEvalIds,
+} from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
+import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
@@ -24,12 +32,12 @@ import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
-  getPrompts,
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
   readResult,
 } from '../util/database';
+import { redactAzureBlobSasTokens } from '../util/sanitizer';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
@@ -43,13 +51,11 @@ import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
+import { promptCacheService } from './services/promptCacheService';
 import { replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
-import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../types/index';
-
-// Prompts cache
-let allPrompts: PromptWithMetadata[] | null = null;
+import type { Prompt, TestCase, TestSuite } from '../types/index';
 
 // JavaScript file extensions that need proper MIME type
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
@@ -186,14 +192,18 @@ export function createApp() {
       res.status(404).json({ error: 'Result not found' });
       return;
     }
-    res.json(ServerSchemas.Result.Response.parse({ data: file.result }));
+    res.json(
+      ServerSchemas.Result.Response.parse({
+        data: {
+          ...file.result,
+          config: redactAzureBlobSasTokens(file.result.config),
+        },
+      }),
+    );
   });
 
   app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
-    if (allPrompts == null) {
-      allPrompts = await getPrompts();
-    }
-    res.json(ServerSchemas.Prompts.Response.parse({ data: allPrompts }));
+    res.json(ServerSchemas.Prompts.Response.parse({ data: await promptCacheService.getAll() }));
   });
 
   app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
@@ -223,7 +233,11 @@ export function createApp() {
   });
 
   app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
-    res.json(ServerSchemas.Datasets.Response.parse({ data: await getTestCases() }));
+    res.json(
+      ServerSchemas.Datasets.Response.parse({
+        data: redactAzureBlobSasTokens(await getTestCases()),
+      }),
+    );
   });
 
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
@@ -374,21 +388,66 @@ export async function startServer(
 
   const watcher = setupSignalWatcher(() => {
     const handleSignalUpdate = async () => {
-      // Try to get the specific eval that was updated from the signal file
-      const signalEvalId = readSignalEvalId();
-      const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
-      const results = await updatedEval?.getResultsCount();
+      // A new eval signal can change /api/prompts output. Invalidate first — before this handler
+      // awaits any DB lookups and regardless of which emit branches below run — so every signal
+      // drops the cache and the next /api/prompts request re-reads it from the DB.
+      promptCacheService.invalidate();
 
-      if (results && results > 0) {
-        logger.debug(
-          `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
-        );
-        io.emit('update', { evalId: updatedEval?.id });
-        allPrompts = null;
+      const signal = readSignalFile();
+      // A coalesced signal can carry several scoped updates (back-to-back eval saves in the
+      // debounce window), an unscoped "refresh latest" component, and a delete component.
+      const scopedUpdateIds = updateEvalIds(signal);
+
+      // Mutations can happen in a separate CLI process, so clear this server's process-local caches
+      // before serving the next request. A delete-all or an unscoped update (whose latest eval is
+      // not known here) can touch any eval's cached count, so clear them all; otherwise scope the
+      // clear to exactly the evals this signal updates and/or deletes.
+      if (
+        (hasDeleteComponent(signal) && isAllEvalsDeleted(signal.deletedEvalIds)) ||
+        hasUnscopedUpdate(signal)
+      ) {
+        invalidateEvaluationCache();
+      } else {
+        invalidateEvaluationCaches([...scopedUpdateIds, ...(signal.deletedEvalIds ?? [])]);
+      }
+
+      // Emit each component independently (not else-if) so no coalesced refresh is lost.
+      if (hasDeleteComponent(signal)) {
+        io.emit('update', { deletedEvalIds: signal.deletedEvalIds ?? [] });
+      }
+
+      // Emit one refresh per surviving scoped eval so a client pinned to any of them updates.
+      if (scopedUpdateIds.length > 0) {
+        const updatedEvals = await Promise.all(scopedUpdateIds.map((id) => Eval.findById(id)));
+        for (const updatedEval of updatedEvals) {
+          if (updatedEval) {
+            logger.debug(
+              `Emitting update for eval: ${updatedEval.config?.description || updatedEval.id}`,
+            );
+            io.emit('update', { evalId: updatedEval.id });
+          }
+          // Else: a scoped update whose eval no longer exists (e.g. it won the debounce race
+          // against its own delete). Emit nothing — clients reconcile on the next signal.
+        }
+      }
+
+      // An unscoped update follows the latest eval, so refresh a root `/eval` view to it (or clear
+      // the view when none remain). Emitted after any scoped updates — and possibly alongside them
+      // when coalesced — so the root view ends on the latest eval.
+      if (hasUnscopedUpdate(signal)) {
+        const latestEval = await Eval.latest();
+        io.emit('update', latestEval ? { evalId: latestEval.id } : null);
       }
     };
 
-    void handleSignalUpdate();
+    // Fire-and-forget: the body awaits DB lookups (Eval.findById/latest) that can reject on a
+    // transient libsql error. Catch here so a rejection is logged rather than becoming an
+    // unhandledRejection that would tear down the long-running view server.
+    void handleSignalUpdate().catch((err) => {
+      logger.warn(
+        `Failed to handle eval signal update: ${err instanceof Error ? err.message : err}`,
+      );
+    });
   });
 
   io.on('connection', async (socket) => {

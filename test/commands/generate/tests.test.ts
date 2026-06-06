@@ -326,6 +326,7 @@ describe('generate tests command', () => {
         expect.anything(),
         expect.objectContaining({
           dataset: expect.objectContaining({
+            concepts: expect.objectContaining({ extractRelationships: true }),
             edgeCases: expect.objectContaining({ enabled: true }),
             diversity: expect.objectContaining({ enabled: true, targetScore: 0.9 }),
             iterative: expect.objectContaining({ enabled: true }),
@@ -476,6 +477,22 @@ describe('generate tests command', () => {
         }),
       ).rejects.toThrow('Cannot use --dataset-only and --assertions-only together.');
 
+      expect(generateTestSuite).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsupported assertion types when called directly', async () => {
+      await expect(
+        doGenerateTests({
+          cache: true,
+          config: 'config.yaml',
+          numPersonas: '1',
+          numTestCasesPerPersona: '1',
+          write: false,
+          type: 'unsupported' as never,
+          defaultConfig: {},
+          defaultConfigPath: 'config.yaml',
+        }),
+      ).rejects.toThrow('Option --type must be one of: pi, g-eval, llm-rubric.');
       expect(generateTestSuite).not.toHaveBeenCalled();
     });
   });

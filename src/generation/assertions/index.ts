@@ -6,6 +6,7 @@ import { loadApiProvider } from '../../providers/index';
 import { sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
+import { withAbortSignal } from '../shared/cancellableProvider';
 import { ProgressReporter } from '../shared/progressReporter';
 import { getNumAssertions } from '../types';
 import { generateSampleOutputs, validateAssertions } from './assertionValidator';
@@ -18,7 +19,7 @@ import type {
   AssertionGenerationResult,
   AssertionValidationResult,
   CoverageAnalysis,
-  ProgressCallback,
+  GenerationCallbacks,
 } from '../types';
 
 /**
@@ -349,7 +350,7 @@ export async function generateAssertions(
   prompts: Prompt[],
   existingTests: TestCase[],
   options: Partial<AssertionGenerationOptions> = {},
-  callbacks?: { onProgress?: ProgressCallback; jobId?: string },
+  callbacks?: GenerationCallbacks,
 ): Promise<AssertionGenerationResult> {
   const startTime = Date.now();
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
@@ -379,7 +380,10 @@ export async function generateAssertions(
   logger.debug(`Starting assertion generation with ${numQuestions} questions`);
 
   // Load provider
-  const provider = await loadProvider(mergedOptions.provider);
+  const provider = withAbortSignal(
+    await loadProvider(mergedOptions.provider),
+    callbacks?.abortSignal,
+  );
   const providerName = provider.id?.() || mergedOptions.provider || 'default';
 
   // Phase 1: Coverage analysis (optional)

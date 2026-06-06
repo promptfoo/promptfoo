@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const PositiveIntegerSchema = z.coerce.number().int().positive();
 const ProbabilitySchema = z.coerce.number().min(0).max(1);
+const AssertionTypeSchema = z.enum(['pi', 'g-eval', 'llm-rubric']);
 
 export function validatePositiveIntegerOption(value: string | undefined, optionName: string): void {
   if (value !== undefined && !PositiveIntegerSchema.safeParse(value).success) {
@@ -12,6 +13,12 @@ export function validatePositiveIntegerOption(value: string | undefined, optionN
 export function validateProbabilityOption(value: string | undefined, optionName: string): void {
   if (value !== undefined && !ProbabilitySchema.safeParse(value).success) {
     throw new Error(`Option ${optionName} must be a number between 0 and 1.`);
+  }
+}
+
+export function validateAssertionTypeOption(value: string | undefined, optionName: string): void {
+  if (value !== undefined && !AssertionTypeSchema.safeParse(value).success) {
+    throw new Error(`Option ${optionName} must be one of: pi, g-eval, llm-rubric.`);
   }
 }
 

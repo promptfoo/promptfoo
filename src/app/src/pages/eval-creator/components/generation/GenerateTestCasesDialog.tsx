@@ -53,6 +53,7 @@ interface GeneratedTestCase {
 // Sensible defaults
 const DEFAULT_NUM_PERSONAS = 5;
 const DEFAULT_TESTS_PER_PERSONA = 3;
+const DEFAULT_EDGE_CASE_COUNT = 10;
 
 function toGeneratedTestCases(dataset?: DatasetGenerationResult): GeneratedTestCase[] {
   if (!dataset) {
@@ -164,10 +165,14 @@ export function GenerateTestCasesDialog({
     onClose();
   }, [reset, onClose, disconnectStream]);
 
-  const handleCancel = useCallback(() => {
-    cancelJob();
-    disconnectStream();
-    setShowProgress(false);
+  const handleCancel = useCallback(async () => {
+    try {
+      await cancelJob();
+      disconnectStream();
+      setShowProgress(false);
+    } catch {
+      // Cancellation error is exposed by the job hook.
+    }
   }, [cancelJob, disconnectStream]);
 
   const handleGenerate = useCallback(async () => {
@@ -178,7 +183,11 @@ export function GenerateTestCasesDialog({
       numTestCasesPerPersona,
       instructions: instructions.trim() || undefined,
       // Good defaults always enabled
-      edgeCases: { enabled: true, types: ['boundary', 'format', 'empty', 'special-chars'] },
+      edgeCases: {
+        enabled: true,
+        types: ['boundary', 'format', 'empty', 'special-chars'],
+        count: DEFAULT_EDGE_CASE_COUNT,
+      },
       diversity: { enabled: true, targetScore: 0.7 },
     };
 
@@ -207,7 +216,7 @@ export function GenerateTestCasesDialog({
   ]);
 
   const hasPrompts = prompts.length > 0;
-  const totalTests = numPersonas * numTestCasesPerPersona;
+  const totalTests = numPersonas * numTestCasesPerPersona + DEFAULT_EDGE_CASE_COUNT;
 
   if (showProgress) {
     return (

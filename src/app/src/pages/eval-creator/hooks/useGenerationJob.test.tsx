@@ -1,17 +1,23 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getJobStatus } from '../api/generation';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cancelGenerationJob, getJobStatus } from '../api/generation';
 import { useGenerationJob } from './useGenerationJob';
 
 import type { GenerationResult } from '../api/generation';
 
 vi.mock('../api/generation', () => ({
+  cancelGenerationJob: vi.fn(),
   getJobStatus: vi.fn(),
 }));
 
+const mockCancelGenerationJob = vi.mocked(cancelGenerationJob);
 const mockGetJobStatus = vi.mocked(getJobStatus);
 
 describe('useGenerationJob', () => {
+  beforeEach(() => {
+    mockCancelGenerationJob.mockResolvedValue({} as never);
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
   });
@@ -110,9 +116,10 @@ describe('useGenerationJob', () => {
       expect(result.current.status).toBe('in-progress');
     });
 
-    act(() => {
-      result.current.cancelJob();
+    await act(async () => {
+      await result.current.cancelJob();
     });
+    expect(mockCancelGenerationJob).toHaveBeenCalledWith('job-3');
     expect(result.current.status).toBe('idle');
     expect(result.current.phase).toBe('');
 
@@ -144,8 +151,8 @@ describe('useGenerationJob', () => {
     await act(async () => {
       await result.current.startJob('dataset', async () => ({ jobId: 'job-cancelled' }));
     });
-    act(() => {
-      result.current.cancelJob();
+    await act(async () => {
+      await result.current.cancelJob();
     });
 
     await act(async () => {
@@ -183,8 +190,8 @@ describe('useGenerationJob', () => {
     await act(async () => {
       await result.current.startJob('dataset', async () => ({ jobId: 'job-cancelled' }));
     });
-    act(() => {
-      result.current.cancelJob();
+    await act(async () => {
+      await result.current.cancelJob();
     });
 
     await act(async () => {

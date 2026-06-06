@@ -12,6 +12,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import {
+  validateAssertionTypeOption,
   validateExclusiveGenerationModes,
   validatePositiveIntegerOption,
   validateProbabilityOption,
@@ -114,6 +115,11 @@ function buildDatasetOptions(
     };
   }
   if (options.iterative) {
+    datasetOptions.concepts = {
+      maxTopics: 5,
+      maxEntities: 10,
+      extractRelationships: true,
+    };
     datasetOptions.iterative = { enabled: true, maxRounds: 2, targetDiversity: 0.7 };
   }
   return datasetOptions;
@@ -303,6 +309,7 @@ export async function doGenerateTests(options: TestsGenerateOptions): Promise<vo
   validatePositiveIntegerOption(options.numTestCasesPerPersona, '--numTestCasesPerPersona');
   validatePositiveIntegerOption(options.numAssertions, '--numAssertions');
   validateProbabilityOption(options.diversityTarget, '--diversity-target');
+  validateAssertionTypeOption(options.type, '--type');
   validateExclusiveGenerationModes(options.datasetOnly, options.assertionsOnly);
 
   setupEnv(options.envFile);

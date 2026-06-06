@@ -9,10 +9,12 @@ import {
 import { extractConcepts, generateDataset, measureDiversity } from '../../generation/dataset';
 import { generateTestSuite } from '../../generation/index';
 import {
+  cancelJob,
   completeJob,
   createJob,
   failJob,
   getJob,
+  getJobAbortSignal,
   jobEventEmitter,
   listJobs,
 } from '../../generation/shared/jobManager';
@@ -71,10 +73,11 @@ generationRouter.post('/dataset/generate', (req: Request, res: Response): void =
 
     // Start generation in background with jobId for streaming
     generateDataset(toPrompts(prompts), tests as TestCase[], options || {}, {
+      abortSignal: getJobAbortSignal(job.id),
       jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
-        if (existingJob) {
+        if (existingJob && existingJob.status !== 'cancelled') {
           existingJob.progress = current;
           existingJob.total = total;
           existingJob.phase = phase;
@@ -83,10 +86,16 @@ generationRouter.post('/dataset/generate', (req: Request, res: Response): void =
       },
     })
       .then((result) => {
+        if (getJob(job.id)?.status === 'cancelled') {
+          return;
+        }
         completeJob(job.id, result);
         logger.info('Dataset generation job completed', { jobId: job.id });
       })
       .catch((error) => {
+        if (getJob(job.id)?.status === 'cancelled') {
+          return;
+        }
         logger.error('Dataset generation job failed', { jobId: job.id, error });
         failJob(job.id, 'Dataset generation failed');
       });
@@ -196,10 +205,11 @@ generationRouter.post('/assertions/generate', (req: Request, res: Response): voi
 
     // Start generation in background with jobId for streaming
     generateAssertions(toPrompts(prompts), tests as TestCase[], options || {}, {
+      abortSignal: getJobAbortSignal(job.id),
       jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
-        if (existingJob) {
+        if (existingJob && existingJob.status !== 'cancelled') {
           existingJob.progress = current;
           existingJob.total = total;
           existingJob.phase = phase;
@@ -208,10 +218,16 @@ generationRouter.post('/assertions/generate', (req: Request, res: Response): voi
       },
     })
       .then((result) => {
+        if (getJob(job.id)?.status === 'cancelled') {
+          return;
+        }
         completeJob(job.id, result);
         logger.info('Assertion generation job completed', { jobId: job.id });
       })
       .catch((error) => {
+        if (getJob(job.id)?.status === 'cancelled') {
+          return;
+        }
         logger.error('Assertion generation job failed', { jobId: job.id, error });
         failJob(job.id, 'Assertion generation failed');
       });
@@ -322,10 +338,11 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
 
     // Start generation in background
     generateTestSuite(toPrompts(prompts), tests as TestCase[], options || {}, {
+      abortSignal: getJobAbortSignal(job.id),
       jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
-        if (existingJob) {
+        if (existingJob && existingJob.status !== 'cancelled') {
           existingJob.progress = current;
           existingJob.total = total;
           existingJob.phase = phase;
@@ -334,10 +351,16 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
       },
     })
       .then((result) => {
+        if (getJob(job.id)?.status === 'cancelled') {
+          return;
+        }
         completeJob(job.id, result);
         logger.info('Test suite generation job completed', { jobId: job.id });
       })
       .catch((error) => {
+        if (getJob(job.id)?.status === 'cancelled') {
+          return;
+        }
         logger.error('Test suite generation job failed', { jobId: job.id, error });
         failJob(job.id, 'Test suite generation failed');
       });
@@ -371,6 +394,18 @@ generationRouter.get('/tests/job/:id', (req: Request, res: Response): void => {
 // Job Management Routes
 // =============================================================================
 
+generationRouter.post('/jobs/:id/cancel', (req: Request, res: Response): void => {
+  const id = req.params.id as string;
+  const job = getJob(id);
+  if (!job) {
+    res.status(404).json({ success: false, error: 'Job not found' });
+    return;
+  }
+
+  cancelJob(id);
+  res.json({ success: true, data: { job: formatJobResponse(job) } });
+});
+
 /**
  * GET /api/generation/jobs
  * Lists all generation jobs.
@@ -387,7 +422,8 @@ generationRouter.get('/jobs', (req: Request, res: Response): void => {
     status === 'pending' ||
     status === 'in-progress' ||
     status === 'complete' ||
-    status === 'error'
+    status === 'error' ||
+    status === 'cancelled'
   ) {
     filter.status = status;
   }
@@ -452,6 +488,12 @@ generationRouter.get('/stream/:jobId', (req: Request, res: Response): void => {
     return;
   }
 
+  if (job.status === 'cancelled') {
+    res.write(`data: ${JSON.stringify({ type: 'cancelled', jobId })}\n\n`);
+    res.end();
+    return;
+  }
+
   const eventName = `job:${jobId}`;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let isClosed = false;
@@ -480,7 +522,7 @@ generationRouter.get('/stream/:jobId', (req: Request, res: Response): void => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
 
       // Close connection on complete or error
-      if (event.type === 'complete' || event.type === 'error') {
+      if (event.type === 'complete' || event.type === 'error' || event.type === 'cancelled') {
         cleanup();
         res.end();
       }

@@ -144,6 +144,7 @@ describe('DiversityScoreDisplay', () => {
     expect(screen.queryByText(/clusters/)).not.toBeInTheDocument();
     expect(screen.queryByText('Coverage gaps:')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Improve diversity/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveClass('[&>div]:bg-red-500');
   });
 
   it('normalizes sparse diversity payloads in compact mode', async () => {

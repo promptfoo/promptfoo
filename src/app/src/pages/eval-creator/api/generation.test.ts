@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   analyzeConceptsSync,
   analyzeCoverageSync,
+  cancelGenerationJob,
   generateAssertions,
   generateDataset,
   generateTestSuite,
@@ -194,6 +195,34 @@ describe('eval creator generation API', () => {
           gaps: [],
         },
       },
+    });
+  });
+
+  it('cancels a generation job through the shared job endpoint', async () => {
+    mockCallApi.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: {
+          job: {
+            id: 'job-cancel',
+            type: 'dataset',
+            status: 'cancelled',
+            progress: 2,
+            total: 5,
+            phase: 'Cancelled',
+            createdAt: '2026-05-16T00:00:00.000Z',
+            updatedAt: '2026-05-16T00:00:01.000Z',
+          },
+        },
+      }),
+    );
+
+    await expect(cancelGenerationJob('job-cancel')).resolves.toMatchObject({
+      id: 'job-cancel',
+      status: 'cancelled',
+    });
+    expect(mockCallApi).toHaveBeenCalledWith('/generation/jobs/job-cancel/cancel', {
+      method: 'POST',
     });
   });
 

@@ -111,9 +111,13 @@ export function GenerateAssertionsDialog({
     onClose();
   }, [reset, onClose]);
 
-  const handleCancel = useCallback(() => {
-    cancelJob();
-    setShowProgress(false);
+  const handleCancel = useCallback(async () => {
+    try {
+      await cancelJob();
+      setShowProgress(false);
+    } catch {
+      // Cancellation error is exposed by the job hook.
+    }
   }, [cancelJob]);
 
   const handleGenerate = useCallback(async () => {

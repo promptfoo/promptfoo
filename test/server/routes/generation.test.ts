@@ -22,6 +22,7 @@ import {
   createJob,
   failJob,
   generationJobs,
+  getJobAbortSignal,
   jobEventEmitter,
 } from '../../../src/generation/shared/jobManager';
 import { getDefaultProviders } from '../../../src/providers/defaults';
@@ -206,18 +207,31 @@ describe('generation routes', () => {
     expect(combined.body.data.jobId).toBeTypeOf('string');
 
     const datasetCallbacks = vi.mocked(generateDataset).mock.calls[0]?.[3] as
-      | { onProgress?: (current: number, total: number, phase: string) => void }
+      | {
+          abortSignal?: AbortSignal;
+          onProgress?: (current: number, total: number, phase: string) => void;
+        }
       | undefined;
     const assertionCallbacks = vi.mocked(generateAssertions).mock.calls[0]?.[3] as
-      | { onProgress?: (current: number, total: number, phase: string) => void }
+      | {
+          abortSignal?: AbortSignal;
+          onProgress?: (current: number, total: number, phase: string) => void;
+        }
       | undefined;
     const combinedCallbacks = vi.mocked(generateTestSuite).mock.calls[0]?.[3] as
-      | { onProgress?: (current: number, total: number, phase: string) => void }
+      | {
+          abortSignal?: AbortSignal;
+          onProgress?: (current: number, total: number, phase: string) => void;
+        }
       | undefined;
 
     datasetCallbacks?.onProgress?.(1, 3, 'Dataset phase');
     assertionCallbacks?.onProgress?.(2, 4, 'Assertion phase');
     combinedCallbacks?.onProgress?.(3, 5, 'Combined phase');
+
+    expect(datasetCallbacks?.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(assertionCallbacks?.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(combinedCallbacks?.abortSignal).toBeInstanceOf(AbortSignal);
 
     await api
       .get(`/api/generation/dataset/job/${dataset.body.data.jobId}`)
@@ -255,6 +269,25 @@ describe('generation routes', () => {
     await api.get('/api/generation/dataset/job/missing').expect(404);
     await api.get('/api/generation/assertions/job/missing').expect(404);
     await api.get('/api/generation/tests/job/missing').expect(404);
+  });
+
+  it('cancels active jobs and aborts their provider signal', async () => {
+    const job = createJob('dataset');
+    const signal = getJobAbortSignal(job.id);
+
+    await api
+      .post(`/api/generation/jobs/${job.id}/cancel`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.data.job).toMatchObject({
+          id: job.id,
+          status: 'cancelled',
+          phase: 'Cancelled',
+        });
+      });
+
+    expect(signal?.aborted).toBe(true);
+    await api.post('/api/generation/jobs/missing/cancel').expect(404);
   });
 
   it('returns synchronous analysis results and lists filtered jobs', async () => {

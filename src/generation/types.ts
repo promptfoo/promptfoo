@@ -369,7 +369,13 @@ export interface AssertionGenerationResult {
 // Job Types
 // =============================================================================
 
-export const GenerationJobStatusSchema = z.enum(['pending', 'in-progress', 'complete', 'error']);
+export const GenerationJobStatusSchema = z.enum([
+  'pending',
+  'in-progress',
+  'complete',
+  'error',
+  'cancelled',
+]);
 
 export type GenerationJobStatus = z.infer<typeof GenerationJobStatusSchema>;
 
@@ -396,6 +402,12 @@ export type GenerationJobType = 'dataset' | 'assertions' | 'combined';
 // =============================================================================
 
 export type ProgressCallback = (current: number, total: number, phase: string) => void;
+
+export interface GenerationCallbacks {
+  abortSignal?: AbortSignal;
+  jobId?: string;
+  onProgress?: ProgressCallback;
+}
 
 /** Callback for streaming individual test cases as they're generated */
 export type TestCaseStreamCallback = (testCase: VarMapping, index: number) => void;
