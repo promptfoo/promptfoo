@@ -5,7 +5,7 @@ import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { createWebPageTaskError, WebPageTaskError } from '../shared/webPageTaskError';
 import { getTargetResponse } from './shared';
 
@@ -137,7 +137,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       url,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'create-web-page',
           testCaseId,
@@ -171,7 +171,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       url,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,

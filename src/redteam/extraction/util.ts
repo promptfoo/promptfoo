@@ -7,7 +7,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 
 import type { ApiProvider, TokenUsage } from '../../types/index';
 
@@ -86,7 +86,7 @@ export async function fetchRemoteGenerationWithMetadata(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(body),
       },
       getRequestTimeoutMs(),

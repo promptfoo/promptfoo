@@ -867,6 +867,7 @@ describe('CrescendoProvider', () => {
     expect(firstCall?.[0]).toBe('first question');
     expect(firstCall?.[1]).toBe('first response');
     expect(firstCall?.[7]).toMatchObject({
+      providerResponse: { output: 'first response' },
       redteamHistory: [],
       conversationHistory: [],
       conversationTranscript: '',
@@ -876,6 +877,7 @@ describe('CrescendoProvider', () => {
     expect(secondCall?.[0]).toBe('second question');
     expect(secondCall?.[1]).toBe('second response');
     expect(secondCall?.[7]).toMatchObject({
+      providerResponse: { output: 'second response' },
       redteamHistory: [{ prompt: 'first question', output: 'first response' }],
       conversationHistory: [{ prompt: 'first question', output: 'first response' }],
       conversationTranscript: 'Turn 1:\nUser: first question\nAssistant: first response',

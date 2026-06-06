@@ -14,7 +14,7 @@ import {
   UserEmailStatus,
 } from '../types/email';
 import { fetchWithTimeout } from '../util/fetch/index';
-import { CloudConfig } from './cloud';
+import { cloudConfig } from './cloud';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
@@ -193,10 +193,9 @@ export async function checkEmailStatus(options?: {
       logger.info(`Checking email...`);
     }
 
-    const cloudConfig = new CloudConfig();
-    const host =
-      getEnvString('PROMPTFOO_CLOUD_API_URL') ||
-      (cloudConfig.isEnabled() ? cloudConfig.getApiHost() : 'https://api.promptfoo.app');
+    const host = cloudConfig.isEnabled()
+      ? cloudConfig.getApiHost()
+      : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')?.replace(/\/+$/, '');
 
     const resp = await fetchWithTimeout(
       `${host}/api/users/status?email=${encodeURIComponent(userEmail)}${validateParam}`,

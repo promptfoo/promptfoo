@@ -11,7 +11,11 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { redteamProviderManager } from '../providers/shared';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
 import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -168,9 +172,7 @@ async function processRemoteChunk(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(payload),
     },
     getRequestTimeoutMs(),

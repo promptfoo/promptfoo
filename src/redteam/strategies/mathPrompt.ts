@@ -8,7 +8,11 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { redteamProviderManager } from '../providers/shared';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
 import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -81,9 +85,7 @@ export async function generateMathPrompt(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(payload),
         },
         getRequestTimeoutMs(),

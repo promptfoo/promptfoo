@@ -48,6 +48,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
@@ -568,6 +569,10 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            const gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: lastResponse,
+              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
@@ -575,6 +580,8 @@ export class CustomProvider implements ApiProvider {
               provider,
               getGraderAssertionValue(assertToUse),
               additionalRubric,
+              undefined,
+              gradingContext,
             );
             graderPassed = grade.pass;
             storedGraderResult = mergeStoredGraderResultTokenUsage(

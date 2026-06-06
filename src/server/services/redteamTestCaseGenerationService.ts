@@ -6,7 +6,11 @@ import {
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../../redteam/remoteGeneration';
 import { mergeProviderTokenUsage } from '../../redteam/strategies/util';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
@@ -314,9 +318,7 @@ async function handleGoatStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(goatBody),
     },
     getRequestTimeoutMs(),
@@ -380,9 +382,7 @@ async function handleMischievousUserStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(mischievousBody),
     },
     getRequestTimeoutMs(),
@@ -502,9 +502,7 @@ async function handleHydraStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(hydraBody),
     },
     getRequestTimeoutMs(),
@@ -599,9 +597,7 @@ async function handleCrescendoLikeStrategy(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(providerRequest),
     },
     getRequestTimeoutMs(),

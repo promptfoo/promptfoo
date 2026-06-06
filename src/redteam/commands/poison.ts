@@ -9,7 +9,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { setupEnv } from '../../util/index';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
 
 import type { TokenUsage } from '../../types/index';
@@ -64,9 +64,7 @@ export async function generatePoisonedDocument(
 ): Promise<PoisonResponse> {
   const response = await fetchWithProxy(getRemoteGenerationUrl(), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getRemoteGenerationHeaders(),
     body: JSON.stringify({
       task: 'poison-document',
       document,

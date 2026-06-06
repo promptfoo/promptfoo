@@ -1313,6 +1313,48 @@ describe('RedteamGraderBase', () => {
     expect(result.rubric).toContain('Current timestamp:');
   });
 
+  it('should pass only image output context to multimodal graders', async () => {
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    const imageOutputs = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'generated image',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+      undefined /* additionalRubric */,
+      undefined /* skipRefusalCheck */,
+      {
+        imageOutputs,
+        providerResponse: {
+          output: 'generated image',
+          raw: 'raw provider internals',
+          metadata: { secret: 'metadata should not be forwarded' },
+        },
+      },
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.stringContaining('Test rubric for test-purpose'),
+      'generated image',
+      expect.any(Object),
+      undefined,
+      undefined,
+      {
+        providerResponse: {
+          output: 'generated image',
+          images: imageOutputs,
+        },
+      },
+    );
+  });
+
   it('should prefer remote grading when test options only contain a target provider', async () => {
     cliState.config = {
       redteam: {},
@@ -1987,6 +2029,89 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
+    it('should grade empty responses when provider response images are present', async () => {
+      const mockResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Image violates policy',
+      };
+      const images = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images,
+          },
+        },
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.any(Object),
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images,
+          },
+        },
+      );
+    });
+
+    it('should grade empty responses when strategy image outputs are present', async () => {
+      const mockResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Image violates policy',
+      };
+      const imageOutputs = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          imageOutputs,
+          providerResponse: {
+            output: '',
+            images: [{ data: 'data:image/png;base64,ignored', mimeType: 'image/png' }],
+          },
+        },
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.any(Object),
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images: imageOutputs,
+          },
+        },
+      );
+    });
+
     it('should auto-pass JSON empty object responses', async () => {
       const result = await grader.getResult('test prompt', '{}', mockTest, undefined, undefined);
 
@@ -2397,7 +2522,7 @@ describe('RedteamGraderBase', () => {
       expect(rubricCall).toContain('requestId');
     });
 
-    it('should spread all gradingContext properties into rubric vars', async () => {
+    it('should spread public gradingContext properties into rubric vars', async () => {
       const mockResult: GradingResult = {
         pass: true,
         score: 1,
@@ -2430,10 +2555,50 @@ describe('RedteamGraderBase', () => {
       );
 
       const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
-      // All properties from gradingContext should be available
+      // Public properties from gradingContext should be available.
       expect(rubricCall).toContain('Summary: Trace summary from context');
       expect(rubricCall).toContain('Custom: Custom value');
       expect(rubricCall).toContain('Category: test_category');
+    });
+
+    it('should not expose image payloads or provider internals as rubric vars', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const InternalContextGrader = class extends RedteamGraderBase {
+        id = 'test-grader-internal-context';
+        rubric =
+          'Image outputs: {% if imageOutputs %}{{ imageOutputs }}{% endif %} Provider response: {% if providerResponse %}{{ providerResponse }}{% endif %} Raw: {% if providerResponse %}{{ providerResponse.raw }}{% endif %}';
+      };
+
+      const customPropsGrader = new InternalContextGrader();
+
+      await customPropsGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          providerResponse: {
+            output: 'test output',
+            raw: 'raw provider internals',
+            metadata: { secret: 'metadata should not be exposed' },
+          },
+        },
+      );
+
+      const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
+      expect(rubricCall).not.toContain('abc123');
+      expect(rubricCall).not.toContain('raw provider internals');
+      expect(rubricCall).not.toContain('metadata should not be exposed');
     });
 
     it('should work when gradingContext is undefined', async () => {

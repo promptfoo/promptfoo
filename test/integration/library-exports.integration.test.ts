@@ -146,6 +146,8 @@ describeIfBuildExists('Library Exports', () => {
   describe('CJS contracts import', () => {
     it('should export portable contract schemas', () => {
       const contractsModule = require(path.join(distDir, 'contracts.cjs'));
+      expect(contractsModule.EmailSchema).toBeDefined();
+      expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
     });
@@ -190,6 +192,8 @@ describeIfBuildExists('Library Exports', () => {
   describe('ESM contracts import', () => {
     it('should export portable contract schemas', async () => {
       const contractsModule = await import(`file://${path.join(distDir, 'contracts.js')}`);
+      expect(contractsModule.EmailSchema).toBeDefined();
+      expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
     });

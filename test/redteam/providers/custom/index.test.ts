@@ -915,14 +915,15 @@ describe('CustomProvider', () => {
     };
 
     const testRubric = 'Test grading rubric';
+    const getResult = vi.fn<any>(async () => ({
+      grade: mockGraderResult,
+      rubric: testRubric,
+    }));
 
     // Mock grader to fail (jailbreak success)
     mockGetGraderById.mockImplementation(function () {
       return {
-        getResult: vi.fn(async () => ({
-          grade: mockGraderResult,
-          rubric: testRubric,
-        })),
+        getResult,
       } as any;
     });
 
@@ -970,6 +971,10 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
+    expect(getResult).toHaveBeenCalled();
+    expect(getResult.mock.calls[0][7]).toMatchObject({
+      providerResponse: { output: 'target response' },
+    });
     // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toMatchObject({
       ...mockGraderResult,

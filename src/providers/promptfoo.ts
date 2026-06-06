@@ -3,6 +3,7 @@ import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
   neverGenerateRemote,
@@ -125,9 +126,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -249,9 +248,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -368,9 +365,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },

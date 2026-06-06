@@ -6,6 +6,20 @@
     "@promptfoo": "src"
   },
   "ignoredRoots": ["src/__mocks__"],
+  "tierOrder": [
+    "contracts",
+    "legacy-contracts",
+    "legacy-runtime",
+    "node",
+    "providers",
+    "redteam",
+    "core",
+    "view-server",
+    "cli",
+    "app",
+    "facade"
+  ],
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",
@@ -15,8 +29,16 @@
     {
       "name": "app",
       "roots": ["src/app"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"],
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ],
       "allowedImportPaths": [
+        "src/contracts.ts",
         "src/csv.ts",
         "src/logger.ts",
         "src/providers/constants.ts",
@@ -33,7 +55,6 @@
         "src/tracing/store.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
-        "src/types/api/user.ts",
         "src/types/email.ts",
         "src/types/index.ts",
         "src/types/modelAudit.ts",
@@ -76,15 +97,7 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "node",
-        "providers",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
@@ -105,20 +118,19 @@
         "src/storage",
         "src/util"
       ],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "providers",
-        "redteam",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
     },
     {
       "name": "core",
       "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ]
     },
     {
       "name": "legacy-contracts",
@@ -144,6 +156,7 @@
         "src/envOverrides.ts",
         "src/envars.ts",
         "src/esm.ts",
+        "src/evaluator",
         "src/evaluator.ts",
         "src/evaluatorHelpers.ts",
         "src/external",
@@ -173,7 +186,14 @@
         "src/updates",
         "src/version.ts"
       ],
-      "allowedDependencies": ["core", "legacy-contracts", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "node",
+        "providers",
+        "redteam"
+      ]
     }
   ]
 }

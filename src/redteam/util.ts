@@ -12,7 +12,11 @@ import {
   materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
-import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from './remoteGeneration';
 
 import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../types/index';
 
@@ -389,9 +393,7 @@ export async function extractGoalFromPromptWithUsage(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(requestBody),
       },
       getRequestTimeoutMs(),

@@ -358,6 +358,24 @@ describe('importCommand', () => {
       expect(traces[0].traceId).toBe('trace-valid');
     });
 
+    it('should clear result trace linkage when the exported trace is absent', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.results.results[0].traceId = 'trace-missing-from-export';
+      sampleData.results.results[0].evaluationId = 'eval-from-another-machine';
+
+      const filePath = path.join(__dirname, `temp-unlinked-trace-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult().traceId).toBeUndefined();
+      expect(result.toEvaluateResult().evaluationId).toBeUndefined();
+    });
+
     it('should import embedded blob assets before recording result references', async () => {
       const blobDir = createTempDir('promptfoo-import-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
@@ -1093,6 +1111,8 @@ describe('importCommand', () => {
           spans: [{ spanId: 'span-duplicate-import', name: 'span', startTime: 10 }],
         },
       ];
+      sampleData.results.results[0].traceId = 'trace-duplicate-import';
+      sampleData.results.results[0].evaluationId = sampleData.evalId;
 
       const filePath = path.join(__dirname, `temp-trace-new-id-${Date.now()}.json`);
       fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -1118,6 +1138,47 @@ describe('importCommand', () => {
       expect(duplicateTraces[0].spans).toEqual([
         expect.objectContaining({ spanId: 'span-duplicate-import' }),
       ]);
+
+      const [duplicateResult] = await EvalResult.findManyByEvalId(duplicateEval!.id);
+      expect(duplicateResult.toEvaluateResult()).toMatchObject({
+        traceId: duplicateTraces[0].traceId,
+        evaluationId: duplicateEval!.id,
+      });
+    });
+
+    it('keeps the trace id and rewrites evaluationId on a default import (no --new-id)', async () => {
+      // The most common import path: trace ids are preserved (no collision) and the result's
+      // evaluationId is corrected to the imported eval id even if the export carried a stale one.
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-default-import',
+          evaluationId: 'eval-from-original-machine',
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-default-import', name: 'span', startTime: 10 }],
+        },
+      ];
+      sampleData.results.results[0].traceId = 'trace-default-import';
+      sampleData.results.results[0].evaluationId = 'eval-from-original-machine';
+
+      const filePath = path.join(__dirname, `temp-trace-default-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const traceStore = new TraceStore();
+      const traces = await traceStore.getTracesByEvaluation(sampleData.evalId);
+      expect(traces).toHaveLength(1);
+      expect(traces[0].traceId).toBe('trace-default-import');
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'trace-default-import',
+        evaluationId: sampleData.evalId,
+      });
     });
 
     it('should remap imported trace IDs that already belong to another eval', async () => {
@@ -1131,6 +1192,8 @@ describe('importCommand', () => {
           spans: [{ spanId: 'span-original', name: 'original span', startTime: 10 }],
         },
       ];
+      sampleData.results.results[0].traceId = 'trace-cross-eval-collision';
+      sampleData.results.results[0].evaluationId = sampleData.evalId;
 
       const filePath = path.join(__dirname, `temp-trace-collision-${Date.now()}.json`);
       fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -1164,6 +1227,12 @@ describe('importCommand', () => {
       expect(importedTraces[0].spans).toEqual([
         expect.objectContaining({ spanId: 'span-imported' }),
       ]);
+
+      const [importedResult] = await EvalResult.findManyByEvalId(collidingData.evalId);
+      expect(importedResult.toEvaluateResult()).toMatchObject({
+        traceId: importedTraces[0].traceId,
+        evaluationId: collidingData.evalId,
+      });
     });
 
     it('should replace existing eval with --force flag', async () => {

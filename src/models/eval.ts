@@ -53,7 +53,12 @@ import {
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult, { getResultIndexKey } from './evalResult';
+import EvalResult, {
+  getResultIndexKey,
+  PROMPTFOO_METADATA_KEY,
+  persistTraceMetadata,
+  stripTraceLinkageFromMetadata,
+} from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -231,7 +236,9 @@ export class EvalQueries {
         LIMIT 1000
       `;
       const results = await db.all<MetadataKeyResult>(query);
-      return results.map((r) => r.key);
+      // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+      // it through the metadata-keys API — pair this with the value-side filter below.
+      return results.map((r) => r.key).filter((key) => key !== PROMPTFOO_METADATA_KEY);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
@@ -251,6 +258,14 @@ export class EvalQueries {
     const db = await getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
+      return [];
+    }
+    // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+    // it through the metadata-values API even though it lives in the same JSON column.
+    if (
+      trimmedKey === PROMPTFOO_METADATA_KEY ||
+      trimmedKey.startsWith(`${PROMPTFOO_METADATA_KEY}.`)
+    ) {
       return [];
     }
 
@@ -517,7 +532,14 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
+          .values(
+            opts.results?.map((r) => ({
+              ...r,
+              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              evalId,
+              id: crypto.randomUUID(),
+            })),
+          )
           .run();
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
@@ -1101,7 +1123,9 @@ export default class Eval {
         sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
         sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        sql`json_extract(metadata, '$') LIKE ${searchPattern}`,
+        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
+        // (trace linkage) so a query can't match on internal data the UI never shows.
+        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
       ];
@@ -1334,7 +1358,13 @@ export default class Eval {
       const db = await getDb();
       await db
         .insert(evalResultsTable)
-        .values(results.map((r) => ({ ...r, evalId: this.id })))
+        .values(
+          results.map((r) => ({
+            ...r,
+            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            evalId: this.id,
+          })),
+        )
         .run();
       notifyEvaluationChanged(this.id);
     }
@@ -1637,6 +1667,7 @@ export default class Eval {
           id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
+          metadata: stripTraceLinkageFromMetadata(result.metadata),
           updatedAt: now,
         }));
 
