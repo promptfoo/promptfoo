@@ -28,6 +28,7 @@ vi.mock('../../../src/cache', () => ({
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.com'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
 }));
 
 vi.mock('../../../src/database', async (importOriginal) => {
@@ -59,7 +60,7 @@ vi.mock('glob', async (importOriginal) => {
   };
 });
 
-vi.mock('better-sqlite3');
+vi.mock('libsql');
 
 describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();

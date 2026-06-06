@@ -174,7 +174,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/browser.test.ts',
   'providers/cloudflare-ai.test.ts',
   'providers/cloudflare-gateway.test.ts',
-  'providers/functionCallbackUtils.test.ts',
   'providers/github/defaults.test.ts',
   'providers/google/ai.studio.test.ts',
   'providers/google/auth.test.ts',
@@ -202,7 +201,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/watsonx.test.ts',
   'redteam/commands/crossSessionLeakGenerate.test.ts',
   'redteam/commands/generate.test.ts',
-  'redteam/commands/report.test.ts',
+  'commands/redteam/report.test.ts',
   'redteam/extraction/entities.test.ts',
   'redteam/extraction/purpose.test.ts',
   'redteam/extraction/util.test.ts',
@@ -229,7 +228,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
-  'tracing/evaluatorTracing.test.ts',
   'tracing/integration.test.ts',
   'util/agent/fsOperations.test.ts',
   'util/config/load.test.ts',
@@ -238,7 +236,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
-  'validators/testProvider.test.ts',
+  'node/testProvider.test.ts',
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;

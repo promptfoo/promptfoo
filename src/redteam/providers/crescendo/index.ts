@@ -589,8 +589,11 @@ export class CrescendoProvider implements ApiProvider {
                 (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
               : undefined;
 
-            // Build grading context with tracing and exfil tracking data
-            let gradingContext: RedteamGradingContext | undefined;
+            // Build grading context with image outputs, tracing, and exfil tracking data.
+            let gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: lastResponse,
+              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
 
             // First try to get exfil data from provider response metadata (Playwright provider)
             if (lastResponse.metadata?.wasExfiltrated === undefined) {
@@ -606,6 +609,7 @@ export class CrescendoProvider implements ApiProvider {
                 const exfilData = await checkExfilTracking(webPageUuid, evalId);
                 if (exfilData) {
                   gradingContext = {
+                    ...(gradingContext ?? {}),
                     ...(tracingOptions.includeInGrading
                       ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
                       : {}),
@@ -618,6 +622,7 @@ export class CrescendoProvider implements ApiProvider {
             } else {
               logger.debug('[Crescendo] Using exfil data from provider response metadata');
               gradingContext = {
+                ...(gradingContext ?? {}),
                 ...(tracingOptions.includeInGrading
                   ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
                   : {}),
@@ -628,8 +633,9 @@ export class CrescendoProvider implements ApiProvider {
             }
 
             // Fallback to just tracing context if no exfil data found
-            if (!gradingContext && tracingOptions.includeInGrading) {
+            if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
               gradingContext = {
+                ...(gradingContext ?? {}),
                 traceContext: response.traceContext,
                 traceSummary: gradingTraceSummary,
               };
