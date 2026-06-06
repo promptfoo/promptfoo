@@ -8,4 +8,6 @@ import type { EvaluateOptions } from './index';
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
+  /** Zero-based test case indices applied after scenario expansion. */
+  testCaseIndices?: number[];
 };

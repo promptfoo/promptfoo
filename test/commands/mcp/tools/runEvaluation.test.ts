@@ -77,27 +77,27 @@ async function defaultDoEvalImplementation(
   return createMockEvalResult();
 }
 
-vi.mock('../../../../src/commands/eval', () => ({
+vi.mock('../../../../src/node/doEval', () => ({
   doEval: vi.fn().mockImplementation(defaultDoEvalImplementation),
 }));
 
 describe('runEvaluation tool', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { doEval } = await import('../../../../src/commands/eval');
+    const { doEval } = await import('../../../../src/node/doEval');
     vi.mocked(doEval)
       .mockReset()
       .mockImplementation(defaultDoEvalImplementation as any);
   });
 
   afterEach(async () => {
-    const { doEval } = await import('../../../../src/commands/eval');
+    const { doEval } = await import('../../../../src/node/doEval');
     vi.mocked(doEval).mockReset();
   });
 
   describe('shared execution path', () => {
     it('should route filtered evals through doEval with the requested runtime options', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -145,6 +145,7 @@ describe('runEvaluation tool', () => {
           afterFilterTestSuite: expect.any(Function),
           evaluateOptionOverrides: {
             timeoutMs: 1234,
+            testCaseIndices: [0],
           },
           allowConfigFilterRange: false,
           disablePromptSuggestions: true,
@@ -154,7 +155,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should pass timeoutMs through the unfiltered doEval path', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -192,7 +193,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should preserve config timeout overrides when the MCP caller omits timeoutMs', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = createMockTestSuite();
@@ -240,7 +241,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should report effective delay and concurrency from the completed eval runtime options', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = createMockTestSuite();
@@ -281,7 +282,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should keep source config providers unchanged while filtering executable providers', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       let observedConfigProviders: unknown;
       let observedExecutableProviders: unknown;
       let observedPermissionProviders: unknown;
@@ -333,7 +334,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should not persist expanded file provider contents after filtering a resolved provider', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       let observedConfigProviders: unknown;
       let observedExecutableProviders: unknown;
       let observedPermissionProviders: unknown;
@@ -422,7 +423,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should summarize the final filtered test surface after doEval applies later filtering', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = {
@@ -466,7 +467,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should count scenario-generated test cases in the suite summary', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = {
@@ -510,8 +511,63 @@ describe('runEvaluation tool', () => {
       });
     });
 
+    it('should select scenario-generated test cases by their flattened indices', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+              },
+            ],
+          };
+
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: [1, 3],
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 2,
+        filters: { testCaseIndices: [1, 3] },
+      });
+      expect(doEval).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Object),
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          evaluateOptionOverrides: { testCaseIndices: [1, 3] },
+        }),
+      );
+    });
+
     it('should apply deferred scenario filter ranges to the final suite summary', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = {
@@ -558,7 +614,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should count scenarios with explicit empty test arrays as zero generated test cases', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = {
@@ -603,7 +659,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should count the implicit default test in the suite summary', async () => {
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = {
@@ -933,7 +989,7 @@ describe('runEvaluation tool', () => {
 
     it('should return an error when config resolution fails instead of terminating the host', async () => {
       const { ConfigResolutionError } = await import('../../../../src/util/config/load');
-      const { doEval } = await import('../../../../src/commands/eval');
+      const { doEval } = await import('../../../../src/node/doEval');
 
       vi.mocked(doEval).mockRejectedValueOnce(
         new ConfigResolutionError('You must provide at least 1 prompt'),

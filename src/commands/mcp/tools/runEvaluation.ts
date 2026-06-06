@@ -1,12 +1,12 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../../logger';
+import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
+import { filterPrompts } from '../../../util/eval/filterPrompts';
+import { getProviderIdAndLabel } from '../../../util/eval/filterProviders';
 import { parseFilterRange } from '../../../util/filterRange';
 import { escapeRegExp } from '../../../util/text';
-import { doEval } from '../../eval';
-import { filterPrompts } from '../../eval/filterPrompts';
-import { getProviderIdAndLabel } from '../../eval/filterProviders';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -135,43 +135,55 @@ function applyPromptFilter(testSuite: TestSuite, promptFilter?: string | string[
   }
 }
 
-function applyTestCaseFilter(
-  testSuite: TestSuite,
-  testCaseIndices?: number | number[] | { start: number; end: number },
-): void {
-  if (testCaseIndices === undefined || !testSuite.tests) {
+type TestCaseIndices = number | number[] | { start: number; end: number };
+
+function normalizeTestCaseIndices(testCaseIndices?: TestCaseIndices): number[] | undefined {
+  if (testCaseIndices === undefined) {
+    return undefined;
+  }
+  if (typeof testCaseIndices === 'number') {
+    return [testCaseIndices];
+  }
+  if (Array.isArray(testCaseIndices)) {
+    return testCaseIndices;
+  }
+  return Array.from(
+    { length: testCaseIndices.end - testCaseIndices.start },
+    (_, index) => testCaseIndices.start + index,
+  );
+}
+
+function validateTestCaseIndices(testSuite: TestSuite, testCaseIndices?: TestCaseIndices): void {
+  if (testCaseIndices === undefined) {
     return;
   }
 
-  const tests = testSuite.tests;
+  const testCaseCount = countRunnableTestCases(testSuite);
   if (typeof testCaseIndices === 'number') {
-    if (testCaseIndices < 0 || testCaseIndices >= tests.length) {
+    if (testCaseIndices >= testCaseCount) {
       throw new McpEvaluationFilterError(
-        `Test case index ${testCaseIndices} is out of range. Available indices: 0-${tests.length - 1}`,
+        `Test case index ${testCaseIndices} is out of range. Available indices: 0-${testCaseCount - 1}`,
       );
     }
-    testSuite.tests = [tests[testCaseIndices]];
     return;
   }
 
   if (Array.isArray(testCaseIndices)) {
-    const invalidIndices = testCaseIndices.filter((index) => index < 0 || index >= tests.length);
+    const invalidIndices = testCaseIndices.filter((index) => index >= testCaseCount);
     if (invalidIndices.length > 0) {
       throw new McpEvaluationFilterError(
-        `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${tests.length - 1}`,
+        `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${testCaseCount - 1}`,
       );
     }
-    testSuite.tests = testCaseIndices.map((index) => tests[index]);
     return;
   }
 
   const { start, end } = testCaseIndices;
-  if (start < 0 || end > tests.length || start >= end) {
+  if (end > testCaseCount || start >= end) {
     throw new McpEvaluationFilterError(
-      `Invalid range: start=${start}, end=${end}. Available indices: 0-${tests.length - 1}`,
+      `Invalid range: start=${start}, end=${end}. Available indices: 0-${testCaseCount - 1}`,
     );
   }
-  testSuite.tests = tests.slice(start, end);
 }
 
 function countRunnableTestCases(testSuite: TestSuite): number {
@@ -207,11 +219,14 @@ function summarizeFilteredSuite(
     providers: number;
   },
   deferredFilterRange?: string,
+  selectedTestCaseCount?: number,
 ): EvaluationFilterSummary {
   return {
     testCases: {
       total: totals.testCases,
-      filtered: applyDeferredFilterRange(countRunnableTestCases(testSuite), deferredFilterRange),
+      filtered:
+        selectedTestCaseCount ??
+        applyDeferredFilterRange(countRunnableTestCases(testSuite), deferredFilterRange),
     },
     prompts: {
       total: totals.prompts,
@@ -247,9 +262,14 @@ function applyMcpEvaluationFilters(
   // original form for persistence; permission checking receives a separate safe projection.
   applyProviderFilter(testSuite, providerFilter);
   applyPromptFilter(testSuite, promptFilter);
-  applyTestCaseFilter(testSuite, testCaseIndices);
+  validateTestCaseIndices(testSuite, testCaseIndices);
 
-  return summarizeFilteredSuite(testSuite, totals);
+  return summarizeFilteredSuite(
+    testSuite,
+    totals,
+    undefined,
+    normalizeTestCaseIndices(testCaseIndices)?.length,
+  );
 }
 
 function getPromptFilterValidationError(promptFilter?: string | string[]): string | undefined {
@@ -357,11 +377,11 @@ export function registerRunEvaluationTool(server: McpServer) {
         ),
       testCaseIndices: z
         .union([
-          z.number(),
-          z.array(z.number()),
+          z.number().int().nonnegative(),
+          z.array(z.number().int().nonnegative()).min(1),
           z.object({
-            start: z.number().describe('Start index (inclusive)'),
-            end: z.number().describe('End index (exclusive)'),
+            start: z.number().int().nonnegative().describe('Start index (inclusive)'),
+            end: z.number().int().nonnegative().describe('End index (exclusive)'),
           }),
         ])
         .optional()
@@ -474,6 +494,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           testCaseIndices !== undefined ||
           hasStringFilters(promptFilter) ||
           hasStringFilters(providerFilter);
+        const selectedTestCaseIndices = normalizeTestCaseIndices(testCaseIndices);
         let suiteSummary: EvaluationFilterSummary | undefined;
 
         const cmdObj: Partial<CommandLineOptions & Command> = {
@@ -493,10 +514,13 @@ export function registerRunEvaluationTool(server: McpServer) {
           showProgressBar: false,
         };
         const evaluateOptionOverrides: Partial<InternalEvaluateOptions> | undefined =
-          args.timeoutMs === undefined
+          args.timeoutMs === undefined && selectedTestCaseIndices === undefined
             ? undefined
             : {
-                timeoutMs,
+                ...(args.timeoutMs === undefined ? {} : { timeoutMs }),
+                ...(selectedTestCaseIndices === undefined
+                  ? {}
+                  : { testCaseIndices: selectedTestCaseIndices }),
               };
 
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
@@ -527,6 +551,7 @@ export function registerRunEvaluationTool(server: McpServer) {
                 providers: suiteSummary.providers.total,
               },
               deferredFilterRange,
+              selectedTestCaseIndices?.length,
             );
           },
           getCloudPermissionConfig: (config) => getProviderPermissionConfig(config, providerFilter),

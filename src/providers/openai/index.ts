@@ -10,6 +10,9 @@ import type {
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
+export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
+export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
+
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
@@ -43,6 +46,23 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.env?.OPENAI_ORGANIZATION ||
       getEnvString('OPENAI_ORGANIZATION')
     );
+  }
+
+  getOpenAiRequestHeaders(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): Record<string, string> {
+    let sendsToOpenAiApi = false;
+    try {
+      sendsToOpenAiApi = new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+    } catch {
+      // Leave malformed custom URLs to the request path to validate.
+    }
+
+    return {
+      ...(sendsToOpenAiApi ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
+      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+      ...customHeaders,
+    };
   }
 
   getApiUrlDefault(): string {

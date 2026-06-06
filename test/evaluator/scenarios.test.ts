@@ -10,6 +10,31 @@ import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it('filters scenario-generated test cases by flattened index', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation((prompt) => ({ output: prompt })),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{region}} {{role}}')],
+      scenarios: [
+        {
+          config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+          tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { testCaseIndices: [2] });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].vars).toEqual({ region: 'east', role: 'admin' });
+  });
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

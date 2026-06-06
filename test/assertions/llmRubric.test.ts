@@ -130,6 +130,78 @@ describe('handleLlmRubric', () => {
     );
   });
 
+  it('should pass provider response images to the matcher', async () => {
+    const params = {
+      ...defaultParams,
+      renderedValue: 'test rubric',
+      providerResponse: {
+        output: 'test output',
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+      },
+    };
+
+    const expectedResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue(expectedResult);
+
+    const result = await handleLlmRubric(params);
+
+    expect(result).toEqual(expectedResult);
+    expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+      'test rubric',
+      'test output string',
+      undefined,
+      {},
+      params.assertion,
+      { providerResponse: params.providerResponse },
+      undefined,
+    );
+  });
+
+  it('should not pass original provider response images when the assertion output is transformed', async () => {
+    const params = {
+      ...defaultParams,
+      assertion: {
+        type: 'llm-rubric',
+        value: 'test rubric',
+        transform: 'output.text',
+      } as Assertion,
+      renderedValue: 'test rubric',
+      outputString: 'transformed output',
+      providerResponse: {
+        output: {
+          text: 'transformed output',
+        },
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+      },
+    };
+
+    const expectedResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue(expectedResult);
+
+    const result = await handleLlmRubric(params);
+
+    expect(result).toEqual(expectedResult);
+    expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+      'test rubric',
+      'transformed output',
+      undefined,
+      {},
+      params.assertion,
+      undefined,
+      undefined,
+    );
+  });
+
   it('should invert pass and score for inverse assertions', async () => {
     const params = {
       ...defaultParams,
