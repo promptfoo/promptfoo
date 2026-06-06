@@ -19,6 +19,7 @@ import { callProviderWithContext, getAndCheckProvider } from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
+  materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
@@ -36,6 +37,9 @@ import type {
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
 };
+
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
@@ -120,6 +124,43 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
   };
 }
 
+function getDataUriPayload(data: string): string | undefined {
+  const [metadata, payload] = data.trim().split(',', 2);
+  if (!payload || !metadata.toLowerCase().startsWith('data:image/')) {
+    return undefined;
+  }
+  return payload;
+}
+
+function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
+  if (!imageOutputs?.length) {
+    return llmOutput;
+  }
+
+  const trimmedOutput = llmOutput.trim();
+  if (!trimmedOutput) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  if (/^data:image\/[^;,]+;base64,/i.test(trimmedOutput)) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  if (
+    imageOutputs.some((image) => {
+      if (!image.data) {
+        return false;
+      }
+      const imageData = image.data.trim();
+      return imageData === trimmedOutput || getDataUriPayload(imageData) === trimmedOutput;
+    })
+  ) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  return llmOutput;
+}
+
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -129,6 +170,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
     preferRemote?: boolean;
+    providerResponse?: ProviderResponse;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -144,6 +186,8 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
+  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
+  const gradingOutput = getGradingOutputForImages(llmOutput, imageOutputs);
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -156,8 +200,9 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          output: llmOutput,
+          output: gradingOutput,
           vars: vars || {},
+          ...(imageOutputs.length ? { images: imageOutputs } : {}),
         })),
         assertion,
       };
@@ -178,8 +223,9 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
+      images: imageOutputs,
       vars: {
-        output: tryParse(llmOutput),
+        output: tryParse(gradingOutput),
         rubric,
         ...(vars || {}),
       },
@@ -402,6 +448,8 @@ export async function matchesGEval(
   const tokensUsed = normalizeMatcherTokenUsage(undefined);
 
   const failWithTokens = (reason: string) => graderFail(reason, tokensUsed);
+  const failNoOutput = (phase: 'step-generation' | 'evaluation') =>
+    failWithTokens(`G-Eval ${phase} call to ${textProvider.id()} returned no output`);
 
   // Step 1: Get evaluation steps using renderLlmRubricPrompt
   const stepsRubricPrompt =
@@ -425,7 +473,7 @@ export async function matchesGEval(
     return failWithTokens(respSteps.error);
   }
   if (!respSteps.output) {
-    return failWithTokens('No output');
+    return failNoOutput('step-generation');
   }
   if (typeof respSteps.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation steps response is not a string');
@@ -488,7 +536,7 @@ export async function matchesGEval(
     return failWithTokens(resp.error);
   }
   if (!resp.output) {
-    return failWithTokens('No output');
+    return failNoOutput('evaluation');
   }
   if (typeof resp.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation result response is not a string');

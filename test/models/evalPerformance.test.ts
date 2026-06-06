@@ -15,7 +15,7 @@ describe('evalPerformance', () => {
   });
 
   beforeEach(async () => {
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -198,7 +198,7 @@ describe('evalPerformance', () => {
   });
 
   describe('cache invalidation on result write (issue #9348)', () => {
-    const makeResult = (evalId: string, testIdx: number) =>
+    const makeResult = (_evalId: string, testIdx: number) =>
       ({
         description: `test-${testIdx}`,
         promptIdx: 0,
@@ -208,17 +208,29 @@ describe('evalPerformance', () => {
         provider: { id: 'provider-1', label: 'Provider 1' },
         prompt: { raw: 'Test prompt', label: 'Test prompt' },
         vars: { input: `test${testIdx}` },
-        response: { output: `response-${testIdx}`, tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0 } },
+        response: {
+          output: `response-${testIdx}`,
+          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0 },
+        },
         error: null,
         failureReason: ResultFailureReason.NONE,
         success: true,
         score: 1,
         latencyMs: 10,
-        gradingResult: { pass: true, score: 1, reason: 'Pass', namedScores: {}, tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 }, componentResults: [] },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Pass',
+          namedScores: {},
+          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
+          componentResults: [],
+        },
         namedScores: {},
         cost: 0,
         metadata: {},
-      }) as Parameters<typeof import('../../src/models/evalResult')['default']['createFromEvaluateResult']>[1];
+      }) as Parameters<
+        typeof import('../../src/models/evalResult')['default']['createFromEvaluateResult']
+      >[1];
 
     it('getCachedResultsCount refreshes after createFromEvaluateResult (issue #9348)', async () => {
       const eval_ = await Eval.create(
