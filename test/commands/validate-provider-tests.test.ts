@@ -239,8 +239,9 @@ describe('Validate Command Provider Tests', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     });
 
-    it('should not mark an exact 100-character response as truncated', async () => {
+    it('should not mark an exact 100-character serialized response as truncated', async () => {
       const output = 'x'.repeat(98);
+      expect(JSON.stringify(output)).toHaveLength(100);
       mockEchoProvider.callApi.mockResolvedValue({ output });
       vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
