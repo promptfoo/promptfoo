@@ -1,9 +1,9 @@
 import './setup';
 
-import { randomUUID } from 'crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'crypto';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
@@ -38,7 +38,10 @@ describeEvaluator('multimodal grading externalization', () => {
 
     const imageTarget: ApiProvider = {
       id: () => 'image-target',
-      callApi: async () => ({ output: dataUri, images: [{ data: dataUri, mimeType: 'image/png' }] }),
+      callApi: async () => ({
+        output: dataUri,
+        images: [{ data: dataUri, mimeType: 'image/png' }],
+      }),
     };
 
     const grader: ApiProvider = {

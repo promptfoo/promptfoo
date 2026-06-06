@@ -1145,7 +1145,10 @@ describe('matchesLlmRubric', () => {
           {
             providerResponse: {
               output: 'Generated image',
-              images: [{ blobRef: blobRefFor('a'.repeat(64), 5) }, { blobRef: blobRefFor('b'.repeat(64), 5) }],
+              images: [
+                { blobRef: blobRefFor('a'.repeat(64), 5) },
+                { blobRef: blobRefFor('b'.repeat(64), 5) },
+              ],
             },
             resolveImageBlob: mockBlobResolver,
           },
@@ -1179,7 +1182,9 @@ describe('matchesLlmRubric', () => {
             resolveImageBlob: mockBlobResolver,
           },
         ),
-      ).rejects.toThrow('Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.');
+      ).rejects.toThrow(
+        'Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.',
+      );
     } finally {
       restoreEnv();
     }
@@ -1209,7 +1214,9 @@ describe('matchesLlmRubric', () => {
             resolveImageBlob: mockBlobResolver,
           },
         ),
-      ).rejects.toThrow('Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.');
+      ).rejects.toThrow(
+        'Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.',
+      );
     } finally {
       restoreEnv();
     }
