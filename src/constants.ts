@@ -28,6 +28,10 @@ export function getDefaultPort(): number {
   return getEnvInt('API_PORT', 15500);
 }
 
+export function getDevApiPort(): number {
+  return getEnvInt('API_PORT', 18601);
+}
+
 // Maximum width for terminal outputs.
 export const TERMINAL_MAX_WIDTH =
   process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10
