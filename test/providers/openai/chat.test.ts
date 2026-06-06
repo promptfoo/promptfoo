@@ -3257,6 +3257,28 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe('Hello world');
     });
 
+    it('should reassemble multiple data lines in a single SSE event', async () => {
+      const sseChunks = [
+        'data: {"choices":[\n',
+        'data: {"delta":{"content":"Hello from multiline SSE"},"finish_reason":"stop"}\n',
+        'data: ]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithRetries.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Hello from multiline SSE');
+      expect(result.error).toBeUndefined();
+    });
+
     it('should handle CRLF, data without a space, and final buffered SSE line', async () => {
       const sseChunks = [
         'data:{"choices":[{"delta":{"content":"Hello"}}]}\r\n\r\n',
@@ -3492,6 +3514,27 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
 
       expect(result.error).toBe('API returned malformed SSE data during streaming request');
+      expect(result.output).toBeUndefined();
+    });
+
+    it('should surface a top-level streamed error instead of returning partial output', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Partial output"}}]}\n\n',
+        'data: {"error":{"message":"Upstream provider overloaded","code":"provider_error"}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithRetries.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toBe('API returned streaming error: Upstream provider overloaded');
       expect(result.output).toBeUndefined();
     });
 

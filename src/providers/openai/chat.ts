@@ -12,7 +12,6 @@ import {
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import {
@@ -92,6 +91,7 @@ type OpenAiStreamingState = {
   choices: Map<number, OpenAiStreamingChoice>;
   usage?: OpenAiStreamingUsage;
   serviceTier?: string | null;
+  error?: string;
   completed: boolean;
   malformed: boolean;
 };
@@ -108,11 +108,28 @@ function getStreamingPassthroughOptions(body: Record<string, any>): Record<strin
 }
 
 function getSseData(line: string): string | undefined {
-  const trimmedLine = line.trim();
-  if (!trimmedLine || trimmedLine.startsWith(':') || !trimmedLine.startsWith('data:')) {
+  if (!line || line.startsWith(':') || !line.startsWith('data:')) {
     return undefined;
   }
-  return trimmedLine.slice(5).trimStart();
+  const data = line.slice(5);
+  return data.startsWith(' ') ? data.slice(1) : data;
+}
+
+function getOpenAiStreamingErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) {
+      return message;
+    }
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function appendFunctionCall(
@@ -231,7 +248,12 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
       choices?: Array<Parameters<typeof appendStreamingChoice>[1]>;
       usage?: OpenAiStreamingUsage;
       service_tier?: string | null;
+      error?: unknown;
     };
+    if (chunk.error !== undefined && chunk.error !== null) {
+      state.error = getOpenAiStreamingErrorMessage(chunk.error);
+      return true;
+    }
     if (chunk.choices !== undefined && !Array.isArray(chunk.choices)) {
       throw new Error('Invalid streaming choices');
     }
@@ -252,14 +274,45 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
   return false;
 }
 
-function processOpenAiSseLines(state: OpenAiStreamingState, lines: string[]): boolean {
-  for (const line of lines) {
-    const data = getSseData(line);
-    if (data && processOpenAiStreamingChunk(state, data)) {
-      return true;
-    }
+function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): boolean {
+  const dataLines = event
+    .split(/\r?\n/)
+    .map(getSseData)
+    .filter((data): data is string => data !== undefined);
+  if (dataLines.length === 0) {
+    return false;
   }
-  return false;
+
+  const joinedData = dataLines.join('\n');
+  try {
+    if (joinedData !== '[DONE]') {
+      JSON.parse(joinedData);
+    }
+    return processOpenAiStreamingChunk(state, joinedData);
+  } catch {
+    // Some OpenAI-compatible proxies omit blank event separators and emit each
+    // data line as an independent JSON chunk. Preserve that compatibility only
+    // when every line is independently valid; otherwise fail closed below.
+    const independentlyValid = dataLines.every((data) => {
+      if (data === '[DONE]') {
+        return true;
+      }
+      try {
+        JSON.parse(data);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (independentlyValid && dataLines.length > 1) {
+      return dataLines.some((data) => processOpenAiStreamingChunk(state, data));
+    }
+    return processOpenAiStreamingChunk(state, joinedData);
+  }
+}
+
+function processOpenAiSseEvents(state: OpenAiStreamingState, events: string[]): boolean {
+  return events.some((event) => processOpenAiSseEvent(state, event));
 }
 
 async function readOpenAiStreamingResponse(
@@ -279,14 +332,16 @@ async function readOpenAiStreamingResponse(
       const { done, value } = await reader.read();
       if (done) {
         buffer += decoder.decode();
-        processOpenAiSseLines(state, buffer.split(/\r?\n/));
+        if (buffer) {
+          processOpenAiSseEvent(state, buffer);
+        }
         break;
       }
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() || '';
-      streamDone = processOpenAiSseLines(state, lines);
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() || '';
+      streamDone = processOpenAiSseEvents(state, events);
     }
   } finally {
     if (streamDone) {
@@ -298,6 +353,9 @@ async function readOpenAiStreamingResponse(
 }
 
 function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string | undefined {
+  if (state.error) {
+    return `API returned streaming error: ${state.error}`;
+  }
   if (state.malformed) {
     return 'API returned malformed SSE data during streaming request';
   }
