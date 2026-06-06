@@ -137,7 +137,11 @@ vi.mock('./CompareEvalMenuItem', () => ({
 }));
 
 vi.mock('./EvalSelectorDialog', () => ({
-  default: () => <div>Eval Selector Dialog</div>,
+  default: ({ focusedDatasetId }: { focusedDatasetId?: string | null }) => (
+    <div data-testid="eval-selector-dialog" data-focused-dataset-id={focusedDatasetId ?? ''}>
+      Eval Selector Dialog
+    </div>
+  ),
 }));
 
 vi.mock('./EvalSelectorKeyboardShortcut', () => ({
@@ -250,6 +254,8 @@ function createCopyEvalResponse(): Response {
 }
 
 beforeEach(() => {
+  mockNavigate.mockReset();
+  mockUpdateConfig.mockReset();
   mockUseFilterMode.mockReturnValue({
     filterMode: 'all',
     setFilterMode: vi.fn(),
@@ -418,6 +424,7 @@ describe('ResultsView Share Button', () => {
       defaultTest: { assert: [{ type: 'contains', value: 'ok' }] },
     };
     mockFetchEvalConfig.mockResolvedValueOnce({ config: fullConfig });
+
     renderWithRouter(
       <ResultsView
         recentEvals={mockRecentEvals}
@@ -432,6 +439,56 @@ describe('ResultsView Share Button', () => {
     await waitFor(() => {
       expect(mockFetchEvalConfig).toHaveBeenCalledWith('test-eval-id');
       expect(mockUpdateConfig).toHaveBeenCalledWith(fullConfig);
+      expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+        state: { sourceEvalId: 'test-eval-id' },
+      });
+    });
+  });
+
+  it('passes the current dataset to the comparison eval selector', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={[
+          {
+            ...mockRecentEvals[0],
+            evalId: 'test-eval-id',
+            datasetId: 'dataset-for-comparison',
+          },
+        ]}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByTestId('eval-selector-dialog')
+        .some(
+          (dialog) => dialog.getAttribute('data-focused-dataset-id') === 'dataset-for-comparison',
+        ),
+    ).toBe(true);
+  });
+
+  it('carries the source eval id when editing and rerunning a redacted config', async () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+
+    await waitFor(() => {
+      expect(mockFetchEvalConfig).toHaveBeenCalledWith('test-eval-id');
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Full Test Evaluation' }),
+      );
+      expect(mockNavigate).toHaveBeenCalledWith('/setup', {
+        state: { sourceEvalId: 'test-eval-id' },
+      });
     });
   });
 

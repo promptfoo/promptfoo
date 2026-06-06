@@ -168,6 +168,7 @@ export const EvalResultDetailResponseSchema = z.object({
   response: z.unknown().optional(),
   testCase: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  gradingResult: z.unknown().optional(),
   text: z.string(),
   output: z.unknown().optional(),
   audio: z.unknown().optional(),
@@ -190,6 +191,7 @@ export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
   // Override prompts to require array - evaluate() calls .map() on prompts
   prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
   evaluateOptions: EvaluateOptionsSchema.optional(),
+  sourceEvalId: z.string().min(1).optional(),
 }).passthrough();
 
 export const CreateJobResponseSchema = z.object({

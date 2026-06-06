@@ -1,4 +1,3 @@
-import logger from '../../logger';
 import type { Response } from 'express';
 
 const JSON_STRING_LENGTH_ERROR_RE =
@@ -9,6 +8,11 @@ export const DEFAULT_OVERSIZED_STRING_LIMIT = 100_000;
 export type OversizedStringStats = {
   oversizedStrings: number;
   omittedCharacters: number;
+};
+
+type JsonResponseLogger = {
+  warn: (message: string, context: Record<string, unknown>) => void;
+  error: (message: string, context: Record<string, unknown>) => void;
 };
 
 export function isJsonStringLengthError(error: unknown): error is RangeError {
@@ -93,12 +97,14 @@ export function sendJsonResponse<T>(
   {
     beforeSend,
     evalId,
+    logger,
     maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT,
     stripOversizedStringsOnRangeError = false,
     tooLargeMessage = 'Response payload is too large to serialize',
   }: {
     beforeSend?: () => void;
     evalId?: string;
+    logger?: JsonResponseLogger;
     maxStringLength?: number;
     stripOversizedStringsOnRangeError?: boolean;
     tooLargeMessage?: string;
@@ -114,7 +120,7 @@ export function sendJsonResponse<T>(
       throw error;
     }
 
-    logger.warn('[sendJsonResponse] JSON payload exceeded V8 string length limit', {
+    logger?.warn('[sendJsonResponse] JSON payload exceeded V8 string length limit', {
       error,
       evalId,
       stripOversizedStringsOnRangeError,
@@ -139,7 +145,7 @@ export function sendJsonResponse<T>(
         throw fallbackError;
       }
 
-      logger.error('[sendJsonResponse] Stripped JSON payload is still too large', {
+      logger?.error('[sendJsonResponse] Stripped JSON payload is still too large', {
         error: fallbackError,
         evalId,
         oversizedStrings: stats.oversizedStrings,

@@ -170,7 +170,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(largeCell.testCase.vars).toBeUndefined();
     expect(largeCell.detail).toEqual({
       available: true,
-      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'media'],
+      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
     });
 
     const normalCell = response.body.table.body[1].outputs[0];
@@ -178,7 +178,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(normalCell.text).toBe(normal);
     expect(normalCell.detail).toEqual({
       available: true,
-      omittedFields: ['prompt', 'response', 'testCase', 'metadata'],
+      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult'],
     });
   });
 
@@ -239,7 +239,7 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(response.body.table.body[0].outputs[0].prompt).toBe('');
     expect(response.body.table.body[0].outputs[0].detail).toEqual({
       available: true,
-      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'media'],
+      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
     });
     expect(response.body.table.body[0].outputs[0].metadata).toEqual({ comment: 'keep this' });
     expect(response.body.table.body[0].outputs[0].metadata.inputVars).toBeUndefined();
@@ -268,6 +268,12 @@ describe('GET /api/eval/:id/table large payload handling', () => {
       latencyMs: 0,
       namedScores: {},
       metadata: { inputVars: { image: oversized } },
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: oversized,
+        comment: 'full comment',
+      },
       failureReason: ResultFailureReason.NONE,
     } as unknown as EvalResult);
 
@@ -279,6 +285,12 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(response.body.response.images[0].data).toBe(oversized);
     expect(response.body.testCase.vars.image).toBe(oversized);
     expect(response.body.metadata.inputVars.image).toBe(oversized);
+    expect(response.body.gradingResult).toEqual({
+      pass: false,
+      score: 0,
+      reason: oversized,
+      comment: 'full comment',
+    });
   });
 
   it('returns full config from the config detail endpoint', async () => {

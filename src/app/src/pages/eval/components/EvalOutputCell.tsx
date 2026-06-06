@@ -4,7 +4,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { fetchEvalResultDetail, prefetchEvalResultDetail } from '@app/utils/api';
+import {
+  type EvalResultDetailResponse,
+  fetchEvalResultDetail,
+  prefetchEvalResultDetail,
+} from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -52,7 +56,6 @@ import {
   setEvalDetailsHash,
   useEvalDetailsHash,
 } from './utils';
-import type { EvalResultDetailResponse } from '@promptfoo/types/api/eval';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -637,8 +640,7 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   };
 }
 
-function getDialogGradingResults(output: EvaluateTableOutput): GradingResult[] | undefined {
-  const gradingResult = output.gradingResult;
+function getDialogGradingResults(gradingResult?: GradingResult): GradingResult[] | undefined {
   if (!gradingResult) {
     return undefined;
   }
@@ -998,14 +1000,18 @@ function renderPromptBlock({
   prompt,
   loading,
   error,
+  detailAvailable,
+  onLoadDetail,
 }: {
   showPrompts: boolean;
   firstOutput?: EvaluateTableOutput | null;
   prompt?: EvaluateTableOutput['prompt'];
   loading: boolean;
   error: string | null;
+  detailAvailable: boolean;
+  onLoadDetail: () => void;
 }): React.ReactNode {
-  if (!showPrompts || (!firstOutput?.prompt && !prompt && !loading && !error)) {
+  if (!showPrompts || (!firstOutput?.prompt && !prompt && !loading && !error && !detailAvailable)) {
     return null;
   }
 
@@ -1018,6 +1024,12 @@ function renderPromptBlock({
     body = prompt;
   } else if (prompt !== undefined) {
     body = JSON.stringify(prompt, null, 2);
+  } else if (detailAvailable) {
+    body = (
+      <button type="button" className="action underline" onClick={onLoadDetail}>
+        Load prompt
+      </button>
+    );
   }
 
   return (
@@ -1115,6 +1127,8 @@ function renderOutputActions({
   const displayPrompt = cellDetail?.prompt || output.prompt || (detailLoading ? 'Loading...' : '');
   const detailResponse = cellDetail?.response as ProviderResponse | undefined;
   const detailVariables = (cellDetail?.testCase?.vars as Vars | undefined) ?? output.testCase?.vars;
+  const detailGradingResult = cellDetail?.gradingResult as GradingResult | undefined;
+  const gradingResult = detailGradingResult ?? output.gradingResult ?? undefined;
 
   return (
     <div
@@ -1261,7 +1275,7 @@ function renderOutputActions({
               onClose={handlePromptClose}
               prompt={displayPrompt || detailError || ''}
               provider={output.provider}
-              gradingResults={getDialogGradingResults(output)}
+              gradingResults={getDialogGradingResults(gradingResult)}
               output={cellDetail?.text || text}
               metadata={cellDetail?.metadata || output.metadata}
               providerPrompt={getActualPrompt(detailResponse || output.response, {
@@ -1271,7 +1285,11 @@ function renderOutputActions({
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
-              variables={(output.metadata?.inputVars as Vars | undefined) || detailVariables}
+              variables={
+                (cellDetail?.metadata?.inputVars as Vars | undefined) ??
+                (output.metadata?.inputVars as Vars | undefined) ??
+                detailVariables
+              }
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
@@ -1362,7 +1380,7 @@ function EvalOutputCell({
   const isMountedRef = React.useRef(true);
 
   const detailEvalId = output.evalId || evaluationId || '';
-  const detailAvailable = Boolean(detailEvalId && output.id && (output.detail?.available ?? true));
+  const detailAvailable = Boolean(detailEvalId && output.id && output.detail?.available === true);
 
   // Update activeRating when output changes
   React.useEffect(() => {
@@ -1488,27 +1506,6 @@ function EvalOutputCell({
     promptIndex,
   ]);
 
-  React.useEffect(() => {
-    if (
-      showPrompts &&
-      !output.prompt &&
-      detailAvailable &&
-      !cellDetail &&
-      !detailLoading &&
-      !detailError
-    ) {
-      void loadCellDetail();
-    }
-  }, [
-    cellDetail,
-    detailAvailable,
-    detailError,
-    detailLoading,
-    loadCellDetail,
-    output.prompt,
-    showPrompts,
-  ]);
-
   const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
   const handlePromptOpen = () => {
@@ -1558,17 +1555,19 @@ function EvalOutputCell({
   );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
-  const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
+  const hydratedGradingResult =
+    (cellDetail?.gradingResult as GradingResult | undefined) ?? output.gradingResult;
+  const [commentText, setCommentText] = React.useState(hydratedGradingResult?.comment || '');
   const [commentDraftText, setCommentDraftText] = React.useState(
-    output.gradingResult?.comment || '',
+    hydratedGradingResult?.comment || '',
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset local draft state when switching outputs that share the same stored comment value.
   React.useEffect(() => {
-    const persistedComment = output.gradingResult?.comment || '';
+    const persistedComment = hydratedGradingResult?.comment || '';
     setCommentText(persistedComment);
     setCommentDraftText(persistedComment);
-  }, [output.id, output.gradingResult?.comment]);
+  }, [hydratedGradingResult?.comment, output.id]);
 
   const handleCommentOpen = () => {
     setCommentDraftText(commentText);
@@ -1607,7 +1606,12 @@ function EvalOutputCell({
   const { failReasons, passReasons } = getFailAndPassReasons(output);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
-  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const detailMetadata = cellDetail?.metadata as EvaluateTableOutput['metadata'] | undefined;
+  const redteamHistory =
+    detailMetadata?.redteamHistory ||
+    detailMetadata?.redteamTreeHistory ||
+    output.metadata?.redteamHistory ||
+    output.metadata?.redteamTreeHistory;
   const lastTurn = redteamHistory?.[redteamHistory.length - 1];
   const responseAudio = lastTurn?.outputAudio as
     | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
@@ -1786,9 +1790,11 @@ function EvalOutputCell({
       {renderPromptBlock({
         showPrompts,
         firstOutput,
-        prompt: cellDetail?.prompt || output.prompt,
+        prompt: cellDetail?.prompt ?? (output.prompt || undefined),
         loading: detailLoading,
         error: detailError,
+        detailAvailable,
+        onLoadDetail: () => void loadCellDetail(),
       })}
       {renderResponseAudioPlayer(responseAudioSource)}
       <div

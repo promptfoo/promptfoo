@@ -8,19 +8,23 @@ import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
-import { convertEvalResultToTableCell } from '../../util/exportToFile/index';
-import invariant from '../../util/invariant';
-import { sanitizeObject } from '../../util/sanitizer';
-import { shouldShareResults } from '../../util/sharing';
-import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { replyValidationError, sendError } from '../utils/errors';
-import { trimEvalConfigForTableApi, trimEvalTableForApi } from '../utils/evalTablePayload';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
   mergeComparisonTables,
-} from '../utils/evalTableUtils';
+} from '../../util/eval/evalTableUtils';
+import invariant from '../../util/invariant';
+import {
+  redactAzureBlobSasTokens,
+  restoreAzureBlobSasTokens,
+  sanitizeObject,
+} from '../../util/sanitizer';
+import { shouldShareResults } from '../../util/sharing';
+import { evalJobService } from '../services/evalJobService';
+import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { replyValidationError, sendError } from '../utils/errors';
+import { trimEvalConfigForTableApi, trimEvalTableForApi } from '../utils/evalTablePayload';
 import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
@@ -30,7 +34,6 @@ import type {
   EvaluateTable,
   EvaluateTestSuite,
   GradingResult,
-  Job,
   PromptMetrics,
   ResultsFile,
   Vars,
@@ -38,9 +41,22 @@ import type {
 
 export const evalRouter = Router();
 
-// Running jobs
-export const evalJobs = new Map<string, Job>();
-evalRouter.post('/job', (req: Request, res: Response): void => {
+function getResultDetailText(result: EvalResult): string {
+  const rawOutput = result.response?.output;
+  const outputText =
+    rawOutput !== null && typeof rawOutput === 'object'
+      ? JSON.stringify(rawOutput)
+      : rawOutput == null || rawOutput === ''
+        ? result.error || ''
+        : String(rawOutput);
+
+  if (result.testCase.assert) {
+    return result.success ? outputText || result.error || '' : outputText;
+  }
+  return result.error || outputText;
+}
+
+evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: z.prettifyError(result.error) });
@@ -51,21 +67,32 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
   // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
   // nested provider schemas may strip. This keeps Zod transforms/coercions while
   // preserving provider flexibility.
-  const { evaluateOptions, providers: _validatedProviders, ...restData } = result.data;
-  const testSuite = {
+  const {
+    evaluateOptions,
+    sourceEvalId,
+    providers: _validatedProviders,
+    ...restData
+  } = result.data;
+  let testSuite = {
     ...restData,
     // Preserve raw providers from req.body to keep nested config fields
     providers: (req.body as { providers?: unknown }).providers,
   };
+
+  if (sourceEvalId) {
+    try {
+      const sourceEval = await Eval.findById(sourceEvalId);
+      if (sourceEval) {
+        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+      }
+    } catch (error) {
+      sendError(res, 500, 'Failed to prepare eval job', error);
+      return;
+    }
+  }
+
   const id = crypto.randomUUID();
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
+  evalJobService.create(id);
 
   evaluateWithSource(
     {
@@ -77,20 +104,14 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       ...evaluateOptions,
       eventSource: 'web',
       progressCallback: (progress: number, total: number) => {
-        const job = evalJobs.get(id);
-        invariant(job, 'Job not found');
-        job.progress = progress;
-        job.total = total;
+        invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
       },
     },
   )
     .then(async (evalResult) => {
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.status = 'complete';
-      job.result = await evalResult.toEvaluateSummary();
-      job.evalId = evalResult.id;
+      const result = await evalResult.toEvaluateSummary();
+      invariant(evalJobService.complete(id, result, evalResult.id), 'Job not found');
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
@@ -99,12 +120,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
         body: sanitizeObject(testSuite, { context: 'request body' }),
       });
 
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.status = 'error';
-      job.result = null;
-      job.evalId = null;
-      job.logs = [String(error)];
+      invariant(evalJobService.fail(id, [String(error)]), 'Job not found');
     });
 
   res.json(EvalSchemas.CreateJob.Response.parse({ id }));
@@ -118,7 +134,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobs.get(id);
+  const job = evalJobService.get(id);
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
     return;
@@ -176,7 +192,8 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
       table: table as unknown as EvaluateTable | undefined,
     });
     res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
-  } catch {
+  } catch (error) {
+    logger.error('[PATCH /api/eval/:id] Failed to update eval', { id, error });
     res.status(500).json({ error: 'Failed to update eval table' });
   }
 });
@@ -238,9 +255,12 @@ evalRouter.get('/:id/config', async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const responsePayload = EvalSchemas.Config.Response.parse({ config: eval_.config });
+    const responsePayload = EvalSchemas.Config.Response.parse({
+      config: redactAzureBlobSasTokens(eval_.config),
+    });
     sendJsonResponse(res, responsePayload, {
       evalId: id,
+      logger,
       tooLargeMessage: 'Eval config is too large to serialize',
     });
   } catch (error) {
@@ -364,6 +384,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     sendJsonResponse(res, jsonData, {
       beforeSend: () => setDownloadHeaders(res, `${id}.json`, 'application/json'),
       evalId: id,
+      logger,
       tooLargeMessage: 'Eval JSON export is too large to serialize',
     });
     return;
@@ -413,7 +434,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   // Keep those tables full so a rating PATCH does not write trimmed detail back to storage.
   const isLegacyTable = eval_.version() < 4;
   const tableForResponse = isLegacyTable ? returnTable : trimEvalTableForApi(returnTable);
-  const leanConfig = trimEvalConfigForTableApi(eval_.config);
+  const leanConfig = trimEvalConfigForTableApi(redactAzureBlobSasTokens(eval_.config));
   const responsePayload = EvalSchemas.Table.Response.parse({
     table: tableForResponse,
     totalCount: table.totalCount,
@@ -429,6 +450,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   sendJsonResponse(res, responsePayload as unknown as EvalTableDTO, {
     evalId: id,
+    logger,
     // Legacy v3 clients PATCH the whole table back via saveManualRating; returning
     // placeholder strings on overflow would silently overwrite stored content, so
     // we return 413 instead and let the client surface the error.
@@ -455,24 +477,25 @@ evalRouter.get(
         return;
       }
 
-      const cell = convertEvalResultToTableCell(result);
       const responsePayload = EvalSchemas.ResultDetail.Response.parse({
         evalId,
-        resultId: cell.id,
+        resultId: result.id || `${result.testIdx}-${result.promptIdx}`,
         prompt: result.prompt.raw,
         providerPrompt: result.response?.prompt,
         response: result.response,
         testCase: result.testCase,
         metadata: result.metadata,
-        text: cell.text,
+        gradingResult: result.gradingResult,
+        text: getResultDetailText(result),
         output: result.response?.output,
-        audio: cell.audio,
-        video: cell.video,
-        images: cell.images,
+        audio: result.response?.audio,
+        video: result.response?.video,
+        images: result.response?.images,
       });
 
       sendJsonResponse(res, responsePayload, {
         evalId,
+        logger,
         tooLargeMessage: 'Eval result detail is too large to serialize',
       });
     } catch (error) {
@@ -556,7 +579,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
       return;
     }
 
-    const values = EvalQueries.getMetadataValuesFromEval(id, key);
+    const values = await EvalQueries.getMetadataValuesFromEval(id, key);
     const response = EvalSchemas.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
@@ -787,8 +810,8 @@ evalRouter.post(
         }
       }
 
-      await eval_.save();
       await result.save();
+      await eval_.save();
 
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
@@ -831,7 +854,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         vars: incEval.vars,
       });
       if (incEval.prompts) {
-        eval_.addPrompts(incEval.prompts);
+        await eval_.addPrompts(incEval.prompts);
       }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
 
@@ -877,7 +900,7 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
 /**
  * Bulk delete evals.
  */
-evalRouter.delete('/', (req: Request, res: Response) => {
+evalRouter.delete('/', async (req: Request, res: Response) => {
   const bodyResult = EvalSchemas.BulkDelete.Request.safeParse(req.body);
   if (!bodyResult.success) {
     res.status(400).json({ error: z.prettifyError(bodyResult.error) });
@@ -887,7 +910,7 @@ evalRouter.delete('/', (req: Request, res: Response) => {
   const { ids } = bodyResult.data;
 
   try {
-    deleteEvals(ids);
+    await deleteEvals(ids);
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });

@@ -1,24 +1,98 @@
-import { ResultFailureReason } from '../../types';
-import {
-  EVAL_CONFIG_DETAIL_FIELDS,
-  EVAL_TABLE_CELL_DETAIL_FIELDS,
-} from '../../types/evalDetailFields';
 import {
   DEFAULT_OVERSIZED_STRING_LIMIT,
   type OversizedStringStats,
   stripOversizedStrings,
 } from './safeJsonResponse';
 
-import type {
-  AtomicTestCase,
-  CompletedPrompt,
-  EvalConfigDetailField,
-  EvaluateTable,
-  EvaluateTableOutput,
-  EvaluateTableRow,
-  ProviderResponse,
-  UnifiedConfig,
-} from '../../types';
+const RESULT_FAILURE_NONE = 0;
+const EVAL_CONFIG_DETAIL_FIELDS = ['tests', 'defaultTest', 'scenarios'] as const;
+const EVAL_TABLE_CELL_DETAIL_FIELDS = [
+  'prompt',
+  'response',
+  'testCase',
+  'metadata',
+  'gradingResult',
+  'media',
+] as const;
+
+type EvalConfigDetailField = (typeof EVAL_CONFIG_DETAIL_FIELDS)[number];
+
+type AudioLike = {
+  id?: string;
+  expiresAt?: number;
+  data?: string;
+  blobRef?: unknown;
+  transcript?: string;
+  format?: string;
+  sampleRate?: number;
+  channels?: number;
+  duration?: number;
+};
+
+type ImageLike = {
+  data?: string;
+  blobRef?: unknown;
+  mimeType?: string;
+};
+
+type ProviderResponseLike = {
+  cached?: boolean;
+  tokenUsage?: unknown;
+  isRefusal?: boolean;
+  finishReason?: string;
+  conversationEnded?: boolean;
+  conversationEndReason?: string;
+  sessionId?: string;
+  guardrails?: unknown;
+  audio?: AudioLike;
+  video?: object;
+  images?: ImageLike[];
+};
+
+type TestCaseLike = object & {
+  vars?: unknown;
+  providerOutput?: unknown;
+  assert?: unknown;
+  options?: unknown;
+};
+
+type PromptLike = object & { raw: string };
+
+type TableCellLike = {
+  id?: string;
+  evalId?: string;
+  text?: string;
+  prompt?: string;
+  provider?: string;
+  pass?: boolean;
+  score?: number;
+  cost?: number;
+  latencyMs?: number;
+  failureReason?: number;
+  namedScores?: Record<string, number>;
+  gradingResult?: unknown;
+  tokenUsage?: unknown;
+  metadata?: Record<string, unknown>;
+  error?: unknown;
+  testCase?: TestCaseLike;
+  response?: ProviderResponseLike;
+  audio?: AudioLike;
+  video?: object;
+  images?: ImageLike[];
+  detail?: unknown;
+};
+
+type TableRowLike = object & {
+  description?: unknown;
+  vars: string[];
+  test: TestCaseLike;
+  outputs: Array<TableCellLike | null | undefined>;
+};
+
+type TableLike = object & {
+  head: object & { prompts: PromptLike[] };
+  body: TableRowLike[];
+};
 
 const DETAIL_ONLY_METADATA_KEYS = new Set([
   'inputVars',
@@ -65,10 +139,7 @@ function trimMediaData(value: string | undefined, maxStringLength: number) {
   return { value: undefined, omitted: true };
 }
 
-function trimAudioForTable(
-  audio: EvaluateTableOutput['audio'] | NonNullable<ProviderResponse['audio']> | undefined,
-  maxStringLength: number,
-) {
+function trimAudioForTable(audio: AudioLike | undefined, maxStringLength: number) {
   if (!audio) {
     return { value: undefined, omitted: false };
   }
@@ -90,10 +161,7 @@ function trimAudioForTable(
   };
 }
 
-function trimVideoForTable(
-  video: EvaluateTableOutput['video'] | NonNullable<ProviderResponse['video']> | undefined,
-  maxStringLength: number,
-) {
+function trimVideoForTable(video: object | undefined, maxStringLength: number) {
   if (!video) {
     return { value: undefined, omitted: false };
   }
@@ -106,7 +174,7 @@ function trimVideoForTable(
   };
 }
 
-function trimImagesForTable(images: EvaluateTableOutput['images'], maxStringLength: number) {
+function trimImagesForTable(images: ImageLike[] | undefined, maxStringLength: number) {
   if (!images) {
     return { value: undefined, omitted: false };
   }
@@ -126,7 +194,7 @@ function trimImagesForTable(images: EvaluateTableOutput['images'], maxStringLeng
 }
 
 function trimMetadataForTable(
-  metadata: EvaluateTableOutput['metadata'] | undefined,
+  metadata: Record<string, unknown> | undefined,
   maxStringLength: number,
 ) {
   if (!metadata) {
@@ -140,7 +208,7 @@ function trimMetadataForTable(
         const lastTurn = value[value.length - 1];
         const outputAudio =
           lastTurn && typeof lastTurn === 'object'
-            ? (lastTurn as { outputAudio?: NonNullable<ProviderResponse['audio']> }).outputAudio
+            ? (lastTurn as { outputAudio?: AudioLike }).outputAudio
             : undefined;
         const audio = trimAudioForTable(outputAudio, maxStringLength);
         if (audio.value) {
@@ -159,7 +227,7 @@ function trimMetadataForTable(
 }
 
 function trimProviderResponseForTable(
-  response: ProviderResponse | undefined,
+  response: ProviderResponseLike | undefined,
   maxStringLength: number,
 ) {
   if (!response) {
@@ -172,7 +240,7 @@ function trimProviderResponseForTable(
 
   return {
     ...(response.cached != null && { cached: response.cached }),
-    ...(response.tokenUsage && { tokenUsage: response.tokenUsage }),
+    ...(response.tokenUsage !== undefined && { tokenUsage: response.tokenUsage }),
     ...(response.isRefusal != null && { isRefusal: response.isRefusal }),
     ...(response.finishReason && { finishReason: response.finishReason }),
     ...(response.conversationEnded != null && { conversationEnded: response.conversationEnded }),
@@ -180,14 +248,16 @@ function trimProviderResponseForTable(
       conversationEndReason: response.conversationEndReason,
     }),
     ...(response.sessionId && { sessionId: response.sessionId }),
-    ...(response.guardrails && { guardrails: trimForTable(response.guardrails, maxStringLength) }),
+    ...(response.guardrails !== undefined && {
+      guardrails: trimForTable(response.guardrails, maxStringLength),
+    }),
     ...(audio.value && { audio: audio.value }),
     ...(video.value && { video: video.value }),
     ...(images.value && { images: images.value }),
-  } as ProviderResponse;
+  } as ProviderResponseLike;
 }
 
-function trimTestCaseForTable(testCase: AtomicTestCase, maxStringLength: number): AtomicTestCase {
+function trimTestCaseForTable(testCase: TestCaseLike, maxStringLength: number): TestCaseLike {
   const {
     vars: _vars,
     providerOutput: _providerOutput,
@@ -195,20 +265,20 @@ function trimTestCaseForTable(testCase: AtomicTestCase, maxStringLength: number)
     options: _options,
     ...rest
   } = testCase;
-  return trimForTable(rest, maxStringLength) as AtomicTestCase;
+  return trimForTable(rest, maxStringLength) as TestCaseLike;
 }
 
-function trimPromptForTable(prompt: CompletedPrompt, maxStringLength: number): CompletedPrompt {
+function trimPromptForTable<T extends PromptLike>(prompt: T, maxStringLength: number): T {
   return {
     ...trimForTable(prompt, maxStringLength),
     raw: trimTextForTable(prompt.raw, maxStringLength),
-  };
+  } as T;
 }
 
-export function trimTableCellForApi(
-  cell: EvaluateTableOutput | null | undefined,
+export function trimTableCellForApi<T extends TableCellLike>(
+  cell: T | null | undefined,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
-): EvaluateTableOutput | null | undefined {
+): T | null | undefined {
   if (!cell) {
     return cell;
   }
@@ -228,7 +298,7 @@ export function trimTableCellForApi(
     score: cell.score,
     cost: cell.cost ?? 0,
     latencyMs: cell.latencyMs ?? 0,
-    failureReason: cell.failureReason ?? ResultFailureReason.NONE,
+    failureReason: cell.failureReason ?? RESULT_FAILURE_NONE,
     namedScores: cell.namedScores ?? {},
     gradingResult: trimForTable(cell.gradingResult, maxStringLength),
     tokenUsage: cell.tokenUsage,
@@ -245,23 +315,23 @@ export function trimTableCellForApi(
         ? [...BASE_CELL_DETAIL_OMITTED_FIELDS, 'media']
         : [...BASE_CELL_DETAIL_OMITTED_FIELDS],
     },
-  };
+  } as T;
 }
 
-function trimTableRowForApi(row: EvaluateTableRow, maxStringLength: number): EvaluateTableRow {
+function trimTableRowForApi<T extends TableRowLike>(row: T, maxStringLength: number): T {
   return {
     ...row,
     description: trimForTable(row.description, maxStringLength),
     vars: row.vars.map((value) => trimTextForTable(value, maxStringLength)),
     test: trimTestCaseForTable(row.test, maxStringLength),
     outputs: row.outputs.map((output) => trimTableCellForApi(output, { maxStringLength })),
-  } as EvaluateTableRow;
+  } as T;
 }
 
-export function trimEvalTableForApi(
-  table: EvaluateTable,
+export function trimEvalTableForApi<T extends TableLike>(
+  table: T,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
-): EvaluateTable {
+): T {
   return {
     ...table,
     head: {
@@ -269,20 +339,20 @@ export function trimEvalTableForApi(
       prompts: table.head.prompts.map((prompt) => trimPromptForTable(prompt, maxStringLength)),
     },
     body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
-  };
+  } as T;
 }
 
-export function trimEvalConfigForTableApi(
-  config: Partial<UnifiedConfig>,
+export function trimEvalConfigForTableApi<T extends object>(
+  config: T,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
 ): {
-  config: Partial<UnifiedConfig>;
+  config: T;
   detail?: {
     available: boolean;
     omittedFields: EvalConfigDetailField[];
   };
 } {
-  const leanConfig: Record<string, unknown> = { ...config };
+  const leanConfig = { ...config } as Record<string, unknown>;
   const omittedFields: EvalConfigDetailField[] = [];
 
   for (const field of EVAL_CONFIG_DETAIL_FIELDS) {
@@ -293,7 +363,7 @@ export function trimEvalConfigForTableApi(
   }
 
   return {
-    config: trimForTable(leanConfig, maxStringLength) as Partial<UnifiedConfig>,
+    config: trimForTable(leanConfig, maxStringLength) as T,
     ...(omittedFields.length > 0 && {
       detail: {
         available: true,

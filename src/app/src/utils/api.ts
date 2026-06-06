@@ -2,9 +2,12 @@ import useApiConfig from '@app/stores/apiConfig';
 import type {
   EvalConfigResponse,
   EvalResultDetailResponse,
-  UpdateEvalAuthorResponse,
-} from '@promptfoo/types/api/eval';
-import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/types/api/user';
+  GetUserIdResponse,
+  GetUserResponse,
+} from '@promptfoo/contracts';
+import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
+
+export type { EvalConfigResponse, EvalResultDetailResponse };
 
 const RESULT_DETAIL_CACHE_LIMIT = 50;
 const EVAL_CONFIG_CACHE_LIMIT = 3;

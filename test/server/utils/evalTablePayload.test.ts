@@ -95,7 +95,7 @@ describe('trimEvalTableForApi', () => {
     expect(cell.text).toBe(`[content omitted: ${huge.length} characters]`);
     expect(cell.detail).toEqual({
       available: true,
-      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'media'],
+      omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
     });
     expect(cell.testCase.vars).toBeUndefined();
     expect(cell.testCase.assert).toBeUndefined();
@@ -162,7 +162,13 @@ describe('trimEvalTableForApi', () => {
     const cell = trimmed.body[0].outputs[0];
 
     expect(cell.prompt).toBe('');
-    expect(cell.detail?.omittedFields).toEqual(['prompt', 'response', 'testCase', 'metadata']);
+    expect(cell.detail?.omittedFields).toEqual([
+      'prompt',
+      'response',
+      'testCase',
+      'metadata',
+      'gradingResult',
+    ]);
     expect(cell.audio?.data).toBe('short-audio');
     expect(cell.metadata?.redteamHistory).toEqual([
       {
@@ -223,6 +229,7 @@ describe('trimEvalTableForApi', () => {
       'response',
       'testCase',
       'metadata',
+      'gradingResult',
       'media',
     ]);
     expect(cell.video?.url).toBe('storageRef:video.mp4');

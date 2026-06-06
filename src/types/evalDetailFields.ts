@@ -3,6 +3,7 @@ export const EVAL_TABLE_CELL_DETAIL_FIELDS = [
   'response',
   'testCase',
   'metadata',
+  'gradingResult',
   'media',
 ] as const;
 export type EvalTableCellDetailField = (typeof EVAL_TABLE_CELL_DETAIL_FIELDS)[number];

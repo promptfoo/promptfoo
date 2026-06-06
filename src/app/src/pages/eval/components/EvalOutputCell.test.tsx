@@ -388,7 +388,8 @@ describe('EvalOutputCell', () => {
     ]);
   });
 
-  it('hydrates stripped prompt detail when inline prompts are shown', async () => {
+  it('loads stripped inline prompts only after explicit user intent', async () => {
+    const user = userEvent.setup();
     vi.mocked(fetchEvalResultDetail).mockResolvedValue({
       evalId: 'eval-1',
       resultId: 'test-id',
@@ -412,6 +413,9 @@ describe('EvalOutputCell', () => {
         }}
       />,
     );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Load prompt' }));
 
     await waitFor(() => {
       expect(fetchEvalResultDetail).toHaveBeenCalledWith(
@@ -438,6 +442,17 @@ describe('EvalOutputCell', () => {
     expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
+  it('opens legacy full prompt cells without requesting unavailable detail', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-1" />);
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.getByTestId('dialog-component')).toHaveAttribute('data-prompt', 'Test prompt');
+  });
+
   it('does not render detail action or fetch when detail is unavailable for stripped prompts', () => {
     renderWithProviders(
       <EvalOutputCell
@@ -456,6 +471,25 @@ describe('EvalOutputCell', () => {
 
     expect(fetchEvalResultDetail).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /view output and test details/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load prompt' })).toBeNull();
+  });
+
+  it('treats legacy stripped cells without detail metadata as unavailable', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: undefined,
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /view output and test details/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load prompt' })).toBeNull();
   });
 
   it('loads stripped prompt detail from the action when inline prompts are hidden', async () => {
@@ -652,8 +686,13 @@ describe('EvalOutputCell', () => {
       resultId: 'test-id',
       prompt: 'Full prompt from detail',
       text: 'Full output from detail',
-      metadata: { detailKey: 'detailValue' },
+      metadata: { detailKey: 'detailValue', inputVars: { topic: 'metadata' } },
       testCase: { vars: { topic: 'details' } },
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Full grading reason from detail',
+      },
     });
 
     renderWithProviders(
@@ -685,10 +724,64 @@ describe('EvalOutputCell', () => {
     expect(dialogComponent).toHaveAttribute('data-output', 'Full output from detail');
     expect(JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}')).toEqual({
       detailKey: 'detailValue',
+      inputVars: { topic: 'metadata' },
     });
     expect(JSON.parse(dialogComponent.getAttribute('data-variables') || '{}')).toEqual({
-      topic: 'details',
+      topic: 'metadata',
     });
+    expect(JSON.parse(dialogComponent.getAttribute('data-grading-results') || '[]')).toEqual([
+      {
+        pass: false,
+        score: 0,
+        reason: 'Full grading reason from detail',
+      },
+    ]);
+  });
+
+  it('restores oversized redteam response audio from hydrated detail', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Hydrated prompt',
+      text: 'Hydrated output',
+      metadata: {
+        redteamHistory: [
+          {
+            outputAudio: {
+              data: 'data:audio/wav;base64,full-audio',
+              format: 'wav',
+            },
+          },
+        ],
+      },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          metadata: {
+            redteamHistory: [{ outputAudio: { format: 'wav' } }],
+          },
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Load prompt' }));
+
+    const player = await screen.findByTestId('response-audio-player');
+    expect(player.querySelector('source')).toHaveAttribute(
+      'src',
+      'data:audio/wav;base64,full-audio',
+    );
   });
 
   it('shows detail load errors for stripped prompts', async () => {
@@ -997,6 +1090,52 @@ describe('EvalOutputCell', () => {
 
     const sourceElement = responseAudioElement.querySelector('source');
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64treeaudio');
+  });
+
+  it('renders response audio from lazy-loaded detail metadata', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Hydrated prompt',
+      text: 'Hydrated output',
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack prompt',
+            output: 'Target response',
+            outputAudio: {
+              data: 'hydratedresponseaudio',
+              format: 'mp3',
+            },
+          },
+        ],
+      },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          metadata: {},
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'metadata'],
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Load prompt' }));
+
+    const responseAudioElement = await screen.findByTestId('response-audio-player');
+    expect(responseAudioElement.querySelector('source')).toHaveAttribute(
+      'src',
+      'data:audio/mp3;base64,hydratedresponseaudio',
+    );
   });
 
   it('does not render response audio when redteamHistory has no audio in last turn', () => {

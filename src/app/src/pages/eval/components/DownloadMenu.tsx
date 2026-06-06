@@ -10,10 +10,19 @@ import yaml from 'js-yaml';
 import { CheckCircle, Copy, Download, Loader2 } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
-import { fetchEvalConfig, fetchEvalResultDetail, prefetchEvalConfig } from '../../../utils/api';
+import {
+  type EvalResultDetailResponse,
+  fetchEvalConfig,
+  fetchEvalResultDetail,
+  prefetchEvalConfig,
+} from '../../../utils/api';
 import { useTableStore as useResultsViewStore } from './store';
-import type { EvaluateTableOutput, EvaluateTableRow, UnifiedConfig } from '@promptfoo/types';
-import type { EvalResultDetailResponse } from '@promptfoo/types/api/eval';
+
+type ResultsViewState = ReturnType<typeof useResultsViewStore.getState>;
+type ResultsTable = NonNullable<ResultsViewState['table']>;
+type EvaluateTableRow = ResultsTable['body'][number];
+type EvaluateTableOutput = NonNullable<EvaluateTableRow['outputs'][number]>;
+type UnifiedConfig = NonNullable<ResultsViewState['config']>;
 
 const DETAIL_EXPORT_CONCURRENCY = 8;
 
