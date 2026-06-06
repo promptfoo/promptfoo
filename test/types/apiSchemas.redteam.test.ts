@@ -631,7 +631,8 @@ describe('API schema red-team coverage', () => {
         EvalSchemas.AddResults.Request.safeParse([
           { promptIdx: 0, testIdx: 0, success: true, score: 1 },
         ]).success,
-      ).toBe(true);
+      ).toBe(false);
+      expect(EvalSchemas.AddResults.Request.safeParse([]).success).toBe(false);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
           {
