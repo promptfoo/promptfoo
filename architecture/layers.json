@@ -122,14 +122,7 @@
     },
     {
       "name": "core",
-      "roots": [
-        "src/assertions",
-        "src/matchers",
-        "src/prompts",
-        "src/runStats",
-        "src/scheduler",
-        "src/testCase"
-      ],
+      "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
       "allowedDependencies": [
         "contracts",
         "legacy-contracts",
