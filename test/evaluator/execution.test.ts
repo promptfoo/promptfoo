@@ -1757,7 +1757,7 @@ describeEvaluator('evaluator execution control', () => {
 
   it('writes max-duration timeout rows to jsonl output', async () => {
     vi.useFakeTimers();
-    const outputPath = `/tmp/pr6344-max-duration-timeout-${randomUUID()}.jsonl`;
+    const outputPath = path.join(os.tmpdir(), `pr6344-max-duration-timeout-${randomUUID()}.jsonl`);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('non-cooperative-provider'),
       callApi: vi.fn(() => new Promise<ProviderResponse>(() => {})),
