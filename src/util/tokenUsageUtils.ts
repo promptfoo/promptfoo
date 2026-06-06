@@ -173,6 +173,22 @@ export function accumulateAssertionTokenUsage(
 }
 
 /**
+ * Account for a single grading (assertion) request: every grading call counts as one
+ * assertion request, and its token usage is folded in when the grader reported any.
+ * Shared by the live grading path and the EvalResult -> EvaluateResult reconstruction so
+ * the two stay in sync. Mutates {@code assertions}.
+ */
+export function accumulateGradingRequest(
+  assertions: NonNullable<TokenUsage['assertions']>,
+  tokensUsed: Partial<TokenUsage> | undefined,
+): void {
+  assertions.numRequests = (assertions.numRequests ?? 0) + 1;
+  if (tokensUsed) {
+    accumulateAssertionTokenUsage(assertions, tokensUsed);
+  }
+}
+
+/**
  * Accumulate token usage from a response, handling the common pattern of
  * incrementing numRequests when no token usage is provided.
  * @param target Object to update
