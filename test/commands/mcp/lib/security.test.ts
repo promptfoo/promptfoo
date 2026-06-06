@@ -522,22 +522,18 @@ describe('MCP Security', () => {
     });
 
     it('should reject dynamic config files before importing them', () => {
-      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
-      const workspace = path.join(tempRoot, 'workspace');
-      fs.mkdirSync(workspace);
+      const workspace = fs.mkdtempSync(path.join(process.cwd(), '.promptfoo-mcp-security-'));
       fs.writeFileSync(
         path.join(workspace, 'promptfooconfig.js'),
         'export default { prompts: ["hello"], providers: ["echo"] };\n',
       );
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
 
       try {
-        expect(() => validateMcpConfigFile('promptfooconfig.js')).toThrow(
+        expect(() => validateMcpConfigFile(path.join(workspace, 'promptfooconfig.js'))).toThrow(
           /Dynamic JavaScript and TypeScript config files are not allowed/,
         );
       } finally {
-        cwdSpy.mockRestore();
-        fs.rmSync(tempRoot, { force: true, recursive: true });
+        fs.rmSync(workspace, { force: true, recursive: true });
       }
     });
 
