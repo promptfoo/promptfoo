@@ -4,6 +4,13 @@ import { isMissingPackageImportError } from './util/packageImportErrors';
 
 import type { CsvRow } from './types/index';
 
+class GoogleSheetAuthenticationRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GoogleSheetAuthenticationRequiredError';
+  }
+}
+
 async function loadGoogleSheetsApi(): Promise<typeof import('@googleapis/sheets')> {
   try {
     return await import('@googleapis/sheets');
@@ -39,6 +46,9 @@ function isHtmlExportResponse(
   if (contentType.includes('text/html')) {
     return true;
   }
+  if (contentType.includes('text/csv') || contentType.includes('application/csv')) {
+    return false;
+  }
 
   const prefix = body.trimStart().slice(0, 32).toLowerCase();
   return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
@@ -56,7 +66,9 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
   }
   const csvData = await response.text();
   if (isHtmlExportResponse(response, csvData)) {
-    throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
+    throw new GoogleSheetAuthenticationRequiredError(
+      `Failed to fetch CSV from Google Sheets URL: ${url}`,
+    );
   }
   return parseCsv(csvData, { columns: true });
 }
@@ -122,7 +134,14 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
   const { public: isPublic } = access;
   logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
   if (isPublic) {
-    return fetchCsvFromGoogleSheetUnauthenticated(url);
+    try {
+      return await fetchCsvFromGoogleSheetUnauthenticated(url);
+    } catch (error) {
+      if (error instanceof GoogleSheetAuthenticationRequiredError) {
+        return fetchCsvFromGoogleSheetAuthenticated(url);
+      }
+      throw error;
+    }
   }
   if (!('status' in access)) {
     try {

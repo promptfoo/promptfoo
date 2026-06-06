@@ -22,10 +22,14 @@ vi.mock('../../../../src/testCase/synthesis', () => ({
   synthesizeFromTestSuite: securityGuardMocks.synthesizeFromTestSuite,
 }));
 
-vi.mock('../../../../src/types/index', () => ({
-  TestSuiteSchema: { safeParse: vi.fn(() => ({ success: true })) },
-  UnifiedConfigSchema: { safeParse: vi.fn(() => ({ success: true })) },
-}));
+vi.mock('../../../../src/types/index', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../src/types/index')>();
+  return {
+    ...actual,
+    TestSuiteSchema: { safeParse: vi.fn(() => ({ success: true })) },
+    UnifiedConfigSchema: { safeParse: vi.fn(() => ({ success: true })) },
+  };
+});
 
 vi.mock('../../../../src/util/config/default', () => ({
   loadDefaultConfig: securityGuardMocks.loadDefaultConfig,

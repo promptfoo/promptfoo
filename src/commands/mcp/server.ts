@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import express from 'express';
 import logger from '../../logger';
 import { csrfProtection } from '../../server/middleware/csrfProtection';
@@ -17,8 +19,35 @@ import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
+import type { NextFunction, Request, Response } from 'express';
 
 export const DEFAULT_MCP_HTTP_HOST = '127.0.0.1';
+const ALLOWED_MCP_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+
+function getHostnameFromHostHeader(host: string): string | undefined {
+  const bracketedIpv6 = host.match(/^(\[[^\]]+\])(?::\d+)?$/);
+  if (bracketedIpv6) {
+    return bracketedIpv6[1].toLowerCase();
+  }
+
+  const hostnameWithOptionalPort = host.match(/^([^:@/]+)(?::\d+)?$/);
+  return hostnameWithOptionalPort?.[1].toLowerCase();
+}
+
+export function mcpHostProtection(req: Request, res: Response, next: NextFunction): void {
+  const hostname = req.headers.host ? getHostnameFromHostHeader(req.headers.host) : undefined;
+  if (hostname && ALLOWED_MCP_HTTP_HOSTS.has(hostname)) {
+    next();
+    return;
+  }
+
+  logger.warn('[MCP] Blocked request with non-local Host header', {
+    host: req.headers.host,
+    method: req.method,
+    path: req.path,
+  });
+  res.status(403).json({ error: 'MCP HTTP requests require a local Host header' });
+}
 
 function formatHttpHostForUrl(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
@@ -134,6 +163,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   setMcpTransport('http');
 
   const app = express();
+  app.use(mcpHostProtection);
   app.use(express.json());
   app.use(csrfProtection);
 
@@ -142,7 +172,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Set up HTTP transport for MCP
   const { StreamableHTTPServerTransport } = await loadMcpHttpTransport();
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
+    sessionIdGenerator: () => randomUUID(),
   });
 
   await mcpServer.connect(transport);

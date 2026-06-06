@@ -21,6 +21,8 @@ type EnvVars = {
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
+  /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
+  PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
   PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
@@ -234,8 +236,9 @@ type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
-  // AIML API
   AIML_API_KEY?: string;
+
+  NOVITA_API_KEY?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
@@ -342,9 +345,19 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // MiniMax
+  MINIMAX_API_KEY?: string;
+
+  // n8n
+  N8N_API_KEY?: string;
+
   // Nscale
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;
+
+  // NVIDIA NIM (hosted inference)
+  NVIDIA_API_BASE_URL?: string;
+  NVIDIA_API_KEY?: string;
 
   // Ollama
   OLLAMA_API_KEY?: string;
@@ -378,6 +391,9 @@ type EnvVars = {
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;
+
+  // OrcaRouter
+  ORCAROUTER_API_KEY?: string;
 
   // Portkey
   PORTKEY_API_BASE_URL?: string;

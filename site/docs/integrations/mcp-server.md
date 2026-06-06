@@ -171,7 +171,9 @@ Choose the appropriate transport based on your use case:
 
 ### HTTP Security
 
-The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, and browser-origin checks block cross-site POSTs.
+The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, rejects non-local `Host` headers, and blocks cross-site browser POSTs.
+
+MCP tools that load config files accept YAML and JSON configs only. JavaScript and TypeScript configs are rejected because importing them executes code. Config globs and referenced files must also stay within the project directory where the MCP server started.
 
 ## Best Practices
 

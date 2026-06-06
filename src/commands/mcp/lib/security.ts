@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../../../util/config/extensions';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
@@ -258,6 +259,16 @@ function validateConfigFileReference(value: string, state: ProviderValidationSta
   validateMcpFilePath(stripConfigFileExport(withoutProtocol), state.basePath);
 }
 
+function resolveConfigFileReference(value: string, state: ProviderValidationState): string {
+  const rendered = renderConfigFileReferenceForValidation(value, state);
+  const withoutProtocol = rendered.startsWith(FILE_PROVIDER_PREFIX)
+    ? rendered.slice(FILE_PROVIDER_PREFIX.length)
+    : rendered;
+  const filePath = stripConfigFileExport(withoutProtocol);
+  validateMcpFilePath(filePath, state.basePath);
+  return path.resolve(state.basePath, filePath);
+}
+
 function validateJsonSchemaRef(value: unknown, state: ProviderValidationState): void {
   if (typeof value !== 'string') {
     return;
@@ -277,7 +288,8 @@ function validateJsonSchemaRef(value: unknown, state: ProviderValidationState): 
     throw new ConfigurationError('External $ref URLs are not allowed in MCP configs', refPath);
   }
 
-  validateConfigFileReference(refPath, state);
+  const resolvedRefPath = resolveConfigFileReference(refPath, state);
+  validateStaticConfigFile(resolvedRefPath, state);
 }
 
 function validateFileReferencesInValue(value: unknown, state: ProviderValidationState): void {
@@ -342,11 +354,12 @@ function validateLocalConfigFileReferences(
   recurseObjectValues = false,
 ): void {
   if (typeof value === 'string') {
-    if (isLocalConfigFileReference(value)) {
-      if (value.startsWith('exec:')) {
-        validateExecConfigFileReference(value, state);
+    const renderedValue = renderEnvOnlyInObject(value, state.env);
+    if (isLocalConfigFileReference(renderedValue)) {
+      if (renderedValue.startsWith('exec:')) {
+        validateExecConfigFileReference(renderedValue, state);
       } else {
-        validateConfigFileReference(value, state);
+        validateConfigFileReference(renderedValue, state);
       }
     }
     return;
@@ -359,6 +372,11 @@ function validateLocalConfigFileReferences(
 
   const object = getObject(value);
   if (object) {
+    if (recurseObjectValues) {
+      for (const key of Object.keys(object)) {
+        validateLocalConfigFileReferences(key, state);
+      }
+    }
     if (typeof object.path === 'string') {
       validateLocalConfigFileReferences(object.path, state);
     }
@@ -378,7 +396,14 @@ function validateStaticConfigLocalReferences(
   state: ProviderValidationState,
 ): void {
   validateLocalConfigFileReferences(rootConfig.prompts, state);
+  const promptMap = getObject(rootConfig.prompts);
+  if (promptMap) {
+    Object.keys(promptMap).forEach((promptPath) =>
+      validateLocalConfigFileReferences(promptPath, state),
+    );
+  }
   validateLocalConfigFileReferences(rootConfig.tests, state);
+  validateLocalConfigFileReferences(rootConfig.defaultTest, state);
   validateLocalConfigFileReferences(rootConfig.outputPath, state);
   validateLocalConfigFileReferences(rootConfig.extensions, state, true);
   validateLocalConfigFileReferences(rootConfig.nunjucksFilters, state, true);
@@ -493,10 +518,25 @@ function validateExecProviderId(providerId: string, state: ProviderValidationSta
 
   let hasWorkspaceScript = false;
   for (const part of commandParts) {
-    if (isInlineExecutionFlag(part)) {
+    const optionSeparatorIndex = part.indexOf('=');
+    const optionName = optionSeparatorIndex === -1 ? part : part.slice(0, optionSeparatorIndex);
+    const optionValue =
+      optionSeparatorIndex === -1 ? undefined : part.slice(optionSeparatorIndex + 1);
+
+    if (isInlineExecutionFlag(optionName)) {
       throw new ConfigurationError(
         'Invalid provider ID format: exec providers used through MCP must reference a workspace script file, not inline code',
       );
+    }
+
+    if (
+      optionValue &&
+      (path.isAbsolute(optionValue) ||
+        optionValue.includes('/') ||
+        optionValue.includes('\\') ||
+        hasProviderFileExtension(optionValue))
+    ) {
+      validateMcpFilePath(stripProviderFileExport(optionValue), state.basePath);
     }
 
     if (
@@ -515,6 +555,47 @@ function validateExecProviderId(providerId: string, state: ProviderValidationSta
       'Invalid provider ID format: exec providers used through MCP must reference a workspace script file',
     );
   }
+}
+
+function validateStaticConfigContents(value: unknown, state: ProviderValidationState): void {
+  validateFileReferencesInValue(value, state);
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => validateProviderReferenceWithState(entry, state));
+    return;
+  }
+
+  const rootConfig = getObject(value);
+  if (!rootConfig) {
+    return;
+  }
+
+  validateStaticConfigLocalReferences(rootConfig, state);
+  validateProviderReferenceWithState(rootConfig, state);
+
+  const providers = rootConfig.providers ?? rootConfig.targets;
+  if (Array.isArray(providers)) {
+    providers.forEach((provider) => validateProviderReferenceWithState(provider, state));
+  } else if (providers !== undefined) {
+    validateProviderReferenceWithState(providers, state);
+  }
+}
+
+function validateStaticConfigFile(configPath: string, state: ProviderValidationState): void {
+  const extension = path.extname(configPath).toLowerCase();
+  if (!STATIC_CONFIG_EXTENSIONS.has(extension) || !fs.existsSync(configPath)) {
+    return;
+  }
+
+  const realConfigPath = fs.realpathSync(configPath);
+  if (state.validatedConfigFiles.has(realConfigPath)) {
+    return;
+  }
+  state.validatedConfigFiles.add(realConfigPath);
+
+  const configState = { ...state, basePath: path.dirname(realConfigPath) };
+  const rawConfig = yaml.load(fs.readFileSync(realConfigPath, 'utf8'));
+  validateStaticConfigContents(rawConfig, configState);
 }
 
 function validateProviderIdWithState(providerId: string, state: ProviderValidationState): void {
@@ -595,32 +676,39 @@ export function validateProviderReference(provider: unknown, env?: EnvOverrides)
 export function validateMcpConfigFile(configPath: string): void {
   validateMcpFilePath(configPath);
 
-  const resolvedConfigPath = path.resolve(process.cwd(), configPath);
-  if (
-    !STATIC_CONFIG_EXTENSIONS.has(path.extname(resolvedConfigPath).toLowerCase()) ||
-    !fs.existsSync(resolvedConfigPath)
-  ) {
+  const matchedConfigPaths = globSync(configPath, {
+    absolute: true,
+    cwd: process.cwd(),
+    nodir: true,
+    windowsPathsNoEscape: true,
+  });
+  if (matchedConfigPaths.length === 0) {
     return;
   }
 
-  const rawConfig = yaml.load(fs.readFileSync(resolvedConfigPath, 'utf8'));
-  const rootConfig =
-    typeof rawConfig === 'object' && rawConfig !== null
-      ? (rawConfig as Record<string, unknown>)
-      : undefined;
   const state: ProviderValidationState = {
-    basePath: path.dirname(resolvedConfigPath),
-    env: asEnvOverrides(rootConfig?.env),
+    basePath: process.cwd(),
     validatedConfigFiles: new Set(),
   };
 
-  validateFileReferencesInValue(rawConfig, state);
-  validateStaticConfigLocalReferences(rootConfig ?? {}, state);
-  const providers = rootConfig?.providers ?? rootConfig?.targets;
-  if (Array.isArray(providers)) {
-    providers.forEach((provider) => validateProviderReferenceWithState(provider, state));
-  } else if (providers !== undefined) {
-    validateProviderReferenceWithState(providers, state);
+  for (const matchedConfigPath of matchedConfigPaths) {
+    validateMcpFilePath(matchedConfigPath);
+    const extension = path.extname(matchedConfigPath).toLowerCase();
+    if (!STATIC_CONFIG_EXTENSIONS.has(extension)) {
+      throw new ConfigurationError(
+        'Dynamic JavaScript and TypeScript config files are not allowed through MCP tools; use YAML or JSON instead',
+        matchedConfigPath,
+      );
+    }
+
+    const rawConfig = yaml.load(fs.readFileSync(matchedConfigPath, 'utf8'));
+    const rootConfig = getObject(rawConfig);
+    const configState: ProviderValidationState = {
+      ...state,
+      basePath: path.dirname(matchedConfigPath),
+      env: asEnvOverrides(rootConfig?.env),
+    };
+    validateStaticConfigFile(matchedConfigPath, configState);
   }
 }
 

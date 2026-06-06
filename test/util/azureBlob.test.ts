@@ -160,4 +160,18 @@ describe('Azure Blob test-set loading', () => {
       'Failed to read Azure Blob Storage URI "az://account/container/path/tests.json?<redacted>": boom',
     );
   });
+
+  it('redacts SAS query strings repeated in SDK error details', async () => {
+    mocks.downloadToBuffer.mockRejectedValueOnce(
+      new Error(
+        'Request failed for https://account.blob.core.windows.net/container/path/tests.json?sp=r&sig=secret',
+      ),
+    );
+
+    await expect(
+      readAzureBlobText('az://account/container/path/tests.json?sp=r&sig=secret'),
+    ).rejects.toThrow(
+      'Request failed for https://account.blob.core.windows.net/container/path/tests.json?<redacted>',
+    );
+  });
 });

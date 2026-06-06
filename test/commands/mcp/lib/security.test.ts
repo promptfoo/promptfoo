@@ -341,6 +341,17 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('exec:python -c "print(1)"')).toThrow(ConfigurationError);
     });
 
+    it('should validate paths embedded in exec option assignments', () => {
+      const outsideModule = path.join(path.dirname(process.cwd()), 'evil.js');
+
+      expect(() =>
+        validateProviderId(`exec:node --require=${outsideModule} scripts/provider.js`),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId('exec:node --require=scripts/bootstrap.js scripts/provider.js'),
+      ).not.toThrow();
+    });
+
     it('should reject MCP provider server command configs', () => {
       expect(() =>
         validateProviderReference({
@@ -480,6 +491,131 @@ describe('MCP Security', () => {
 
       try {
         expect(() => validateMcpConfigFile('promptfooconfig.yaml')).not.toThrow();
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should validate the contents of local JSON-schema refs', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'provider.yaml'),
+        `id: file://${path.join(outside, 'evil.py')}\n`,
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.yaml'),
+        ['prompts: [hello]', 'providers:', '  - $ref: ./provider.yaml', ''].join('\n'),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should reject dynamic config files before importing them', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.js'),
+        'export default { prompts: ["hello"], providers: ["echo"] };\n',
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.js')).toThrow(
+          /Dynamic JavaScript and TypeScript config files are not allowed/,
+        );
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should validate every config matched by a glob', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const configs = path.join(workspace, 'configs');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(configs);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(configs, 'unsafe.yaml'),
+        `prompts: [hello]\nproviders: [file://${path.join(outside, 'evil.py')}]\n`,
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('configs/*.yaml')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should validate prompt map keys and defaultTest paths', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          ['prompts:', `  ${path.join(outside, 'evil.py')}: unsafe`, 'providers: [echo]', ''].join(
+            '\n',
+          ),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          [
+            'prompts: [hello]',
+            'providers: [echo]',
+            `defaultTest: ${path.join(outside, 'default.yaml')}`,
+            '',
+          ].join('\n'),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should render env templates before classifying bare local references', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.yaml'),
+        [
+          'env:',
+          `  PROMPT_PATH: ${path.join(outside, 'evil.py')}`,
+          'prompts: "{{ env.PROMPT_PATH }}"',
+          'providers: [echo]',
+          '',
+        ].join('\n'),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
       } finally {
         cwdSpy.mockRestore();
         fs.rmSync(tempRoot, { force: true, recursive: true });

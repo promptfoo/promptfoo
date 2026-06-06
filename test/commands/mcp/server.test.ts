@@ -1,4 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from '../../util/utils';
+
+const { mockRandomUUID } = vi.hoisted(() => ({
+  mockRandomUUID: vi.fn(() => 'secure-mcp-session-id'),
+}));
+
+vi.mock('node:crypto', () => ({
+  randomUUID: mockRandomUUID,
+}));
 
 // Mock dependencies before importing the module
 vi.mock('../../../src/logger', () => ({
@@ -77,16 +86,16 @@ const mcpServerMocks = vi.hoisted(() => {
   // Create a mock class that can be instantiated with `new`
   const mockMcpServerImplementation = function MockMcpServer(
     this: {
-      close: ReturnType<typeof vi.fn>;
       connect: ReturnType<typeof vi.fn>;
+      close: ReturnType<typeof vi.fn>;
       tool: ReturnType<typeof vi.fn>;
       resource: ReturnType<typeof vi.fn>;
     },
     config: { name: string; version: string; description?: string },
   ) {
     mcpServerCalls.push(config);
-    this.close = vi.fn().mockResolvedValue(undefined);
     this.connect = vi.fn();
+    this.close = vi.fn().mockResolvedValue(undefined);
     this.tool = vi.fn();
     this.resource = vi.fn();
   };
@@ -119,9 +128,10 @@ const expressMocks = vi.hoisted(() => {
 
 const transportMocks = vi.hoisted(() => {
   const instances: Array<{ handleRequest: ReturnType<typeof vi.fn> }> = [];
-  const StreamableHTTPServerTransport = vi.fn(function MockStreamableHTTPServerTransport(this: {
-    handleRequest: ReturnType<typeof vi.fn>;
-  }) {
+  const StreamableHTTPServerTransport = vi.fn(function MockStreamableHTTPServerTransport(
+    this: { handleRequest: ReturnType<typeof vi.fn> },
+    _options?: { sessionIdGenerator?: () => string },
+  ) {
     this.handleRequest = vi.fn().mockResolvedValue(undefined);
     instances.push(this);
   });
@@ -148,11 +158,16 @@ vi.mock('express', () => ({
 const { mcpServerCalls } = mcpServerMocks;
 
 describe('MCP Server', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mcpServerMocks.MockMcpServer.mockReset().mockImplementation(
       mcpServerMocks.mockMcpServerImplementation,
     );
+    mockRandomUUID.mockClear();
     mcpServerCalls.length = 0;
     transportMocks.instances.length = 0;
     Object.keys(expressMocks.postHandlers).forEach((key) => delete expressMocks.postHandlers[key]);
@@ -318,8 +333,39 @@ describe('MCP Server', () => {
       process.emit('SIGINT');
       await serverPromise;
 
-      expect(expressMocks.app.use).toHaveBeenNthCalledWith(1, 'json-middleware');
-      expect(expressMocks.app.use).toHaveBeenNthCalledWith(2, expect.any(Function));
+      expect(expressMocks.app.use).toHaveBeenNthCalledWith(1, expect.any(Function));
+      expect(expressMocks.app.use).toHaveBeenNthCalledWith(2, 'json-middleware');
+      expect(expressMocks.app.use).toHaveBeenNthCalledWith(3, expect.any(Function));
+    });
+
+    it('should reject DNS-rebinding Host headers', async () => {
+      const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+
+      const serverPromise = startHttpMcpServer(3100);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const hostProtection = expressMocks.app.use.mock.calls[0][0];
+      const request = {
+        headers: { host: 'attacker.example:3100' },
+        method: 'POST',
+        path: '/mcp',
+      };
+      const response = {
+        json: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+      };
+      const next = vi.fn();
+
+      hostProtection(request, response, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(response.status).toHaveBeenCalledWith(403);
+      expect(response.json).toHaveBeenCalledWith({
+        error: 'MCP HTTP requests require a local Host header',
+      });
+
+      process.emit('SIGINT');
+      await serverPromise;
     });
 
     it('should handle MCP requests on loopback transport', async () => {
@@ -348,6 +394,39 @@ describe('MCP Server', () => {
 
       process.emit('SIGINT');
       await serverPromise;
+    });
+
+    it('creates cryptographically random session identifiers', async () => {
+      const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
+      let shutdown: (() => void) | undefined;
+      vi.spyOn(process, 'once').mockImplementation(((event: string, listener: () => void) => {
+        if (event === 'SIGINT') {
+          shutdown = listener;
+        }
+        return process;
+      }) as typeof process.once);
+
+      let serverPromise: Promise<void> | undefined;
+      try {
+        const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+        serverPromise = startHttpMcpServer(3100);
+
+        await vi.waitFor(() => {
+          expect(transportMocks.StreamableHTTPServerTransport).toHaveBeenCalledOnce();
+        });
+
+        const transportOptions = transportMocks.StreamableHTTPServerTransport.mock.calls[0][0] as {
+          sessionIdGenerator: () => string;
+        };
+        expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
+        expect(mockRandomUUID).toHaveBeenCalledOnce();
+      } finally {
+        if (shutdown) {
+          shutdown();
+          await serverPromise;
+        }
+        restoreEnv();
+      }
     });
   });
 });

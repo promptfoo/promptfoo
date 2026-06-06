@@ -1,11 +1,11 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../../logger';
+import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
+import { filterPrompts } from '../../../util/eval/filterPrompts';
 import { escapeRegExp } from '../../../util/text';
-import { doEval } from '../../eval';
-import { filterPrompts } from '../../eval/filterPrompts';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { validateDefaultMcpConfigFile, validateMcpConfigFile } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
