@@ -51,16 +51,26 @@ export function mergeApiConfigPersistedState(
 ): ApiConfig {
   const persistedConfig = getPersistedApiConfig(persistedState);
   const currentApiBaseUrl = currentState.apiBaseUrl;
+  const hasPersistedApiBaseUrl = persistedConfig.apiBaseUrl !== undefined;
 
   if (
     currentApiBaseUrl &&
-    currentApiBaseUrl !== persistedConfig?.apiBaseUrl &&
-    isLegacyLocalApiBaseUrl(persistedConfig?.apiBaseUrl)
+    currentApiBaseUrl !== persistedConfig.apiBaseUrl &&
+    isLegacyLocalApiBaseUrl(persistedConfig.apiBaseUrl)
   ) {
-    return { ...currentState, ...persistedConfig, apiBaseUrl: currentApiBaseUrl };
+    return {
+      ...currentState,
+      ...persistedConfig,
+      apiBaseUrl: currentApiBaseUrl,
+      persistApiBaseUrl: true,
+    };
   }
 
-  return { ...currentState, ...persistedConfig };
+  return {
+    ...currentState,
+    ...persistedConfig,
+    persistApiBaseUrl: hasPersistedApiBaseUrl || currentState.persistApiBaseUrl,
+  };
 }
 
 const useApiConfig = create<ApiConfig>()(

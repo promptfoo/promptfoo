@@ -21,6 +21,7 @@ describe('mergeApiConfigPersistedState', () => {
     );
 
     expect(merged.apiBaseUrl).toBe('http://localhost:18601');
+    expect(merged.persistApiBaseUrl).toBe(true);
   });
 
   it('upgrades stale IPv6 loopback defaults to the configured API base URL', () => {
@@ -38,6 +39,7 @@ describe('mergeApiConfigPersistedState', () => {
     );
 
     expect(merged.apiBaseUrl).toBe('https://api.example.com');
+    expect(merged.persistApiBaseUrl).toBe(true);
   });
 
   it('keeps the local default when there is no configured API base URL', () => {
@@ -55,6 +57,7 @@ describe('mergeApiConfigPersistedState', () => {
     const merged = mergeApiConfigPersistedState('not-json-state', currentState);
 
     expect(merged.apiBaseUrl).toBe('http://localhost:18601');
+    expect(merged.persistApiBaseUrl).toBe(false);
   });
 
   it('does not let persisted state overwrite store actions', () => {
