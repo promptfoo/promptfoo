@@ -1,4 +1,15 @@
-import type { ProviderResponse, ReasoningContent } from '../types/providers';
+type ReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thought: string; signature?: string }
+  | { type: 'think'; content: string };
+
+type ReasoningResponse = {
+  output?: unknown;
+  reasoning?: ReasoningContent[];
+  tokenUsage?: { completionDetails?: { reasoning?: number } };
+};
 
 /**
  * Extract text content from a reasoning array for display or export.
@@ -40,7 +51,7 @@ export function reasoningToString(reasoning: ReasoningContent[] | undefined): st
  * @param response - The provider response to check
  * @returns True if reasoning content is present
  */
-export function hasReasoning(response: ProviderResponse | undefined): boolean {
+export function hasReasoning(response: ReasoningResponse | undefined): boolean {
   return Boolean(response?.reasoning?.length);
 }
 
@@ -51,7 +62,7 @@ export function hasReasoning(response: ProviderResponse | undefined): boolean {
  * @param response - The provider response to check
  * @returns The reasoning token count, or undefined if not available
  */
-export function getReasoningTokens(response: ProviderResponse | undefined): number | undefined {
+export function getReasoningTokens(response: ReasoningResponse | undefined): number | undefined {
   return response?.tokenUsage?.completionDetails?.reasoning;
 }
 
@@ -64,7 +75,7 @@ export function getReasoningTokens(response: ProviderResponse | undefined): numb
  * @returns Combined string with reasoning (if any) followed by output
  */
 export function combineReasoningAndOutput(
-  response: ProviderResponse | undefined,
+  response: ReasoningResponse | undefined,
   prefix: string = 'Reasoning',
 ): string {
   if (!response) {

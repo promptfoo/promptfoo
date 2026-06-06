@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProvider, loadApiProviders } from '../../../providers/index';
-import { reasoningToString } from '../../../util/reasoning';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -31,6 +30,31 @@ interface TestResult {
 }
 
 type ProviderInput = string | { id: string; config?: Record<string, unknown> };
+type ReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thought: string; signature?: string }
+  | { type: 'think'; content: string };
+
+function reasoningToString(reasoning: ReasoningContent[] | undefined): string {
+  return (reasoning ?? [])
+    .map((block) => {
+      switch (block.type) {
+        case 'thinking':
+          return block.thinking;
+        case 'redacted_thinking':
+          return '[Redacted]';
+        case 'reasoning':
+        case 'think':
+          return block.content;
+        case 'thought':
+          return block.thought;
+      }
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
 
 const DEFAULT_REASONING_TEST_PROMPT = dedent`
   Please solve this step-by-step reasoning problem:

@@ -1,5 +1,11 @@
-import type { ReasoningContent } from '../../types/providers';
 import type { FunctionCallbackHandler } from '../functionCallbackUtils';
+
+type ProcessedReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thought: string; signature?: string }
+  | { type: 'think'; content: string };
 
 export interface ProcessorConfig {
   modelName: string;
@@ -29,5 +35,5 @@ export interface ProcessedOutput {
   refusal: string;
   isRefusal: boolean;
   annotations?: any[];
-  reasoning?: ReasoningContent[];
+  reasoning?: ProcessedReasoningContent[];
 }

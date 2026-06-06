@@ -21,7 +21,6 @@ import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
-import type { ReasoningContent } from '../../types/providers';
 import type { VarValue } from '../../types/shared';
 import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
 
@@ -292,6 +291,12 @@ export interface Candidate {
   safetyRatings: SafetyRating[];
   webSearchQueries?: string[];
 }
+
+type GeminiReasoningContent = {
+  type: 'thought';
+  thought: string;
+  signature?: string;
+};
 
 interface GeminiUsageMetadata {
   promptTokenCount: number;
@@ -793,12 +798,12 @@ export function formatCandidateContents(candidate: Candidate) {
 export function extractGeminiReasoningFromCandidate(
   candidate: Candidate,
   showThinking: boolean = true,
-): ReasoningContent[] | undefined {
+): GeminiReasoningContent[] | undefined {
   if (!showThinking || !candidate.content?.parts) {
     return undefined;
   }
 
-  const reasoning: ReasoningContent[] = [];
+  const reasoning: GeminiReasoningContent[] = [];
   for (const part of candidate.content.parts) {
     if (part.thought === true && typeof part.text === 'string' && part.text.trim()) {
       reasoning.push({

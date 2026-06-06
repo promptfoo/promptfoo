@@ -1,4 +1,9 @@
-import type { ReasoningContent } from '@promptfoo/types';
+export type ReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thought: string; signature?: string }
+  | { type: 'think'; content: string };
 
 /**
  * Extract text content from a reasoning array for display.

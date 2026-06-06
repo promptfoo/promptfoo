@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hasReasoning, reasoningToString } from './reasoning';
-import type { ReasoningContent } from '@promptfoo/types';
+
+import type { ReasoningContent } from './reasoning';
 
 describe('reasoning utilities', () => {
   describe('reasoningToString', () => {
