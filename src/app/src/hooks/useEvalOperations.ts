@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
 
-import { callApiJson, callApiResult } from '@app/utils/api';
-import { EvalSchemas } from '@promptfoo/types/api/eval';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { TracesSchemas } from '@promptfoo/types/api/traces';
+import {
+  ApiRoutes,
+  callApiJson,
+  callApiResult,
+  EvalResponseSchemas,
+  TracesSchemas,
+} from '@app/utils/api';
 import type { Trace } from '@app/components/traces/TraceView';
 import type {
   ReplayEvaluationParams,
@@ -18,13 +21,17 @@ export function useEvalOperations() {
   const replayEvaluation = useCallback(
     async (params: ReplayEvaluationParams): Promise<ReplayEvaluationResult> => {
       try {
-        const response = await callApiResult(ApiRoutes.Eval.Replay, EvalSchemas.Replay.Response, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const response = await callApiResult(
+          ApiRoutes.Eval.Replay,
+          EvalResponseSchemas.Replay.Response,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params),
           },
-          body: JSON.stringify(params),
-        });
+        );
 
         if (!response.ok) {
           return { error: response.error.message || 'Failed to replay evaluation' };

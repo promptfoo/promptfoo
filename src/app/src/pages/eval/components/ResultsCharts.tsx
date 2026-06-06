@@ -9,9 +9,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { EVAL_ROUTES } from '@app/constants/routes';
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import {
   BarController,
   BarElement,
@@ -438,18 +436,19 @@ function MetricChart({ table }: ChartProps) {
 
     const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
     const labels = namedScoreKeys;
-    // Compute each metric's max once; it depends only on the key, not the prompt.
-    const maxValueByKey = new Map(
-      namedScoreKeys.map((key) => [
-        key,
-        Math.max(...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0)),
-      ]),
+    // Compute each metric's normalization value once; it depends only on the key, not the prompt.
+    const normalizationValueByKey = new Map(
+      namedScoreKeys.map((key) => {
+        const values = table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0);
+        const maxValue = Math.max(...values);
+        return [key, maxValue > 0 ? maxValue : Math.max(...values.map(Math.abs))];
+      }),
     );
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
       const data = namedScoreKeys.map((key) => {
         const value = prompt.metrics?.namedScores[key] || 0;
-        const maxValue = maxValueByKey.get(key) ?? 0;
-        return maxValue > 0 ? value / maxValue : 0;
+        const normalizationValue = normalizationValueByKey.get(key) ?? 0;
+        return normalizationValue > 0 ? value / normalizationValue : 0;
       });
       return {
         label: `${table.head.prompts[promptIdx].provider}`,
@@ -536,7 +535,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       }
 
       try {
-        const data = await callApiJson(ApiRoutes.History, ServerSchemas.History.Response, {
+        const data = await callApiJson(ApiRoutes.History, ServerResponseSchemas.History.Response, {
           query: new URLSearchParams({ description: config.description }),
         });
         setProgressData(data.data as ProgressData[]);

@@ -7,6 +7,7 @@ import {
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
+import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import { ErrorResponseSchema } from '../../../src/types/api/common';
 import { ConfigSchemas } from '../../../src/types/api/configs';
 import { EvalSchemas } from '../../../src/types/api/eval';
@@ -109,7 +110,7 @@ vi.mock('../../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: mocks.isBlobStorageEnabled,
 }));
 
-vi.mock('../../../src/commands/modelScan', () => ({
+vi.mock('../../../src/util/modelAuditInstall', () => ({
   checkModelAuditInstalled: mocks.checkModelAuditInstalled,
 }));
 
@@ -232,7 +233,7 @@ vi.mock('../../../src/util/promptfooCommand', () => ({
   isRunningUnderNpx: mocks.isRunningUnderNpx,
 }));
 
-vi.mock('../../../src/validators/testProvider', () => ({
+vi.mock('../../../src/node/testProvider', () => ({
   testProviderConnectivity: mocks.testProviderConnectivity,
   testProviderSession: mocks.testProviderSession,
 }));
@@ -898,10 +899,14 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
+    // by one test cannot leak into another.
+    promptCacheService.invalidate();
     setupDefaultMocks();
   });
 
   afterEach(() => {
+    promptCacheService.invalidate();
     vi.resetAllMocks();
   });
 

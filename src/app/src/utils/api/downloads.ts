@@ -1,4 +1,4 @@
-import { ApiRoutes, buildApiPath } from '@promptfoo/types/api/routes';
+import { ApiRoutes, buildApiPath } from '@app/utils/api';
 import { callApi } from '../api';
 
 /**

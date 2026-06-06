@@ -19,12 +19,9 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, callApiJson, EvalResponseSchemas, ServerResponseSchemas } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
-import { EvalSchemas } from '@promptfoo/types/api/eval';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -403,13 +400,17 @@ export default function ResultsView({
         return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
       }
 
-      const { url } = await callApiJson(ApiRoutes.Results.Share, ServerSchemas.Share.Response, {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
+      const { url } = await callApiJson(
+        ApiRoutes.Results.Share,
+        ServerResponseSchemas.Share.Response,
+        {
+          method: 'POST',
+          body: JSON.stringify({ id }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
         },
-      });
+      );
       if (!url) {
         throw new Error('Failed to generate share URL');
       }
@@ -587,7 +588,7 @@ export default function ResultsView({
         invariant(config, 'Config must be loaded before updating its description');
         const newConfig = { ...config, description: newName };
 
-        await callApiJson(ApiRoutes.Eval.Update, EvalSchemas.Update.Response, {
+        await callApiJson(ApiRoutes.Eval.Update, EvalResponseSchemas.Update.Response, {
           params: { id: evalId as string },
           method: 'PATCH',
           headers: {
@@ -616,7 +617,7 @@ export default function ResultsView({
 
         const { id: newEvalId, distinctTestCount } = await callApiJson(
           ApiRoutes.Eval.Copy,
-          EvalSchemas.Copy.Response,
+          EvalResponseSchemas.Copy.Response,
           {
             params: { id: evalId },
             method: 'POST',
@@ -690,7 +691,7 @@ export default function ResultsView({
     setIsDeleting(true);
 
     try {
-      await callApiJson(ApiRoutes.Eval.Delete, EvalSchemas.Delete.Response, {
+      await callApiJson(ApiRoutes.Eval.Delete, EvalResponseSchemas.Delete.Response, {
         params: { id: evalId },
         method: 'DELETE',
       });

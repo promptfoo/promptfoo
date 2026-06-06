@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { cn } from '@app/lib/utils';
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { Info } from 'lucide-react';
 
 interface EnterpriseBannerProps {
@@ -32,7 +30,7 @@ const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
 
         const data = await callApiJson(
           ApiRoutes.Results.ShareCheckDomain,
-          ServerSchemas.ShareCheckDomain.Response,
+          ServerResponseSchemas.ShareCheckDomain.Response,
           { query: new URLSearchParams({ id: evalId }) },
         );
         setIsCloudEnabled(data.isCloudEnabled);

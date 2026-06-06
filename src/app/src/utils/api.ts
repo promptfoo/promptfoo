@@ -1,9 +1,56 @@
 import useApiConfig from '@app/stores/apiConfig';
-import { type ErrorResponse, ErrorResponseSchema } from '@promptfoo/types/api/common';
-import { EvalSchemas, type UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
-import { type ApiRouteContract, ApiRoutes, buildApiPath } from '@promptfoo/types/api/routes';
-import { UserSchemas } from '@promptfoo/types/api/user';
+import {
+  type ApiRouteContract,
+  ApiRoutes,
+  BlobsSchemas,
+  buildApiPath,
+  ConfigSchemas,
+  type ErrorResponse,
+  ErrorResponseSchema,
+  EVAL_TABLE_MAX_PAGE_SIZE,
+  type EvalOption,
+  EvalResponseSchemas,
+  type GraderResult,
+  type MediaItem,
+  type MediaItemContext,
+  type MediaLibraryResponse,
+  ModelAuditSchemas,
+  ProviderResponseSchemas,
+  RedteamResponseSchemas,
+  ServerResponseSchemas,
+  type TestSessionResponse,
+  TracesSchemas,
+  type UpdateEvalAuthorResponse,
+  UserSchemas,
+  VersionSchemas,
+} from '@promptfoo/contracts';
 import type { ZodType } from 'zod';
+
+export type {
+  ApiRouteContract,
+  EvalOption,
+  GraderResult,
+  MediaItem,
+  MediaItemContext,
+  MediaLibraryResponse,
+  TestSessionResponse,
+  UpdateEvalAuthorResponse,
+};
+export {
+  ApiRoutes,
+  BlobsSchemas,
+  buildApiPath,
+  ConfigSchemas,
+  EVAL_TABLE_MAX_PAGE_SIZE,
+  EvalResponseSchemas,
+  ModelAuditSchemas,
+  ProviderResponseSchemas,
+  RedteamResponseSchemas,
+  ServerResponseSchemas,
+  TracesSchemas,
+  UserSchemas,
+  VersionSchemas,
+};
 
 export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
@@ -126,14 +173,18 @@ export async function updateEvalAuthor(
   author: string,
 ): Promise<UpdateEvalAuthorResponse> {
   try {
-    return await callApiJson(ApiRoutes.Eval.UpdateAuthor, EvalSchemas.UpdateAuthor.Response, {
-      params: { id: evalId },
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
+    return await callApiJson(
+      ApiRoutes.Eval.UpdateAuthor,
+      EvalResponseSchemas.UpdateAuthor.Response,
+      {
+        params: { id: evalId },
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ author }),
       },
-      body: JSON.stringify({ author }),
-    });
+    );
   } catch (error) {
     if (error instanceof ApiResponseError) {
       throw new Error('Failed to update eval author');

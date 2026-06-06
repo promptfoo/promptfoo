@@ -15,10 +15,8 @@ import { DeleteIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
-import { callApiEmpty, callApiJson } from '@app/utils/api';
+import { ApiRoutes, callApiEmpty, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
@@ -62,11 +60,15 @@ export default function EvalsTable({
           filterByDatasetId && focusedDatasetId
             ? new URLSearchParams({ datasetId: focusedDatasetId })
             : undefined;
-        const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
-          cache: 'no-store',
-          signal,
-          query,
-        });
+        const body = await callApiJson(
+          ApiRoutes.Results.List,
+          ServerResponseSchemas.ResultList.Response,
+          {
+            cache: 'no-store',
+            signal,
+            query,
+          },
+        );
         setEvals(body.data as unknown as EvalSummary[]);
         setError(null);
       } catch (err) {

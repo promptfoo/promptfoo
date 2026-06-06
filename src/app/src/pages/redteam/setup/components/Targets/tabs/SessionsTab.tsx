@@ -21,9 +21,13 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
-import { type ApiResponseError, callApiResult } from '@app/utils/api';
-import { ProviderSchemas, type TestSessionResponse } from '@promptfoo/types/api/providers';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import {
+  type ApiResponseError,
+  ApiRoutes,
+  callApiResult,
+  ProviderResponseSchemas,
+  type TestSessionResponse,
+} from '@app/utils/api';
 import {
   AlertCircle,
   AlertTriangle,
@@ -318,7 +322,7 @@ async function runSessionTest({
   try {
     const response = await callApiResult(
       ApiRoutes.Providers.TestSession,
-      ProviderSchemas.TestSession.Response,
+      ProviderResponseSchemas.TestSession.Response,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

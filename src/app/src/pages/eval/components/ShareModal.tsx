@@ -11,9 +11,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
-import { callApiResult } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiResult, ServerResponseSchemas } from '@app/utils/api';
 import { Check, Copy } from 'lucide-react';
 import logger from '../../../../../logger';
 
@@ -50,7 +48,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       try {
         const response = await callApiResult(
           ApiRoutes.Results.ShareCheckDomain,
-          ServerSchemas.ShareCheckDomain.Response,
+          ServerResponseSchemas.ShareCheckDomain.Response,
           { query: new URLSearchParams({ id: evalId }) },
         );
 

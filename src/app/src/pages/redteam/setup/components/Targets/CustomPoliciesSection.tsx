@@ -19,10 +19,8 @@ import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, callApiJson, RedteamResponseSchemas } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import { RedteamSchemas } from '@promptfoo/types/api/redteam';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
@@ -387,15 +385,19 @@ export const CustomPoliciesSection = () => {
       ];
 
       // Send the request to `/redteam/:taskId`:
-      const data = (await callApiJson(ApiRoutes.Redteam.Task, RedteamSchemas.Task.Response, {
-        params: { taskId: 'custom-policy-generation-task' },
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          applicationDefinition: config.applicationDefinition,
-          existingPolicies,
-        }),
-      })) as {
+      const data = (await callApiJson(
+        ApiRoutes.Redteam.Task,
+        RedteamResponseSchemas.Task.Response,
+        {
+          params: { taskId: 'custom-policy-generation-task' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            applicationDefinition: config.applicationDefinition,
+            existingPolicies,
+          }),
+        },
+      )) as {
         result: PolicyObject[];
         error: string | null;
         task: string;

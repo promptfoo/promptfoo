@@ -1,6 +1,4 @@
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EnterpriseBanner from './EnterpriseBanner';
@@ -22,7 +20,7 @@ describe('EnterpriseBanner', () => {
     expect(mockCallApiJson).toHaveBeenCalledTimes(1);
     expect(mockCallApiJson).toHaveBeenCalledWith(
       ApiRoutes.Results.ShareCheckDomain,
-      ServerSchemas.ShareCheckDomain.Response,
+      ServerResponseSchemas.ShareCheckDomain.Response,
       { query: new URLSearchParams({ id: 'test-eval-123' }) },
     );
 

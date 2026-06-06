@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
@@ -22,7 +20,10 @@ function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await callApiJson(ApiRoutes.Prompts.List, ServerSchemas.Prompts.Response);
+        const data = await callApiJson(
+          ApiRoutes.Prompts.List,
+          ServerResponseSchemas.Prompts.Response,
+        );
         if (data?.data) {
           setPrompts(data.data as ServerPromptWithMetadata[]);
         }

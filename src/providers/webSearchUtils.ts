@@ -107,10 +107,10 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude 4.6 Opus with web search tool
+  // Anthropic Claude 4.8 Opus with web search tool
   const loadAnthropicWebSearch = async () => {
     try {
-      return await loadApiProvider('anthropic:messages:claude-opus-4-6', {
+      return await loadApiProvider('anthropic:messages:claude-opus-4-8', {
         options: {
           config: {
             tools: [

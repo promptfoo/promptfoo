@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Datasets from './Datasets';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
@@ -20,7 +18,7 @@ function DatasetsPageContent() {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await callApiJson(ApiRoutes.Datasets, ServerSchemas.Datasets.Response);
+        const data = await callApiJson(ApiRoutes.Datasets, ServerResponseSchemas.Datasets.Response);
         if (data?.data) {
           setTestCases(data.data as (TestCasesWithMetadata & { recentEvalDate: string })[]);
         }

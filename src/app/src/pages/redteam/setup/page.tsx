@@ -24,11 +24,9 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, ConfigSchemas, callApiJson } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { ConfigSchemas } from '@promptfoo/types/api/configs';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import {

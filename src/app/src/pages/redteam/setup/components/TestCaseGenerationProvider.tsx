@@ -10,16 +10,18 @@ import React, {
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApiJson } from '@app/utils/api';
+import {
+  ApiRoutes,
+  callApiJson,
+  ProviderResponseSchemas,
+  RedteamResponseSchemas,
+} from '@app/utils/api';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
-import { RedteamSchemas } from '@promptfoo/types/api/redteam';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
@@ -136,7 +138,7 @@ async function callTestGenerationApi(
         }
       : plugin;
 
-  return callApiJson(ApiRoutes.Redteam.GenerateTest, RedteamSchemas.GenerateTest.Response, {
+  return callApiJson(ApiRoutes.Redteam.GenerateTest, RedteamResponseSchemas.GenerateTest.Response, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -164,7 +166,7 @@ async function callTestExecutionApi(
   prompt: GeneratedTestCase['prompt'],
   abortController: AbortController,
 ) {
-  return callApiJson(ApiRoutes.Providers.Test, ProviderSchemas.Test.Response, {
+  return callApiJson(ApiRoutes.Providers.Test, ProviderResponseSchemas.Test.Response, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

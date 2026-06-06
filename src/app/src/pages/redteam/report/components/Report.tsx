@@ -27,7 +27,7 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import {
   type EvaluateResult,
@@ -38,8 +38,6 @@ import {
   type ResultLightweightWithLabel,
   type ResultsFile,
 } from '@promptfoo/types';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -89,7 +87,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const body = await callApiJson(ApiRoutes.Results.Get, ServerSchemas.Result.Response, {
+      const body = await callApiJson(ApiRoutes.Results.Get, ServerResponseSchemas.Result.Response, {
         params: { id },
         cache: 'no-store',
       });
@@ -122,7 +120,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
           try {
             const body = await callApiJson(
               ApiRoutes.Results.List,
-              ServerSchemas.ResultList.Response,
+              ServerResponseSchemas.ResultList.Response,
               { cache: 'no-store' },
             );
             if (body.data && body.data.length > 0) {

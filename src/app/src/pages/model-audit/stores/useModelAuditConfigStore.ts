@@ -1,6 +1,4 @@
-import { callApiJson } from '@app/utils/api';
-import { ModelAuditSchemas } from '@promptfoo/types/api/modelAudit';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ApiRoutes, callApiJson, ModelAuditSchemas } from '@app/utils/api';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 

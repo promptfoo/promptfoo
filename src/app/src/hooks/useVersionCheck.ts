@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { VersionSchemas } from '@promptfoo/types/api/version';
+import { ApiRoutes, callApiJson, VersionSchemas } from '@app/utils/api';
 
 interface VersionInfo {
   currentVersion: string;

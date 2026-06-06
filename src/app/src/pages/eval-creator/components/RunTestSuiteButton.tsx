@@ -7,9 +7,7 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
-import { callApiJson } from '@app/utils/api';
-import { EvalSchemas } from '@promptfoo/types/api/eval';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ApiRoutes, callApiJson, EvalResponseSchemas } from '@app/utils/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   countTests,
@@ -107,13 +105,17 @@ const RunTestSuiteButton = () => {
     };
 
     try {
-      const job = await callApiJson(ApiRoutes.Eval.CreateJob, EvalSchemas.CreateJob.Response, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const job = await callApiJson(
+        ApiRoutes.Eval.CreateJob,
+        EvalResponseSchemas.CreateJob.Response,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(testSuite),
         },
-        body: JSON.stringify(testSuite),
-      });
+      );
 
       if (!isMountedRef.current) {
         return;
@@ -124,7 +126,7 @@ const RunTestSuiteButton = () => {
         try {
           const progressData = await callApiJson(
             ApiRoutes.Eval.GetJob,
-            EvalSchemas.GetJob.Response,
+            EvalResponseSchemas.GetJob.Response,
             { params: { id: job.id } },
           );
           if (!isMountedRef.current) {

@@ -30,9 +30,7 @@ import {
 import { Switch } from '@app/components/ui/switch';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
-import { callApiJson, callApiResult } from '@app/utils/api';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ApiRoutes, callApiJson, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import yaml from 'js-yaml';
 import {
   AlignLeft,
@@ -179,7 +177,7 @@ Content-Type: application/json
     try {
       const response = await callApiResult(
         ApiRoutes.Providers.Test,
-        ProviderSchemas.Test.Response,
+        ProviderResponseSchemas.Test.Response,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -436,7 +434,7 @@ ${exampleRequest}`;
     try {
       const data = await callApiJson(
         ApiRoutes.Providers.HttpGenerator,
-        ProviderSchemas.HttpGenerator.Response,
+        ProviderResponseSchemas.HttpGenerator.Response,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

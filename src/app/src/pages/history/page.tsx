@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 import type { StandaloneEval } from '@promptfoo/util/database';
@@ -25,7 +23,7 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await callApiJson(ApiRoutes.History, ServerSchemas.History.Response);
+        const data = await callApiJson(ApiRoutes.History, ServerResponseSchemas.History.Response);
 
         if (data?.data) {
           setCols(data.data as StandaloneEval[]);

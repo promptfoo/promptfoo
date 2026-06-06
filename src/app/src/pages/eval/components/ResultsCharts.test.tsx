@@ -699,6 +699,67 @@ describe('ResultsCharts', () => {
       expect(values).toEqual([0, 0, 0, 0]);
     });
 
+    it('should preserve relative metric chart values if named scores are all negative', () => {
+      const mockTableWithNegativeNamedScores = {
+        head: {
+          prompts: [
+            {
+              provider: 'test-provider-1',
+              metrics: {
+                namedScores: {
+                  penalty: -0.8,
+                  risk: -0.5,
+                },
+              },
+            },
+            {
+              provider: 'test-provider-2',
+              metrics: {
+                namedScores: {
+                  penalty: -0.2,
+                  risk: -0.1,
+                },
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const scores = calculateScores(mockTableWithNegativeNamedScores);
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableWithNegativeNamedScores,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const chartCalls = vi.mocked(Chart).mock.calls;
+      const metricChartConfig = chartCalls
+        .map(([, config]) => config)
+        .find((config) => {
+          const labels = config.data?.labels;
+          return Array.isArray(labels) && labels.includes('penalty');
+        });
+
+      expect(metricChartConfig).toBeDefined();
+      const values = metricChartConfig!.data!.datasets.flatMap((dataset) => dataset.data ?? []);
+      expect(values).toEqual([-1, -1, -0.25, -0.2]);
+    });
+
     it('should normalize each named metric independently when one metric is all zero', () => {
       // `accuracy` is all zero (exercises the zero-max guard), while `precision` and
       // `coverage` have different maxima. Per-key normalization divides each metric by

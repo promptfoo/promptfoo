@@ -13,11 +13,9 @@ import { Textarea } from '@app/components/ui/textarea';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
@@ -174,7 +172,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
       const response = await callApiResult(
         ApiRoutes.Providers.Discover,
-        ProviderSchemas.Discover.Response,
+        ProviderResponseSchemas.Discover.Response,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { callApiResult } from '@app/utils/api';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import TransformTestDialog from './TransformTestDialog';
 
 interface ResponseParserTestModalProps {
@@ -32,7 +30,7 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
   const handleTest = async (transformCode: string, testInput: string) => {
     const response = await callApiResult(
       ApiRoutes.Providers.TestResponseTransform,
-      ProviderSchemas.TestResponseTransform.Response,
+      ProviderResponseSchemas.TestResponseTransform.Response,
       {
         method: 'POST',
         headers: {

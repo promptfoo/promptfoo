@@ -31,7 +31,13 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
-import { ApiResponseError, callApiJson } from '@app/utils/api';
+import {
+  ApiResponseError,
+  ApiRoutes,
+  callApiJson,
+  EvalResponseSchemas,
+  RedteamResponseSchemas,
+} from '@app/utils/api';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
@@ -39,9 +45,6 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import { EvalSchemas } from '@promptfoo/types/api/eval';
-import { RedteamSchemas } from '@promptfoo/types/api/redteam';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -284,9 +287,13 @@ export default function Review({
       if (hasRunningJob && serverJobId) {
         // Server has a running job - reconnect to it
         try {
-          const job = (await callApiJson(ApiRoutes.Eval.GetJob, EvalSchemas.GetJob.Response, {
-            params: { id: serverJobId },
-          })) as Job;
+          const job = (await callApiJson(
+            ApiRoutes.Eval.GetJob,
+            EvalResponseSchemas.GetJob.Response,
+            {
+              params: { id: serverJobId },
+            },
+          )) as Job;
           setLogs(job.logs || []);
 
           if (job.status === 'in-progress') {
@@ -310,9 +317,13 @@ export default function Review({
         // We have a saved job ID but server says nothing running
         // Check if it completed while we were away
         try {
-          const job = (await callApiJson(ApiRoutes.Eval.GetJob, EvalSchemas.GetJob.Response, {
-            params: { id: savedJobId },
-          })) as Job;
+          const job = (await callApiJson(
+            ApiRoutes.Eval.GetJob,
+            EvalResponseSchemas.GetJob.Response,
+            {
+              params: { id: savedJobId },
+            },
+          )) as Job;
           setLogs(job.logs || []);
 
           if (job.status === 'complete' && job.evalId) {
@@ -440,7 +451,7 @@ export default function Review({
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
-      return await callApiJson(ApiRoutes.Redteam.Status, RedteamSchemas.Status.Response);
+      return await callApiJson(ApiRoutes.Redteam.Status, RedteamResponseSchemas.Status.Response);
     } catch (error) {
       console.error('Error checking job status:', error);
       return { hasRunningJob: false };
@@ -457,9 +468,13 @@ export default function Review({
 
       const interval = window.setInterval(async () => {
         try {
-          const status = (await callApiJson(ApiRoutes.Eval.GetJob, EvalSchemas.GetJob.Response, {
-            params: { id: jobId },
-          })) as Job;
+          const status = (await callApiJson(
+            ApiRoutes.Eval.GetJob,
+            EvalResponseSchemas.GetJob.Response,
+            {
+              params: { id: jobId },
+            },
+          )) as Job;
 
           if (status.logs) {
             setLogs(status.logs);
@@ -577,7 +592,7 @@ export default function Review({
     setEvalId(null);
 
     try {
-      const { id } = await callApiJson(ApiRoutes.Redteam.Run, RedteamSchemas.Run.Response, {
+      const { id } = await callApiJson(ApiRoutes.Redteam.Run, RedteamResponseSchemas.Run.Response, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -607,7 +622,7 @@ export default function Review({
 
   const handleCancel = async () => {
     try {
-      await callApiJson(ApiRoutes.Redteam.Cancel, RedteamSchemas.Cancel.Response, {
+      await callApiJson(ApiRoutes.Redteam.Cancel, RedteamResponseSchemas.Cancel.Response, {
         method: 'POST',
       });
 

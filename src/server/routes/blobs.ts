@@ -117,7 +117,7 @@ blobsRouter.get(
     const orderByFn = sortOrder === 'asc' ? asc : desc;
 
     try {
-      const db = getDb();
+      const db = await getDb();
 
       // Build WHERE conditions for filtering
       const filterConditions = [];
@@ -152,7 +152,7 @@ blobsRouter.get(
       const whereClause = filterConditions.length > 0 ? and(...filterConditions) : undefined;
 
       // Get total count of unique blobs matching filters
-      const countResult = db
+      const countResult = await db
         .select({ count: sql<number>`COUNT(DISTINCT ${blobAssetsTable.hash})` })
         .from(blobAssetsTable)
         .innerJoin(blobReferencesTable, eq(blobAssetsTable.hash, blobReferencesTable.blobHash))
@@ -162,7 +162,7 @@ blobsRouter.get(
       const total = countResult?.count ?? 0;
 
       // Get unique blob hashes for the current page using Drizzle query builder
-      const uniqueHashes = db
+      const uniqueHashes = await db
         .selectDistinct({ hash: blobAssetsTable.hash })
         .from(blobAssetsTable)
         .innerJoin(blobReferencesTable, eq(blobAssetsTable.hash, blobReferencesTable.blobHash))
@@ -216,7 +216,7 @@ blobsRouter.get(
         }),
       };
 
-      const items = db
+      const items = await db
         .select(selectColumns)
         .from(blobAssetsTable)
         .innerJoin(
@@ -376,7 +376,7 @@ blobsRouter.get(
     const { limit, search } = parseResult.data;
 
     try {
-      const db = getDb();
+      const db = await getDb();
 
       const conditions = [];
       if (search) {
@@ -389,7 +389,7 @@ blobsRouter.get(
         );
       }
 
-      const evals = db
+      const evals = await db
         .selectDistinct({
           evalId: blobReferencesTable.evalId,
           description: evalsTable.description,
@@ -433,8 +433,8 @@ blobsRouter.get(
     }
     const { hash } = paramsResult.data;
 
-    const db = getDb();
-    const asset = db
+    const db = await getDb();
+    const asset = await db
       .select({
         hash: blobAssetsTable.hash,
         mimeType: blobAssetsTable.mimeType,
@@ -456,7 +456,7 @@ blobsRouter.get(
     // - Verify the requesting user has access to the evaluation (reference.evalId)
     // - Check user/team ownership before serving the blob
     // - Implement proper session/token-based authentication
-    const reference = db
+    const reference = await db
       .select({ evalId: blobReferencesTable.evalId })
       .from(blobReferencesTable)
       .where(eq(blobReferencesTable.blobHash, hash))

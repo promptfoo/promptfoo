@@ -15,9 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tab
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import { callApiJson } from '@app/utils/api';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ApiRoutes, callApiJson, ProviderResponseSchemas } from '@app/utils/api';
 import yaml from 'js-yaml';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -106,7 +104,7 @@ const EvaluateTestSuiteCreator = () => {
       try {
         const data = await callApiJson(
           ApiRoutes.Providers.ConfigStatus,
-          ProviderSchemas.ConfigStatus.Response,
+          ProviderResponseSchemas.ConfigStatus.Response,
         );
         if (isMounted) {
           setHasCustomConfig(data.success === true ? data.data.hasCustomConfig : false);

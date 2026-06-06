@@ -1,6 +1,4 @@
-import { callApiJson, callApiResult, fetchUserId } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { UserSchemas } from '@promptfoo/types/api/user';
+import { ApiRoutes, callApiJson, callApiResult, fetchUserId, UserSchemas } from '@app/utils/api';
 import { create } from 'zustand';
 
 interface UserState {

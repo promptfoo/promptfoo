@@ -1,6 +1,4 @@
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { ServerSchemas } from '@promptfoo/types/api/server';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { useQuery } from '@tanstack/react-query';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
@@ -20,7 +18,7 @@ export function useApiHealth() {
       try {
         const { status, message } = await callApiJson(
           ApiRoutes.RemoteHealth,
-          ServerSchemas.RemoteHealth.Response,
+          ServerResponseSchemas.RemoteHealth.Response,
           { cache: 'no-store' },
         );
         return {

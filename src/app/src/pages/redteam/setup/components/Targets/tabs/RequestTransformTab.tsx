@@ -3,9 +3,7 @@ import React from 'react';
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
 import Prism from '@app/lib/prism';
-import { callApiResult } from '@app/utils/api';
-import { ProviderSchemas } from '@promptfoo/types/api/providers';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import dedent from 'dedent';
 import { Play } from 'lucide-react';
 import TransformTestDialog from '../TransformTestDialog';
@@ -55,7 +53,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   const handleTest = async (transformCode: string, testInput: string) => {
     const response = await callApiResult(
       ApiRoutes.Providers.TestRequestTransform,
-      ProviderSchemas.TestRequestTransform.Response,
+      ProviderResponseSchemas.TestRequestTransform.Response,
       {
         method: 'POST',
         headers: {

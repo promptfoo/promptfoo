@@ -1,5 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { callApiResult } from '@app/utils/api';
+import { ApiRoutes, callApiResult, EvalResponseSchemas } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -8,8 +8,6 @@ import {
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { EvalSchemas } from '@promptfoo/types/api/eval';
-import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
@@ -706,7 +704,7 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        const resp = await callApiResult(ApiRoutes.Eval.Table, EvalSchemas.Table.Response, {
+        const resp = await callApiResult(ApiRoutes.Eval.Table, EvalResponseSchemas.Table.Response, {
           params: { id },
           query: url.searchParams,
         });
@@ -947,7 +945,7 @@ export const useTableStore = create<TableState>()(
 
         const resp = await callApiResult(
           ApiRoutes.Eval.MetadataKeys,
-          EvalSchemas.MetadataKeys.Response,
+          EvalResponseSchemas.MetadataKeys.Response,
           { params: { id }, query: url.searchParams, signal: abortController.signal },
         );
 
@@ -1048,7 +1046,7 @@ export const useTableStore = create<TableState>()(
 
         const resp = await callApiResult(
           ApiRoutes.Eval.MetadataValues,
-          EvalSchemas.MetadataValues.Response,
+          EvalResponseSchemas.MetadataValues.Response,
           { params: { id: evalId }, query: url.searchParams, signal: abortController.signal },
         );
 
