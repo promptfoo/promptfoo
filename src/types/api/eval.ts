@@ -348,13 +348,8 @@ export const EvalAssertionJobResponseSchema = z.object({
     status: z.enum(['in-progress', 'complete', 'error']),
     progress: z.number().int().nonnegative(),
     total: z.number().int().nonnegative(),
-    completedResults: z.array(
-      z.object({
-        resultId: z.string(),
-        pass: z.boolean(),
-        score: z.number(),
-      }),
-    ),
+    passCount: z.number().int().nonnegative(),
+    failCount: z.number().int().nonnegative(),
     updatedResults: z.number().int().nonnegative(),
     skippedResults: z.number().int().nonnegative(),
     skippedAssertions: z.number().int().nonnegative(),

@@ -10,6 +10,7 @@ const BASE_DOCS_URL = 'https://www.promptfoo.dev/docs/providers';
  */
 export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   // API Endpoints
+  a2a: `${BASE_DOCS_URL}/a2a`,
   http: `${BASE_DOCS_URL}/http`,
   websocket: `${BASE_DOCS_URL}/websocket`,
 

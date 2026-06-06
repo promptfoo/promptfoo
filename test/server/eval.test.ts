@@ -11,11 +11,19 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { activeEvalMutationsByEval, assertionJobs } from '../../src/server/routes/eval';
 import { createApp } from '../../src/server/server';
-import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
 import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
+import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
 
 describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
@@ -27,6 +35,8 @@ describe('eval routes', () => {
     jobId: string,
     maxWaitMs = 10000,
   ): Promise<{
+    passCount: number;
+    failCount: number;
     updatedResults: number;
     skippedResults: number;
     skippedAssertions: number;
@@ -37,8 +47,15 @@ describe('eval routes', () => {
         const statusRes = await api.get(`/api/eval/${evalId}/assertions/job/${jobId}`);
         expect(statusRes.status).toBe(200);
 
-        const { status, updatedResults, skippedResults, skippedAssertions, errors } =
-          statusRes.body.data;
+        const {
+          status,
+          passCount,
+          failCount,
+          updatedResults,
+          skippedResults,
+          skippedAssertions,
+          errors,
+        } = statusRes.body.data;
         if (status === 'error') {
           throw new Error('Assertion job failed');
         }
@@ -46,7 +63,14 @@ describe('eval routes', () => {
           throw new Error(`Assertion job still ${status}`);
         }
 
-        return { updatedResults, skippedResults, skippedAssertions, errors };
+        return {
+          passCount,
+          failCount,
+          updatedResults,
+          skippedResults,
+          skippedAssertions,
+          errors,
+        };
       },
       { interval: 50, timeout: maxWaitMs },
     );
@@ -92,6 +116,7 @@ describe('eval routes', () => {
     // Wait for all cleanups to complete
     await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
+    vi.resetAllMocks();
   });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
@@ -138,6 +163,32 @@ describe('eval routes', () => {
     payload.score = score;
     return payload;
   }
+
+  describe('POST /', () => {
+    it('returns 500 when v4 prompt persistence fails', async () => {
+      const createSpy = vi.spyOn(Eval, 'create');
+      vi.spyOn(Eval.prototype, 'addPrompts').mockRejectedValueOnce(
+        new Error('prompt persistence failed'),
+      );
+
+      const res = await api.post('/api/eval').send({
+        config: {
+          description: 'v4 save test',
+          tests: [],
+        },
+        prompts: [{ raw: 'hello', label: 'hello' }],
+        results: [],
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
+
+      const createdEval = await createSpy.mock.results[0]?.value;
+      if (createdEval) {
+        testEvalIds.add(createdEval.id);
+      }
+    });
+  });
 
   describe('post("/:evalId/results/:id/rating")', () => {
     it('rejects result ratings when the URL eval does not own the result', async () => {
@@ -262,6 +313,27 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.pass).toBe(true);
       expect(res.body.gradingResult?.score).toBe(1);
       expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
+    it('persists the rated result before notifying through the eval save', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const resultSaveSpy = vi.spyOn(EvalResult.prototype, 'save');
+      const evalSaveSpy = vi.spyOn(Eval.prototype, 'save');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      expect(resultSaveSpy).toHaveBeenCalledTimes(1);
+      expect(evalSaveSpy).toHaveBeenCalledTimes(1);
+      expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        evalSaveSpy.mock.invocationCallOrder[0],
+      );
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
@@ -560,6 +632,8 @@ describe('eval routes', () => {
 
       const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
       expect(jobResult.updatedResults).toBe(1);
+      expect(jobResult).toMatchObject({ passCount: 1, failCount: 0 });
+      expect(jobResult).not.toHaveProperty('completedResults');
 
       const updatedResult = await EvalResult.findById(result.id);
       expect(updatedResult?.testCase.assert).toHaveLength(2);
@@ -1061,7 +1135,7 @@ describe('eval routes', () => {
 
       // Add eval results with metadata using direct database insert
       const { getDb } = await import('../../src/database');
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,

@@ -11,7 +11,7 @@ vi.mock('../../../src/database', async (importOriginal) => {
 });
 
 vi.mock('../../../src/models/eval');
-vi.mock('../../../src/server/utils/evalTableUtils');
+vi.mock('../../../src/util/eval/evalTableUtils');
 vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -22,8 +22,8 @@ vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
 // Import after mocking
 import Eval from '../../../src/models/eval';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
-import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
 import { EVAL_TABLE_MAX_PAGE_SIZE, EvalSchemas } from '../../../src/types/api/eval';
+import { evalTableToCsv, evalTableToJson } from '../../../src/util/eval/evalTableUtils';
 
 // Setup mocked functions
 const mockedEvalFindById = vi.fn() as MockedFunction<typeof Eval.findById>;

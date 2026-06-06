@@ -109,7 +109,8 @@ function createRunningJobStatus(
     status: 'in-progress',
     progress: 0,
     total: data.total ?? fallbackTotal,
-    completedResults: [],
+    passCount: 0,
+    failCount: 0,
     updatedResults: 0,
     skippedResults: 0,
     skippedAssertions: 0,
@@ -473,8 +474,8 @@ export default function AddAssertionsDialog({
 
   const progressPercent =
     jobStatus && jobStatus.total > 0 ? Math.round((jobStatus.progress / jobStatus.total) * 100) : 0;
-  const passCount = jobStatus?.completedResults.filter((r) => r.pass).length ?? 0;
-  const failCount = jobStatus?.completedResults.filter((r) => !r.pass).length ?? 0;
+  const passCount = jobStatus?.passCount ?? 0;
+  const failCount = jobStatus?.failCount ?? 0;
 
   // Group errors by message for display
   const errorGroups = useMemo(() => {
@@ -674,7 +675,7 @@ export default function AddAssertionsDialog({
                 <Progress value={progressPercent} className="h-2" />
               </div>
 
-              {jobStatus.completedResults.length > 0 && (
+              {passCount + failCount > 0 && (
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                     <CheckCircle className="size-4" />

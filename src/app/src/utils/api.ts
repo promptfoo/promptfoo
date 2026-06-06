@@ -1,6 +1,6 @@
 import useApiConfig from '@app/stores/apiConfig';
+import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
 import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
-import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/types/api/user';
 
 export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
@@ -95,18 +95,12 @@ export async function updateEvalAuthor(
   return response.json();
 }
 
-export interface AssertionJobResult {
-  resultId: string;
-  pass: boolean;
-  score: number;
-  error?: string;
-}
-
 export interface AssertionJobStatus {
   status: 'in-progress' | 'complete' | 'error';
   progress: number;
   total: number;
-  completedResults: AssertionJobResult[];
+  passCount: number;
+  failCount: number;
   updatedResults: number;
   skippedResults: number;
   skippedAssertions: number;
