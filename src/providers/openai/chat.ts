@@ -30,7 +30,7 @@ import {
 } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -64,6 +64,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.functions, vars);
   }
 
   private async initializeMCP(): Promise<void> {
@@ -181,6 +185,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
     return this.modelName;
+  }
+
+  protected getGenAISystem(): string {
+    return 'openai';
   }
 
   async getOpenAiBody(
@@ -346,7 +354,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'openai',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
@@ -470,8 +478,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+            ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
         },
@@ -630,7 +637,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
       // Handle reasoning as thinking content if present and showThinking is enabled
-      if (reasoning && (this.config.showThinking ?? true)) {
+      if (reasoning && typeof output === 'string' && (this.config.showThinking ?? true)) {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 

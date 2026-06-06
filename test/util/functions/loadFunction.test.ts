@@ -308,6 +308,42 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should handle standard Windows file URLs on Windows', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: 'C:/path/to/file.js',
+      });
+      expect(parseFileUrl('file:///C:/path/to/file.js:functionName')).toEqual({
+        filePath: 'C:/path/to/file.js',
+        functionName: 'functionName',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('should preserve standard Windows-looking file URLs as POSIX paths on POSIX', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: '/C:/path/to/file.js',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
   it('should handle relative paths', () => {
     const result = parseFileUrl('file://./path/to/file.js:functionName');
     expect(result).toEqual({
@@ -316,37 +352,43 @@ describe('parseFileUrl', () => {
     });
   });
 
-  // Regression: caught by Codex on PR #9472. Filenames that legitimately
-  // contain colons (ISO timestamps, POSIX names like `foo:bar`) must not be
-  // mis-split into a truncated path + bogus function name. The tail after
-  // the last `:` only counts as a named export when it parses as a JS
-  // identifier.
-  it('does not split when the tail is not a valid JS identifier', () => {
+  it('should preserve colons in callback file paths', () => {
     expect(parseFileUrl('file://callbacks/2026-05-27T12:00:00.js')).toEqual({
       filePath: 'callbacks/2026-05-27T12:00:00.js',
     });
     expect(parseFileUrl('file://foo:bar/cb.js')).toEqual({
       filePath: 'foo:bar/cb.js',
     });
-    // Trailing number-prefixed segment isn't a valid identifier either.
-    expect(parseFileUrl('file://cb.js:42abc')).toEqual({
-      filePath: 'cb.js:42abc',
+  });
+
+  it('should parse Python file URLs with function names', () => {
+    const result = parseFileUrl('file://./path/to/file.py:function_name');
+    expect(result).toEqual({
+      filePath: './path/to/file.py',
+      functionName: 'function_name',
     });
   });
 
-  it('splits at the last colon when the tail IS a valid identifier', () => {
-    // Sanity that the identifier path still works alongside the new check.
-    expect(parseFileUrl('file://path.js:handler')).toEqual({
-      filePath: 'path.js',
-      functionName: 'handler',
+  it('should preserve colons in default-export file paths', () => {
+    const result = parseFileUrl('file://./path/to/file:default.js');
+    expect(result).toEqual({
+      filePath: './path/to/file:default.js',
     });
-    expect(parseFileUrl('file://path.js:$cb')).toEqual({
-      filePath: 'path.js',
-      functionName: '$cb',
+  });
+
+  it('should parse named exports from file paths that contain colons', () => {
+    const result = parseFileUrl('file://./path/to/file:default.js:functionName');
+    expect(result).toEqual({
+      filePath: './path/to/file:default.js',
+      functionName: 'functionName',
     });
-    expect(parseFileUrl('file://path.js:_init')).toEqual({
-      filePath: 'path.js',
-      functionName: '_init',
+  });
+
+  it('should parse named exports from directory paths that contain colons', () => {
+    const result = parseFileUrl('file://path:with:colons/hooks.js:functionName');
+    expect(result).toEqual({
+      filePath: 'path:with:colons/hooks.js',
+      functionName: 'functionName',
     });
   });
 });

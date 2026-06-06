@@ -1,6 +1,11 @@
 import OpenAI from 'openai';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
   wrapError,
@@ -189,6 +194,27 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.assistantConfig.modelName || this.assistantId,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: { temperature: this.assistantConfig.temperature ?? undefined },
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
@@ -201,7 +227,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
-      defaultHeaders: this.assistantConfig.headers,
+      defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),
     });
 
     const messages = parseChatPrompt(prompt, [

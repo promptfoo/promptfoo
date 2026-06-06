@@ -3,6 +3,13 @@ import { createHmac } from 'crypto';
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
+  emitTurnMarkerSpan,
+  extractProviderResponseAttributes,
+  getGenAITracer,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -491,6 +498,26 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'azure',
+      model: this.deploymentName,
+      providerId: this.id(),
+      prompt,
+      context,
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
@@ -520,11 +547,50 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const responseOptions = this.getAgentReference(agent);
       const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;
       const startTime = Date.now();
+      const tracer = getGenAITracer();
+      let turnCount = 0;
 
-      let response = await openAIClient.responses.create(
-        body as ResponseCreateParamsNonStreaming,
-        responseOptions,
-      );
+      const emitTurnSpan = (callStartedAt: number, callEndedAt: number, errorMessage?: string) => {
+        turnCount += 1;
+        emitTurnMarkerSpan({
+          tracer,
+          index: turnCount,
+          startTime: callStartedAt,
+          endTime: callEndedAt,
+          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          errorMessage,
+          logLabel: 'AzureFoundryAgent',
+        });
+      };
+
+      // The Responses API can resolve with a failed/errored response object
+      // instead of throwing. Surface that on the turn marker so a failed model
+      // round is not reported as OK (the parent chat span is already marked
+      // failed downstream via processResponse).
+      const responseFailureMessage = (resp: any): string | undefined => {
+        if (resp?.error) {
+          return typeof resp.error === 'string'
+            ? resp.error
+            : resp.error.message || resp.error.code || 'Response failed';
+        }
+        if (resp?.status === 'failed') {
+          return resp.incomplete_details?.reason || 'Response status: failed';
+        }
+        return undefined;
+      };
+
+      let turnStartedAt = Date.now();
+      let response;
+      try {
+        response = await openAIClient.responses.create(
+          body as ResponseCreateParamsNonStreaming,
+          responseOptions,
+        );
+        emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
+      } catch (err) {
+        emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+        throw err;
+      }
       while (Date.now() - startTime <= maxLoopTimeMs) {
         const functionCalls = this.getCallableFunctionCalls(
           response,
@@ -543,13 +609,20 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
         );
-        response = await openAIClient.responses.create(
-          {
-            input: outputs as ResponseFunctionToolCallOutputItem[],
-            previous_response_id: response.id,
-          } as ResponseCreateParamsNonStreaming,
-          responseOptions,
-        );
+        turnStartedAt = Date.now();
+        try {
+          response = await openAIClient.responses.create(
+            {
+              input: outputs as ResponseFunctionToolCallOutputItem[],
+              previous_response_id: response.id,
+            } as ResponseCreateParamsNonStreaming,
+            responseOptions,
+          );
+          emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
+        } catch (err) {
+          emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+          throw err;
+        }
       }
 
       if (Date.now() - startTime > maxLoopTimeMs) {

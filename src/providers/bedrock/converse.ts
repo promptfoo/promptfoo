@@ -26,7 +26,7 @@ import {
   wrapError,
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { isClaudeOpus47Model } from '../anthropic/util';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -76,10 +76,13 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stop?: string[]; // Alias for compatibility
 
   // Extended thinking (Claude models)
-  thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
-  };
+  thinking?:
+    | {
+        type: 'enabled';
+        budget_tokens: number;
+      }
+    | { type: 'adaptive' }
+    | { type: 'disabled' };
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -144,6 +147,8 @@ export interface BedrockConverseToolConfig {
  * Prices as of 2025 - may need updates
  */
 const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
+  // Claude Opus 4.8
+  'anthropic.claude-opus-4-8': { input: 5, output: 25 },
   // Claude Opus 4.7
   'anthropic.claude-opus-4-7': { input: 5, output: 25 },
   // Claude Opus 4.6
@@ -209,7 +214,9 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   // Writer Palmyra
   'writer.palmyra-x5': { input: 0.6, output: 6 },
   'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // OpenAI GPT-OSS
+  // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
+  // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
+  // Responses API (see src/providers/bedrock/openaiResponses.ts).
   'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
   'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
 };
@@ -1021,12 +1028,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    // Claude Opus 4.7 deprecates `temperature` at the model level — any request
-    // that includes it on Bedrock returns ValidationException. Drop the value
-    // regardless of where it came from (config or AWS_BEDROCK_TEMPERATURE).
-    const isOpus47 = isClaudeOpus47Model(this.modelName);
-    const temperature = reasoningEnabled || isOpus47 ? undefined : temperatureValue;
-    const topP = reasoningEnabled ? undefined : topPValue;
+    // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+    // level — a request that pins `temperature` or `topP` on Bedrock returns
+    // ValidationException. Drop both regardless of where they came from (config
+    // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
+    const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
 
     // Only return config if at least one field is set
     if (
@@ -1139,7 +1147,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
-      fields.thinking = this.config.thinking;
+      fields.thinking =
+        isSamplingParamsDeprecatedClaudeModel(this.modelName) &&
+        this.config.thinking.type === 'enabled'
+          ? { type: 'adaptive' }
+          : this.config.thinking;
     }
 
     // Add reasoning configuration for Amazon Nova 2 models

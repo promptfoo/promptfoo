@@ -88,16 +88,17 @@ export async function loadFunction<T extends Function>({
   }
 }
 
-/**
- * Matches a JavaScript identifier or a dotted member-access path
- * (e.g. `handler`, `$cb`, `_init`, `module.deepExport.nested`). We use this
- * to decide whether the trailing segment after the last `:` in a `file://`
- * URL is a named-export reference or just part of the file path. Filenames
- * that legitimately contain colons (`2026-05-27T12:00:00.js`, `foo:bar/cb.js`)
- * never match because their tail starts with a digit, contains a slash, or
- * otherwise isn't an identifier — Codex caught this regression in PR #9472.
- */
-const JS_EXPORT_REF_RE = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
+// Matches the leading slash + Windows drive prefix from canonical `file:///C:/...`
+// URLs (e.g. `/C:/` or `/C:\`). Only stripped on Windows so POSIX paths that
+// legitimately start with `/X:` (a directory literally named `X:`) are preserved.
+const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
+
+function normalizeFilePath(filePath: string): string {
+  if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(filePath)) {
+    return filePath.slice(1);
+  }
+  return filePath;
+}
 
 /**
  * Extracts the file path and optional function name from a `file://` URL.
@@ -105,17 +106,16 @@ const JS_EXPORT_REF_RE = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
  * Splits at the **last** `:` rather than the first so Windows drive-letter
  * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
  * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
- * with no function name) or at the empty-path edge case (`file://:fn`). The
- * candidate function name must additionally look like a JS identifier — paths
- * that legitimately contain a colon (POSIX timestamps, `foo:bar/cb.js`) are
- * not split because their tail (`00.js`, `bar/cb.js`) is not an identifier.
+ * with no function name) or at the empty-path edge case (`file://:fn`). Only
+ * JavaScript and Python callback files support the named-export suffix, so
+ * colons in other valid POSIX paths remain part of the path.
  *
  * Examples:
  *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
  *   `file://callbacks.js:fn`          → `{ filePath: 'callbacks.js', functionName: 'fn' }`
  *   `file://C:/cb.js:fn`              → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
  *   `file://C:`                       → `{ filePath: 'C:' }` (drive-letter colon preserved)
- *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (tail not an identifier)
+ *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
  *
  * @param fileUrl The `file://` URL.
  * @returns The file path and optional function name.
@@ -129,23 +129,25 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
-  // Index > 1 (not >= 1) preserves single-letter drive prefixes like `C:` so
-  // Windows paths don't get sliced to `C`. Do not "simplify" to >= 0.
   if (lastColonIndex > 1) {
-    const candidateFn = urlWithoutProtocol.slice(lastColonIndex + 1);
-    // Only split when the tail is a plausible JS export identifier. This
-    // protects paths whose filenames legitimately contain colons (e.g.
-    // ISO timestamps like `2026-05-27T12:00:00.js` or POSIX `foo:bar`).
-    if (JS_EXPORT_REF_RE.test(candidateFn)) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+
+    // Only executable function files support a :functionName suffix. This preserves
+    // colons that are part of a valid file or directory name on POSIX systems.
+    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
       return {
-        filePath: urlWithoutProtocol.slice(0, lastColonIndex),
-        functionName: candidateFn,
+        filePath: normalizeFilePath(urlWithoutProtocol),
       };
     }
+
+    return {
+      filePath: normalizeFilePath(candidateFilePath),
+      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
+    };
   }
 
   return {
-    filePath: urlWithoutProtocol,
+    filePath: normalizeFilePath(urlWithoutProtocol),
   };
 }
 
@@ -279,10 +281,9 @@ function assertWithinBase(filePath: string, resolvedPath: string, normalizedBase
  *   3. {@link importModule} to load the file
  *   4. extracting the named export, default export, or module-as-function
  *
- * Callers typically wrap the throw to add provider-specific context (e.g.
- * `Error loading function from <fileRef>: ...`) using `Error(msg, { cause })`
- * so the original stack and `CallbackPathTraversalError` instance are
- * preserved for upstream classification.
+ * Callers typically use {@link wrapError} to add provider-specific context
+ * while preserving the original stack and `CallbackPathTraversalError`
+ * instance for upstream classification.
  *
  * @param fileRef The `file://` reference (e.g. `file://callbacks.js:handler`).
  * @param options.logPrefix Optional prefix for the debug log line (e.g.
