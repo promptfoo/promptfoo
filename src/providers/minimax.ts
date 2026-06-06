@@ -39,6 +39,14 @@ function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): st
 
 export const MINIMAX_CHAT_MODELS = [
   {
+    id: 'MiniMax-M3',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      cache_read: 0.12 / 1e6,
+    },
+  },
+  {
     id: 'MiniMax-M2.7',
     cost: {
       input: 0.3 / 1e6,
@@ -52,22 +60,6 @@ export const MINIMAX_CHAT_MODELS = [
       input: 0.6 / 1e6,
       output: 2.4 / 1e6,
       cache_read: 0.06 / 1e6,
-    },
-  },
-  {
-    id: 'MiniMax-M2.5',
-    cost: {
-      input: 0.3 / 1e6,
-      output: 1.2 / 1e6,
-      cache_read: 0.03 / 1e6,
-    },
-  },
-  {
-    id: 'MiniMax-M2.5-highspeed',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      cache_read: 0.03 / 1e6,
     },
   },
 ];
@@ -277,6 +269,6 @@ export function createMiniMaxProvider(
   options: MiniMaxProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':') || 'MiniMax-M2.7';
+  const modelName = splits.slice(1).join(':') || 'MiniMax-M3';
   return new MiniMaxProvider(modelName, options);
 }

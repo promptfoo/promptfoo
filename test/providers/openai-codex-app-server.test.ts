@@ -855,6 +855,250 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'Legacy auth ok' });
   });
 
+  it('does not leak an ambient OpenAI key to the CLI (env or login) when routing to a custom model_provider', async () => {
+    const restore = mockProcessEnv({ OPENAI_API_KEY: 'sk-ambient-unrelated' });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    try {
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          model: 'openai.gpt-5.5',
+          model_provider: 'amazon-bedrock',
+          thread_cleanup: 'none',
+        },
+      });
+
+      const resultPromise = provider.callApi('Run on Bedrock');
+
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+
+      // No account/login/start should be issued for the ambient OpenAI key; the next request
+      // is thread/start (mirrors the no-key flow).
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_bedrock_noleak' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_bedrock_noleak', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_bedrock_noleak',
+          turnId: 'turn_bedrock_noleak',
+          itemId: 'msg_bedrock_noleak',
+          delta: 'On Bedrock',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_bedrock_noleak',
+          turn: { id: 'turn_bedrock_noleak', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'On Bedrock' });
+
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+      expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
+      expect(spawnEnv.CODEX_API_KEY).toBeUndefined();
+      // No account/login/start was ever sent for the unrelated ambient key.
+      expect(
+        server.messages().some((message: any) => message.method === 'account/login/start'),
+      ).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still injects an explicit config.apiKey when routing to a custom model_provider', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        model: 'openai.gpt-5.5',
+        model_provider: 'amazon-bedrock',
+        apiKey: 'explicit-bedrock-key',
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run on Bedrock with explicit key');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const loginStart = await waitForMessage(
+      server,
+      (message) => message.method === 'account/login/start',
+    );
+    expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'explicit-bedrock-key' });
+    server.send({ id: loginStart.id, result: { type: 'apiKey' } });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_bedrock_explicit' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_bedrock_explicit', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_bedrock_explicit',
+        turnId: 'turn_bedrock_explicit',
+        itemId: 'msg_bedrock_explicit',
+        delta: 'Explicit key ok',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_bedrock_explicit',
+        turn: { id: 'turn_bedrock_explicit', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Explicit key ok' });
+
+    const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+    expect(spawnEnv.OPENAI_API_KEY).toBe('explicit-bedrock-key');
+    expect(spawnEnv.CODEX_API_KEY).toBe('explicit-bedrock-key');
+  });
+
+  it('strips an inherited OpenAI/Codex key from the CLI env when inherit_process_env is set with a custom model_provider', async () => {
+    // Highest-risk path: with inherit_process_env the whole process env is spread into the CLI
+    // env, so an ambient OPENAI_API_KEY/CODEX_API_KEY would reach the Bedrock-routed agent shell
+    // unless the strip loop removes it. Mirrors openai-codex-sdk.test.ts's inherit-path test.
+    const restore = mockProcessEnv({
+      OPENAI_API_KEY: 'sk-process-unrelated',
+      CODEX_API_KEY: 'codex-process-unrelated',
+    });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    try {
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          model: 'openai.gpt-5.5',
+          model_provider: 'amazon-bedrock',
+          inherit_process_env: true,
+          thread_cleanup: 'none',
+        },
+      });
+
+      const resultPromise = provider.callApi('Run on Bedrock with inherited env');
+
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+
+      // No login for the unrelated ambient key — straight to thread/start.
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_bedrock_inherit' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_bedrock_inherit', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_bedrock_inherit',
+          turnId: 'turn_bedrock_inherit',
+          itemId: 'msg_bedrock_inherit',
+          delta: 'Inherited env ok',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_bedrock_inherit',
+          turn: { id: 'turn_bedrock_inherit', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'Inherited env ok' });
+
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+      expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
+      expect(spawnEnv.CODEX_API_KEY).toBeUndefined();
+      expect(
+        server.messages().some((message: any) => message.method === 'account/login/start'),
+      ).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves an OPENAI_API_KEY supplied explicitly via cli_env under a custom model_provider', async () => {
+    // The strip loop must not delete a key the user placed in cli_env on purpose (the
+    // `!(key in cli_env)` exception). No config.apiKey -> no login, mirroring the no-leak flow.
+    const restore = mockProcessEnv({ OPENAI_API_KEY: undefined, CODEX_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    try {
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          model: 'openai.gpt-5.5',
+          model_provider: 'amazon-bedrock',
+          cli_env: { OPENAI_API_KEY: 'cli-env-key' },
+          thread_cleanup: 'none',
+        },
+      });
+
+      const resultPromise = provider.callApi('Run on Bedrock with cli_env key');
+
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_bedrock_clienv' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_bedrock_clienv', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_bedrock_clienv',
+          turnId: 'turn_bedrock_clienv',
+          itemId: 'msg_bedrock_clienv',
+          delta: 'cli_env key ok',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_bedrock_clienv',
+          turn: { id: 'turn_bedrock_clienv', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'cli_env key ok' });
+
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+      // The cli_env-supplied key survives the custom-provider strip loop.
+      expect(spawnEnv.OPENAI_API_KEY).toBe('cli-env-key');
+    } finally {
+      restore();
+    }
+  });
+
   it('maps legacy approval requests by conversation id and legacy decision names', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -4470,6 +4714,82 @@ describe('OpenAICodexAppServerProvider', () => {
         source: 'heuristic',
       },
     ]);
+  });
+
+  it('detects repo-local skill calls without accepting wildcard or unrelated skill paths', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Use a repo skill');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_local_skill' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_local_skill', status: 'inProgress' } },
+    });
+
+    for (const [id, command] of [
+      ['cmd_local_skill', '.agents/skills/repo-skill/SKILL.md --help'],
+      ['cmd_wildcard_skill', '.agents/skills/*/SKILL.md --help'],
+      ['cmd_unrelated_skill', '/tmp/unrelated-project/skills/external/SKILL.md --help'],
+    ]) {
+      server.send({
+        method: 'item/completed',
+        params: {
+          threadId: 'thr_local_skill',
+          turnId: 'turn_local_skill',
+          item: {
+            type: 'commandExecution',
+            id,
+            command,
+            cwd: process.cwd(),
+            status: 'completed',
+            exitCode: 0,
+            durationMs: 1,
+          },
+        },
+      });
+    }
+
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_local_skill',
+        turnId: 'turn_local_skill',
+        itemId: 'msg_local_skill',
+        delta: 'Skill used',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_local_skill',
+        turn: { id: 'turn_local_skill', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.metadata?.skillCalls).toEqual([
+      {
+        name: 'repo-skill',
+        path: '.agents/skills/repo-skill/SKILL.md',
+        source: 'heuristic',
+      },
+    ]);
+    expect(result.metadata?.attemptedSkillCalls).toBeUndefined();
   });
 
   it('records attempted repo-local skill calls when command execution fails', async () => {

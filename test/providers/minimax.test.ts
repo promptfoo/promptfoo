@@ -23,6 +23,16 @@ vi.mock('../../src/logger', () => ({
 }));
 
 describe('calculateMiniMaxCost', () => {
+  it('should calculate cost without cache for MiniMax-M3', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3', {}, 1000000, 1000000);
+    expect(cost).toBeCloseTo(3.0); // (0.6 + 2.4)
+  });
+
+  it('should calculate cost with cache hits for MiniMax-M3', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3', {}, 1000000, 1000000, 500000);
+    expect(cost).toBeCloseTo(2.76); // (0.6 * 0.5 + 0.12 * 0.5 + 2.4)
+  });
+
   it('should calculate cost without cache for MiniMax-M2.7', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000);
     expect(cost).toBeCloseTo(1.5); // (0.3 + 1.2)
@@ -41,26 +51,6 @@ describe('calculateMiniMaxCost', () => {
   it('should calculate cost with cache hits for MiniMax-M2.7-highspeed', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7-highspeed', {}, 1000000, 1000000, 500000);
     expect(cost).toBeCloseTo(2.73); // (0.6 * 0.5 + 0.06 * 0.5 + 2.4)
-  });
-
-  it('should calculate cost without cache for MiniMax-M2.5', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.5', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(1.5); // (0.3 + 1.2)
-  });
-
-  it('should calculate cost with cache hits for MiniMax-M2.5', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.5', {}, 1000000, 1000000, 500000);
-    expect(cost).toBeCloseTo(1.365); // (0.3 * 0.5 + 0.03 * 0.5 + 1.2)
-  });
-
-  it('should calculate cost for MiniMax-M2.5-highspeed', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.5-highspeed', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(3.0); // (0.6 + 2.4)
-  });
-
-  it('should calculate cost with cache hits for MiniMax-M2.5-highspeed', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.5-highspeed', {}, 1000000, 1000000, 500000);
-    expect(cost).toBeCloseTo(2.715); // (0.6 * 0.5 + 0.03 * 0.5 + 2.4)
   });
 
   it('should return undefined if promptTokens is missing', () => {
@@ -121,6 +111,14 @@ describe('calculateMiniMaxCost', () => {
 });
 
 describe('MINIMAX_CHAT_MODELS', () => {
+  it('should have correct pricing for MiniMax-M3', () => {
+    const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M3');
+    expect(model).toBeDefined();
+    expect(model?.cost.input).toBeCloseTo(0.6 / 1e6);
+    expect(model?.cost.output).toBeCloseTo(2.4 / 1e6);
+    expect(model?.cost.cache_read).toBeCloseTo(0.12 / 1e6);
+  });
+
   it('should have correct pricing for MiniMax-M2.7', () => {
     const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M2.7');
     expect(model).toBeDefined();
@@ -137,32 +135,26 @@ describe('MINIMAX_CHAT_MODELS', () => {
     expect(model?.cost.cache_read).toBeCloseTo(0.06 / 1e6);
   });
 
-  it('should have correct pricing for MiniMax-M2.5', () => {
-    const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M2.5');
-    expect(model).toBeDefined();
-    expect(model?.cost.input).toBeCloseTo(0.3 / 1e6);
-    expect(model?.cost.output).toBeCloseTo(1.2 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.03 / 1e6);
+  it('should contain exactly three models', () => {
+    expect(MINIMAX_CHAT_MODELS).toHaveLength(3);
   });
 
-  it('should have correct pricing for MiniMax-M2.5-highspeed', () => {
-    const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M2.5-highspeed');
-    expect(model).toBeDefined();
-    expect(model?.cost.input).toBeCloseTo(0.6 / 1e6);
-    expect(model?.cost.output).toBeCloseTo(2.4 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.03 / 1e6);
+  it('should have M3 as first model in the list', () => {
+    expect(MINIMAX_CHAT_MODELS[0].id).toBe('MiniMax-M3');
   });
 
-  it('should contain exactly four models', () => {
-    expect(MINIMAX_CHAT_MODELS).toHaveLength(4);
+  it('should have M2.7 as second model in the list', () => {
+    expect(MINIMAX_CHAT_MODELS[1].id).toBe('MiniMax-M2.7');
   });
 
-  it('should have M2.7 as first model in the list', () => {
-    expect(MINIMAX_CHAT_MODELS[0].id).toBe('MiniMax-M2.7');
+  it('should have M2.7-highspeed as third model in the list', () => {
+    expect(MINIMAX_CHAT_MODELS[2].id).toBe('MiniMax-M2.7-highspeed');
   });
 
-  it('should have M2.7-highspeed as second model in the list', () => {
-    expect(MINIMAX_CHAT_MODELS[1].id).toBe('MiniMax-M2.7-highspeed');
+  it('should no longer include the older M2.5 models', () => {
+    const ids = MINIMAX_CHAT_MODELS.map((m) => m.id);
+    expect(ids).not.toContain('MiniMax-M2.5');
+    expect(ids).not.toContain('MiniMax-M2.5-highspeed');
   });
 });
 
@@ -171,14 +163,14 @@ describe('createMiniMaxProvider', () => {
     vi.restoreAllMocks();
   });
 
-  it('should use default model MiniMax-M2.7 when no model specified', () => {
+  it('should use default model MiniMax-M3 when no model specified', () => {
     const provider = createMiniMaxProvider('minimax');
-    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    expect(provider.id()).toBe('minimax:MiniMax-M3');
   });
 
   it('should parse model name from provider path', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.5');
-    expect(provider.id()).toBe('minimax:MiniMax-M2.5');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3');
+    expect(provider.id()).toBe('minimax:MiniMax-M3');
   });
 
   it('should handle model names with colons', () => {
@@ -187,7 +179,7 @@ describe('createMiniMaxProvider', () => {
   });
 
   it('should pass options to the provider', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3', {
       config: {
         config: {
           temperature: 0.8,
@@ -195,7 +187,7 @@ describe('createMiniMaxProvider', () => {
         },
       },
     });
-    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    expect(provider.id()).toBe('minimax:MiniMax-M3');
   });
 });
 
@@ -515,10 +507,10 @@ describe('MiniMaxProvider', () => {
       raw: '{"usage":',
     });
 
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.5');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3');
     const result = await provider.callApi('Test prompt');
 
-    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.5', {}, 100, 50, 0));
+    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M3', {}, 100, 50, 0));
   });
 
   it('should preserve cached responses without recalculating cost', async () => {
@@ -539,7 +531,7 @@ describe('MiniMaxProvider', () => {
       cached: true,
     });
 
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.5-highspeed');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed');
     const result = await provider.callApi('Test prompt');
 
     expect(result.cached).toBe(true);

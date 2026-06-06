@@ -216,7 +216,9 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   // Writer Palmyra
   'writer.palmyra-x5': { input: 0.6, output: 6 },
   'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // OpenAI GPT-OSS
+  // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
+  // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
+  // Responses API (see src/providers/bedrock/openaiResponses.ts).
   'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
   'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
 };

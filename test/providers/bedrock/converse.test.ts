@@ -3409,7 +3409,7 @@ describe('Model coverage parity', () => {
     // Writer Palmyra models
     { id: 'writer.palmyra-x5-v1:0', family: 'writer' },
     { id: 'writer.palmyra-x4-v1:0', family: 'writer' },
-    // OpenAI GPT-OSS models
+    // OpenAI GPT-OSS models (frontier gpt-5.x models are not served via Converse)
     { id: 'openai.gpt-oss-120b-1:0', family: 'openai' },
     { id: 'openai.gpt-oss-20b-1:0', family: 'openai' },
   ];

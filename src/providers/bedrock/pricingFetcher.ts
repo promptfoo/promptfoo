@@ -1,5 +1,4 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import logger from '../../logger';
 import { getFiniteCostValue } from '../shared';
 import type {
   GetProductsCommand,
@@ -25,6 +24,16 @@ export interface BedrockModelPricing {
   input: number;
   output: number;
 }
+
+interface BedrockPricingLogger {
+  debug(message: string, context?: Record<string, unknown>): void;
+  warn(message: string, context?: Record<string, unknown>): void;
+}
+
+const silentPricingLogger: BedrockPricingLogger = {
+  debug: () => {},
+  warn: () => {},
+};
 
 /**
  * Maps Bedrock model IDs to their pricing API model names.
@@ -75,6 +84,7 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'anthropic.claude-opus-4-5-20251101-v1': 'Claude Opus 4.5',
     'anthropic.claude-opus-4-6-v1': 'Claude Opus 4.6',
     'anthropic.claude-opus-4-7': 'Claude Opus 4.7',
+    'anthropic.claude-opus-4-8': 'Claude Opus 4.8',
     // Anthropic Claude models - Legacy
     'anthropic.claude-instant-v1': 'Claude Instant',
     'anthropic.claude-v1': 'Claude',
@@ -184,6 +194,7 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
 export async function getPricingData(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
+  logger: BedrockPricingLogger = silentPricingLogger,
 ): Promise<BedrockPricingData | null> {
   const cacheKey = `bedrock-pricing:${region}`;
   let cache: Awaited<ReturnType<typeof getCache>> | undefined;
@@ -233,7 +244,7 @@ export async function getPricingData(
   // Fetches are not shared while in flight: separate credential contexts must not
   // inherit another caller's authentication failure.
   logger.debug('[Bedrock Pricing]: Starting new pricing fetch', { region });
-  const pricingData = await fetchBedrockPricing(region, credentials);
+  const pricingData = await fetchBedrockPricing(region, credentials, logger);
 
   // Cache the result if successful
   if (pricingData && isCacheEnabled()) {
@@ -358,7 +369,10 @@ function setModelPricingRate(
   models.get(modelName)![rateType] = pricePerToken;
 }
 
-function removeIncompleteModelPricing(models: Map<string, BedrockModelPricing>) {
+function removeIncompleteModelPricing(
+  models: Map<string, BedrockModelPricing>,
+  logger: BedrockPricingLogger,
+) {
   for (const [modelName, modelPricing] of models) {
     if (modelPricing.input <= 0 || modelPricing.output <= 0) {
       logger.debug('[Bedrock Pricing]: Skipping incomplete pricing data', {
@@ -450,7 +464,10 @@ function getStandardTextTokenRateType(
   return undefined;
 }
 
-function parseBedrockPriceItems(priceItems: string[]): {
+function parseBedrockPriceItems(
+  priceItems: string[],
+  logger: BedrockPricingLogger,
+): {
   models: Map<string, BedrockModelPricing>;
   allModelsFound: Set<string>;
   usageTypeSamples: Record<string, string>;
@@ -502,13 +519,14 @@ function parseBedrockPriceItems(priceItems: string[]): {
     }
   }
 
-  removeIncompleteModelPricing(models);
+  removeIncompleteModelPricing(models, logger);
   return { models, allModelsFound, usageTypeSamples };
 }
 
 async function fetchBedrockPricing(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
+  logger: BedrockPricingLogger = silentPricingLogger,
 ): Promise<BedrockPricingData | null> {
   const startTime = Date.now();
 
@@ -526,7 +544,10 @@ async function fetchBedrockPricing(
     });
 
     const allPriceItems = await fetchAllPriceItems(pricingClient, region);
-    const { models, allModelsFound, usageTypeSamples } = parseBedrockPriceItems(allPriceItems);
+    const { models, allModelsFound, usageTypeSamples } = parseBedrockPriceItems(
+      allPriceItems,
+      logger,
+    );
 
     const duration = Date.now() - startTime;
 
@@ -583,6 +604,7 @@ export function calculateCostWithFetchedPricing(
   promptTokens: number | undefined,
   completionTokens: number | undefined,
   rateOverrides: Partial<BedrockModelPricing> = {},
+  logger: BedrockPricingLogger = silentPricingLogger,
 ): number | undefined {
   if (
     promptTokens === undefined ||

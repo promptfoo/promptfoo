@@ -278,7 +278,7 @@ export abstract class AwsBedrockGenericProvider {
       }
 
       try {
-        const data = await getPricingData(this.getRegion(), credentials);
+        const data = await getPricingData(this.getRegion(), credentials, logger);
         if (data) {
           this.pricingData = data;
           this.pricingRetryAfter = 0;

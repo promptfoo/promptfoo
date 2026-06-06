@@ -67,6 +67,11 @@ describe('pricingFetcher', () => {
       );
     });
 
+    it('should map Claude Opus 4.8 model IDs to the AWS Pricing API name', () => {
+      expect(mapBedrockModelIdToApiName('anthropic.claude-opus-4-8:0')).toBe('Claude Opus 4.8');
+      expect(mapBedrockModelIdToApiName('us.anthropic.claude-opus-4-8:0')).toBe('Claude Opus 4.8');
+    });
+
     it('should map Amazon Nova Micro model ID to API name', () => {
       expect(mapBedrockModelIdToApiName('amazon.nova-micro-v1:0')).toBe('Nova Micro');
     });
