@@ -14,7 +14,8 @@ const mockUseTableStore = vi.fn();
 const mockUseResultsViewSettingsStore = vi.fn();
 
 // Mock dependencies
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: vi.fn(),
   fetchUserEmail: vi.fn().mockResolvedValue(null),
   updateEvalAuthor: vi.fn(),

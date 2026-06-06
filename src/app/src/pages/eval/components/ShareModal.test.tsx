@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareModal from './ShareModal';
 
 // Mock the API utility
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiResult: vi.fn(),
 }));
 

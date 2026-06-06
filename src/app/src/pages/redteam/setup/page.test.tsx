@@ -33,7 +33,8 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
   callApiJson: vi.fn(
     async (

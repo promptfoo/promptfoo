@@ -48,7 +48,8 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('@app/utils/api', () => {
+vi.mock('@app/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@app/utils/api')>();
   class MockApiResponseError extends Error {
     constructor(
       public readonly status: number,
@@ -61,6 +62,7 @@ vi.mock('@app/utils/api', () => {
   }
 
   return {
+    ...actual,
     ApiResponseError: MockApiResponseError,
     callApi: vi.fn().mockImplementation(async (url: string) => {
       if (url === '/redteam/status') {

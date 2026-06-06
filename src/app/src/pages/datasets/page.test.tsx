@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DatasetsPage from './page';
 
 const callApiJsonMock = vi.fn();
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: (...args: any[]) => callApiJsonMock(...args),
 }));
 

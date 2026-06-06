@@ -34,7 +34,8 @@ const connectedApiHealth = {
   isLoading: false,
 } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>;
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
   callApiResult: vi.fn(
     async (route: { clientPath: string }, _schema: unknown, options?: RequestInit) => {

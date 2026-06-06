@@ -4,7 +4,8 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEmailVerification } from './useEmailVerification';
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiResult: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),

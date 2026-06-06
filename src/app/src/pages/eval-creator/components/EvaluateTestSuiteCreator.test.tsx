@@ -71,7 +71,8 @@ vi.mock('./InfoBox', () => ({
   InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
 }));
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: vi.fn(() => Promise.resolve({ success: true, data: { hasCustomConfig: false } })),
 }));
 

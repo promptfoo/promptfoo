@@ -6,7 +6,8 @@ import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
 // Mock the callApi utility
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
   callApiResult: vi.fn(
     async (route: { clientPath: string }, _schema: unknown, options?: RequestInit) => {

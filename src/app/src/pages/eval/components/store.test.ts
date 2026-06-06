@@ -20,10 +20,12 @@ vi.stubGlobal('crypto', {
   randomUUID: mockRandomUUID,
 });
 
-vi.mock('@app/utils/api', () => {
+vi.mock('@app/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@app/utils/api')>();
   const callApi = vi.fn();
 
   return {
+    ...actual,
     callApi,
     callApiResult: vi.fn(
       async (

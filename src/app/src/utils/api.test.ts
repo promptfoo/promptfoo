@@ -1,5 +1,5 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
-import { ApiRoutes, UserSchemas } from '@app/utils/api';
+import { ApiRoutes, ServerResponseSchemas, UserSchemas } from '@app/utils/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiResponseError,
@@ -140,6 +140,15 @@ describe('typed route API helpers', () => {
 
     expect(result).toEqual({ email: 'test@example.com' });
     expect(mockFetch).toHaveBeenCalledWith('/api/user/email', {});
+  });
+
+  it('uses standalone route paths without adding the API prefix', async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ status: 'ok', version: '1.0.0' })));
+
+    const result = await callApiJson(ApiRoutes.Health, ServerResponseSchemas.Health.Response);
+
+    expect(result).toEqual({ status: 'ok', version: '1.0.0' });
+    expect(mockFetch).toHaveBeenCalledWith('/health', {});
   });
 
   it('returns parsed error envelopes without requiring raw response casts', async () => {

@@ -7,9 +7,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
 import type { EvalSummary } from '@promptfoo/types';
 
-vi.mock('@app/utils/api', () => {
+vi.mock('@app/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@app/utils/api')>();
   const callApi = vi.fn();
   return {
+    ...actual,
     callApi,
     callApiJson: vi.fn(
       async (
@@ -20,12 +22,13 @@ vi.mock('@app/utils/api', () => {
           query?: URLSearchParams;
         } & RequestInit = {},
       ) => {
+        const { params, query, ...requestInit } = options;
         let path = route.clientPath;
-        for (const [name, value] of Object.entries(options.params ?? {})) {
+        for (const [name, value] of Object.entries(params ?? {})) {
           path = path.replace(`:${name}`, encodeURIComponent(String(value)));
         }
-        const query = options.query?.toString();
-        const response = await callApi(query ? `${path}?${query}` : path, options);
+        const search = query?.toString();
+        const response = await callApi(search ? `${path}?${search}` : path, requestInit);
         return response.json();
       },
     ),

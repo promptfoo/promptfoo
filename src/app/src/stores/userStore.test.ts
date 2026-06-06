@@ -3,7 +3,8 @@ import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: vi.fn(),
   callApiResult: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),

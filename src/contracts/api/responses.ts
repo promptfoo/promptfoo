@@ -106,7 +106,7 @@ export const ProviderResponseSchemas = {
         success: z.literal(true),
         data: z.object({ hasCustomConfig: z.boolean() }),
       }),
-      z.object({ error: z.string() }).passthrough(),
+      z.object({ success: z.literal(false).optional(), error: z.string() }).passthrough(),
     ]),
   },
   Test: {
@@ -163,13 +163,9 @@ export const ProviderResponseSchemas = {
           .object({
             sessionId: z.string().optional(),
             sessionSource: z.string().optional(),
-            request1: z
-              .object({ prompt: z.string(), sessionId: z.string().optional() })
-              .optional(),
+            request1: z.object({ prompt: z.string(), sessionId: z.string().optional() }).optional(),
             response1: z.unknown().optional(),
-            request2: z
-              .object({ prompt: z.string(), sessionId: z.string().optional() })
-              .optional(),
+            request2: z.object({ prompt: z.string(), sessionId: z.string().optional() }).optional(),
             response2: z.unknown().optional(),
             hasSessionIdTemplate: z.boolean().optional(),
             hasSessionParser: z.boolean().optional(),
@@ -182,9 +178,7 @@ export const ProviderResponseSchemas = {
   },
 } as const;
 
-export type TestSessionResponse = z.infer<
-  (typeof ProviderResponseSchemas.TestSession)['Response']
->;
+export type TestSessionResponse = z.infer<(typeof ProviderResponseSchemas.TestSession)['Response']>;
 
 const GeneratedTestCaseResponseSchema = z.object({
   prompt: z.string(),

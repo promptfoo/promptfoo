@@ -20,7 +20,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
   );
 };
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: vi.fn(),
 }));
 vi.mock('react-router-dom', async () => {

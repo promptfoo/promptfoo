@@ -86,13 +86,22 @@ type ApiResult<T> =
   | { ok: false; error: ApiResponseError; response: Response };
 
 function createRoutePath(
-  route: Pick<ApiRouteContract, 'clientPath'>,
+  route: Pick<ApiRouteContract, 'expressPath'>,
   params?: Record<string, string | number>,
   query?: URLSearchParams,
 ): string {
-  const path = buildApiPath(route, params);
+  const path = buildApiPath({ clientPath: route.expressPath }, params);
   const search = query?.toString();
   return search ? `${path}?${search}` : path;
+}
+
+async function callContractApi(
+  route: Pick<ApiRouteContract, 'expressPath'>,
+  params: Record<string, string | number> | undefined,
+  query: URLSearchParams | undefined,
+  requestInit: RequestInit,
+): Promise<Response> {
+  return fetch(`${getApiBaseUrl()}${createRoutePath(route, params, query)}`, requestInit);
 }
 
 async function readErrorResponse(response: Response): Promise<ApiResponseError> {
@@ -109,12 +118,12 @@ async function readErrorResponse(response: Response): Promise<ApiResponseError> 
 }
 
 export async function callApiResult<T>(
-  route: Pick<ApiRouteContract, 'clientPath'>,
+  route: Pick<ApiRouteContract, 'expressPath'>,
   schema: ZodType<T>,
   options: ApiRequestOptions = {},
 ): Promise<ApiResult<T>> {
   const { params, query, ...requestInit } = options;
-  const response = await callApi(createRoutePath(route, params, query), requestInit);
+  const response = await callContractApi(route, params, query, requestInit);
   if (!response.ok) {
     return { ok: false, error: await readErrorResponse(response), response };
   }
@@ -122,7 +131,7 @@ export async function callApiResult<T>(
 }
 
 export async function callApiJson<T>(
-  route: Pick<ApiRouteContract, 'clientPath'>,
+  route: Pick<ApiRouteContract, 'expressPath'>,
   schema: ZodType<T>,
   options: ApiRequestOptions = {},
 ): Promise<T> {
@@ -134,11 +143,11 @@ export async function callApiJson<T>(
 }
 
 export async function callApiEmpty(
-  route: Pick<ApiRouteContract, 'clientPath'>,
+  route: Pick<ApiRouteContract, 'expressPath'>,
   options: ApiRequestOptions = {},
 ): Promise<void> {
   const { params, query, ...requestInit } = options;
-  const response = await callApi(createRoutePath(route, params, query), requestInit);
+  const response = await callContractApi(route, params, query, requestInit);
   if (!response.ok) {
     throw await readErrorResponse(response);
   }

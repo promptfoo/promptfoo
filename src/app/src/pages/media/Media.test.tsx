@@ -8,7 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MediaItem } from './types';
 
 // Mock callApi and useTelemetry before importing the component
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
   ApiResponseError: class ApiResponseError extends Error {
     constructor(

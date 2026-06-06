@@ -28,7 +28,8 @@ vi.mock('@app/stores/evalConfig', () => ({
   }),
 }));
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: vi.fn(),
   fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
   updateEvalAuthor: vi.fn().mockResolvedValue({}),

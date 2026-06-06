@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApiJson: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
