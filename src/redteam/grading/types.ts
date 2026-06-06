@@ -1,5 +1,5 @@
 import type { TraceContextData } from '../../tracing/traceContext';
-import type { ImageOutput, ProviderResponse } from '../../types/providers';
+import type { GradingBlobResolver, ImageOutput, ProviderResponse } from '../../types/providers';
 import type { TraceData } from '../../types/tracing';
 import type { RedteamHistoryEntry } from '../types';
 
@@ -12,6 +12,8 @@ import type { RedteamHistoryEntry } from '../types';
 export interface RedteamGradingContext {
   providerResponse?: ProviderResponse;
   imageOutputs?: ImageOutput[];
+  /** Resolver for blob-backed image outputs, threaded from the evaluator. */
+  resolveImageBlob?: GradingBlobResolver;
   traceData?: TraceData | null;
   traceContext?: TraceContextData | null;
   traceSummary?: string;

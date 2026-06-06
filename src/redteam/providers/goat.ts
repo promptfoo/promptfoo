@@ -721,6 +721,7 @@ export default class GoatProvider implements ApiProvider {
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
+            ...(context?.resolveImageBlob ? { resolveImageBlob: context.resolveImageBlob } : {}),
           };
 
           // First try to get exfil data from provider response metadata (Playwright provider)

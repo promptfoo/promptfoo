@@ -593,6 +593,7 @@ export class CrescendoProvider implements ApiProvider {
             let gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+              ...(context?.resolveImageBlob ? { resolveImageBlob: context.resolveImageBlob } : {}),
             };
 
             // First try to get exfil data from provider response metadata (Playwright provider)

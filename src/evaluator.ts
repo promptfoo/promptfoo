@@ -975,6 +975,9 @@ function buildCallApiContext({
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
+    // Exposed so multi-turn redteam providers, which grade externalized (blob-backed)
+    // image responses inside their own loop, can resolve blobs for grading too.
+    resolveImageBlob,
   };
 
   if (evalId) {

@@ -76,6 +76,7 @@ export const handleRedteam = async ({
   renderedValue,
   providerResponse,
   assertionValueContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
@@ -116,6 +117,11 @@ export const handleRedteam = async ({
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
+  // Thread the blob resolver (injected by the evaluator) so redteam graders can resolve
+  // externalized image outputs, mirroring the standard llm-rubric assertion path.
+  if (providerCallContext?.resolveImageBlob) {
+    gradingContext.resolveImageBlob = providerCallContext.resolveImageBlob;
+  }
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);

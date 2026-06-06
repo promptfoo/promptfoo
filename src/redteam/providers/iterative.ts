@@ -534,6 +534,7 @@ export async function runRedteamConversation({
         let gradingContext: RedteamGradingContext | undefined = {
           providerResponse: targetResponse,
           ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+          ...(context?.resolveImageBlob ? { resolveImageBlob: context.resolveImageBlob } : {}),
         };
 
         // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
