@@ -290,7 +290,8 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    if (cloudConfig.isEnabled()) {
+    const isCloudEnabled = cloudConfig.isEnabled() === true;
+    if (isCloudEnabled) {
       if (eval_.author) {
         res.status(403).json({ error: 'Cloud eval authors cannot be changed once assigned' });
         return;
@@ -303,8 +304,17 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       }
     }
 
-    eval_.author = author || null;
-    await eval_.save();
+    const authorUpdated = await Eval.updateAuthor(id, author || null, {
+      onlyIfUnassigned: isCloudEnabled,
+    });
+    if (!authorUpdated) {
+      res.status(isCloudEnabled ? 403 : 404).json({
+        error: isCloudEnabled
+          ? 'Cloud eval authors cannot be changed once assigned'
+          : 'Eval not found',
+      });
+      return;
+    }
 
     // NOTE: Side effect. If user email is not set, set it to the author's email
     if (author && !getUserEmail()) {

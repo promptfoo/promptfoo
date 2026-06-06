@@ -680,6 +680,49 @@ describe('eval routes', () => {
       expect(updatedEval.author).toBe('cloud-user@example.com');
     });
 
+    it('should allow only one of two concurrent cloud claims', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const originalFindById = Eval.findById.bind(Eval);
+      let matchingReads = 0;
+      let releaseReads: () => void;
+      const bothRequestsReadUnassigned = new Promise<void>((resolve) => {
+        releaseReads = resolve;
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockImplementation(async (id) => {
+        const result = await originalFindById(id);
+        if (id === eval_.id && matchingReads < 2) {
+          matchingReads += 1;
+          if (matchingReads === 2) {
+            releaseReads();
+          }
+          await bothRequestsReadUnassigned;
+        }
+        return result;
+      });
+
+      const responses = await Promise.all([
+        api.patch(`/api/eval/${eval_.id}/author`).send({ author: 'cloud-user@example.com' }),
+        api.patch(`/api/eval/${eval_.id}/author`).send({ author: 'cloud-user@example.com' }),
+      ]);
+      findByIdSpy.mockRestore();
+
+      expect(responses.map(({ status }) => status).sort()).toEqual([200, 403]);
+      const rejectedResponse = responses.find(({ status }) => status === 403);
+      expect(rejectedResponse?.body).toHaveProperty(
+        'error',
+        'Cloud eval authors cannot be changed once assigned',
+      );
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('cloud-user@example.com');
+    });
+
     it('should reject claiming a cloud eval for a different email', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
       mockedGetUserEmail.mockReturnValue('cloud-user@example.com');

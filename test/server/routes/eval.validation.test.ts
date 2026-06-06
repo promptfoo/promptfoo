@@ -24,6 +24,7 @@ describe('Eval Routes - Zod Validation', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
   let mockFindById: ReturnType<typeof vi.fn>;
+  let mockUpdateAuthor: ReturnType<typeof vi.fn>;
   let mockSave: ReturnType<typeof vi.fn>;
   let mockGetMetadataKeysFromEval: ReturnType<typeof vi.fn>;
   let mockGetMetadataValuesFromEval: ReturnType<typeof vi.fn>;
@@ -51,12 +52,14 @@ describe('Eval Routes - Zod Validation', () => {
 
     // Setup mock methods
     mockFindById = vi.fn();
+    mockUpdateAuthor = vi.fn();
     mockSave = vi.fn();
     mockGetMetadataKeysFromEval = vi.fn();
     mockGetMetadataValuesFromEval = vi.fn();
 
     // Mock Eval.findById
     mockedEval.findById = mockFindById as any;
+    mockedEval.updateAuthor = mockUpdateAuthor as any;
 
     // Mock EvalQueries methods
     mockedEvalQueries.getMetadataKeysFromEval = mockGetMetadataKeysFromEval as any;
@@ -90,11 +93,10 @@ describe('Eval Routes - Zod Validation', () => {
       const mockEval = {
         id: 'test-id',
         author: 'old@example.com',
-        save: mockSave,
       };
 
       mockFindById.mockResolvedValue(mockEval);
-      mockSave.mockResolvedValue(undefined);
+      mockUpdateAuthor.mockResolvedValue(true);
 
       const response = await api.patch('/api/eval/test-id/author').send({
         author: 'new@example.com',
@@ -102,18 +104,19 @@ describe('Eval Routes - Zod Validation', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.message).toBe('Author updated successfully');
-      expect(mockEval.author).toBe('new@example.com');
+      expect(mockUpdateAuthor).toHaveBeenCalledWith('test-id', 'new@example.com', {
+        onlyIfUnassigned: false,
+      });
     });
 
     it('should return 200 and clear author when author is empty', async () => {
-      const mockEval: { id: string; author: string | null; save: ReturnType<typeof vi.fn> } = {
+      const mockEval: { id: string; author: string | null } = {
         id: 'test-id',
         author: 'old@example.com',
-        save: mockSave,
       };
 
       mockFindById.mockResolvedValue(mockEval);
-      mockSave.mockResolvedValue(undefined);
+      mockUpdateAuthor.mockResolvedValue(true);
 
       const response = await api.patch('/api/eval/test-id/author').send({
         author: '',
@@ -121,7 +124,9 @@ describe('Eval Routes - Zod Validation', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.message).toBe('Author cleared successfully');
-      expect(mockEval.author).toBeNull();
+      expect(mockUpdateAuthor).toHaveBeenCalledWith('test-id', null, {
+        onlyIfUnassigned: false,
+      });
     });
   });
 
