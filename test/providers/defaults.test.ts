@@ -482,6 +482,7 @@ describe('getDefaultProvidersWithInfo', () => {
       MISTRAL_API_KEY: undefined,
       OPENAI_API_KEY: undefined,
       PALM_API_KEY: undefined,
+      XAI_API_KEY: undefined,
     });
   });
 

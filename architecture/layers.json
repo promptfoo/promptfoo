@@ -1,30 +1,108 @@
 {
   "publicFacade": "src/index.ts",
   "leafLayers": ["contracts"],
+  "aliases": {
+    "@app": "src/app/src",
+    "@promptfoo": "src"
+  },
+  "ignoredRoots": ["src/__mocks__"],
+  "tierOrder": [
+    "contracts",
+    "legacy-contracts",
+    "legacy-runtime",
+    "node",
+    "providers",
+    "redteam",
+    "core",
+    "view-server",
+    "cli",
+    "app",
+    "facade"
+  ],
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",
-      "roots": ["src/index.ts"]
+      "roots": ["src/index.ts"],
+      "allowedDependencies": []
     },
     {
       "name": "app",
-      "roots": ["src/app/src"]
+      "roots": ["src/app"],
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ],
+      "allowedImportPaths": [
+        "src/contracts.ts",
+        "src/csv.ts",
+        "src/logger.ts",
+        "src/providers/constants.ts",
+        "src/providers/http.ts",
+        "src/redteam/commands/discover.ts",
+        "src/redteam/constants.ts",
+        "src/redteam/constants/metadata.ts",
+        "src/redteam/constants/strategies.ts",
+        "src/redteam/metrics.ts",
+        "src/redteam/plugins/policy/utils.ts",
+        "src/redteam/riskScoring.ts",
+        "src/redteam/sharedFrontend.ts",
+        "src/redteam/types.ts",
+        "src/tracing/store.ts",
+        "src/types/api/eval.ts",
+        "src/types/api/modelAudit.ts",
+        "src/types/email.ts",
+        "src/types/index.ts",
+        "src/types/modelAudit.ts",
+        "src/util/convertEvalResultsToTable.ts",
+        "src/util/database.ts",
+        "src/util/fileExtensions.ts",
+        "src/util/invariant.ts",
+        "src/util/objectUtils.ts",
+        "src/util/sanitizer.ts",
+        "src/util/text.ts",
+        "src/validators/providers.ts"
+      ]
     },
     {
       "name": "cli",
-      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"]
+      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"],
+      "allowedDependencies": [
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam",
+        "view-server"
+      ]
     },
     {
       "name": "view-server",
-      "roots": ["src/server"]
+      "roots": ["src/server"],
+      "allowedDependencies": [
+        "cli",
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ]
     },
     {
       "name": "redteam",
-      "roots": ["src/redteam"]
+      "roots": ["src/redteam"],
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
-      "roots": ["src/providers"]
+      "roots": ["src/providers"],
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "redteam"]
     },
     {
       "name": "node",
@@ -39,19 +117,83 @@
         "src/share.ts",
         "src/storage",
         "src/util"
-      ]
+      ],
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
     },
     {
       "name": "core",
-      "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"]
+      "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ]
     },
     {
       "name": "legacy-contracts",
-      "roots": ["src/types", "src/validators"]
+      "roots": ["src/types", "src/validators"],
+      "allowedDependencies": ["contracts", "legacy-runtime", "node", "providers", "redteam"]
     },
     {
       "name": "contracts",
-      "roots": ["src/contracts"]
+      "roots": ["src/contracts", "src/contracts.ts"],
+      "allowedDependencies": [],
+      "allowedExternal": ["zod"]
+    },
+    {
+      "name": "legacy-runtime",
+      "roots": [
+        "src/blobs",
+        "src/cliState.ts",
+        "src/codeScan",
+        "src/configTypes.ts",
+        "src/constants.ts",
+        "src/constants",
+        "src/csv.ts",
+        "src/envOverrides.ts",
+        "src/envars.ts",
+        "src/esm.ts",
+        "src/evaluator",
+        "src/evaluator.ts",
+        "src/evaluatorHelpers.ts",
+        "src/external",
+        "src/feedback.ts",
+        "src/googleSheets.ts",
+        "src/guardrails.ts",
+        "src/importers",
+        "src/integrations",
+        "src/logger.browser.ts",
+        "src/logger.ts",
+        "src/mainUtils.ts",
+        "src/microsoftSharepoint.ts",
+        "src/onboarding.ts",
+        "src/openapi",
+        "src/optimizer",
+        "src/progress",
+        "src/python",
+        "src/remoteGrading.ts",
+        "src/remoteScoring.ts",
+        "src/ruby",
+        "src/suggestions.ts",
+        "src/table.ts",
+        "src/telemetry.ts",
+        "src/telemetryEvents.ts",
+        "src/tracing",
+        "src/updates.ts",
+        "src/updates",
+        "src/version.ts"
+      ],
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "node",
+        "providers",
+        "redteam"
+      ]
     }
   ]
 }

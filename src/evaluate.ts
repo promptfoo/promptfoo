@@ -14,12 +14,19 @@ import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
+import {
+  buildConfiguredProviderMap,
+  isProviderTypeMap,
+  resolveConfiguredProviderReference,
+} from './util/gradingProvider';
+import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
+  EnvOverrides,
   EvaluateTestSuite,
+  GradingConfig,
   Scenario,
   TestCase,
   TestSuite,
@@ -195,15 +202,19 @@ function createSerializableUnifiedConfig(
   return config;
 }
 
-function buildProviderMap(providers: ApiProvider[]): Record<string, ApiProvider> {
-  const providerMap: Record<string, ApiProvider> = {};
-  for (const provider of providers) {
-    providerMap[provider.id()] = provider;
-    if (provider.label) {
-      providerMap[provider.label] = provider;
-    }
+async function resolveGradingProvider(
+  provider: GradingConfig['provider'],
+  providerMap: Record<string, ApiProvider>,
+  context: { env?: EnvOverrides; basePath?: string },
+): Promise<GradingConfig['provider']> {
+  if (!isProviderTypeMap(provider)) {
+    return isApiProvider(provider) ? provider : resolveProvider(provider, providerMap, context);
   }
-  return providerMap;
+
+  // A typed map can carry alternatives for assertion types that never run.
+  // Reuse configured provider instances, but leave all other entries for
+  // getGradingProvider() to instantiate only when its type is selected.
+  return resolveConfiguredProviderReference(provider, providerMap, context.env);
 }
 
 async function createRuntimeTestSuite(
@@ -249,7 +260,7 @@ async function resolveNestedProviders(
       constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
     ) {
-      constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.options.provider = await resolveGradingProvider(
         constructedTestSuite.defaultTest.options.provider,
         providerMap,
         { env: testSuiteConfig.env, basePath: cliState.basePath },
@@ -261,7 +272,7 @@ async function resolveNestedProviders(
 
   for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
+      test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
         env: testSuiteConfig.env,
         basePath: cliState.basePath,
       });
@@ -271,7 +282,7 @@ async function resolveNestedProviders(
         continue;
       }
       if (assertion.provider && !isApiProvider(assertion.provider)) {
-        assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+        assertion.provider = await resolveGradingProvider(assertion.provider, providerMap, {
           env: testSuiteConfig.env,
           basePath: cliState.basePath,
         });
@@ -282,7 +293,7 @@ async function resolveNestedProviders(
 
 async function maybeShareEval(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
-  evalResult: Awaited<ReturnType<typeof doEvaluate>>,
+  evalResult: Eval,
 ): Promise<void> {
   if (!testSuiteConfig.writeLatestResults || !testSuiteConfig.sharing) {
     return;
@@ -318,7 +329,7 @@ export async function evaluateWithSource(
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
-  const providerMap = buildProviderMap(loadedProviders);
+  const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
@@ -365,10 +376,15 @@ export async function evaluateWithSource(
 
   await maybeShareEval(testSuiteConfig, ret);
   if (testSuiteConfig.outputPath) {
-    if (typeof testSuiteConfig.outputPath === 'string') {
-      await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
-    } else if (Array.isArray(testSuiteConfig.outputPath)) {
-      await writeMultipleOutputs(testSuiteConfig.outputPath, evalRecord, null);
+    const outputPaths =
+      typeof testSuiteConfig.outputPath === 'string'
+        ? [testSuiteConfig.outputPath]
+        : testSuiteConfig.outputPath;
+    warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
+    // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
+    // case too — matching the doEval call site in src/node/doEval.ts.
+    if (outputPaths.length) {
+      await writeMultipleOutputs(outputPaths, evalRecord, null);
     }
   }
 

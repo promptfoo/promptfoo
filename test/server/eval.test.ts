@@ -6,7 +6,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
+import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -21,6 +21,13 @@ const defaultProviderInfo: DefaultProviderSelectionInfo = {
     grading: { id: 'anthropic:messages:claude-sonnet-4' },
   },
 };
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
 
 describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
@@ -65,6 +72,7 @@ describe('eval routes', () => {
     // Wait for all cleanups to complete
     await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
+    vi.resetAllMocks();
   });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
@@ -111,6 +119,32 @@ describe('eval routes', () => {
     payload.score = score;
     return payload;
   }
+
+  describe('POST /', () => {
+    it('returns 500 when v4 prompt persistence fails', async () => {
+      const createSpy = vi.spyOn(Eval, 'create');
+      vi.spyOn(Eval.prototype, 'addPrompts').mockRejectedValueOnce(
+        new Error('prompt persistence failed'),
+      );
+
+      const res = await api.post('/api/eval').send({
+        config: {
+          description: 'v4 save test',
+          tests: [],
+        },
+        prompts: [{ raw: 'hello', label: 'hello' }],
+        results: [],
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
+
+      const createdEval = await createSpy.mock.results[0]?.value;
+      if (createdEval) {
+        testEvalIds.add(createdEval.id);
+      }
+    });
+  });
 
   describe('post("/:evalId/results/:id/rating")', () => {
     it('rejects result ratings when the URL eval does not own the result', async () => {
@@ -194,6 +228,27 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.pass).toBe(true);
       expect(res.body.gradingResult?.score).toBe(1);
       expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
+    it('persists the rated result before notifying through the eval save', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const resultSaveSpy = vi.spyOn(EvalResult.prototype, 'save');
+      const evalSaveSpy = vi.spyOn(Eval.prototype, 'save');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      expect(resultSaveSpy).toHaveBeenCalledTimes(1);
+      expect(evalSaveSpy).toHaveBeenCalledTimes(1);
+      expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        evalSaveSpy.mock.invocationCallOrder[0],
+      );
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
@@ -488,7 +543,7 @@ describe('eval routes', () => {
 
       // Add eval results with metadata using direct database insert
       const { getDb } = await import('../../src/database');
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,

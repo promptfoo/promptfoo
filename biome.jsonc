@@ -28,7 +28,9 @@
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json",
       // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
-      "!!src/redteam/shared/runtimeTransform.ts"
+      "!!src/redteam/shared/runtimeTransform.ts",
+      "!!plugins/promptfoo/skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs",
+      "!!plugins/promptfoo/skills/promptfoo-redteam-setup/scripts/openapi-operation-to-redteam-config.mjs"
     ]
   },
   "formatter": {
@@ -329,6 +331,7 @@
         "src/redteam/**/*",
         "src/util/**/*",
         "src/commands/**/*",
+        "src/node/doEval.ts",
         "src/contracts/**/*",
         "src/types/**/*",
         "src/tracing/**/*"
