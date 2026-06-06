@@ -9,7 +9,9 @@ import {
   type Tracer,
   trace,
 } from '@opentelemetry/api';
+import logger from '../logger';
 
+import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
 
 const TRACER_NAME = 'promptfoo.providers';
@@ -496,4 +498,195 @@ export function getCurrentTraceId(): string | undefined {
 export function getCurrentSpanId(): string | undefined {
   const activeSpan = trace.getActiveSpan();
   return activeSpan?.spanContext().spanId;
+}
+
+/**
+ * Build a `chat` GenAISpanContext from the fields every provider shares.
+ *
+ * The promptfoo context fields (eval id, test index, prompt label, traceparent)
+ * and the request body are derived identically across providers; per-provider
+ * request parameters (max tokens, temperature, etc.) are passed via `request`.
+ */
+export function buildChatSpanContext(args: {
+  system: string;
+  model: string;
+  providerId: string;
+  prompt: string;
+  context?: CallApiContextParams;
+  request?: Pick<GenAISpanContext, 'maxTokens' | 'temperature' | 'topP' | 'stopSequences'>;
+}): GenAISpanContext {
+  const { system, model, providerId, prompt, context, request } = args;
+  return {
+    system,
+    operationName: 'chat',
+    model,
+    providerId,
+    evalId: context?.evaluationId || (context?.test?.metadata?.evaluationId as string | undefined),
+    testIndex: context?.test?.vars?.__testIdx as number | undefined,
+    promptLabel: context?.prompt?.label,
+    traceparent: context?.traceparent,
+    requestBody: prompt,
+    ...request,
+  };
+}
+
+/**
+ * Extract the standard GenAI response attributes (token usage, finish reason,
+ * cache hit, response body) from a ProviderResponse. Every field is optional
+ * and only emitted when present, so this is safe to share across providers
+ * whose responses populate different subsets.
+ */
+export function extractProviderResponseAttributes(response: ProviderResponse): GenAISpanResult {
+  const result: GenAISpanResult = {};
+  if (response.tokenUsage) {
+    // Preserve the full usage object (including completionDetails) so
+    // setGenAIResponseAttributes can emit reasoning / prediction / cache-detail
+    // token counts for reasoning models, not just the four top-level totals.
+    result.tokenUsage = { ...response.tokenUsage };
+  }
+  if (response.finishReason) {
+    result.finishReasons = [response.finishReason];
+  }
+  if (response.cached !== undefined) {
+    result.cacheHit = response.cached;
+  }
+  if (response.output !== undefined) {
+    result.responseBody =
+      typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+  }
+  return result;
+}
+
+/**
+ * Per-turn span bookkeeping shared by streaming agent providers. A provider's
+ * streaming state embeds these fields and hands the state to the turn-span
+ * helpers below, which own the span lifecycle while the provider supplies the
+ * usage attributes (which differ per API).
+ */
+export interface TurnSpanState {
+  /** Number of turns opened so far in this run (1-based for the active turn). */
+  turnCount: number;
+  /** The currently open `gen_ai.turn` span, if any. */
+  activeTurnSpan?: Span;
+  /** 1-based index of the currently open turn, stamped on child item spans. */
+  activeTurnIndex: number;
+}
+
+/**
+ * Open a `gen_ai.turn N` span on `state`, force-closing any still-open prior
+ * turn span with ERROR status first (so a never-completed turn is
+ * distinguishable). Span-creation failures are logged and leave no active span.
+ */
+export function openTurnSpan(
+  state: TurnSpanState,
+  opts: {
+    tracer: Tracer;
+    eventTime: number;
+    system: string;
+    attributes?: Attributes;
+    logLabel?: string;
+  },
+): void {
+  if (state.activeTurnSpan) {
+    try {
+      state.activeTurnSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: 'Turn span not properly closed before next turn started',
+      });
+      state.activeTurnSpan.end(opts.eventTime);
+    } catch {
+      // ignore
+    }
+    state.activeTurnSpan = undefined;
+  }
+  // Only advance the turn counter / active index once the span actually opens,
+  // so a (practically impossible) startSpan failure can't leave item spans
+  // tagged with a turn index that has no corresponding gen_ai.turn span.
+  const index = state.turnCount + 1;
+  try {
+    const span = opts.tracer.startSpan(`gen_ai.turn ${index}`, {
+      kind: SpanKind.INTERNAL,
+      startTime: opts.eventTime,
+      attributes: {
+        'gen_ai.turn.index': index,
+        'gen_ai.system': opts.system,
+        ...opts.attributes,
+      },
+    });
+    state.turnCount = index;
+    state.activeTurnIndex = index;
+    state.activeTurnSpan = span;
+  } catch (err) {
+    logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to start turn span: ${err}`);
+    state.activeTurnSpan = undefined;
+  }
+}
+
+/**
+ * Close the active `gen_ai.turn` span on `state`, applying any provider-supplied
+ * usage attributes and an OK/ERROR status. No-op when no turn span is open.
+ */
+export function closeTurnSpan(
+  state: TurnSpanState,
+  opts: {
+    eventTime?: number;
+    attributes?: Attributes;
+    errorMessage?: string;
+    logLabel?: string;
+  } = {},
+): void {
+  const span = state.activeTurnSpan;
+  if (!span) {
+    return;
+  }
+  try {
+    if (opts.attributes) {
+      for (const [key, value] of Object.entries(opts.attributes)) {
+        if (value !== undefined && value !== null) {
+          span.setAttribute(key, value);
+        }
+      }
+    }
+    span.setStatus(
+      opts.errorMessage
+        ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
+        : { code: SpanStatusCode.OK },
+    );
+    span.end(opts.eventTime);
+  } catch (err) {
+    logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to end turn span: ${err}`);
+  }
+  state.activeTurnSpan = undefined;
+}
+
+/**
+ * Emit a fire-and-forget `gen_ai.turn N` marker span (created and ended at the
+ * given timestamps). Used by providers whose agent loop has a natural turn
+ * boundary but no streaming span to bracket. Caller builds the full attribute
+ * set; status is OK unless `errorMessage` is provided.
+ */
+export function emitTurnMarkerSpan(opts: {
+  tracer: Tracer;
+  index: number;
+  startTime: number;
+  endTime: number;
+  attributes: Attributes;
+  errorMessage?: string;
+  logLabel?: string;
+}): void {
+  try {
+    const span = opts.tracer.startSpan(`gen_ai.turn ${opts.index}`, {
+      kind: SpanKind.INTERNAL,
+      startTime: opts.startTime,
+      attributes: opts.attributes,
+    });
+    span.setStatus(
+      opts.errorMessage
+        ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
+        : { code: SpanStatusCode.OK },
+    );
+    span.end(opts.endTime);
+  } catch (err) {
+    logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to emit turn span: ${err}`);
+  }
 }
