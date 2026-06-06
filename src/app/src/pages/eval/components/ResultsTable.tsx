@@ -254,6 +254,42 @@ export function useStableColumnSampleBody(
   return sample?.resultSetKey === resultSetKey ? sample.body : tableBody;
 }
 
+function useStableDynamicColumnSizes(
+  resultSetKey: string | null,
+  currentSizes: Record<string, number>,
+): Record<string, number> {
+  const [cachedSizes, setCachedSizes] = React.useState<{
+    resultSetKey: string | null;
+    sizes: Record<string, number>;
+  }>(() => ({ resultSetKey, sizes: currentSizes }));
+
+  useEffect(() => {
+    setCachedSizes((current) => {
+      if (current.resultSetKey !== resultSetKey) {
+        return { resultSetKey, sizes: currentSizes };
+      }
+
+      const newlyDiscoveredSizes = Object.fromEntries(
+        Object.entries(currentSizes).filter(
+          ([key]) => !Object.prototype.hasOwnProperty.call(current.sizes, key),
+        ),
+      );
+      if (Object.keys(newlyDiscoveredSizes).length === 0) {
+        return current;
+      }
+
+      return {
+        resultSetKey,
+        sizes: { ...current.sizes, ...newlyDiscoveredSizes },
+      };
+    });
+  }, [currentSizes, resultSetKey]);
+
+  return cachedSizes.resultSetKey === resultSetKey
+    ? { ...currentSizes, ...cachedSizes.sizes }
+    : currentSizes;
+}
+
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
   if (output == null) {
     return output;
@@ -1891,10 +1927,10 @@ function ResultsTable({
     [head.vars, injectVarName, columnSizeSampleBody],
   );
 
-  const transformDisplayVarColumnSizes = React.useMemo(() => {
-    return Object.fromEntries(
+  const currentDynamicColumnSizes = React.useMemo(() => {
+    const sizes = Object.fromEntries(
       transformDisplayVarKeys.map((varName) => [
-        varName,
+        `transform:${varName}`,
         estimateMetadataColumnSize(
           varName.replace(/^__/, ''),
           getMetadataColumnSizeValues(columnSizeSampleBody, tableBody, (row) => {
@@ -1906,22 +1942,36 @@ function ResultsTable({
         ),
       ]),
     ) as Record<string, number>;
-  }, [columnSizeSampleBody, tableBody, transformDisplayVarKeys]);
 
-  const descriptionColumnSize = React.useMemo(
-    () =>
-      estimateMetadataColumnSize(
+    if (hasDescriptionColumn) {
+      sizes.description = estimateMetadataColumnSize(
         'Description',
-        hasDescriptionColumn
-          ? getMetadataColumnSizeValues(
-              columnSizeSampleBody,
-              tableBody,
-              (row) => row.test.description || '',
-            )
-          : [],
-      ),
-    [columnSizeSampleBody, hasDescriptionColumn, tableBody],
+        getMetadataColumnSizeValues(
+          columnSizeSampleBody,
+          tableBody,
+          (row) => row.test.description || '',
+        ),
+      );
+    }
+
+    return sizes;
+  }, [columnSizeSampleBody, hasDescriptionColumn, tableBody, transformDisplayVarKeys]);
+  const stableDynamicColumnSizes = useStableDynamicColumnSizes(
+    columnSizeSampleKey,
+    currentDynamicColumnSizes,
   );
+  const transformDisplayVarColumnSizes = React.useMemo(
+    () =>
+      Object.fromEntries(
+        transformDisplayVarKeys.map((varName) => [
+          varName,
+          stableDynamicColumnSizes[`transform:${varName}`],
+        ]),
+      ) as Record<string, number>,
+    [stableDynamicColumnSizes, transformDisplayVarKeys],
+  );
+  const descriptionColumnSize =
+    stableDynamicColumnSizes.description ?? estimateMetadataColumnSize('Description', []);
 
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));

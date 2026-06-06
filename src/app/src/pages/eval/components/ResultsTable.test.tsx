@@ -5131,6 +5131,20 @@ describe('ResultsTable default column sizing', () => {
 
     expect(descriptionHeader).not.toBeNull();
     expect(descriptionWidth).toBeGreaterThan(160);
+
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'short' },
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.02} />);
+
+    const nextPageHeader = screen.getByText('Description').closest('th') as HTMLElement | null;
+    expect(Number.parseFloat(nextPageHeader?.style.width || '0')).toBe(descriptionWidth);
   });
 
   it('sizes transform columns from current rows when the stable sample lacks their keys', () => {
@@ -5184,6 +5198,31 @@ describe('ResultsTable default column sizing', () => {
 
     expect(transformHeader).not.toBeNull();
     expect(transformWidth).toBeGreaterThan(160);
+
+    table = {
+      ...table,
+      body: [
+        {
+          ...table.body[0],
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                transformDisplayVars: {
+                  __late: 'short',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.02} />);
+
+    const nextPageHeader = screen.getByText('late').closest('th') as HTMLElement | null;
+    expect(Number.parseFloat(nextPageHeader?.style.width || '0')).toBe(transformWidth);
   });
 });
 
