@@ -430,11 +430,12 @@ const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$/;
 function looksLikeUrlEncodedFormData(value: string): boolean {
   // Every non-empty separator-delimited chunk must be a `key=value` pair with
   // safe key characters. Values may contain raw spaces because some clients
-  // emit non-canonical form bodies instead of encoding them as `+` or `%20`.
-  // Empty chunks (leading/trailing/consecutive separators) are tolerated.
-  // The strict key shape keeps prose and shell commands containing `=` from
-  // being treated as form data.
-  if (!value.includes('=')) {
+  // emit non-canonical form bodies instead of encoding them as `+` or `%20`,
+  // but multiline/tab-delimited diagnostic text must not be collapsed into a
+  // single form field. Empty chunks (leading/trailing/consecutive separators)
+  // are tolerated. The strict key shape keeps prose and shell commands
+  // containing `=` from being treated as form data.
+  if (!value.includes('=') || /[\r\n\t]/.test(value)) {
     return false;
   }
   const segments = value.split(/[&;]/).filter((segment) => segment.length > 0);

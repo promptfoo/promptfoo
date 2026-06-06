@@ -1174,6 +1174,12 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).not.toContain('plain-secret');
     });
 
+    it('should not collapse multiline key-value diagnostic text into one form field', () => {
+      const text = 'token=short-value\nowner=user@example.com\n';
+
+      expect(sanitizeObject(text)).toBe(text);
+    });
+
     it('should not URL-encode prose strings that happen to contain "="', () => {
       // Regression: previously, any string containing `=` was parsed by
       // URLSearchParams and re-serialized, mangling prose like shell commands
