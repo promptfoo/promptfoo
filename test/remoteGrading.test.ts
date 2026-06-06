@@ -10,6 +10,19 @@ import { doRemoteGrading } from '../src/remoteGrading';
 
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
+function containsString(value: unknown, needle: string): boolean {
+  if (typeof value === 'string') {
+    return value.includes(needle);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsString(item, needle));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some((item) => containsString(item, needle));
+  }
+  return false;
+}
+
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
@@ -148,7 +161,7 @@ describe('doRemoteGrading', () => {
       body: { images: Array<{ data: string; mimeType: string }> };
     };
     expect(firstDebugPayload.body.images[0].data).toBe('[REDACTED_IMAGE_DATA]');
-    expect(firstDebugPayload.body.images[0].data).not.toContain('abc123');
+    expect(containsString(mockLoggerDebug.mock.calls, 'abc123')).toBe(false);
     expect(fetchWithCache).toHaveBeenCalledWith(
       'https://api.promptfoo.test/task',
       expect.objectContaining({
