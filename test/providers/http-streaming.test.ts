@@ -185,6 +185,8 @@ describe('HttpProvider streaming integration', () => {
     });
 
     it('should correctly identify single-chunk pseudo-streaming', async () => {
+      vi.useFakeTimers();
+
       const provider = new HttpProvider('https://api.example.com/chat', {
         config: {
           method: 'POST',
@@ -208,10 +210,14 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < mockChunks.length) {
-            return {
-              done: false,
-              value: new TextEncoder().encode(mockChunks[chunkIndex++]),
-            };
+            return new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({
+                  done: false,
+                  value: new TextEncoder().encode(mockChunks[chunkIndex++]),
+                });
+              }, 50);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -229,7 +235,7 @@ describe('HttpProvider streaming integration', () => {
 
       vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
 
-      const result = await provider.callApi('Test prompt');
+      const result = await settlePendingTimers(provider.callApi('Test prompt'));
 
       // Should have streaming metrics
       expect(result.streamingMetrics).toBeDefined();
@@ -237,10 +243,10 @@ describe('HttpProvider streaming integration', () => {
       // But multiChunkDelivery should be false (single chunk)
       expect(result.streamingMetrics?.multiChunkDelivery).toBe(false);
 
-      // TTFT and latencyMs should be similar for single-chunk
-      expect(Math.abs(result.streamingMetrics!.timeToFirstToken! - result.latencyMs!)).toBeLessThan(
-        50,
-      );
+      // With one delayed chunk and no later bytes, TTFT and total latency share
+      // the same deterministic clock boundary.
+      expect(result.streamingMetrics?.timeToFirstToken).toBe(50);
+      expect(result.latencyMs).toBe(50);
     });
 
     it('should ensure TTFT is always <= latencyMs', async () => {
