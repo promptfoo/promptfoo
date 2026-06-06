@@ -282,6 +282,10 @@ describe('ResponsesProcessor', () => {
         model: 'gpt-4.1',
         output: [
           {
+            type: 'reasoning',
+            summary: [{ text: 'The request should be refused.' }],
+          },
+          {
             type: 'message',
             role: 'assistant',
             content: [
@@ -299,10 +303,33 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toBe('I cannot help with that request.');
       expect(result.isRefusal).toBe(true);
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'The request should be refused.' },
+      ]);
       expect(result.metadata).toEqual({
         responseId: 'resp_refusal456',
         model: 'gpt-4.1',
       });
+    });
+
+    it('should suppress reasoning on refusals when showThinking is false', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'reasoning', summary: [{ text: 'Private refusal reasoning' }] },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'refusal', refusal: 'Request refused.' }],
+            },
+          ],
+        },
+        { showThinking: false },
+        false,
+      );
+
+      expect(result.output).toBe('Request refused.');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should handle mixed response types', async () => {

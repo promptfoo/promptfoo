@@ -32,7 +32,7 @@ import {
 } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -66,6 +66,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.functions, vars);
   }
 
   private async initializeMCP(): Promise<void> {
@@ -500,8 +504,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+            ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
         },
@@ -585,6 +588,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
+      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
+        message,
+        config.showThinking !== false,
+      );
 
       if (message.refusal) {
         return {
@@ -594,6 +601,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           isRefusal: true,
           ...(finishReason && { finishReason }),
+          ...(reasoning?.length && { reasoning }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
           metadata: {
             http: {
@@ -614,6 +622,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           isRefusal: true,
           finishReason: FINISH_REASON_MAP.content_filter,
+          ...(reasoning?.length && { reasoning }),
           guardrails: {
             flagged: true,
           },
@@ -627,10 +636,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
-        message,
-        config.showThinking !== false,
-      );
       let output: string | object = '';
 
       if (message.content && (message.function_call || message.tool_calls)) {

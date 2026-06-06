@@ -42,6 +42,31 @@ import type { AnthropicMessageOptions } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
 
+type AnthropicMessageStream = {
+  finalMessage(): Promise<Anthropic.Messages.Message>;
+  on?(
+    event: 'streamEvent',
+    listener: (event: Anthropic.Messages.MessageStreamEvent) => void,
+  ): unknown;
+};
+
+async function finalMessageWithStreamedStopDetails(
+  stream: AnthropicMessageStream,
+): Promise<Anthropic.Messages.Message> {
+  let streamedStopDetails: Anthropic.Messages.RefusalStopDetails | null | undefined;
+
+  stream.on?.('streamEvent', (event) => {
+    if (event.type === 'message_delta' && event.delta.stop_details != null) {
+      streamedStopDetails = event.delta.stop_details;
+    }
+  });
+
+  const finalMessage = await stream.finalMessage();
+  return finalMessage.stop_details == null && streamedStopDetails != null
+    ? { ...finalMessage, stop_details: streamedStopDetails }
+    : finalMessage;
+}
+
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
     return undefined;
@@ -359,7 +384,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         const stream = await this.anthropic.messages.stream(nextParams, {
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
         });
-        response = await stream.finalMessage();
+        response = await finalMessageWithStreamedStopDetails(stream);
       } else {
         response = (await this.anthropic.messages.create(nextParams, {
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
@@ -827,7 +852,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       let initialMessage: Anthropic.Messages.Message;
       if (shouldStream) {
         const stream = await this.anthropic.messages.stream(params, requestOptions);
-        initialMessage = await stream.finalMessage();
+        initialMessage = await finalMessageWithStreamedStopDetails(stream);
         logger.debug(`Anthropic Messages API streaming complete`, {
           finalMessage: getMessagesResponseMetadata(initialMessage),
         });

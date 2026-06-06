@@ -38,6 +38,7 @@ This directory contains several example configurations for different Bedrock mod
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
+- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI frontier models (GPT-5.5 and GPT-5.4) with native reasoning effort
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
@@ -239,6 +240,33 @@ Run the OpenAI example with:
 
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
+```
+
+## OpenAI Frontier Models Example
+
+The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenAI's GPT-5.x frontier models on Bedrock:
+
+- **openai.gpt-5.5** - Flagship frontier reasoning model (available in `us-east-2`)
+- **openai.gpt-5.4** - Frontier reasoning model (available in `us-east-2` and `us-west-2`)
+
+### Key Features
+
+- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (the mantle endpoint), not `InvokeModel`. promptfoo routes `bedrock:openai.gpt-5.x` there automatically, so output matches the `openai:responses` provider.
+- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+
+  ```bash
+  export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
+  ```
+
+- **Native Reasoning Effort**: `reasoning_effort` supports `none`, `low`, `medium`, `high`, and `xhigh` (`minimal` is not supported by these Bedrock models).
+- **Region-gated**: Request model access in a supported region before running.
+
+These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.
+
+Run the frontier example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-frontier.yaml
 ```
 
 ## New Converse API Features (SDK 3.943+)

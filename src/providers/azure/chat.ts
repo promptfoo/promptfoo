@@ -104,6 +104,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // Microsoft Phi reasoning models
       lowerName.includes('phi-4-reasoning') ||
       lowerName.includes('phi-4-mini-reasoning') ||
+      // Microsoft MAI reasoning models (MAI-Thinking-1, MAI-DS-R1 / DeepSeek-R1
+      // lineage). MAI-Code-* are fast coding models and use the standard chat
+      // surface, so they're intentionally excluded here.
+      lowerName.includes('mai-thinking') ||
+      lowerName.includes('mai-ds-r1') ||
+      lowerName.includes('mai-reasoning') ||
       // xAI Grok reasoning models
       (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );

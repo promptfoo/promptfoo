@@ -2189,6 +2189,45 @@ describe('AIStudioChatProvider', () => {
         ]);
       });
 
+      it('should accumulate reasoning from earlier streaming chunks', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'test-key' },
+        });
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: [
+            {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      { text: 'First thought.', thought: true, thoughtSignature: 'sig-first' },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
+              candidates: [{ content: { parts: [{ text: 'Final answer.' }] } }],
+              usageMetadata: {
+                promptTokenCount: 10,
+                candidatesTokenCount: 3,
+                totalTokenCount: 20,
+                thoughtsTokenCount: 7,
+              },
+            },
+          ],
+          cached: false,
+        } as any);
+
+        const response = await provider.callApi('test prompt');
+
+        expect(response.output).toBe('Final answer.');
+        expect(response.reasoning).toEqual([
+          { type: 'thought', thought: 'First thought.', signature: 'sig-first' },
+        ]);
+      });
+
       it('should track thinking tokens when present in response', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
           config: {

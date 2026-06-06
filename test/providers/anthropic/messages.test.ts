@@ -14,6 +14,14 @@ import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
+type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
+  output_tokens_details?: { thinking_tokens?: number } | null;
+};
+
+type AnthropicTestMessage = Anthropic.Messages.Message & {
+  usage: AnthropicUsageWithOutputDetails;
+};
+
 const mcpMocks = vi.hoisted(() => {
   const initialize = vi.fn();
   const cleanup = vi.fn();
@@ -2329,7 +2337,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      const mockFinalMessage: Anthropic.Messages.Message = {
+      const mockFinalMessage: AnthropicTestMessage = {
         content: [{ type: 'text', text: '{"status":"complete"}', citations: [] }],
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
@@ -3104,17 +3112,25 @@ describe('AnthropicMessagesProvider', () => {
         id: 'test-id',
         role: 'assistant',
         stop_reason: 'refusal',
-        stop_details: {
-          type: 'refusal',
-          category: 'bio',
-          explanation: null,
-        },
+        stop_details: null,
         stop_sequence: null,
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 0 },
       } as unknown as Anthropic.Messages.Message;
       vi.spyOn(provider.anthropic.messages, 'stream').mockReturnValue({
         finalMessage: vi.fn().mockResolvedValue(refusalResponse),
+        on: vi.fn((_event, listener) => {
+          listener({
+            type: 'message_delta',
+            delta: {
+              stop_details: {
+                type: 'refusal',
+                category: 'bio',
+                explanation: null,
+              },
+            },
+          } as Anthropic.Messages.MessageStreamEvent);
+        }),
       } as any);
 
       const result = await provider.callApi('Dangerous request');

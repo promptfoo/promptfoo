@@ -83,6 +83,8 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(requestHeaders['X-OpenAI-Originator']).toBe('promptfoo');
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
@@ -357,7 +359,10 @@ describe('OpenAI Provider', () => {
         data: {
           choices: [
             {
-              message: { refusal: 'Content policy violation' },
+              message: {
+                refusal: 'Content policy violation',
+                reasoning_content: 'Reasoning before refusal',
+              },
               finish_reason: 'stop',
             },
           ],
@@ -378,6 +383,9 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Content policy violation');
       expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0, numRequests: 1 });
       expect(result.isRefusal).toBe(true);
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Reasoning before refusal' },
+      ]);
       expect(result.guardrails).toEqual({ flagged: true });
     });
 
@@ -429,7 +437,7 @@ describe('OpenAI Provider', () => {
         data: {
           choices: [
             {
-              message: { content: null },
+              message: { content: null, reasoning: 'Reasoning before filtering' },
               finish_reason: 'content_filter',
             },
           ],
@@ -450,6 +458,9 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Content filtered by provider');
       expect(result.isRefusal).toBe(true);
       expect(result.finishReason).toBe('content_filter');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Reasoning before filtering' },
+      ]);
       // OpenAI doesn't specify if it's input or output filtering, so we only set flagged
       expect(result.guardrails).toEqual({
         flagged: true,

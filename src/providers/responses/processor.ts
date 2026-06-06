@@ -119,6 +119,7 @@ export class ResponsesProcessor {
 
       const processedOutput = await this.processOutput(data.output, context);
       const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
+      const showThinking = requestConfig.showThinking !== false;
 
       if (processedOutput.isRefusal) {
         return {
@@ -129,6 +130,9 @@ export class ResponsesProcessor {
           ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
+          ...(processedOutput.reasoning?.length && showThinking
+            ? { reasoning: processedOutput.reasoning }
+            : {}),
         };
       }
 
@@ -145,9 +149,6 @@ export class ResponsesProcessor {
           logger.error(`Failed to parse JSON output: ${error}`);
         }
       }
-
-      // Only include reasoning if showThinking is not explicitly false (per-call config takes priority)
-      const showThinking = requestConfig.showThinking !== false;
 
       const result: ProviderResponse = {
         output: finalOutput,

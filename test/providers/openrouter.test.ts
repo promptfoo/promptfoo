@@ -14,7 +14,7 @@ vi.mock('../../src/util', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/util/fetch');
+vi.mock('../../src/util/fetch/index');
 
 describe('OpenRouter', () => {
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);

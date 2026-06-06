@@ -94,6 +94,7 @@ providers:
 - `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
+- `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.5) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
 
 Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
 
@@ -128,6 +129,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                   |
 | **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                        |
 | **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                   |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                          |
 | **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                   |
 | **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                  |
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                               |
@@ -176,6 +178,67 @@ The Responses API supports Azure deployments backed by current Azure OpenAI resp
 - **Deep Research Models**: `o3-deep-research`, `o4-mini-deep-research`
 
 Use your Azure deployment name in promptfoo, even if it differs from the underlying model ID.
+
+### Reasoning Effort, Tokens, and Summaries
+
+As described in Microsoft's
+[Azure reasoning models documentation](https://learn.microsoft.com/azure/foundry/openai/how-to/reasoning#reasoning-summary),
+Azure does not expose a reasoning model's private chain-of-thought. Configuring
+`reasoning_effort` controls how much reasoning work the model may perform; it does not
+make hidden reasoning steps visible.
+
+| Provider type     | Reasoning request behavior                                                                                                                | Visible promptfoo output                                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `azure:chat`      | For reasoning deployments, sends `reasoning_effort` and `max_completion_tokens`; set `isReasoningModel: true` for aliases                 | Assistant `message.content`. If Azure reports `completion_tokens_details.reasoning_tokens`, promptfoo records that count in `tokenUsage.completionDetails.reasoning`. |
+| `azure:responses` | For reasoning deployments, maps `reasoning_effort` to `reasoning.effort` and uses `max_output_tokens`; set `isReasoningModel` for aliases | Assistant output plus an Azure-provided reasoning **summary** when the response contains a non-empty `output` reasoning item. It is not raw chain-of-thought.         |
+
+For `azure:responses`, the current provider exposes Azure's summary request through
+`passthrough.reasoning`. Keep `effort` and `summary` in that same raw object because
+`passthrough` supplies the final Responses API field:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Azure reasoning output surfaces
+
+prompts:
+  - 'Which is larger: 9.11 or 9.9? Answer with a brief explanation.'
+
+providers:
+  - id: azure:chat:my-o4-mini-deployment
+    label: azure-chat-final-answer
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      isReasoningModel: true
+      reasoning_effort: 'medium'
+      max_completion_tokens: 2000
+
+  - id: azure:responses:my-gpt-5-deployment
+    label: azure-responses-summary
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      isReasoningModel: true
+      max_output_tokens: 2000
+      passthrough:
+        reasoning:
+          effort: 'medium'
+          summary: 'auto'
+
+tests:
+  - assert:
+      - type: contains
+        value: '9.9'
+```
+
+Set `AZURE_API_KEY`, replace the deployment names and `apiHost`, then run:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o output.json
+```
+
+If Azure returns a Responses API reasoning summary, promptfoo includes it in normalized
+output as `Reasoning: <summary>` before the assistant answer and preserves the API
+response in `raw`. A returned reasoning token count without summary text indicates
+hidden reasoning usage, not missing chain-of-thought output.
 
 ### Responses API Features
 
@@ -321,8 +384,9 @@ providers:
   - id: azure:responses:o3-mini-deployment
     label: azure-reasoning
     config:
+      isReasoningModel: true
       reasoning_effort: medium
-      max_completion_tokens: 4000
+      max_output_tokens: 4000
 
 prompts:
   - 'Analyze this data and provide insights: {{data}}'
@@ -700,10 +764,11 @@ These properties can be set under the provider `config` key:
 | Name                  | Description                                                                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
+| isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.     |
 | isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                         |
-| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                         |
+| max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                   |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`.         |
 | showThinking          | Whether to return provider reasoning content in the response `reasoning` field. Set to `false` to omit it.                                      |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
@@ -720,13 +785,18 @@ These properties can be set under the provider `config` key:
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
-Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-mini`. These models operate differently from standard models with specific requirements:
+For `azure:chat` and `azure:completion`, Azure OpenAI reasoning models like `o1`, `o3`,
+`o3-mini`, and `o4-mini` operate differently from standard models with specific
+requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
 2. They don't support `temperature` (it's ignored)
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
 
-Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, you must explicitly set the `isReasoningModel` flag to `true` in your configuration when using reasoning models. This works with both chat and completion endpoints:
+For `azure:responses` reasoning deployments, use `max_output_tokens` and the Responses
+configuration documented above.
+
+Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for aliases or deployment names that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. The explicit configuration below works with chat and completion endpoints:
 
 ```yaml
 # For chat endpoints
@@ -782,13 +852,21 @@ tests:
 
 ### Troubleshooting
 
-If you encounter this error when using reasoning models:
+If you encounter this error with `azure:chat` or `azure:completion`:
 
 ```
 API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
 ```
 
-This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
+For a custom or aliased reasoning deployment, this commonly means Promptfoo is not
+treating it as a reasoning model because `isReasoningModel: true` is missing. Update
+your config as shown above.
+
+For `azure:responses`, use `max_output_tokens`, not `max_completion_tokens`. If you
+request a reasoning summary and only see a final answer or a reasoning token count,
+check that the Azure deployment supports Responses reasoning summaries and returned a
+non-empty reasoning `summary` item. Promptfoo cannot expose hidden reasoning tokens as
+text.
 
 ## Using Vision Models
 
@@ -989,6 +1067,74 @@ defaultTest:
 ```
 
 Adjust `reasoning_effort` to control response quality vs. speed: `low` for faster responses, `medium` for balanced performance (default), or `high` for more thorough reasoning on complex tasks.
+
+## Using Microsoft MAI Models
+
+Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
+
+- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
+- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
+
+Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
+
+```bash
+az cognitiveservices account deployment create \
+  --name <RESOURCE> --resource-group <RG> \
+  --deployment-name mai-image-2-5 \
+  --model-name MAI-Image-2.5 --model-format Microsoft \
+  --model-version 2026-06-02 --sku-name GlobalStandard --sku-capacity 1
+
+export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
+export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
+```
+
+### Image generation (`azure:image`)
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: azure:image:mai-image-2-5
+    config:
+      # `model` is used only for cost reporting — Azure deployment names can't
+      # contain the dot in "MAI-Image-2.5", so name the model id explicitly.
+      model: MAI-Image-2.5
+      width: 1024 # min 768; width * height must be <= 1,048,576
+      height: 1024
+
+tests:
+  - vars:
+      prompt: A photorealistic red cube on a clean white background, studio lighting
+    assert:
+      # The image is returned as a base64 PNG, which promptfoo stores as a blob ref.
+      - type: javascript
+        value: output.startsWith('promptfoo://blob/') || output.startsWith('data:image/')
+```
+
+The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage and per-image cost from the API's token counts. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+
+To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. See the [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) for a complete vision-grading config.
+
+### Reasoning chat (`azure:chat`)
+
+MAI text models run through the standard `azure:chat` provider. **Availability is limited today:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and aren't yet in the public CLI catalog (checked via `az cognitiveservices model list` in eastus, westus, swedencentral, and eastus2 — as of this writing). promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` as soon as your subscription can deploy them. The example below is forward-looking.
+
+promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:mai-thinking-1
+    config:
+      apiHost: 'your-resource.services.ai.azure.com'
+      max_completion_tokens: 2048
+      reasoning_effort: 'medium' # forwarded as-is; honored only if the deployment supports it
+      # omitDefaults: true       # uncomment if the deployment rejects top_p / penalties
+```
+
+:::note
+The MAI image models are in **Preview**, and the MAI text models roll out region-by-region (`MAI-DS-R1` deprecated; `MAI-Thinking-1` / `MAI-Code-1-Flash` private preview). Run `az cognitiveservices model list --location <region>` to see what your subscription can actually deploy.
+:::
 
 ## Assistants
 
