@@ -201,9 +201,7 @@ describe('JSON export with improved error handling', () => {
         await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
 
         const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
-        expect(parsed.results.results[0].response.metadata.blobUris).toEqual([
-          `promptfoo://blob/${hash}`,
-        ]);
+        expect(parsed.results.results[0].response.metadata.blobUris).toBeUndefined();
         expect(parsed).not.toHaveProperty('blobAssets');
         expect(getBlobSpy).not.toHaveBeenCalled();
       } finally {

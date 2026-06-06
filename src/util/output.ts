@@ -362,12 +362,80 @@ const isEvaluateTableOutput = (
   output: EvaluateTableOutput | null | undefined,
 ): output is EvaluateTableOutput => output != null;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stripConfigPrompt(prompt: unknown): unknown {
+  if (typeof prompt === 'string') {
+    return '[prompt stripped]';
+  }
+  if (Array.isArray(prompt)) {
+    return prompt.map(stripConfigPrompt);
+  }
+  if (!isRecord(prompt)) {
+    return prompt;
+  }
+
+  const isPromptObject = ['id', 'raw', 'template', 'display', 'label'].some((key) => key in prompt);
+  if (isPromptObject) {
+    return {
+      ...prompt,
+      ...('raw' in prompt && { raw: '[prompt stripped]' }),
+      ...('template' in prompt && { template: '[prompt stripped]' }),
+      ...('display' in prompt && { display: '[prompt stripped]' }),
+      ...('label' in prompt && { label: '[prompt stripped]' }),
+    };
+  }
+
+  return Object.fromEntries(
+    Object.entries(prompt).map(([key, value]) => [key, stripConfigPrompt(value)]),
+  );
+}
+
+function stripConfigTestVars(test: unknown): unknown {
+  if (Array.isArray(test)) {
+    return test.map(stripConfigTestVars);
+  }
+  if (!isRecord(test)) {
+    return test;
+  }
+  return 'vars' in test ? { ...test, vars: undefined } : test;
+}
+
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(config, {
+  const sanitized = sanitizeObject(config, {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
+  const projected = sanitized as Record<string, unknown>;
+
+  if (getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) && 'prompts' in projected) {
+    projected.prompts = stripConfigPrompt(projected.prompts);
+  }
+  if (getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false)) {
+    if ('tests' in projected) {
+      projected.tests = stripConfigTestVars(projected.tests);
+    }
+    if ('defaultTest' in projected) {
+      projected.defaultTest = stripConfigTestVars(projected.defaultTest);
+    }
+    if (Array.isArray(projected.scenarios)) {
+      projected.scenarios = projected.scenarios.map((scenario) => {
+        if (!isRecord(scenario)) {
+          return scenario;
+        }
+        return {
+          ...scenario,
+          ...('config' in scenario && { config: stripConfigTestVars(scenario.config) }),
+          ...('tests' in scenario && { tests: stripConfigTestVars(scenario.tests) }),
+        };
+      });
+    }
+  }
+
+  return sanitized;
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
@@ -485,8 +553,8 @@ function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummar
   summary: T,
 ): T {
   if (Array.isArray(summary.results)) {
-    summary.results = (summary.results as object[]).map((result) =>
-      sanitizeResultForJsonlArtifact(result),
+    summary.results = (summary.results as unknown[]).map((result) =>
+      isRecord(result) ? sanitizeResultForJsonlArtifact(result) : result,
     ) as T['results'];
   }
   if ('prompts' in summary && Array.isArray(summary.prompts)) {

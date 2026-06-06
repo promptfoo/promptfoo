@@ -52,7 +52,7 @@ function projectProviderResponse(
     return response;
   }
 
-  const projectedResponse = options.stripMetadata
+  const projectedResponse: ProviderResponse = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
@@ -1128,6 +1128,7 @@ export default class EvalResult {
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
+      stripPrompt: shouldStripPromptText,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);

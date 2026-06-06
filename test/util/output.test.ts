@@ -485,6 +485,82 @@ describe('writeOutput', () => {
     }
   });
 
+  it('honors prompt and test-var stripping in the exported config', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({
+        prompts: [
+          'inline prompt secret',
+          {
+            id: 'prompt-id',
+            raw: 'raw prompt secret',
+            label: 'prompt label secret',
+          },
+        ],
+        tests: [
+          { vars: { customer: 'test-var secret' }, assert: [{ type: 'contains', value: 'ok' }] },
+        ],
+        defaultTest: { vars: { defaultCustomer: 'default-var secret' } },
+        scenarios: [
+          {
+            config: [{ vars: { scenarioDefault: 'scenario-config secret' } }],
+            tests: [{ vars: { scenarioCustomer: 'scenario-test secret' } }],
+          },
+        ],
+      });
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const config = JSON.parse(written).config;
+      expect(config.prompts).toEqual([
+        '[prompt stripped]',
+        {
+          id: 'prompt-id',
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        },
+      ]);
+      expect(config.tests[0].vars).toBeUndefined();
+      expect(config.defaultTest.vars).toBeUndefined();
+      expect(config.scenarios[0].config[0].vars).toBeUndefined();
+      expect(config.scenarios[0].tests[0].vars).toBeUndefined();
+      expect(written).not.toContain('inline prompt secret');
+      expect(written).not.toContain('raw prompt secret');
+      expect(written).not.toContain('prompt label secret');
+      expect(written).not.toContain('test-var secret');
+      expect(written).not.toContain('default-var secret');
+      expect(written).not.toContain('scenario-config secret');
+      expect(written).not.toContain('scenario-test secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves malformed legacy summary rows instead of crashing export', async () => {
+    const eval_ = new Eval({});
+    const summary = await eval_.toEvaluateSummary();
+    (summary as { results: unknown[] }).results = [
+      null,
+      'legacy-row',
+      { success: true, response: {} },
+    ];
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(summary);
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(JSON.parse(written).results.results).toEqual([
+      null,
+      'legacy-row',
+      expect.objectContaining({ success: true }),
+    ]);
+  });
+
   it.each([
     {
       extension: 'json',
