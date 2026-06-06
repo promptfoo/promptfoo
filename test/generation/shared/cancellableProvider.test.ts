@@ -4,6 +4,29 @@ import { withAbortSignal } from '../../../src/generation/shared/cancellableProvi
 import type { ApiProvider } from '../../../src/types/providers';
 
 describe('withAbortSignal', () => {
+  it('returns the original provider when no signal is supplied', () => {
+    const provider = {
+      id: () => 'test-provider',
+      callApi: vi.fn(),
+    } as ApiProvider;
+
+    expect(withAbortSignal(provider, undefined)).toBe(provider);
+  });
+
+  it('preserves provider properties and binds methods to the provider', () => {
+    const provider = {
+      config: { label: 'bound-provider' },
+      id() {
+        return this.config.label;
+      },
+      callApi: vi.fn(),
+    } as ApiProvider;
+    const wrapped = withAbortSignal(provider, new AbortController().signal);
+
+    expect(wrapped.config).toBe(provider.config);
+    expect(wrapped.id()).toBe('bound-provider');
+  });
+
   it('forwards the job signal and stops calls after cancellation', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'ok' });
     const provider = {
@@ -19,8 +42,13 @@ describe('withAbortSignal', () => {
       abortSignal: controller.signal,
     });
 
+    await cancellable.callApi('without-options');
+    expect(callApi).toHaveBeenLastCalledWith('without-options', undefined, {
+      abortSignal: controller.signal,
+    });
+
     controller.abort();
     await expect(cancellable.callApi('second')).rejects.toThrow();
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi).toHaveBeenCalledTimes(2);
   });
 });
