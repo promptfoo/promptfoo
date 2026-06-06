@@ -406,10 +406,13 @@ export async function resolveBlobBackedImageOutputs(
     );
   }
 
+  // Compute each image's blob hash once (it scans image.data via regex) and reuse below.
+  const hashedImages = images.map((image) => ({ image, hash: getBlobHashForImage(image) }));
+
   // (b) Reject by DECLARED blobRef.sizeBytes BEFORE reading (per-image + cumulative).
   let declaredBlobBytes = 0;
-  for (const image of images) {
-    if (!getBlobHashForImage(image)) {
+  for (const { image, hash } of hashedImages) {
+    if (!hash) {
       continue;
     }
     const sizeBytes = typeof image.blobRef?.sizeBytes === 'number' ? image.blobRef.sizeBytes : 0;
@@ -429,10 +432,9 @@ export async function resolveBlobBackedImageOutputs(
   // (c) Read + per-image actual-size check (bounded concurrency), WITHOUT encoding yet.
   type ResolvedSlot = { image: ImageOutput; blob?: { data: Buffer; mimeType?: string } };
   const slots: ResolvedSlot[] = await async.mapLimit(
-    images,
+    hashedImages,
     BLOB_READ_CONCURRENCY,
-    async (image: ImageOutput): Promise<ResolvedSlot> => {
-      const hash = getBlobHashForImage(image);
+    async ({ image, hash }: { image: ImageOutput; hash?: string }): Promise<ResolvedSlot> => {
       if (!hash) {
         return { image };
       }
