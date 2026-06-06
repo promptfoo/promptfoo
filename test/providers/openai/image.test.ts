@@ -58,6 +58,7 @@ describe('OpenAiImageProvider', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             Authorization: 'Bearer test-key',
+            'X-OpenAI-Originator': 'promptfoo',
           }),
           body: expect.stringContaining('"prompt":"Generate a cat"'),
         }),
