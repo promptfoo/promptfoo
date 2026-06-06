@@ -1,5 +1,7 @@
-import { countAssertionPassFail } from '../../../assertions/componentResults';
-import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+import {
+  countAssertionPassFail,
+  ResultFailureReason as ResultFailureReasonEnum,
+} from '../../../types/index';
 import { truncateText } from './utils';
 
 import type {

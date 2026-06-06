@@ -5,7 +5,11 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
+import {
+  isSamplingParamsDeprecatedClaudeModel,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -84,10 +88,13 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     type: 'any' | 'auto' | 'tool';
     name?: string;
   };
-  thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
-  };
+  thinking?:
+    | {
+        type: 'enabled';
+        budget_tokens: number;
+      }
+    | { type: 'adaptive' }
+    | { type: 'disabled' };
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -384,7 +391,30 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   stop?: string[];
+  /**
+   * Reasoning depth for the open-weight gpt-oss models (served via InvokeModel), passed
+   * through as the native `reasoning_effort` request field. gpt-oss accepts `low`, `medium`,
+   * and `high` (the Harmony runtime rejects `none`); `minimal` is not supported. The value is
+   * forwarded as-is so the Bedrock API validates it. Frontier gpt-5.x models do not use this
+   * handler — they go through the OpenAI Responses provider (see openaiResponses.ts).
+   */
   reasoning_effort?: 'low' | 'medium' | 'high';
+  /**
+   * Controls how the `<reasoning>...</reasoning>` block that the open-weight gpt-oss models
+   * prepend to the response content via `InvokeModel` is surfaced. (Frontier gpt-5.x models
+   * do not use this handler — they go through the OpenAI Responses provider, which returns the
+   * final answer only.)
+   *
+   * - **unset (default):** the model output is returned verbatim (reasoning block included).
+   *   An eval framework should not hide application-visible content by default, so the raw
+   *   response stays available to assertions and red-team graders.
+   * - **`true`:** the reasoning is surfaced in the `Thinking: <reasoning>\n\n<answer>` format
+   *   the OpenAI chat provider uses, for consistency across providers.
+   * - **`false`:** the reasoning block is stripped and `output` is the clean final answer,
+   *   matching OpenAI's first-party Chat Completions API (which hides chain-of-thought) and
+   *   the `openai:` providers.
+   */
+  showThinking?: boolean;
 }
 
 interface BedrockQwenGenerationOptions extends BedrockOptions {
@@ -1613,17 +1643,17 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      // Claude Opus 4.7 deprecates `temperature` at the model level — Bedrock
-      // relays the resulting 400 as a ValidationException. Drop the default
-      // regardless of which IAM-region prefix the user picked.
-      const isOpus47 = modelName ? isClaudeOpus47Model(modelName) : false;
-      if (isOpus47) {
-        if (config?.temperature != null || getEnvFloat('AWS_BEDROCK_TEMPERATURE') != null) {
-          logger.warn(
-            'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your Bedrock config (or unset AWS_BEDROCK_TEMPERATURE) to silence this warning.',
-          );
-        }
-      } else {
+      // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+      // level — Bedrock relays the resulting 400 as a ValidationException. Drop
+      // `temperature` regardless of which IAM-region prefix the user picked.
+      // (This handler never emits top_p/top_k.) `params` is a shared model
+      // handler with no per-instance state to dedup a warning across requests,
+      // so we normalize silently here; the Anthropic Messages provider surfaces
+      // the one-time heads-up and the provider docs document the behavior.
+      const samplingParamsDeprecated = modelName
+        ? isSamplingParamsDeprecatedClaudeModel(modelName)
+        : false;
+      if (!samplingParamsDeprecated) {
         addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
       }
       addConfigParam(
@@ -1641,7 +1671,11 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'thinking', config?.thinking, undefined, undefined);
+      const thinking =
+        samplingParamsDeprecated && config?.thinking?.type === 'enabled'
+          ? { type: 'adaptive' as const }
+          : config?.thinking;
+      addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
@@ -2029,21 +2063,6 @@ ${prompt}
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-      // Handle reasoning_effort by adding it to system message
-      if (config?.reasoning_effort) {
-        const reasoningInstruction = `Reasoning: ${config.reasoning_effort}`;
-
-        // Find existing system message or create one
-        const systemMessageIndex = messages.findIndex((msg) => msg.role === 'system');
-        if (systemMessageIndex >= 0) {
-          // Append to existing system message
-          messages[systemMessageIndex].content += `\n\n${reasoningInstruction}`;
-        } else {
-          // Add new system message at the beginning
-          messages.unshift({ role: 'system', content: reasoningInstruction });
-        }
-      }
-
       const params: any = {
         messages,
       };
@@ -2063,6 +2082,10 @@ ${prompt}
         0.1,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+      // The open-weight gpt-oss models accept `reasoning_effort` as a native request field on
+      // Bedrock's InvokeModel API. Forward it as-is and let the API validate the value.
+      // (Frontier gpt-5.x models don't reach this handler — see the OpenAI Responses provider.)
+      addConfigParam(params, 'reasoning_effort', config?.reasoning_effort);
       if ((stop && stop.length > 0) || config?.stop) {
         addConfigParam(params, 'stop', stop || config?.stop, getEnvString('AWS_BEDROCK_STOP'));
       }
@@ -2081,19 +2104,56 @@ ${prompt}
 
       return params;
     },
-    output: (_config: BedrockOptions, responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any) => {
       if (responseJson.error) {
         throw new Error(`OpenAI API error: ${responseJson.error}`);
       }
-      return responseJson.choices?.[0]?.message?.content;
+      const content = responseJson.choices?.[0]?.message?.content;
+      const showThinking = (config as BedrockOpenAIGenerationOptions)?.showThinking;
+      // Bedrock's InvokeModel surfaces the model's chain-of-thought inline, wrapped in
+      // <reasoning>...</reasoning> before the final answer. By DEFAULT promptfoo returns the
+      // model output verbatim so nothing the API returned is hidden from assertions or
+      // red-team graders — an eval framework should not silently drop application-visible
+      // content. `showThinking` makes the two transformations opt-in.
+      if (typeof content !== 'string' || showThinking === undefined) {
+        return content;
+      }
+      const reasoningMatch = content.match(/^\s*<reasoning>([\s\S]*?)<\/reasoning>\s*([\s\S]*)$/);
+      if (!reasoningMatch) {
+        return content;
+      }
+      const [, reasoning, answer] = reasoningMatch;
+      // showThinking: true → surface the reasoning in the OpenAI chat provider's `Thinking: ...`
+      // format so outputs read consistently across providers.
+      if (showThinking) {
+        return `Thinking: ${reasoning.trim()}\n\n${answer}`;
+      }
+      // showThinking: false → strip the reasoning to the clean final answer (parity with the
+      // openai: providers, which hide chain-of-thought). If the model returned only a reasoning
+      // block, fall back to the original content so the whole response is never silently dropped.
+      return answer.trim() === '' ? content : answer;
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
+        const usage = responseJson.usage;
+        // gpt-oss reports usage the same way OpenAI's Chat Completions API does; surface
+        // reasoning and cached-input token counts (when present) under completionDetails for
+        // parity with the openai: provider.
+        const reasoningTokens = coerceStrToNum(usage.completion_tokens_details?.reasoning_tokens);
+        const cachedInputTokens = coerceStrToNum(usage.prompt_tokens_details?.cached_tokens);
+        const completionDetails: { reasoning?: number; cacheReadInputTokens?: number } = {};
+        if (reasoningTokens !== undefined) {
+          completionDetails.reasoning = reasoningTokens;
+        }
+        if ((cachedInputTokens ?? 0) > 0) {
+          completionDetails.cacheReadInputTokens = cachedInputTokens;
+        }
         return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
+          prompt: coerceStrToNum(usage.prompt_tokens),
+          completion: coerceStrToNum(usage.completion_tokens),
+          total: coerceStrToNum(usage.total_tokens),
           numRequests: 1,
+          ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
         };
       }
 
@@ -2247,6 +2307,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2319,6 +2380,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2351,6 +2413,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2369,7 +2432,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'us.mistral.pixtral-large-2502-v1:0': BEDROCK_MODEL.MISTRAL_CHAT,
 
-  // OpenAI Models via Bedrock
+  // OpenAI open-weight (gpt-oss) models via Bedrock InvokeModel. The frontier models
+  // (openai.gpt-5.x) are NOT InvokeModel models — they are served through Bedrock's
+  // OpenAI-compatible Responses API and are routed to the OpenAI Responses provider in
+  // src/providers/families/aws.ts (see src/providers/bedrock/openaiResponses.ts).
   'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-safeguard-120b': BEDROCK_MODEL.OPENAI,
@@ -2391,10 +2457,19 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // (verified via `aws bedrock list-inference-profiles`).
   'global.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // Global / Japan cross-region inference profiles for Claude Opus 4.8
+  // (verified via `aws bedrock list-inference-profiles`; same `us.`/`eu.`/`jp.`/`global.`
+  // set as Opus 4.7, with no older `apac.` prefix).
+  'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOptions): IBedrockModel {
+export function getHandlerForModel(
+  modelName: string,
+  config?: BedrockInvokeModelOptions,
+): IBedrockModel {
   // Check if it's an inference profile ARN
   if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
     // For inference profiles, use the model type from config to determine handler
@@ -2502,6 +2577,37 @@ function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOption
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
   }
+  // Open-weight gpt-oss models are the only OpenAI models served via InvokeModel. The
+  // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the
+  // OpenAI Responses provider in src/providers/families/aws.ts before reaching this handler.
+  if (modelName.includes('openai.gpt-oss')) {
+    // The registered runtime ids (e.g. openai.gpt-oss-120b-1:0, openai.gpt-oss-safeguard-120b)
+    // are resolved by the exact-match lookup above. Any gpt-oss id reaching here is
+    // unregistered: a versioned id (…-N:M) is still an InvokeModel runtime id (forward-compat
+    // for new versions), but a bare id such as `openai.gpt-oss-120b` is the Bedrock Mantle id,
+    // which the InvokeModel (bedrock-runtime) API does not serve — reject it with the runtime
+    // id to use instead of silently sending the wrong id.
+    if (/-\d+:\d+$/.test(modelName)) {
+      return BEDROCK_MODEL.OPENAI;
+    }
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" looks like the Bedrock Mantle id for an open-weight ` +
+        `gpt-oss model. promptfoo's bedrock: provider calls the InvokeModel (bedrock-runtime) ` +
+        `API, which uses the versioned runtime id — e.g. "bedrock:openai.gpt-oss-120b-1:0". See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+    );
+  }
+  if (modelName.includes('openai.')) {
+    // Suggest the bare frontier id: AWS does not offer region/geo/global inference profiles for
+    // the gpt-5.x frontier models, so a prefixed id like `us.openai.gpt-5.5` is not valid.
+    const bareFrontierId = modelName.replace(/^[a-z]+\.(?=openai\.)/, '');
+    throw new Error(
+      `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
+        `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
+        `"bedrock:${bareFrontierId}" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+    );
+  }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
 
@@ -2516,20 +2622,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
+    // Merge prompt-level config over provider config once so the same effective config
+    // drives handler selection, request params, AND output parsing (e.g. showThinking).
+    const mergedConfig = { ...this.config, ...context?.prompt.config };
+
+    let model = getHandlerForModel(this.modelName, mergedConfig);
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = await model.params(
-      { ...this.config, ...context?.prompt.config },
-      prompt,
-      stop,
-      this.modelName,
-      context?.vars,
-    );
+    const params = await model.params(mergedConfig, prompt, stop, this.modelName, context?.vars);
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2547,7 +2651,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(this.config, JSON.parse(cachedResponse as string)),
+          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
           cached: true,
         };
@@ -2659,7 +2763,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       }
 
       return {
-        output: model.output(this.config, output),
+        output: model.output(mergedConfig, output),
         tokenUsage,
         ...(output['amazon-bedrock-guardrailAction']
           ? {

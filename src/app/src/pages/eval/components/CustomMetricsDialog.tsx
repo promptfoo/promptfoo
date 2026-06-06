@@ -19,6 +19,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useApplyFilterFromMetric } from './hooks';
 import {
+  formatRawMetricValue,
   getMetricAverage,
   getMetricDisplayKind,
   getMetricDisplayKinds,
@@ -26,7 +27,6 @@ import {
 } from './metricDisplay';
 import { useTableStore } from './store';
 import { getNamedMetricTotal } from './utils';
-import type { EvaluateTable } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
@@ -44,10 +44,15 @@ type MetricRow = {
 } & Partial<Record<PromptMetricColumnKey, MetricScore>>;
 
 function formatMetricNumber(value: number): string {
-  return value.toFixed(Math.abs(value) >= 1 ? 2 : 4);
+  return formatRawMetricValue(value, Math.abs(value) >= 1 ? 2 : 4);
 }
 
-type PromptHeader = EvaluateTable['head']['prompts'][number];
+type PromptHeader = {
+  raw?: string;
+  display?: string;
+  label?: string;
+  provider?: string | object;
+};
 
 function getMetricValue(metricScore: MetricScore, kind: MetricDisplayKind): number {
   if (!metricScore.hasScore) {

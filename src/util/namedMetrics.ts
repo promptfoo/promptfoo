@@ -1,7 +1,5 @@
-import { collectAssertedComponentResults } from '../assertions/componentResults';
 import { renderMetricName } from '../assertions/index';
-
-import type { GradingResult, Vars } from '../types/index';
+import { collectAssertedComponentResults, type GradingResult, type Vars } from '../types/index';
 
 export interface NamedMetricAccumulator {
   namedScores: Record<string, number>;

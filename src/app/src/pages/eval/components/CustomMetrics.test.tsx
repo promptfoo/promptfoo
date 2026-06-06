@@ -102,6 +102,14 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.50 (40.00/80.00)');
   });
 
+  it('preserves significant digits for small raw metrics', () => {
+    renderWithProviders(<CustomMetrics lookup={{ cost: 0.00000465 }} counts={{ cost: 1 }} />);
+
+    expect(screen.getByTestId('metric-value-cost')).toHaveTextContent(
+      '0.000004650 (0.000004650/1.00)',
+    );
+  });
+
   it('displays metrics with totals as percentages', () => {
     const lookup = {
       metric1: 30,

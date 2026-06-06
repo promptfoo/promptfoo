@@ -14,6 +14,7 @@ import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { ExternalLink } from 'lucide-react';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useApplyFilterFromMetric } from './hooks';
+import { formatRawMetricValue } from './metricDisplay';
 import { useTableStore } from './store';
 
 interface CustomMetricsProps {
@@ -55,12 +56,12 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
     }
     return (
       <span data-testid={`metric-value-${metric}`}>
-        {(score / counts[metric]).toFixed(2)} ({score?.toFixed(2) ?? '0'}/
+        {formatRawMetricValue(score / counts[metric])} ({formatRawMetricValue(score)}/
         {counts[metric]?.toFixed(2) ?? '0'})
       </span>
     );
   }
-  return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
+  return <span data-testid={`metric-value-${metric}`}>{formatRawMetricValue(score)}</span>;
 };
 
 const CustomMetrics = ({

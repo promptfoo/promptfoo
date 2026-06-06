@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectAssertedComponentResults,
   collectCountableComponentResults,
-} from '../../src/assertions/componentResults';
+} from '../../src/types/index';
 
 import type { Assertion, GradingResult } from '../../src/types/index';
 

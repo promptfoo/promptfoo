@@ -1,7 +1,37 @@
 import nunjucks from 'nunjucks';
-import type { Assertion, EvaluateTable, UnifiedConfig } from '@promptfoo/types';
+
+type MetricAssertion = {
+  type: string;
+  threshold?: number;
+  metric?: string;
+  assert?: MetricAssertion[];
+};
+
+type MetricConfig = {
+  defaultTest?: unknown;
+  tests?: unknown;
+};
+
+type MetricTable = {
+  body: Array<{
+    test?: {
+      assert?: MetricAssertion[];
+      vars?: Record<string, unknown>;
+    };
+  }>;
+};
 
 export type MetricDisplayKind = 'percentage' | 'value';
+
+export function formatRawMetricValue(value: number | null | undefined, fractionDigits = 2): string {
+  if (typeof value !== 'number') {
+    return '0';
+  }
+  if (value !== 0 && Math.abs(value) < 10 ** -fractionDigits) {
+    return value.toPrecision(4);
+  }
+  return value.toFixed(fractionDigits);
+}
 
 export function isValueMetricAssertion(assertion: { type: string; threshold?: number }): boolean {
   if (assertion.threshold !== undefined || assertion.type.startsWith('not-')) {
@@ -62,7 +92,7 @@ function getTestVars(test: unknown): Record<string, unknown> {
 }
 
 function collectMetricKinds(
-  assertions: Assertion[] | undefined,
+  assertions: MetricAssertion[] | undefined,
   vars: Record<string, unknown>,
   metricKinds: Record<string, MetricDisplayKind>,
 ) {
@@ -83,12 +113,15 @@ function collectMetricKinds(
 }
 
 function collectMetricKindsFromConfig(
-  config: Partial<UnifiedConfig>,
+  config: MetricConfig,
   metricKinds: Record<string, MetricDisplayKind>,
 ) {
   const defaultAssert =
-    typeof config.defaultTest === 'object'
-      ? (config.defaultTest?.assert as Assertion[] | undefined)
+    typeof config.defaultTest === 'object' &&
+    config.defaultTest !== null &&
+    'assert' in config.defaultTest &&
+    Array.isArray(config.defaultTest.assert)
+      ? (config.defaultTest.assert as MetricAssertion[])
       : undefined;
 
   const tests = Array.isArray(config.tests)
@@ -104,14 +137,14 @@ function collectMetricKindsFromConfig(
     const vars = getTestVars(test);
     collectMetricKinds(defaultAssert, vars, metricKinds);
     if ('assert' in test) {
-      collectMetricKinds(test.assert as Assertion[] | undefined, vars, metricKinds);
+      collectMetricKinds(test.assert as MetricAssertion[] | undefined, vars, metricKinds);
     }
   }
 }
 
 export function getMetricDisplayKinds(
-  table: EvaluateTable | null,
-  config?: Partial<UnifiedConfig> | null,
+  table: MetricTable | null,
+  config?: MetricConfig | null,
 ): Record<string, MetricDisplayKind> {
   if (!table) {
     return {};
@@ -126,11 +159,7 @@ export function getMetricDisplayKinds(
 
   // Also walk table body rows (covers runtime-resolved templates)
   table.body.forEach((row) => {
-    collectMetricKinds(
-      row.test?.assert as Assertion[] | undefined,
-      (row.test?.vars ?? {}) as Record<string, unknown>,
-      metricKinds,
-    );
+    collectMetricKinds(row.test?.assert, row.test?.vars ?? {}, metricKinds);
   });
 
   return metricKinds;

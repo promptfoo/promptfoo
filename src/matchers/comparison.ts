@@ -1,18 +1,17 @@
-import { collectAssertedComponentResults } from '../assertions/componentResults';
 import { SELECT_BEST_PROMPT } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import {
+  type Assertion,
+  type CallApiContextParams,
+  collectAssertedComponentResults,
+  type GradingConfig,
+  type GradingResult,
+  type VarValue,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
-
-import type {
-  Assertion,
-  CallApiContextParams,
-  GradingConfig,
-  GradingResult,
-  VarValue,
-} from '../types/index';
 
 export async function matchesSelectBest(
   criteria: string,

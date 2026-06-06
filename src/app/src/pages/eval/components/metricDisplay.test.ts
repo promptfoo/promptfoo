@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { getMetricAverage, getMetricDisplayKind, getMetricDisplayKinds } from './metricDisplay';
+import {
+  formatRawMetricValue,
+  getMetricAverage,
+  getMetricDisplayKind,
+  getMetricDisplayKinds,
+} from './metricDisplay';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
+
+describe('formatRawMetricValue', () => {
+  it('preserves significant digits for small nonzero values', () => {
+    expect(formatRawMetricValue(0.00000465)).toBe('0.000004650');
+    expect(formatRawMetricValue(-0.00000465)).toBe('-0.000004650');
+    expect(formatRawMetricValue(0)).toBe('0.00');
+    expect(formatRawMetricValue(0.25)).toBe('0.25');
+    expect(formatRawMetricValue(null)).toBe('0');
+  });
+});
 
 describe('metricDisplay', () => {
   it('classifies thresholdless cost as value and inverse types as percentage', () => {
