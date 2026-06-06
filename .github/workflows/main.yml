@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./coverage/coverage-final.json
           flags: backend
@@ -202,6 +202,12 @@ jobs:
             fi
             echo "PostHog key replacement verified successfully"
           fi
+
+      - name: Test Package Artifact
+        if: matrix.node == '20.20'
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact
 
   style-check:
     name: Style Check
@@ -284,6 +290,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      - name: Use Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.13'
+
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
         run: npm install -g npm@latest
@@ -291,8 +302,13 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Generate JSON Schema
-        run: npm run jsonSchema:generate
+      - name: Install ModelAudit schema dependencies
+        run: python3 -m pip install --disable-pip-version-check --no-deps -r scripts/modelaudit_schema_requirements.txt
+
+      - name: Generate JSON Schemas
+        run: |
+          npm run jsonSchema:generate
+          npm run modelAuditSchema:generate
 
       - name: Generate OpenAPI Spec
         run: npm run openapi:generate
@@ -434,7 +450,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./site/coverage/coverage-final.json
           flags: site
@@ -480,7 +496,7 @@ jobs:
         run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend

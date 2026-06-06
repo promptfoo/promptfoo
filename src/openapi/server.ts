@@ -78,10 +78,18 @@ type RegisteredRouteConfig = RouteConfig & {
   operationId: string;
   tags: string[];
 };
+type CreateServerOpenApiRegistryOptions = {
+  version?: string;
+};
 
-export function createServerOpenApiRegistry() {
+export function createServerOpenApiRegistry({
+  version = VERSION,
+}: CreateServerOpenApiRegistryOptions = {}) {
   const registry = new OpenAPIRegistry();
   const routes: RegisteredRouteConfig[] = [];
+  const telemetryEventSchema = ServerSchemas.Telemetry.Request.extend({
+    packageVersion: z.string().optional().prefault(version),
+  });
 
   function schema<T extends z.ZodType>(_name: string, zodSchema: T): T {
     // The DTO schemas are created before this generator runs. Passing them directly
@@ -384,7 +392,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Telemetry'],
     summary: 'Record a web UI telemetry event',
     request: {
-      body: jsonBody('TelemetryEvent', ServerSchemas.Telemetry.Request),
+      body: jsonBody('TelemetryEvent', telemetryEventSchema),
     },
     responses: {
       200: jsonResponse('TelemetryResponse', ServerSchemas.Telemetry.Response),
@@ -1265,7 +1273,7 @@ export function createServerOpenApiDocument({
   serverUrl = 'http://localhost:15500',
   version = VERSION,
 }: CreateServerOpenApiDocumentOptions = {}) {
-  const { registry } = createServerOpenApiRegistry();
+  const { registry } = createServerOpenApiRegistry({ version });
   const generator = new OpenApiGeneratorV31(registry.definitions, {
     sortComponents: 'alphabetically',
     unionPreferredType: 'oneOf',

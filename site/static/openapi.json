@@ -799,7 +799,7 @@
                   },
                   "packageVersion": {
                     "type": "string",
-                    "default": "0.121.12"
+                    "default": "latest"
                   },
                   "properties": {
                     "type": "object",

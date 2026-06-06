@@ -169,6 +169,15 @@ describe('server OpenAPI generation', () => {
     ]);
   });
 
+  it('uses the requested document version in version-bearing schemas', () => {
+    const document = createServerOpenApiDocument({ version: 'latest' });
+    const telemetryRequest = (document.paths?.['/api/telemetry']?.post?.requestBody as any)
+      ?.content?.['application/json']?.schema;
+
+    expect(document.info.version).toBe('latest');
+    expect(telemetryRequest?.properties?.packageVersion?.default).toBe('latest');
+  });
+
   it('emits representative inline DTO schemas', () => {
     const document = createServerOpenApiDocument();
     const paths = document.paths ?? {};

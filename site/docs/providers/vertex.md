@@ -40,6 +40,10 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 Anthropic's Claude models are available with the following versions:
 
+**Claude 4.8:**
+
+- `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+
 **Claude 4.7:**
 
 - `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, long-running agents, and computer use. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. See the [Google Cloud announcement](https://cloud.google.com/blog/products/ai-machine-learning/claude-opus-4-7-on-vertex-ai) for details.
@@ -181,6 +185,8 @@ providers:
 ```
 
 ## Model Capabilities
+
+<a id="gemini-20-pro-specifications"></a>
 
 ### Gemini Model Specifications
 
@@ -611,7 +617,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
 - Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for Opus 4.7
-- Claude Opus 4.7: adaptive thinking and `xhigh` effort level; promptfoo automatically omits `temperature` (deprecated for this model) and forwards the rest of the Anthropic Messages body to Vertex's `rawPredict` endpoint
+- Claude Opus 4.7 and 4.8: promptfoo automatically omits deprecated sampling parameters and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage
