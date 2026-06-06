@@ -29,7 +29,7 @@ const HTTP_STATUS_PATTERNS = {
  * Keyword patterns for error categorization.
  */
 const ERROR_KEYWORDS = {
-  timeout: ['timeout', 'timed out', 'etimedout', 'request timeout'],
+  timeout: ['timeout', 'timed out', 'etimedout', 'request timeout', 'exceeded max duration'],
   rate_limit: ['rate limit', 'rate_limit', 'ratelimit', 'too many requests', 'throttl'],
   auth: ['unauthorized', 'forbidden', 'authentication', 'invalid api key', 'invalid_api_key'],
   server_error: ['internal server error', 'bad gateway', 'service unavailable', 'server error'],

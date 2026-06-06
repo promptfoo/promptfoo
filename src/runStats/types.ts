@@ -15,6 +15,8 @@ import type { GradingResult, ProviderResponse, ResultFailureReason } from '../ty
  * It is satisfied by both EvalResult (database model) and EvaluateResult (interface).
  */
 export interface StatableResult {
+  testIdx?: number;
+  promptIdx?: number;
   success: boolean;
   latencyMs: number;
   error?: string | null;

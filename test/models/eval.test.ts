@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { updateSignalFile } from '../../src/database/signal';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -12,10 +12,17 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
-import { type Prompt, ResultFailureReason } from '../../src/types/index';
+import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from '../../src/util/standaloneEvalCache';
+import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -32,6 +39,7 @@ vi.mock('../../src/database/signal', async () => {
   return {
     ...actual,
     updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
   };
 });
 
@@ -101,6 +109,126 @@ describe('evaluator', () => {
     });
   });
 
+  describe('fetchResultsBatched', () => {
+    it('returns in-memory results in batches for non-persisted evals', async () => {
+      const eval_ = new Eval({});
+      const results = Array.from({ length: 3 }, (_, testIdx) => {
+        return new EvalResult({
+          id: `in-memory-${testIdx}`,
+          evalId: eval_.id,
+          promptIdx: 0,
+          testIdx,
+          testCase: { vars: { testIdx } },
+          prompt: { raw: 'Test prompt', label: 'Test prompt' },
+          provider: { id: 'test-provider' },
+          response: { output: `Result ${testIdx}` },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        });
+      });
+      await eval_.setResults(results);
+
+      const batches: EvalResult[][] = [];
+      for await (const batch of eval_.fetchResultsBatched(2)) {
+        batches.push(batch);
+      }
+
+      expect(batches.map((batch) => batch.map((result) => result.id))).toEqual([
+        ['in-memory-0', 'in-memory-1'],
+        ['in-memory-2'],
+      ]);
+    });
+
+    it('advances across sparse test indices for persisted evals', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const results = [150, 275].map((testIdx) => {
+        return new EvalResult({
+          id: `sparse-${eval_.id}-${testIdx}`,
+          evalId: eval_.id,
+          promptIdx: 0,
+          testIdx,
+          testCase: { vars: { testIdx } },
+          prompt: { raw: 'Test prompt', label: 'Test prompt' },
+          provider: { id: 'test-provider' },
+          response: { output: `Result ${testIdx}` },
+          gradingResult: null,
+          namedScores: {},
+          metadata: {},
+          success: true,
+          score: 1,
+          latencyMs: 1,
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+        });
+      });
+      await eval_.setResults(results);
+
+      const batches: EvalResult[][] = [];
+      for await (const batch of eval_.fetchResultsBatched(1)) {
+        batches.push(batch);
+      }
+
+      expect(batches.map((batch) => batch.map((result) => result.testIdx))).toEqual([[150], [275]]);
+    });
+  });
+
+  describe('getFailedResultsByTestIdx', () => {
+    const makeFailedRow = (promptIdx: number) => ({
+      promptIdx,
+      testIdx: 0,
+      testCase: { vars: {} },
+      prompt: { raw: 'p', label: 'p' },
+      provider: { id: 'test-provider' },
+      response: { output: 'out' },
+      gradingResult: { pass: true, score: 1, reason: 'init', componentResults: [] },
+      namedScores: {},
+      metadata: {},
+      success: true,
+      score: 1,
+      latencyMs: 1,
+      cost: 0,
+      failureReason: ResultFailureReason.NONE,
+    });
+
+    it('reuses the reconstructed instance so comparison grading composes across passes', async () => {
+      const eval_ = new Eval({});
+      eval_.recordResultPersistenceFailure(makeFailedRow(1) as any);
+
+      const [first] = await eval_.getFailedResultsByTestIdx(0);
+      // Simulate an earlier comparison pass (e.g. select-best) demoting the failed row.
+      first.success = false;
+      first.score = 0;
+
+      const [second] = await eval_.getFailedResultsByTestIdx(0);
+      // A later pass (e.g. max-score) must see the SAME, already-mutated instance so its
+      // grading composes on top rather than rehydrating the stale pre-comparison row.
+      expect(second).toBe(first);
+      expect(second.success).toBe(false);
+      expect(second.score).toBe(0);
+    });
+
+    it('rebuilds from the raw row when the persistence failure is re-recorded', async () => {
+      const eval_ = new Eval({});
+      eval_.recordResultPersistenceFailure(makeFailedRow(0) as any);
+
+      const [first] = await eval_.getFailedResultsByTestIdx(0);
+      first.success = false;
+
+      // Re-recording the failure replaces the raw row and must drop the cached reconstruction.
+      eval_.recordResultPersistenceFailure(makeFailedRow(0) as any);
+      const [second] = await eval_.getFailedResultsByTestIdx(0);
+
+      expect(second).not.toBe(first);
+      expect(second.success).toBe(true);
+    });
+  });
+
   describe('setResults', () => {
     it('should persist result rows when replacing results on a persisted eval', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
@@ -126,9 +254,12 @@ describe('evaluator', () => {
         failureReason: ResultFailureReason.NONE,
       });
 
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
       await eval_.setResults([result]);
 
       const persistedResults = await EvalResult.findManyByEvalId(eval_.id);
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
       expect(persistedResults).toHaveLength(1);
       expect(persistedResults[0]).toEqual(
         expect.objectContaining({
@@ -359,14 +490,19 @@ describe('evaluator', () => {
   describe('delete', () => {
     it('should delete an evaluation', async () => {
       const eval1 = await EvalFactory.create();
+      const cacheKey = getStandaloneEvalCacheKey();
+      setCachedStandaloneEvals(cacheKey, []);
 
       const eval_ = await Eval.findById(eval1.id);
       expect(eval_).toBeDefined();
+      expect(getCachedStandaloneEvals(cacheKey)).toBeDefined();
 
       await eval1.delete();
 
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
+      expect(getCachedStandaloneEvals(cacheKey)).toBeUndefined();
+      expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval1.id]);
     });
 
     it('should delete traces and spans for an evaluation', async () => {
@@ -391,6 +527,15 @@ describe('evaluator', () => {
       expect(await Eval.findById(eval1.id)).toBeUndefined();
       await expect(db.select().from(tracesTable).all()).resolves.toHaveLength(0);
       await expect(db.select().from(spansTable).all()).resolves.toHaveLength(0);
+    });
+
+    it('should suppress deletion signals while replacing an evaluation', async () => {
+      const eval1 = await EvalFactory.create();
+
+      await eval1.delete({ notify: false });
+
+      expect(await Eval.findById(eval1.id)).toBeUndefined();
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
     });
   });
 
@@ -450,6 +595,107 @@ describe('evaluator', () => {
       expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockAuthor);
+    });
+
+    it('preserves trace linkage when results are inserted during eval creation', async () => {
+      const tracedResult = createEvaluateResult({
+        traceId: 'create-trace-id',
+        evaluationId: 'create-evaluation-id',
+        metadata: { source: 'create-path' },
+      });
+
+      const evaluation = await Eval.create({ description: 'Trace linkage create coverage' }, [], {
+        results: [tracedResult as unknown as EvalResult],
+      });
+
+      const [persistedResult] = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(persistedResult.toEvaluateResult()).toMatchObject({
+        traceId: 'create-trace-id',
+        evaluationId: 'create-evaluation-id',
+        metadata: { source: 'create-path' },
+      });
+    });
+
+    it('surfaces trace linkage without leaking the reserved namespace through toEvaluateSummary (export path)', async () => {
+      // output.ts serializes JSON/JSONL/CSV via toEvaluateSummary(); assert that path surfaces
+      // traceId/evaluationId at the top level and never emits the internal `__promptfoo` key.
+      const tracedResult = createEvaluateResult({
+        traceId: 'export-trace-id',
+        evaluationId: 'export-evaluation-id',
+        metadata: { source: 'export-path' },
+      });
+
+      const evaluation = await Eval.create({ description: 'Trace linkage export coverage' }, [], {
+        results: [tracedResult as unknown as EvalResult],
+      });
+
+      const summary = await evaluation.toEvaluateSummary();
+      expect('results' in summary).toBe(true);
+      const [exportedRow] = (summary as { results: EvaluateResult[] }).results;
+      expect(exportedRow).toMatchObject({
+        traceId: 'export-trace-id',
+        evaluationId: 'export-evaluation-id',
+        metadata: { source: 'export-path' },
+      });
+      expect(exportedRow.metadata).not.toHaveProperty('__promptfoo');
+      expect(JSON.stringify(summary)).not.toContain('__promptfoo');
+    });
+  });
+
+  describe('setResults trace linkage', () => {
+    it('preserves trace linkage when results are appended to an existing eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const tracedResult = createEvaluateResult({
+        traceId: 'append-trace-id',
+        evaluationId: 'append-evaluation-id',
+        metadata: { source: 'set-results-path' },
+      });
+
+      await eval_.setResults([
+        {
+          id: 'append-trace-result',
+          evalId: eval_.id,
+          ...tracedResult,
+          failureReason: ResultFailureReason.NONE,
+          persisted: false,
+        } as unknown as EvalResult,
+      ]);
+
+      const [persistedResult] = await EvalResult.findManyByEvalId(eval_.id);
+      expect(persistedResult.toEvaluateResult()).toMatchObject({
+        traceId: 'append-trace-id',
+        evaluationId: 'append-evaluation-id',
+        metadata: { source: 'set-results-path' },
+      });
+    });
+  });
+
+  describe('copy', () => {
+    it('drops trace linkage from copied results without copied trace records', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await EvalResult.createFromEvaluateResult(
+        eval_.id,
+        createEvaluateResult({
+          traceId: 'copy-source-trace',
+          evaluationId: eval_.id,
+          metadata: {
+            source: 'copy-path',
+            __promptfoo: { retained: 'internal-metadata' },
+          },
+        }),
+      );
+
+      const copy = await eval_.copy();
+      const [copiedResult] = await EvalResult.findManyByEvalId(copy.id);
+
+      expect(copiedResult.toEvaluateResult()).toMatchObject({
+        metadata: {
+          source: 'copy-path',
+          __promptfoo: { retained: 'internal-metadata' },
+        },
+      });
+      expect(copiedResult.toEvaluateResult().traceId).toBeUndefined();
+      expect(copiedResult.toEvaluateResult().evaluationId).toBeUndefined();
     });
   });
 
@@ -1253,6 +1499,45 @@ describe('evaluator', () => {
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
+    });
+
+    it('hides the reserved __promptfoo namespace from key listings', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const db = await getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+      expect(keys).toContain('userKey');
+      expect(keys).not.toContain('__promptfoo');
+    });
+  });
+
+  describe('EvalQueries.getMetadataValuesFromEval', () => {
+    it('refuses to return values under the reserved __promptfoo namespace', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const db = await getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('promptfoo-val-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          '{"__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+      );
+
+      expect(await EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo')).toEqual([]);
+      expect(
+        await EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo.traceLinkage'),
+      ).toEqual([]);
     });
   });
 

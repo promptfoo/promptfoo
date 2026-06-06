@@ -64,6 +64,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
       'eval_ran',
       expect.objectContaining({
         models: ['python:custom'],
+        isModelComparison: false,
       }),
     );
     const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
@@ -74,6 +75,33 @@ describeEvaluator('evaluator metrics and scoring', () => {
         provider: 'python:custom',
         requests: 2,
         successes: 2,
+        failures: 0,
+      }),
+    ]);
+  });
+
+  it('aggregates all private providers before truncating outbound telemetry', async () => {
+    const providers: ApiProvider[] = Array.from({ length: 11 }, (_, index) => ({
+      id: vi.fn().mockReturnValue(`python:/private/provider-${index}.py:call_api`),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    }));
+    const recordSpy = vi.spyOn(telemetry, 'record');
+    const testSuite: TestSuite = {
+      providers,
+      prompts: [toPrompt('Telemetry aggregation before truncation')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.runStats?.providers).toHaveLength(10);
+    const properties = recordSpy.mock.calls.find(([event]) => event === 'eval_ran')?.[1];
+    expect(JSON.parse(String(properties?.providerBreakdown))).toEqual([
+      expect.objectContaining({
+        provider: 'python:custom',
+        requests: 11,
+        successes: 11,
         failures: 0,
       }),
     ]);

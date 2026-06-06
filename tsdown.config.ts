@@ -96,7 +96,10 @@ export default defineConfig([
   },
   // Library ESM build
   {
-    entry: ['src/index.ts'],
+    entry: {
+      contracts: 'src/contracts.ts',
+      index: 'src/index.ts',
+    },
     format: ['esm'],
     target: 'node20',
     outDir: 'dist/src',
@@ -118,7 +121,10 @@ export default defineConfig([
   },
   // Library CJS build for compatibility
   {
-    entry: ['src/index.ts'],
+    entry: {
+      contracts: 'src/contracts.ts',
+      index: 'src/index.ts',
+    },
     format: ['cjs'],
     target: 'node20',
     outDir: 'dist/src',

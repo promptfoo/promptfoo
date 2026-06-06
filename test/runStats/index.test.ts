@@ -412,6 +412,82 @@ describe('computeRunStats', () => {
     });
   });
 
+  it('should count one select-best grader call copied across compared output rows only once', () => {
+    const comparisonResult = {
+      pass: true,
+      score: 1,
+      reason: '',
+      assertion: { type: 'select-best' as const, value: 'Choose the best response' },
+      tokensUsed: {
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+      },
+    };
+    const runStats = computeRunStats({
+      results: [0, 1].map((promptIdx) => ({
+        testIdx: 7,
+        promptIdx,
+        success: promptIdx === 0,
+        latencyMs: 100,
+        gradingResult: {
+          tokensUsed: comparisonResult.tokensUsed,
+          componentResults: [comparisonResult],
+        },
+      })),
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.assertions.tokenUsage).toEqual({
+      totalTokens: 50,
+      promptTokens: 30,
+      completionTokens: 20,
+      cachedTokens: 0,
+      numRequests: 1,
+      reasoningTokens: 0,
+    });
+  });
+
+  it('should retain row-specific grader requests while deduplicating select-best requests', () => {
+    const selectBest = {
+      pass: true,
+      score: 1,
+      reason: '',
+      assertion: { type: 'select-best' as const, value: 'Choose the best response' },
+      tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+    };
+    const rubric = {
+      pass: true,
+      score: 1,
+      reason: '',
+      assertion: { type: 'llm-rubric' as const, value: 'Be correct' },
+      tokensUsed: { total: 10, prompt: 8, completion: 2, numRequests: 1 },
+    };
+    const runStats = computeRunStats({
+      results: [0, 1].map((promptIdx) => ({
+        testIdx: 8,
+        promptIdx,
+        success: true,
+        latencyMs: 100,
+        gradingResult: {
+          tokensUsed: { total: 60, prompt: 38, completion: 22, numRequests: 2 },
+          componentResults: [rubric, selectBest],
+        },
+      })),
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.assertions.tokenUsage).toMatchObject({
+      totalTokens: 70,
+      promptTokens: 46,
+      completionTokens: 24,
+      numRequests: 3,
+    });
+  });
+
   it('should ignore flattened assert-set aggregate parents in aggregate assertion stats', () => {
     const equalsResult = {
       pass: true,
@@ -628,6 +704,7 @@ describe('computeRunStats', () => {
     });
 
     expect(batched.runStats).toEqual(computeRunStats({ results, stats, providers }));
+    expect(batched.allProviderStats).toEqual(batched.runStats.providers);
     expect(batched.resultCount).toBe(2);
     expect(batched.hasTimedOutResult).toBe(true);
   });

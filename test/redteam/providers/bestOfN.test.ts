@@ -29,6 +29,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
     (strategyName) =>
       `${strategyName} requires remote generation, which has been explicitly disabled.`,
   ),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));

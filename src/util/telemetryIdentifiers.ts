@@ -72,6 +72,7 @@ const PUBLIC_MODEL_IDENTIFIER_PREFIXES = new Set([
 ]);
 
 const PUBLIC_SLASH_MODEL_IDENTIFIER_PREFIXES = new Set(['huggingface', 'openrouter', 'replicate']);
+const PUBLIC_BARE_PROVIDER_IDENTIFIERS = new Set(['browser-provider', 'echo', 'mcp']);
 const REDACTED_OPENAI_IDENTIFIER_TYPES = new Set([
   'agents',
   'assistant',
@@ -142,7 +143,10 @@ export function sanitizeTelemetryIdentifier(identifier: string): string {
  * Keep public model IDs useful while hiding provider endpoints and resource names.
  */
 export function sanitizeTelemetryProviderIdentifier(identifier: string): string {
-  if (!identifier.includes(':') || identifier.toLowerCase().startsWith('unknown:')) {
+  if (!identifier.includes(':')) {
+    return PUBLIC_BARE_PROVIDER_IDENTIFIERS.has(identifier.toLowerCase()) ? identifier : 'custom';
+  }
+  if (identifier.toLowerCase().startsWith('unknown:')) {
     return 'custom';
   }
   const prefix = identifier.slice(0, identifier.indexOf(':')).toLowerCase();

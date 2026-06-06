@@ -9,7 +9,7 @@
 import { RunStatsAccumulator } from './accumulator';
 
 import type { ApiProvider, EvaluateStats } from '../types/index';
-import type { EvalRunStats, StatableResult } from './types';
+import type { EvalRunStats, ProviderStats, StatableResult } from './types';
 
 export { computeAssertionBreakdown, computeAssertionStats } from './assertions';
 export { computeCacheStats } from './cache';
@@ -43,6 +43,7 @@ export interface ComputeRunStatsBatchedInput {
 
 export interface ComputeRunStatsBatchedResult {
   runStats: EvalRunStats;
+  allProviderStats: ProviderStats[];
   resultCount: number;
   hasTimedOutResult: boolean;
 }
@@ -99,6 +100,7 @@ export async function computeRunStatsBatched(
 
   return {
     runStats: accumulator.toRunStats(stats, providers),
+    allProviderStats: accumulator.getProviderStats(),
     resultCount: accumulator.resultCount,
     hasTimedOutResult: accumulator.hasTimedOutResult,
   };

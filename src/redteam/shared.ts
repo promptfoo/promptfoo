@@ -4,8 +4,8 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
-import { doEval } from '../commands/eval';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
+import { doEval } from '../node/doEval';
 import telemetry, { sanitizeTelemetryIdentifier } from '../telemetry';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';

@@ -59,6 +59,7 @@ export class RunStatsAccumulator {
   private readonly providers = new Map<string, ProviderAccumulator>();
   private readonly assertions = new Map<string, AssertionAccumulator>();
   private readonly assertionTokenUsage = createAssertionTokenAccumulator();
+  private readonly seenComparisonAssertionTokenUsage = new Set<string>();
   private readonly assertionTypes = new Set<string>();
   private readonly modelProviderIds = new Set<string>();
   private cacheHits = 0;
@@ -117,7 +118,7 @@ export class RunStatsAccumulator {
         types: errorTypes,
         breakdown: this.errors,
       },
-      providers: this.getProviderStats(),
+      providers: this.getProviderStats(10),
       assertions: {
         total: this.assertionCount,
         passed: this.assertionPassCount,
@@ -155,8 +156,11 @@ export class RunStatsAccumulator {
       }
     }
     this.foundAssertionTokenUsage =
-      accumulateResultAssertionTokenUsage(this.assertionTokenUsage, result) ||
-      this.foundAssertionTokenUsage;
+      accumulateResultAssertionTokenUsage(
+        this.assertionTokenUsage,
+        result,
+        this.seenComparisonAssertionTokenUsage,
+      ) || this.foundAssertionTokenUsage;
 
     const providerId = result.provider?.id || 'unknown';
     this.modelProviderIds.add(providerId);
@@ -204,8 +208,8 @@ export class RunStatsAccumulator {
     }
   }
 
-  private getProviderStats(): ProviderStats[] {
-    return Array.from(this.providers.entries())
+  getProviderStats(maxProviders?: number): ProviderStats[] {
+    const providerStats = Array.from(this.providers.entries())
       .map(([provider, accumulated]): ProviderStats => {
         return {
           provider,
@@ -229,8 +233,9 @@ export class RunStatsAccumulator {
             accumulated.totalTokens > 0 ? accumulated.cachedTokens / accumulated.totalTokens : 0,
         };
       })
-      .sort((a, b) => b.requests - a.requests || a.provider.localeCompare(b.provider))
-      .slice(0, 10);
+      .sort((a, b) => b.requests - a.requests || a.provider.localeCompare(b.provider));
+
+    return maxProviders === undefined ? providerStats : providerStats.slice(0, maxProviders);
   }
 
   private getAssertionBreakdown(): AssertionTypeStats[] {

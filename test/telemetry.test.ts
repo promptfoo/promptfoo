@@ -137,6 +137,9 @@ describe('sanitizeTelemetryIdentifier', () => {
     );
     expect(sanitizeTelemetryProviderIdentifier('python:custom')).toBe('python:custom');
     expect(sanitizeTelemetryProviderIdentifier('file:custom')).toBe('file:custom');
+    expect(sanitizeTelemetryProviderIdentifier('echo')).toBe('echo');
+    expect(sanitizeTelemetryProviderIdentifier('mcp')).toBe('mcp');
+    expect(sanitizeTelemetryProviderIdentifier('browser-provider')).toBe('browser-provider');
   });
 });
 
