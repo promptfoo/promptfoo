@@ -10,7 +10,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type UnifiedConfig } from '../../../src/types/index';
+import { type Scenario, type TestCase, type UnifiedConfig } from '../../../src/types/index';
 import {
   ConfigResolutionError,
   combineConfigs,
@@ -140,14 +140,7 @@ vi.mock('../../../src/util/file', async () => {
 });
 
 vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test, _basePath, isDefaultTest) => {
-    // For defaultTest, just return the test as-is since it doesn't need validation
-    if (isDefaultTest) {
-      return test;
-    }
-    // For regular tests, just return the test
-    return test;
-  }),
+  readTest: vi.fn().mockImplementation(async (test) => test),
   readTests: vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
       return [];
@@ -299,19 +292,6 @@ describe('combineConfigs', () => {
     };
 
     vi.mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ) => {
-          if (typeof path === 'string' && path === 'config1.json') {
-            return JSON.stringify(config1);
-          } else if (typeof path === 'string' && path === 'config2.json') {
-            return JSON.stringify(config2);
-          }
-          return Buffer.from('');
-        },
-      )
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValueOnce(JSON.stringify(config1))
@@ -1522,7 +1502,7 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
-  it('should preserve handle string functions/tools when dereferencing', async () => {
+  it('should preserve string functions/tools when dereferencing', async () => {
     const rawConfig = {
       description: 'Test config with function parameters',
       prompts: [],
@@ -1588,6 +1568,7 @@ describe('resolveConfigs', () => {
       { vars: { testPrompt: 'What services do you offer?' } },
       { vars: { testPrompt: 'How can I confirm an order?' } },
     ];
+    const resolvedScenarios = [{ description: 'Scenario', tests: externalTests }];
 
     const prompt =
       'You are a helpful assistant. You are given a prompt and you must answer it. {{testPrompt}}';
@@ -1641,7 +1622,7 @@ describe('resolveConfigs', () => {
           modelName: 'gpt-4',
         }),
       ],
-      scenarios,
+      scenarios: resolvedScenarios,
       tests: externalTests,
       defaultTest: expect.objectContaining({
         metadata: {},
@@ -1650,7 +1631,110 @@ describe('resolveConfigs', () => {
 
     expect(testSuite.prompts[0].raw).toBe(prompt);
     expect(testSuite.tests).toEqual(externalTests);
-    expect(testSuite.scenarios).toEqual(scenarios);
+    expect(testSuite.scenarios).toEqual(resolvedScenarios);
+    expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://tests.yaml' }]);
+  });
+
+  it('should apply configured seeded sampling independently to default config scenarios', async () => {
+    const createDefaultConfig = (): Partial<UnifiedConfig> => ({
+      prompts: ['Hello {{position}}'],
+      providers: ['echo'],
+      commandLineOptions: {
+        filterSample: 2,
+        filterSampleSeed: 0,
+      },
+      scenarios: ['A', 'B'].map((group) => ({
+        config: [{}],
+        tests: ['0', '1', '2', '3'].map((position) => ({
+          vars: { group, position },
+        })),
+      })),
+    });
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{position}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const first = await resolveConfigs({}, createDefaultConfig());
+    const second = await resolveConfigs({}, createDefaultConfig());
+    const selectedPositions = (config: Awaited<ReturnType<typeof resolveConfigs>>) =>
+      config.testSuite.scenarios?.map((scenario) =>
+        scenario.tests.map((test) => test.vars?.position),
+      );
+
+    const firstPositions = selectedPositions(first);
+    expect(firstPositions).toEqual(selectedPositions(second));
+    expect(firstPositions?.every((positions) => positions.length === 2)).toBe(true);
+    expect(firstPositions?.[0]).not.toEqual(firstPositions?.[1]);
+  });
+
+  it('should derive distinct scenario sampling streams at the maximum safe seed', async () => {
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{position}}'],
+      providers: ['echo'],
+      commandLineOptions: {
+        filterSample: 10,
+        filterSampleSeed: Number.MAX_SAFE_INTEGER,
+      },
+      scenarios: ['A', 'B', 'C'].map((group) => ({
+        config: [{}],
+        tests: Array.from({ length: 50 }, (_, position) => ({
+          vars: { group, position: String(position) },
+        })),
+      })),
+    };
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{position}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const resolved = await resolveConfigs({}, defaultConfig);
+    const selectedPositions = resolved.testSuite.scenarios?.map((scenario) =>
+      scenario.tests.map((test) => test.vars?.position),
+    );
+
+    expect(selectedPositions?.[1]).not.toEqual(selectedPositions?.[2]);
+  });
+
+  it('should not mutate reused default config scenarios when sampling', async () => {
+    const originalPositions = ['0', '1', '2', '3'];
+    const scenarios: Scenario[] = [
+      {
+        config: [{}],
+        tests: originalPositions.map((position) => ({
+          vars: { position },
+        })),
+      },
+    ];
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{position}}'],
+      providers: ['echo'],
+      scenarios,
+    };
+    const selectedPositions = (config: Awaited<ReturnType<typeof resolveConfigs>>) =>
+      config.testSuite.scenarios?.[0].tests.map((test) => test.vars?.position);
+    const defaultPositions = () => scenarios[0].tests.map((test) => test.vars?.position);
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello {{position}}', label: 'Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+
+    const first = await resolveConfigs({ filterSample: 2, filterSampleSeed: 0 }, defaultConfig);
+    expect(selectedPositions(first)).toHaveLength(2);
+    expect(defaultPositions()).toEqual(originalPositions);
+
+    const second = await resolveConfigs({ filterSample: 4, filterSampleSeed: 1 }, defaultConfig);
+    expect([...(selectedPositions(second) ?? [])].sort()).toEqual(originalPositions);
+    expect(defaultPositions()).toEqual(originalPositions);
   });
 
   it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
@@ -2057,6 +2141,45 @@ describe('readConfig', () => {
 
     expect(result).toEqual(mockConfig);
     expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+  });
+
+  it('should normalize a quoted configured filter sample seed', async () => {
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      commandLineOptions: {
+        filterSampleSeed: '42',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.yaml');
+
+    expect(result.commandLineOptions?.filterSampleSeed).toBe(42);
+  });
+
+  it.each([
+    'named-seed',
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('should reject invalid configured filter sample seed %p', async (filterSampleSeed) => {
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      commandLineOptions: {
+        filterSampleSeed,
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.yaml')).rejects.toMatchObject({
+      name: 'ConfigResolutionError',
+      message: expect.stringContaining(
+        'Invalid commandLineOptions in configuration file config.yaml',
+      ),
+    });
   });
 
   it('should read JavaScript config file', async () => {

@@ -14,10 +14,9 @@ const moduleNotFoundCodes = new Set(['MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND']
  * absent — npm skipped it, the cache is corrupt, or the platform is unsupported —
  * the user sees a raw module-not-found stack with no remediation hint.
  *
- * Accepts both `MODULE_NOT_FOUND` (CJS require — emitted by @neon-rs/load) and
- * `ERR_MODULE_NOT_FOUND` (ESM dynamic import — emitted if the top-level
- * @libsql/client package itself is missing). The regex only matches platform
- * targets, so a missing @libsql/client falls through to the generic handler.
+ * Accepts both `MODULE_NOT_FOUND` (CJS require) and `ERR_MODULE_NOT_FOUND`
+ * (ESM import) while matching only platform targets. Missing wrapper packages
+ * such as @libsql/client therefore fall through to the generic handler.
  */
 export function getLibsqlBindingTarget(error: unknown): string | undefined {
   if (!(error instanceof Error)) {
