@@ -8,7 +8,11 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
-const FILE_URL_FUNCTION_EXTENSIONS = [...JAVASCRIPT_EXTENSIONS, '.py', '.rb'];
+const FILE_URL_FUNCTION_EXTENSIONS = [
+  ...JAVASCRIPT_EXTENSIONS.map((extension) => `.${extension}`),
+  '.py',
+  '.rb',
+];
 const FUNCTION_REFERENCE_PATTERN =
   /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|::)[A-Za-z_$][A-Za-z0-9_$]*)*$/;
 const RUBY_FUNCTION_REFERENCE_PATTERN =
@@ -98,6 +102,18 @@ export async function loadFunction<T extends Function>({
   }
 }
 
+// Matches the leading slash + Windows drive prefix from canonical `file:///C:/...`
+// URLs (e.g. `/C:/` or `/C:\`). Only stripped on Windows so POSIX paths that
+// legitimately start with `/X:` (a directory literally named `X:`) are preserved.
+const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
+
+function normalizeFilePath(filePath: string): string {
+  if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(filePath)) {
+    return filePath.slice(1);
+  }
+  return filePath;
+}
+
 /**
  * Extracts the file path and function name from a file:// URL.
  * Convention: file://path/to/file.ext:functionName
@@ -133,32 +149,13 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
       isFunctionReference(candidateFn, extension)
     ) {
       return {
-        filePath,
-        functionName: candidateFn,
-      };
-    }
-  }
-
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
-
-  if (lastColonIndex > 1) {
-    const candidateFn = urlWithoutProtocol.slice(lastColonIndex + 1);
-    // Only treat as function name if it looks like an identifier or dotted
-    // reference (e.g., "myFunc", "Class.method", "namespace.func",
-    // "MyModule::Nested.method").
-    // Rejects file extensions (.js, .py, etc.), path segments (/foo), and numbers.
-    if (
-      FUNCTION_REFERENCE_PATTERN.test(candidateFn) &&
-      !/\.(js|cjs|mjs|ts|cts|mts|py|rb|json|yaml|yml)$/i.test(candidateFn)
-    ) {
-      return {
-        filePath: urlWithoutProtocol.slice(0, lastColonIndex),
+        filePath: normalizeFilePath(filePath),
         functionName: candidateFn,
       };
     }
   }
 
   return {
-    filePath: urlWithoutProtocol,
+    filePath: normalizeFilePath(urlWithoutProtocol),
   };
 }

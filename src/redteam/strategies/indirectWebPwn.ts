@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -117,7 +117,7 @@ export async function checkExfilTracking(
       url,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,
@@ -236,7 +236,7 @@ async function createWebPage(
     url,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'create-web-page',
         testCaseId,
@@ -289,7 +289,7 @@ async function updateWebPage(
     url,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'update-web-page',
         uuid,

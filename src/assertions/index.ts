@@ -45,6 +45,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
+import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
@@ -124,6 +125,7 @@ const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
+  'agent-rubric',
   'answer-relevance',
   'context-faithfulness',
   'context-recall',
@@ -230,6 +232,7 @@ const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
   (params: AssertionParams) => GradingResult | Promise<GradingResult>
 > = {
+  'agent-rubric': handleAgentRubric,
   'answer-relevance': handleAnswerRelevance,
   bleu: handleBleuScore,
   classifier: handleClassifier,
@@ -660,7 +663,7 @@ export async function runAssertion({
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },
-      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
+      ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -672,6 +675,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+    ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
   // Add trace data if traceId is available

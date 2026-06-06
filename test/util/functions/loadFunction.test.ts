@@ -316,6 +316,42 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should normalize standard Windows file URLs on Windows', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: 'C:/path/to/file.js',
+      });
+      expect(parseFileUrl('file:///C:/path/to/file.js:functionName')).toEqual({
+        filePath: 'C:/path/to/file.js',
+        functionName: 'functionName',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('should preserve Windows-looking file URLs as POSIX paths on POSIX', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: '/C:/path/to/file.js',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
   it('should handle Windows drive-letter paths without function name', () => {
     expect(parseFileUrl('file://C:\\repo\\assert.js')).toEqual({
       filePath: 'C:\\repo\\assert.js',
@@ -358,6 +394,19 @@ describe('parseFileUrl', () => {
     expect(parseFileUrl('file:///tmp/assert:one.js:myFunc')).toEqual({
       filePath: '/tmp/assert:one.js',
       functionName: 'myFunc',
+    });
+  });
+
+  it('should preserve colons in default-export file paths', () => {
+    expect(parseFileUrl('file://./path/to/file:default.js')).toEqual({
+      filePath: './path/to/file:default.js',
+    });
+  });
+
+  it('should parse named exports from directory paths that contain colons', () => {
+    expect(parseFileUrl('file://path:with:colons/hooks.js:functionName')).toEqual({
+      filePath: 'path:with:colons/hooks.js',
+      functionName: 'functionName',
     });
   });
 
