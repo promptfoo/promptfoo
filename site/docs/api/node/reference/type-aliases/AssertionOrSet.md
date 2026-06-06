@@ -11,7 +11,7 @@ import type { AssertionOrSet } from 'promptfoo';
 
 > **AssertionOrSet** = [`AssertionSet`](../interfaces/AssertionSet.md) \| [`Assertion`](../interfaces/Assertion.md)
 
-Defined in: [types/index.ts:1107](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1107)
+Defined in: [types/index.ts:1042](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1042)
 
 Assertion entry accepted by test cases.
 

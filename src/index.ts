@@ -27,9 +27,9 @@ import type Eval from './models/eval';
 import type { RedteamGenerateOptions, RedteamRunOptions } from './redteam/types';
 import type { UnifiedConfig } from './types/index';
 
-export { EvalRunError } from './commands/eval';
 export { PromptSuggestionsRejectedError } from './evaluator';
 export { EmailValidationError } from './globalConfig/accounts';
+export { EvalRunError } from './node/doEval';
 export { ServerError, type ServerErrorPhase } from './server/errors';
 export { generateTable } from './table';
 // EVENT_SOURCES, EventSource, EventSourceSchema, isCliEventSource flow through ./types/index.

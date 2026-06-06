@@ -9,15 +9,15 @@ description: 'Prompt payload accepted from function-valued prompts.'
 import type { PromptContent } from 'promptfoo';
 ```
 
-> **PromptContent** = `string` \| `object`
+> **PromptContent** = `string` \| `any`
 
 Defined in: [contracts/prompts.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L25)
 
 Prompt payload accepted from function-valued prompts.
 
-Strings are sent as-is. Structured values such as chat-message arrays are
-accepted through the `object` branch and are JSON-stringified before the
-provider receives them.
+Strings are sent as-is. Other values retain the permissive compatibility
+contract used by existing prompt functions and are normalized by the prompt
+processing pipeline before the provider receives them.
 
 ## Example
 

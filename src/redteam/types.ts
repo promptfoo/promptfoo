@@ -654,6 +654,8 @@ export interface RedteamRunOptions {
   progressBar?: boolean;
   /** Human-readable description recorded with the run. */
   description?: string;
+  /** Optional labels recorded with the run. */
+  tags?: Record<string, string>;
   /** Whether to fail closed on invalid or partial runtime input. */
   strict?: boolean;
 

@@ -19,14 +19,14 @@ import path from 'path';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools, stripExecutableToolFileReferences } from './util';
+import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -110,6 +110,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.tools, vars);
   }
 
   /**
@@ -254,15 +258,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @returns The loaded function
    */
   protected async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
+    const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
       const basePath = cliState.basePath || process.cwd();

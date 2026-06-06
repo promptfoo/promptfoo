@@ -9,7 +9,7 @@ description: 'Guardrail outcome metadata returned by moderation-aware providers.
 import type { GuardrailResponse } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:376](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L376)
+Defined in: [contracts/providers.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L50)
 
 Guardrail outcome metadata returned by moderation-aware providers.
 
@@ -29,7 +29,7 @@ const guardrails: GuardrailResponse = {
 
 > `optional` **flagged?**: `boolean`
 
-Defined in: [types/providers.ts:382](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L382)
+Defined in: [contracts/providers.ts:56](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L56)
 
 Aggregate flag when the provider does not distinguish input from output.
 
@@ -39,7 +39,7 @@ Aggregate flag when the provider does not distinguish input from output.
 
 > `optional` **flaggedInput?**: `boolean`
 
-Defined in: [types/providers.ts:378](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L378)
+Defined in: [contracts/providers.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L52)
 
 Whether the input prompt tripped a guardrail.
 
@@ -49,7 +49,7 @@ Whether the input prompt tripped a guardrail.
 
 > `optional` **flaggedOutput?**: `boolean`
 
-Defined in: [types/providers.ts:380](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L380)
+Defined in: [contracts/providers.ts:54](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L54)
 
 Whether the provider output tripped a guardrail.
 
@@ -59,6 +59,6 @@ Whether the provider output tripped a guardrail.
 
 > `optional` **reason?**: `string`
 
-Defined in: [types/providers.ts:384](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L384)
+Defined in: [contracts/providers.ts:58](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L58)
 
 Provider-supplied reason for the guardrail outcome.

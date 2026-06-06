@@ -32,7 +32,7 @@ Provider selected for this invocation when one is available.
 
 #### vars
 
-`Record`\<`string`, `VarValue`\>
+`Record`\<`string`, `string` \| `any`\>
 
 Rendered variables for the current test case.
 

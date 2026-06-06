@@ -20,8 +20,7 @@ export {
 
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptConfig, PromptFunction } from '../contracts/prompts';
-import type { BaseTokenUsage, NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
-import type { TransformFunction } from '../contracts/transform';
+import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -39,9 +38,6 @@ import type {
   VideoOutput,
 } from './providers';
 import type { TraceData } from './tracing';
-
-type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
-function assert<_T extends true>() {}
 
 /**
  * Minimal interface for RateLimitRegistry to avoid circular dependency.
@@ -133,6 +129,7 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
+  filterSampleSeed: z.coerce.number().int().safe().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
   tags: z.record(z.string(), z.string()).optional(),
@@ -421,45 +418,10 @@ const PromptMetricsSchema = z.object({
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface PromptMetrics {
-  /** Aggregate normalized score across outputs for this prompt. */
-  score: number;
-  /** Number of test rows that passed for this prompt. */
-  testPassCount: number;
-  /** Number of test rows that failed assertions for this prompt. */
-  testFailCount: number;
-  /** Number of test rows that errored before normal grading completed. */
-  testErrorCount: number;
-  /** Number of individual assertions that passed. */
-  assertPassCount: number;
-  /** Number of individual assertions that failed. */
-  assertFailCount: number;
-  /** Sum of provider latency for this prompt in milliseconds. */
-  totalLatencyMs: number;
-  /** Token usage accumulated across provider calls for this prompt. */
-  tokenUsage: BaseTokenUsage;
-  /** Aggregate values for named assertion metrics. */
-  namedScores: Record<string, number>;
-  /** Number of contributions included in each named score. */
-  namedScoresCount: Record<string, number>;
-  /** Sum of assertion weights contributing to each named score. */
-  namedScoreWeights?: Record<string, number>;
-  /** Red-team pass/fail counts grouped by plugin and strategy. */
-  redteam?: {
-    /** Passing result counts by red-team plugin id. */
-    pluginPassCount: Record<string, number>;
-    /** Failing result counts by red-team plugin id. */
-    pluginFailCount: Record<string, number>;
-    /** Passing result counts by red-team strategy id. */
-    strategyPassCount: Record<string, number>;
-    /** Failing result counts by red-team strategy id. */
-    strategyFailCount: Record<string, number>;
-  };
-  /** Estimated cost accumulated across provider calls for this prompt. */
-  cost: number;
-}
+export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
 // Used for final prompt display
 export const CompletedPromptSchema = PromptSchema.extend({
@@ -479,14 +441,10 @@ export const CompletedPromptSchema = PromptSchema.extend({
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface CompletedPrompt extends Prompt {
-  /** Provider id associated with the completed prompt column. */
-  provider: string;
-  /** Aggregate metrics accumulated for this prompt. */
-  metrics?: PromptMetrics;
-}
+export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 
 // Used when building prompts index from files.
 export interface PromptWithMetadata {
@@ -544,6 +502,14 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  /**
+   * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
+   * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
+   * Absent when tracing is disabled — its presence implies a trace context exists.
+   */
+  evaluationId?: string;
+  /** W3C trace ID generated for this row when tracing is enabled. */
+  traceId?: string;
 }
 
 /**
@@ -866,6 +832,7 @@ export function isGradingResult(result: any): result is GradingResult {
 }
 
 export const BaseAssertionTypesSchema = z.enum([
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -989,22 +956,10 @@ export const AssertionSetSchema = z.object({
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface AssertionSet {
-  /** Assertion-set discriminator. */
-  type: 'assert-set';
-  /** Sub-assertions to run as one grouped assertion set. */
-  assert: Assertion[];
-  /** Weight of this assertion set relative to other assertions. Defaults to `1`. */
-  weight?: number;
-  /** Optional metric name used to expose the grouped score. */
-  metric?: string;
-  /** Required score for the set; without one, the set is graded pass/fail. */
-  threshold?: number;
-  /** Shared custom config passed into every assertion in the set. */
-  config?: Record<string, any>;
-}
+export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
@@ -1051,30 +1006,10 @@ export const AssertionSchema = z.object({
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface Assertion {
-  /** Assertion kind to run, such as `contains`, `javascript`, or `llm-rubric`. */
-  type: AssertionType;
-  /** Expected value or callback consumed by assertion types that need one. */
-  value?: AssertionValue;
-  /** Arbitrary custom config exposed to assertion callbacks through `context.config`. */
-  config?: Record<string, any>;
-  /** Minimum score required by threshold-aware assertions such as `similar`. */
-  threshold?: number;
-  /** Weight of this assertion relative to the rest of the test case. Defaults to `1`. */
-  weight?: number;
-  /** Provider override used by model-graded assertions that need one. */
-  provider?: GradingConfig['provider'];
-  /** Rubric override used by model-graded assertions. */
-  rubricPrompt?: GradingConfig['rubricPrompt'];
-  /** Optional metric name used when the assertion contributes a named score. */
-  metric?: string;
-  /** Transform provider output before this assertion runs. */
-  transform?: string | TransformFunction;
-  /** Extract assertion-specific context from output before grading. */
-  contextTransform?: string | TransformFunction;
-}
+export type Assertion = z.infer<typeof AssertionSchema>;
 
 /**
  * Schema for validating individual assertions (regular or assert-set).
@@ -1137,6 +1072,8 @@ export interface AssertionValueFunctionContext {
   providerResponse: ProviderResponse | undefined;
   /** Trace data for trace-aware assertions when tracing is enabled. */
   trace?: TraceData;
+  /** Shortcut to providerResponse?.metadata for convenience */
+  metadata?: ProviderResponse['metadata'];
 }
 
 /**
@@ -1456,32 +1393,10 @@ export interface TestCaseMetadata {
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface TestCase {
-  /** Optional human-readable description of what the test covers. */
-  description?: string;
-  /** Key-value pairs substituted into prompts for this test case. */
-  vars?: Vars;
-  /** Provider override for this specific test case. */
-  provider?: string | ProviderOptions | ApiProvider;
-  /** Provider labels or ids this test should run against; supports wildcards such as `openai:*`. */
-  providers?: string[];
-  /** Prompt labels or ids this test should run against; omitted means all prompts. */
-  prompts?: string[];
-  /** Precomputed provider output; when set, promptfoo skips the provider call and grades this output directly. */
-  providerOutput?: string | Record<string, unknown>;
-  /** Assertions to run against the provider output. */
-  assert?: AssertionOrSet[];
-  /** Optional custom scoring function for aggregating assertion results. */
-  assertScoringFunction?: string | ScoringFunction;
-  /** Additional configuration settings for the prompt and grader. */
-  options?: TestCaseOptions;
-  /** Required aggregate score for the test case; without one, the case is graded pass/fail. */
-  threshold?: number;
-  /** Arbitrary metadata attached to the test case. */
-  metadata?: TestCaseMetadata;
-}
+export type TestCase = z.infer<typeof TestCaseSchema>;
 
 export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -1535,19 +1450,10 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface AtomicTestCase extends TestCase {
-  /** Flattened variables used for this exact eval row. */
-  vars?: Vars;
-}
-
-assert<AssertEqual<PromptMetrics, z.infer<typeof PromptMetricsSchema>>>();
-assert<AssertEqual<CompletedPrompt, z.infer<typeof CompletedPromptSchema>>>();
-assert<AssertEqual<AssertionSet, z.infer<typeof AssertionSetSchema>>>();
-assert<AssertEqual<Assertion, z.infer<typeof AssertionSchema>>>();
-assert<AssertEqual<TestCase, z.infer<typeof TestCaseSchema>>>();
-assert<AssertEqual<AtomicTestCase, z.infer<typeof AtomicTestCaseSchema>>>();
+export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
 
 /**
  * Configuration schema for test generators that accept parameters
@@ -1693,6 +1599,8 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1701,6 +1609,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1713,7 +1622,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
@@ -1832,6 +1745,16 @@ export const TestSuiteConfigSchema = z.object({
     .object({
       enabled: z.boolean().prefault(false),
 
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().optional(),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
+
       // OTLP receiver configuration
       otlp: z
         .object({
@@ -1839,8 +1762,11 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z

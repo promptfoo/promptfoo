@@ -46,7 +46,7 @@ Provider config overrides to merge for this rendered prompt.
 
 ### prompt
 
-> **prompt**: [`PromptContent`](../type-aliases/PromptContent.md)
+> **prompt**: `any`
 
 Defined in: [contracts/prompts.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L100)
 

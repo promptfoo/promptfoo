@@ -9,7 +9,7 @@ description: 'Runtime context passed to custom provider functions.'
 import type { CallApiContextParams } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:197](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L197)
+Defined in: [types/providers.ts:180](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L180)
 
 Runtime context passed to custom provider functions.
 
@@ -28,7 +28,7 @@ const provider: ProviderFunction = async (prompt, context) => ({
 
 > `optional` **bustCache?**: `boolean`
 
-Defined in: [types/providers.ts:220](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L220)
+Defined in: [types/providers.ts:203](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L203)
 
 Whether this call should bypass reusable response cache entries.
 
@@ -38,7 +38,7 @@ Whether this call should bypass reusable response cache entries.
 
 > `optional` **debug?**: `boolean`
 
-Defined in: [types/providers.ts:216](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L216)
+Defined in: [types/providers.ts:199](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L199)
 
 Whether the caller requested debug behavior.
 
@@ -48,7 +48,7 @@ Whether the caller requested debug behavior.
 
 > `optional` **evaluationId?**: `string`
 
-Defined in: [types/providers.ts:228](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L228)
+Defined in: [types/providers.ts:211](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L211)
 
 Eval identifier for manual correlation across provider calls.
 
@@ -58,7 +58,7 @@ Eval identifier for manual correlation across provider calls.
 
 > `optional` **filters?**: `NunjucksFilterMap`
 
-Defined in: [types/providers.ts:199](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L199)
+Defined in: [types/providers.ts:182](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L182)
 
 Nunjucks filters available while rendering related prompt content.
 
@@ -68,7 +68,7 @@ Nunjucks filters available while rendering related prompt content.
 
 > `optional` **getCache?**: () => `any`
 
-Defined in: [types/providers.ts:206](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L206)
+Defined in: [types/providers.ts:189](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L189)
 
 Accessor for the active cache instance. Treat the return value as opaque
 and prefer the documented `cache.*` helpers from the package over calling
@@ -84,7 +84,7 @@ it directly.
 
 > `optional` **logger?**: `Logger`
 
-Defined in: [types/providers.ts:208](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L208)
+Defined in: [types/providers.ts:191](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L191)
 
 Logger configured for the current eval.
 
@@ -94,7 +94,7 @@ Logger configured for the current eval.
 
 > `optional` **originalProvider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:210](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L210)
+Defined in: [types/providers.ts:193](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L193)
 
 Original provider when this call is being graded or wrapped.
 
@@ -104,7 +104,7 @@ Original provider when this call is being graded or wrapped.
 
 > **prompt**: [`Prompt`](Prompt.md)
 
-Defined in: [types/providers.ts:212](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L212)
+Defined in: [types/providers.ts:195](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L195)
 
 Prompt object for the current provider call.
 
@@ -114,7 +114,7 @@ Prompt object for the current provider call.
 
 > `optional` **promptIdx?**: `number`
 
-Defined in: [types/providers.ts:240](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L240)
+Defined in: [types/providers.ts:223](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L223)
 
 Index of the prompt within the current evaluation (column in results table).
 Used for correlating blob references and other per-result metadata.
@@ -125,7 +125,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **repeatIndex?**: `number`
 
-Defined in: [types/providers.ts:242](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L242)
+Defined in: [types/providers.ts:225](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L225)
 
 Zero-based repeat index when the same test case is executed repeatedly.
 
@@ -135,7 +135,7 @@ Zero-based repeat index when the same test case is executed repeatedly.
 
 > `optional` **test?**: `AtomicTestCase`
 
-Defined in: [types/providers.ts:218](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L218)
+Defined in: [types/providers.ts:201](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L201)
 
 Test case currently being executed, when available to the caller.
 
@@ -145,7 +145,7 @@ Test case currently being executed, when available to the caller.
 
 > `optional` **testCaseId?**: `string`
 
-Defined in: [types/providers.ts:230](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L230)
+Defined in: [types/providers.ts:213](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L213)
 
 Stable id for the current test case when one has been assigned.
 
@@ -155,7 +155,7 @@ Stable id for the current test case when one has been assigned.
 
 > `optional` **testIdx?**: `number`
 
-Defined in: [types/providers.ts:235](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L235)
+Defined in: [types/providers.ts:218](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L218)
 
 Index of the test case within the current evaluation (row in results table).
 Used for correlating blob references and other per-result metadata.
@@ -166,7 +166,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **traceparent?**: `string`
 
-Defined in: [types/providers.ts:223](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L223)
+Defined in: [types/providers.ts:206](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L206)
 
 W3C Trace Context `traceparent` header for downstream propagation.
 
@@ -176,7 +176,7 @@ W3C Trace Context `traceparent` header for downstream propagation.
 
 > `optional` **tracestate?**: `string`
 
-Defined in: [types/providers.ts:225](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L225)
+Defined in: [types/providers.ts:208](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L208)
 
 W3C Trace Context `tracestate` header for downstream propagation.
 
@@ -186,6 +186,6 @@ W3C Trace Context `tracestate` header for downstream propagation.
 
 > **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [types/providers.ts:214](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L214)
+Defined in: [types/providers.ts:197](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L197)
 
 Rendered variables for the current test case.

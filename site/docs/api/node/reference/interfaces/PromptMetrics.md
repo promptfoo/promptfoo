@@ -9,7 +9,7 @@ description: 'Aggregate metrics tracked for one completed prompt.'
 import type { PromptMetrics } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:426](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L426)
+Defined in: [types/index.ts:424](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L424)
 
 Aggregate metrics tracked for one completed prompt.
 
@@ -37,7 +37,7 @@ const metrics: PromptMetrics = {
 
 > **assertFailCount**: `number`
 
-Defined in: [types/index.ts:438](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L438)
+Defined in: [types/index.ts:374](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L374)
 
 Number of individual assertions that failed.
 
@@ -47,7 +47,7 @@ Number of individual assertions that failed.
 
 > **assertPassCount**: `number`
 
-Defined in: [types/index.ts:436](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L436)
+Defined in: [types/index.ts:372](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L372)
 
 Number of individual assertions that passed.
 
@@ -57,7 +57,7 @@ Number of individual assertions that passed.
 
 > **cost**: `number`
 
-Defined in: [types/index.ts:461](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L461)
+Defined in: [types/index.ts:399](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L399)
 
 Estimated cost accumulated across provider calls for this prompt.
 
@@ -67,7 +67,7 @@ Estimated cost accumulated across provider calls for this prompt.
 
 > **namedScores**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:444](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L444)
+Defined in: [types/index.ts:380](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L380)
 
 Aggregate values for named assertion metrics.
 
@@ -77,7 +77,7 @@ Aggregate values for named assertion metrics.
 
 > **namedScoresCount**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:446](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L446)
+Defined in: [types/index.ts:382](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L382)
 
 Number of contributions included in each named score.
 
@@ -87,7 +87,7 @@ Number of contributions included in each named score.
 
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:448](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L448)
+Defined in: [types/index.ts:384](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L384)
 
 Sum of assertion weights contributing to each named score.
 
@@ -97,7 +97,7 @@ Sum of assertion weights contributing to each named score.
 
 > `optional` **redteam?**: `object`
 
-Defined in: [types/index.ts:450](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L450)
+Defined in: [types/index.ts:386](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L386)
 
 Red-team pass/fail counts grouped by plugin and strategy.
 
@@ -131,7 +131,7 @@ Passing result counts by red-team strategy id.
 
 > **score**: `number`
 
-Defined in: [types/index.ts:428](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L428)
+Defined in: [types/index.ts:364](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L364)
 
 Aggregate normalized score across outputs for this prompt.
 
@@ -141,7 +141,7 @@ Aggregate normalized score across outputs for this prompt.
 
 > **testErrorCount**: `number`
 
-Defined in: [types/index.ts:434](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L434)
+Defined in: [types/index.ts:370](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L370)
 
 Number of test rows that errored before normal grading completed.
 
@@ -151,7 +151,7 @@ Number of test rows that errored before normal grading completed.
 
 > **testFailCount**: `number`
 
-Defined in: [types/index.ts:432](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L432)
+Defined in: [types/index.ts:368](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L368)
 
 Number of test rows that failed assertions for this prompt.
 
@@ -161,7 +161,7 @@ Number of test rows that failed assertions for this prompt.
 
 > **testPassCount**: `number`
 
-Defined in: [types/index.ts:430](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L430)
+Defined in: [types/index.ts:366](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L366)
 
 Number of test rows that passed for this prompt.
 
@@ -169,11 +169,123 @@ Number of test rows that passed for this prompt.
 
 ### tokenUsage
 
-> **tokenUsage**: [`TokenUsage`](TokenUsage.md)
+> **tokenUsage**: `object` = `BaseTokenUsageSchema`
 
-Defined in: [types/index.ts:442](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L442)
+Defined in: [types/index.ts:378](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L378)
 
 Token usage accumulated across provider calls for this prompt.
+
+#### assertions?
+
+> `optional` **assertions?**: `object`
+
+##### assertions.cached?
+
+> `optional` **cached?**: `number`
+
+##### assertions.completion?
+
+> `optional` **completion?**: `number`
+
+##### assertions.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### assertions.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### assertions.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### assertions.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### assertions.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### assertions.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### assertions.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### assertions.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### assertions.total?
+
+> `optional` **total?**: `number`
+
+#### cached?
+
+> `optional` **cached?**: `number`
+
+#### completion?
+
+> `optional` **completion?**: `number`
+
+#### completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+#### numRequests?
+
+> `optional` **numRequests?**: `number`
+
+#### prompt?
+
+> `optional` **prompt?**: `number`
+
+#### total?
+
+> `optional` **total?**: `number`
 
 ---
 
@@ -181,6 +293,6 @@ Token usage accumulated across provider calls for this prompt.
 
 > **totalLatencyMs**: `number`
 
-Defined in: [types/index.ts:440](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L440)
+Defined in: [types/index.ts:376](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L376)
 
 Sum of provider latency for this prompt in milliseconds.

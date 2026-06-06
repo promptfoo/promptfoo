@@ -9,12 +9,9 @@ description: 'Chat message reported by providers for multi-turn prompts and tran
 import type { ChatMessage } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L90)
+Defined in: [contracts/providers.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L17)
 
 Chat message reported by providers for multi-turn prompts and transcripts.
-
-Providers use this lightweight shape when they need to preserve the exact
-conversation that was sent to or returned from a chat-capable model.
 
 ## Example
 
@@ -31,7 +28,7 @@ const message: ChatMessage = {
 
 > **content**: `string`
 
-Defined in: [types/providers.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L94)
+Defined in: [contracts/providers.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L21)
 
 Text content sent or received for the turn.
 
@@ -41,6 +38,6 @@ Text content sent or received for the turn.
 
 > **role**: `"function"` \| `"system"` \| `"user"` \| `"assistant"` \| `"tool"`
 
-Defined in: [types/providers.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L92)
+Defined in: [contracts/providers.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L19)
 
 Speaker role for the message.

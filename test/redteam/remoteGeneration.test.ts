@@ -7,6 +7,7 @@ import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefa
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
   getRemoteHealthUrl,
@@ -493,5 +494,20 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
     expect(getRemoteGenerationUrlForUnaligned()).toBe(
       'https://api.promptfoo.app/api/v1/task/harmful',
     );
+  });
+});
+
+describe('getRemoteGenerationHeaders', () => {
+  it('returns JSON headers without cloud credentials', () => {
+    expect(getRemoteGenerationHeaders()).toEqual({
+      'Content-Type': 'application/json',
+    });
+  });
+
+  it('preserves caller-supplied extra headers', () => {
+    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toEqual({
+      'Content-Type': 'application/json',
+      'X-Custom': 'value',
+    });
   });
 });

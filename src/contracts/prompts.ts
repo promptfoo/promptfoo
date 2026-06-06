@@ -1,4 +1,4 @@
-import type { VarValue } from './shared';
+import type { VarValue } from './shared.js';
 
 /** Minimum provider surface a prompt function may receive. */
 export interface MinimalApiProvider {
@@ -10,9 +10,9 @@ export interface MinimalApiProvider {
 /**
  * Prompt payload accepted from function-valued prompts.
  *
- * Strings are sent as-is. Structured values such as chat-message arrays are
- * accepted through the `object` branch and are JSON-stringified before the
- * provider receives them.
+ * Strings are sent as-is. Other values retain the permissive compatibility
+ * contract used by existing prompt functions and are normalized by the prompt
+ * processing pipeline before the provider receives them.
  *
  * @example
  * ```ts
@@ -22,7 +22,7 @@ export interface MinimalApiProvider {
  *
  * @public
  */
-export type PromptContent = string | object;
+export type PromptContent = string | any;
 
 /**
  * Prompt-local text decoration applied before provider execution.
@@ -121,7 +121,7 @@ export interface PromptFunctionResult {
  */
 export type PromptFunction = (context: {
   /** Rendered variables for the current test case. */
-  vars: Record<string, VarValue>;
+  vars: Record<string, string | any>;
   /** Provider selected for this invocation when one is available. */
   provider?: MinimalApiProvider;
 }) => Promise<PromptContent | PromptFunctionResult>;

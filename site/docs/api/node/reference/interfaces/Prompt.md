@@ -23,10 +23,6 @@ const prompt: Prompt = {
 };
 ```
 
-## Extended by
-
-- [`CompletedPrompt`](CompletedPrompt.md)
-
 ## Properties
 
 ### config?

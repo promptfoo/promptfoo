@@ -130,4 +130,20 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
       'environment variable or add `apiKey` to the provider config.'
     );
   }
+
+  // Redact an inline apiKey when serialized, matching the sibling OpenAI-derived
+  // providers (minimax, orcarouter, openrouter, ...). The base
+  // OpenAiChatCompletionProvider does not implement toJSON(), so without this a
+  // Bearer token set inline in config would be written out verbatim wherever the
+  // provider is JSON.stringify-ed.
+  toJSON() {
+    return {
+      provider: 'mlflow-gateway',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
+  }
 }
