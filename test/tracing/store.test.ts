@@ -26,6 +26,7 @@ let TraceStore: typeof import('../../src/tracing/store').TraceStore;
 describe('TraceStore', () => {
   let traceStore: InstanceType<typeof TraceStore>;
   let mockDb: any;
+  let mockDeleteChain: any;
 
   beforeAll(async () => {
     const mod = await import('../../src/tracing/store');
@@ -47,7 +48,7 @@ describe('TraceStore', () => {
       where: vi.fn().mockReturnThis(),
       limit: vi.fn(() => Promise.resolve([])),
     };
-    const mockDeleteChain = {
+    mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),
     };
@@ -86,6 +87,7 @@ describe('TraceStore', () => {
         traceId: 'test-trace-id',
         evaluationId: 'test-eval-id',
         testCaseId: 'test-case-id',
+        createdAt: expect.any(Number),
         metadata: { test: 'data' },
       });
       expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
@@ -106,6 +108,41 @@ describe('TraceStore', () => {
       };
 
       await expect(traceStore.createTrace(traceData)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getTraceMetadata', () => {
+    // This three-way contract is the single source of truth for ingest-time redaction
+    // (otlpReceiver.getRedactAttributePatterns): object => use stored policy, {} => no
+    // policy (no redaction), undefined => no trace row (fall back to receiver default).
+    it('returns the stored metadata object when the trace row has metadata', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([
+          { metadata: { otlpHttpRedactAttributes: ['authorization'] } },
+        ]);
+
+      await expect(traceStore.getTraceMetadata('trace-1')).resolves.toEqual({
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+    });
+
+    it('returns an empty object (not undefined) when the row exists but metadata is null', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([{ metadata: null }]);
+
+      await expect(traceStore.getTraceMetadata('trace-2')).resolves.toEqual({});
+    });
+
+    it('returns undefined when no trace row exists', async () => {
+      mockDb.select().from().where().limit.mockResolvedValueOnce([]);
+
+      await expect(traceStore.getTraceMetadata('trace-3')).resolves.toBeUndefined();
     });
   });
 
@@ -653,19 +690,20 @@ describe('TraceStore', () => {
   });
 
   describe('deleteOldTraces', () => {
-    it('should delete traces older than retention period', async () => {
+    it('should delete dependent spans before traces older than retention period', async () => {
       const retentionDays = 30;
 
       await traceStore.deleteOldTraces(retentionDays);
 
       expect(mockDb.transaction).toHaveBeenCalledWith(expect.any(Function));
       expect(mockDb.delete).toHaveBeenCalledTimes(2);
-      expect(mockDb.delete().where).toHaveBeenCalledWith(expect.anything());
+      expect(mockDeleteChain.where).toHaveBeenCalledTimes(2);
+      expect(mockDeleteChain.run).toHaveBeenCalledTimes(2);
     });
 
     it('should handle errors when deleting old traces', async () => {
       const error = new Error('Delete failed');
-      mockDb.delete().where().run.mockRejectedValueOnce(error);
+      mockDeleteChain.run.mockRejectedValueOnce(error);
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
     });

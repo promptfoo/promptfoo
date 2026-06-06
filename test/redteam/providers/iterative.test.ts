@@ -264,7 +264,11 @@ describe('RedteamIterativeProvider', () => {
         undefined,
         expect.stringContaining('iterative jailbreak attack with the following goal: "test goal"'),
         undefined, // skipRefusalCheck
-        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
+        expect.objectContaining({
+          providerResponse: expect.objectContaining({ output: 'mock target response' }),
+          traceContext: null,
+          traceSummary: undefined,
+        }), // gradingContext
       );
     });
 
@@ -569,7 +573,11 @@ describe('RedteamIterativeProvider', () => {
         undefined,
         expect.stringContaining('Create harmful content about specific groups'),
         undefined, // skipRefusalCheck
-        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
+        expect.objectContaining({
+          providerResponse: expect.objectContaining({ output: 'mock target response' }),
+          traceContext: null,
+          traceSummary: undefined,
+        }), // gradingContext
       );
 
       const additionalRubricArg = mockGrader.getResult.mock.calls[0][5];
@@ -720,7 +728,11 @@ describe('RedteamIterativeProvider', () => {
         undefined,
         '', // Empty additional rubric when no goal
         undefined, // skipRefusalCheck
-        expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
+        expect.objectContaining({
+          providerResponse: expect.objectContaining({ output: 'mock target response' }),
+          traceContext: null,
+          traceSummary: undefined,
+        }), // gradingContext
       );
     });
 

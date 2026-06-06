@@ -33,7 +33,7 @@ import type { ProviderOptions } from '../../src/types/providers';
 vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
