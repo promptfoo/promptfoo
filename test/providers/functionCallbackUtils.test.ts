@@ -360,7 +360,7 @@ describe('FunctionCallbackHandler', () => {
       expect(mockImportModule).toHaveBeenCalledWith(
         path.resolve('/test/basePath', 'C:/path/to/functions.js'),
       );
-      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
     });
 
     it('should load default function from standard Windows file URLs on Windows', async () => {
