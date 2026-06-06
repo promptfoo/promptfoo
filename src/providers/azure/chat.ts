@@ -15,7 +15,7 @@ import {
   renderVarsInObject,
 } from '../../util/index';
 import invariant from '../../util/invariant';
-import { isClaudeOpus47Model } from '../anthropic/util';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -100,20 +100,29 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // Microsoft Phi reasoning models
       lowerName.includes('phi-4-reasoning') ||
       lowerName.includes('phi-4-mini-reasoning') ||
+      // Microsoft MAI reasoning models (MAI-Thinking-1, MAI-DS-R1 / DeepSeek-R1
+      // lineage). MAI-Code-* are fast coding models and use the standard chat
+      // surface, so they're intentionally excluded here.
+      lowerName.includes('mai-thinking') ||
+      lowerName.includes('mai-ds-r1') ||
+      lowerName.includes('mai-reasoning') ||
       // xAI Grok reasoning models
       (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );
   }
 
   /**
-   * Claude Opus 4.7 deprecates `temperature` at the model level — the
-   * deployment returns 400 for any request that includes it. Opus 4.7 keeps
-   * the standard `max_tokens` field (not `max_completion_tokens`) and does
-   * not accept `reasoning_effort`, so we only strip temperature here and
-   * leave the rest of the chat body intact.
+   * Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+   * level — the deployment returns 400 for any request that pins `temperature`
+   * or `top_p`. These models keep the standard `max_tokens` field (not
+   * `max_completion_tokens`) and do not accept `reasoning_effort`, so we only
+   * strip the sampling params here and leave the rest of the chat body intact.
    */
-  protected isClaudeOpus47(): boolean {
-    return isClaudeOpus47Model(this.deploymentName);
+  protected isSamplingParamsDeprecatedClaudeModel(): boolean {
+    return (
+      Boolean(this.config.isClaudeOpus47OrLater) ||
+      isSamplingParamsDeprecatedClaudeModel(this.deploymentName)
+    );
   }
 
   async getOpenAiBody(
@@ -164,7 +173,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
-    const isClaudeOpus47 = this.isClaudeOpus47();
+    const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel();
 
     // Get max tokens based on model type
     const maxTokensDefault = config.omitDefaults
@@ -221,9 +230,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
-            ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
+            ...(temperature === undefined || samplingParamsDeprecated ? {} : { temperature }),
           }),
-      ...(topP === undefined ? {} : { top_p: topP }),
+      ...(topP === undefined || samplingParamsDeprecated ? {} : { top_p: topP }),
       ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
       ...(frequencyPenalty === undefined ? {} : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),

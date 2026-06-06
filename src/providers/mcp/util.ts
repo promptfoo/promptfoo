@@ -1,7 +1,6 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
-import { safeJsonStringify } from '../../util/json';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 
 import type { VarValue } from '../../types/shared';
@@ -84,6 +83,34 @@ export function formatMcpToolResult(name: string, content: unknown): string {
   return `MCP Tool Result (${name}): ${normalizeMcpContent(content)}`;
 }
 
+function stringifyMcpContent(value: unknown): string {
+  const ancestors: unknown[] = [];
+
+  try {
+    return (
+      JSON.stringify(value, function (_key, nestedValue) {
+        if (typeof nestedValue === 'bigint') {
+          return nestedValue.toString();
+        }
+        if (typeof nestedValue === 'object' && nestedValue !== null) {
+          while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+            ancestors.pop();
+          }
+          if (ancestors.includes(nestedValue)) {
+            return '[Circular]';
+          }
+          ancestors.push(nestedValue);
+        }
+        return nestedValue;
+      }) ?? String(value)
+    );
+  } catch {
+    return typeof value === 'object'
+      ? '{"error":"Unable to serialize MCP content"}'
+      : String(value);
+  }
+}
+
 /**
  * Normalize MCP tool content into a readable string. MCP servers return content
  * as an array of typed blocks (`{ type: 'text', text }`, etc.); this joins the
@@ -111,18 +138,18 @@ export function normalizeMcpContent(content: unknown): string {
             return String((part as { text: unknown }).text);
           }
           if ('json' in part) {
-            return safeJsonStringify((part as { json: unknown }).json) ?? '';
+            return stringifyMcpContent((part as { json: unknown }).json);
           }
           if ('data' in part) {
-            return safeJsonStringify((part as { data: unknown }).data) ?? '';
+            return stringifyMcpContent((part as { data: unknown }).data);
           }
-          return safeJsonStringify(part) ?? '';
+          return stringifyMcpContent(part);
         }
         return String(part);
       })
       .join('\n');
   }
-  return safeJsonStringify(content) ?? '';
+  return stringifyMcpContent(content);
 }
 
 /**
@@ -159,8 +186,11 @@ const oauthTokenCache = new Map<string, OAuthTokenCache>();
 /**
  * Get the cache key for an OAuth config
  */
-function getOAuthCacheKey(auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth): string {
-  return `${auth.tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}`;
+function getOAuthCacheKey(
+  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+  tokenUrl: string,
+): string {
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
@@ -253,7 +283,7 @@ export async function getOAuthTokenWithExpiry(
     tokenUrl = await discoverTokenEndpoint(serverUrl);
   }
 
-  const cacheKey = getOAuthCacheKey(auth);
+  const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
   const now = Date.now();
 
