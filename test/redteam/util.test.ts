@@ -6,6 +6,7 @@ import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   extractVariablesFromJson,
+  fetchRemoteRedteamDataset,
   getSessionId,
   getShortPluginId,
   isBasicRefusal,
@@ -18,6 +19,40 @@ import { mockProcessEnv } from '../util/utils';
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
 vi.mock('../../src/cache');
+
+describe('fetchRemoteRedteamDataset', () => {
+  it('returns text responses from the shared fetch cache', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"id":"example"}',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await expect(fetchRemoteRedteamDataset('https://example.test/data', 'Example')).resolves.toBe(
+      '{"id":"example"}',
+    );
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://example.test/data',
+      {},
+      expect.any(Number),
+      'text',
+    );
+  });
+
+  it('rejects non-success responses', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: 'unavailable',
+      cached: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    await expect(fetchRemoteRedteamDataset('https://example.test/data', 'Example')).rejects.toThrow(
+      '[Example] HTTP status: 503 Service Unavailable',
+    );
+  });
+});
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {

@@ -1,17 +1,15 @@
-import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
-import { fetchWithTimeout } from '../../util/fetch/index';
+import { fetchRemoteRedteamDataset, redteamLogger as logger } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type {
-  ApiProvider,
-  Assertion,
-  AssertionValue,
-  AtomicTestCase,
-  GradingResult,
-  TestCase,
-} from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
+import type {
+  RedteamPluginApiProvider,
+  RedteamPluginAssertion,
+  RedteamPluginAssertionValue,
+  RedteamPluginAtomicTestCase,
+  RedteamPluginGradingResult,
+  RedteamPluginTestCase,
+} from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:openai-guardrails';
 
@@ -170,7 +168,7 @@ type OpenAIGuardrailsVars = {
   isSafe?: boolean;
 };
 
-interface OpenAIGuardrailsTestCase extends TestCase {
+interface OpenAIGuardrailsTestCase extends RedteamPluginTestCase {
   vars: OpenAIGuardrailsVars;
 }
 
@@ -213,13 +211,7 @@ export async function fetchDataset(
       `[OpenAI Guardrails] Fetching dataset from ${DATASET_URL} (includeSafe: ${includeSafe})`,
     );
 
-    const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
-    if (!response.ok) {
-      throw new Error(`[OpenAI Guardrails] HTTP status: ${response.status} ${response.statusText}`);
-    }
-    const jsonlData = await response.text();
-
-    logger.debug(`[OpenAI Guardrails] Got ${jsonlData.length} bytes of JSONL data`);
+    const jsonlData = await fetchRemoteRedteamDataset(DATASET_URL, 'OpenAI Guardrails');
 
     const rows = parseDatasetRows(jsonlData);
 
@@ -302,7 +294,7 @@ export class OpenAIGuardrailsPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  getAssertions(_prompt: string, _isSafe = false): Assertion[] {
+  getAssertions(_prompt: string, _isSafe = false): RedteamPluginAssertion[] {
     return [
       {
         metric: 'OpenAI Guardrails',
@@ -311,7 +303,7 @@ export class OpenAIGuardrailsPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs?: number): Promise<RedteamPluginTestCase[]> {
     const includeSafe = this.config?.includeSafe ?? false;
     const testCases = await fetchDataset(n, includeSafe);
 
@@ -381,13 +373,13 @@ Be strict in your evaluation. Any indication that the model engaged with the har
   async getResult(
     prompt: string,
     llmOutput: string,
-    test: AtomicTestCase,
-    provider: ApiProvider | undefined,
-    renderedValue?: AssertionValue,
+    test: RedteamPluginAtomicTestCase,
+    provider: RedteamPluginApiProvider | undefined,
+    renderedValue?: RedteamPluginAssertionValue,
     additionalRubric?: string,
     _skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+  ): Promise<{ grade: RedteamPluginGradingResult; rubric: string }> {
     // Safe controls and mixed refusal/compliance outputs both require full rubric grading.
     return super.getResult(
       prompt,

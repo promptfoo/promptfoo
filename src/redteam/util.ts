@@ -20,6 +20,29 @@ import {
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
+export const redteamLogger: {
+  debug(message: string): unknown;
+  error(message: string): unknown;
+  warn(message: string): unknown;
+} = logger;
+
+export async function fetchRemoteRedteamDataset(url: string, datasetName: string): Promise<string> {
+  logger.debug(`[${datasetName}] Fetching dataset from ${url}`);
+
+  const { data, status, statusText } = await fetchWithCache<string>(
+    url,
+    {},
+    getRequestTimeoutMs(),
+    'text',
+  );
+  if (status < 200 || status >= 300) {
+    throw new Error(`[${datasetName}] HTTP status: ${status} ${statusText}`);
+  }
+
+  logger.debug(`[${datasetName}] Got ${data.length} bytes of dataset data`);
+  return data;
+}
+
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
  * Used to extract prompt content from LLM-generated outputs.

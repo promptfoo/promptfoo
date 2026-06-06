@@ -35,6 +35,13 @@ import type {
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
 
+export type RedteamPluginApiProvider = ApiProvider;
+export type RedteamPluginAssertion = Assertion;
+export type RedteamPluginAssertionValue = AssertionValue;
+export type RedteamPluginAtomicTestCase = AtomicTestCase;
+export type RedteamPluginGradingResult = GradingResult;
+export type RedteamPluginTestCase = TestCase;
+
 type GraderExample = NonNullable<PluginConfig['graderExamples']>[number];
 
 export function buildPluginGradingInstructions({

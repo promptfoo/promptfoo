@@ -7,10 +7,15 @@ import {
   OpenAIGuardrailsPlugin,
 } from '../../../src/redteam/plugins/openaiGuardrails';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { fetchRemoteRedteamDataset } from '../../../src/redteam/util';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch');
 vi.mock('../../../src/logger');
+vi.mock('../../../src/redteam/util', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchRemoteRedteamDataset: vi.fn(),
+}));
 vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => ({
   ...(await importOriginal()),
   matchesLlmRubric: vi.fn(),
@@ -21,6 +26,13 @@ describe('OpenAIGuardrailsPlugin', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(fetchRemoteRedteamDataset).mockImplementation(async (url) => {
+      const response = await fetchWithTimeout(url, {}, 1_000);
+      if (!response.ok) {
+        throw new Error(`HTTP status: ${response.status} ${response.statusText}`);
+      }
+      return response.text();
+    });
     plugin = new OpenAIGuardrailsPlugin({} as any, 'test', 'input');
   });
 
