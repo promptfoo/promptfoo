@@ -395,9 +395,8 @@ describe('MiniMaxProvider', () => {
 
     const [url, init] = vi.mocked(fetchWithCache).mock.calls[0] ?? [];
     expect(url).toBe('https://proxy.example.com/minimax/v1/chat/completions');
-    expect((init as RequestInit).headers).toMatchObject({
-      Authorization: 'Bearer minimax-key',
-    });
+    const headers = new Headers((init as RequestInit).headers);
+    expect(headers.get('authorization')).toBe('Bearer minimax-key');
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toMatchObject({ max_completion_tokens: 256, temperature: 0.7 });
     expect(body.max_tokens).toBeUndefined();
