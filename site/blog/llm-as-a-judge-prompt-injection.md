@@ -40,7 +40,7 @@ A judge prompt combines your instructions with the content being evaluated:
 
 <TemplateAnatomy variant="clean" />
 
-The <span style={{color: '#22c55e'}}>green</span> parts are your **Control Plane**—the trusted instructions that define how the system behaves. The <span style={{color: '#eab308'}}>yellow</span> part is the **Data Plane**—the untrusted input.
+The sections marked **Trusted** are your **Control Plane**—the instructions that define how the system behaves. The section marked **Untrusted** is the **Data Plane**—the attacker-controlled input.
 
 In a bounded task, code can specify what part of the data is eligible for grading. If the model must decide its own scope from the same text it grades, that boundary is semantic rather than enforced.
 
@@ -169,7 +169,11 @@ Prompting alone is not a security boundary. Where the product contract permits i
 
 First, understand what's broken. In a typical LLM-as-a-Judge setup, the untrusted output and your rubric get merged into a single context:
 
-<ArchitectureDiagram variant="vulnerable" />
+<div aria-label="Scrollable vulnerable architecture diagram" role="region" tabIndex={0} style={{maxWidth: '100%', overflowX: 'auto'}}>
+  <div style={{minWidth: '620px'}}>
+    <ArchitectureDiagram variant="vulnerable" />
+  </div>
+</div>
 
 <p style={{textAlign: 'center', fontSize: '0.85rem', color: 'var(--ifm-color-content-secondary)', marginTop: '-0.5rem'}}>
   <em>Vulnerable: Untrusted content competes with trusted instructions in the same context</em>
@@ -179,7 +183,11 @@ First, understand what's broken. In a typical LLM-as-a-Judge setup, the untruste
 
 Don't let the LLM decide what to grade. Extract it with code first.
 
-<ArchitectureDiagram variant="secure" />
+<div aria-label="Scrollable secure architecture diagram" role="region" tabIndex={0} style={{maxWidth: '100%', overflowX: 'auto'}}>
+  <div style={{minWidth: '620px'}}>
+    <ArchitectureDiagram variant="secure" />
+  </div>
+</div>
 
 <p style={{textAlign: 'center', fontSize: '0.85rem', color: 'var(--ifm-color-content-secondary)', marginTop: '-0.5rem'}}>
   <em>Secure: Code enforces the boundary—LLM only sees extracted content, not raw untrusted input</em>

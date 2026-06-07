@@ -90,7 +90,7 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
             stroke="#86efac"
             strokeWidth="1.5"
           />
-          <text x="0" y="2" textAnchor="middle" fontSize="14" fontWeight="700" fill="#16a34a">
+          <text x="0" y="2" textAnchor="middle" fontSize="14" fontWeight="700" fill="#166534">
             Secure: Deterministic Extraction
           </text>
         </g>
@@ -222,36 +222,17 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
 
           {/* LLM Judge Box */}
           <g transform="translate(490, 110)">
-            <rect
-              width="160"
-              height="110"
-              rx="8"
-              fill="var(--ifm-background-surface-color, #f9fafb)"
-              stroke="#6b7280"
-              strokeWidth="2"
-            />
+            <rect width="160" height="110" rx="8" fill="#ffffff" stroke="#6b7280" strokeWidth="2" />
             <text x="80" y="25" textAnchor="middle" fontSize="11" fontWeight="600" fill="#374151">
               🧠 LLM Judge
             </text>
-            <text
-              x="80"
-              y="50"
-              textAnchor="middle"
-              fontSize="10"
-              fill="var(--ifm-font-color-secondary, #4b5563)"
-            >
+            <text x="80" y="50" textAnchor="middle" fontSize="10" fill="#4b5563">
               Sees injection payloads
             </text>
-            <text
-              x="80"
-              y="68"
-              textAnchor="middle"
-              fontSize="10"
-              fill="var(--ifm-font-color-secondary, #4b5563)"
-            >
+            <text x="80" y="68" textAnchor="middle" fontSize="10" fill="#4b5563">
               mixed with rubric
             </text>
-            <text x="80" y="95" textAnchor="middle" fontSize="14" fontWeight="700" fill="#ef4444">
+            <text x="80" y="95" textAnchor="middle" fontSize="14" fontWeight="700" fill="#b91c1c">
               ❌ Fooled
             </text>
           </g>
@@ -305,10 +286,10 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
           {/* Code Extractor Box */}
           <g transform="translate(210, 85)">
             <rect width="130" height="130" rx="8" fill="#f0fdf4" stroke="#22c55e" strokeWidth="2" />
-            <text x="65" y="22" textAnchor="middle" fontSize="10" fontWeight="600" fill="#16a34a">
+            <text x="65" y="22" textAnchor="middle" fontSize="10" fontWeight="600" fill="#166534">
               Deterministic
             </text>
-            <text x="65" y="36" textAnchor="middle" fontSize="10" fontWeight="600" fill="#16a34a">
+            <text x="65" y="36" textAnchor="middle" fontSize="10" fontWeight="600" fill="#166534">
               Extractor
             </text>
             <text x="65" y="55" textAnchor="middle" fontSize="8" fill="#166534">
@@ -351,10 +332,10 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
           {/* Validated Content Box */}
           <g transform="translate(400, 100)">
             <rect width="120" height="100" rx="8" fill="#f0fdf4" stroke="#22c55e" strokeWidth="2" />
-            <text x="60" y="22" textAnchor="middle" fontSize="10" fontWeight="600" fill="#16a34a">
+            <text x="60" y="22" textAnchor="middle" fontSize="10" fontWeight="600" fill="#166534">
               Extracted Content
             </text>
-            <text x="60" y="55" textAnchor="middle" fontSize="24" fontWeight="700" fill="#16a34a">
+            <text x="60" y="55" textAnchor="middle" fontSize="24" fontWeight="700" fill="#166534">
               5
             </text>
             <text x="60" y="75" textAnchor="middle" fontSize="9" fill="#166534">
@@ -378,15 +359,8 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
 
           {/* LLM Judge Box */}
           <g transform="translate(580, 100)">
-            <rect
-              width="100"
-              height="100"
-              rx="8"
-              fill="var(--ifm-background-surface-color, #f9fafb)"
-              stroke="#22c55e"
-              strokeWidth="2"
-            />
-            <text x="50" y="22" textAnchor="middle" fontSize="10" fontWeight="600" fill="#16a34a">
+            <rect width="100" height="100" rx="8" fill="#ffffff" stroke="#22c55e" strokeWidth="2" />
+            <text x="50" y="22" textAnchor="middle" fontSize="10" fontWeight="600" fill="#166534">
               🧠 LLM Judge
             </text>
             <text x="50" y="45" textAnchor="middle" fontSize="9" fill="#166534">
@@ -395,7 +369,7 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
             <text x="50" y="58" textAnchor="middle" fontSize="9" fill="#166534">
               clean content
             </text>
-            <text x="50" y="85" textAnchor="middle" fontSize="12" fontWeight="700" fill="#22c55e">
+            <text x="50" y="85" textAnchor="middle" fontSize="12" fontWeight="700" fill="#166534">
               ✓ Rejects
             </text>
           </g>
