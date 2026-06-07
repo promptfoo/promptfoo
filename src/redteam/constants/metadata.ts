@@ -546,7 +546,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
-  'openai-guardrails': Severity.Medium,
+  'openai-guardrails': Severity.High,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   'model-identification': Severity.Medium,

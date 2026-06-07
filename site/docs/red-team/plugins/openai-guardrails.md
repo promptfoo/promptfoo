@@ -30,7 +30,7 @@ The plugin:
 
 Add to your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - openai-guardrails
@@ -38,7 +38,7 @@ redteam:
 
 Control the number of tests:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: openai-guardrails
@@ -49,7 +49,7 @@ redteam:
 
 By default, OpenAI Guardrails tests only jailbreak attempts to ensure your model refuses harmful content. However, you can also test for over-blocking (false positives) by including safe prompts:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: openai-guardrails
