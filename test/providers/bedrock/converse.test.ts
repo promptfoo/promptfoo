@@ -2285,7 +2285,7 @@ Third line`;
       cacheSpies.push(isCacheEnabledSpy, getCacheSpy);
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: { region: 'us-east-1' },
+        config: { cost: { input: 0.01, output: 0.02 }, region: 'us-east-1' },
       });
 
       const result = await provider.callApi('Test prompt');
@@ -2298,6 +2298,7 @@ Third line`;
         completion: 50,
         total: 150,
       });
+      expect(result.cost).toBeUndefined();
 
       // Verify the mock send was never called (response came from cache)
       expect(mockSend).not.toHaveBeenCalled();

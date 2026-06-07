@@ -1345,7 +1345,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled, costConfig);
+        const result = await this.parseResponse(parsed, toolsDisabled, costConfig, true);
         return { ...result, cached: true };
       }
     }
@@ -1552,6 +1552,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     response: ConverseCommandOutput,
     toolsDisabled = false,
     costConfig: BedrockConverseOptions = this.config,
+    cached = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1573,13 +1574,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       numRequests: 1,
     };
 
-    // Calculate cost
-    const cost = calculateBedrockConverseCost(
-      this.modelName,
-      costConfig,
-      promptTokens,
-      completionTokens,
-    );
+    // Cached responses do not incur a new Bedrock charge.
+    const cost = cached
+      ? undefined
+      : calculateBedrockConverseCost(this.modelName, costConfig, promptTokens, completionTokens);
 
     // Build metadata
     const metadata: Record<string, unknown> = {};

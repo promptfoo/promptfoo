@@ -3999,7 +3999,7 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockInvokeModel).not.toHaveBeenCalled();
   });
 
-  it('should calculate InvokeModel cost for cached responses with explicit overrides', async () => {
+  it('should not charge InvokeModel cost for cached responses with explicit overrides', async () => {
     mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached response' }));
     vi.mocked(isCacheEnabled).mockImplementation(function () {
       return true;
@@ -4018,7 +4018,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.cached).toBe(true);
-    expect(result.cost).toBeCloseTo(0.5);
+    expect(result.cost).toBeUndefined();
     expect(result.tokenUsage).toEqual({
       prompt: 10,
       completion: 20,
@@ -4029,17 +4029,11 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 
-  it('should calculate InvokeModel cost for cached responses with fetched pricing', async () => {
+  it('should not fetch pricing or charge InvokeModel cost for cached responses', async () => {
     mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached response' }));
     vi.mocked(isCacheEnabled).mockImplementation(function () {
       return true;
     });
-    mockGetPricingData.mockResolvedValueOnce({
-      models: new Map([['Claude 3.7 Sonnet', { input: 0.001, output: 0.002 }]]),
-      region: 'us-east-1',
-      fetchedAt: new Date(),
-    });
-
     const provider = new AwsBedrockCompletionProvider(
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       {
@@ -4052,13 +4046,9 @@ describe('AwsBedrockCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.cached).toBe(true);
-    expect(result.cost).toBeCloseTo(0.05);
+    expect(result.cost).toBeUndefined();
     expect(mockInvokeModel).not.toHaveBeenCalled();
-    expect(mockGetPricingData).toHaveBeenCalledWith(
-      'us-east-1',
-      undefined,
-      expect.objectContaining({ debug: expect.any(Function), warn: expect.any(Function) }),
-    );
+    expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 
   it('should hash prompt and secret values in the cache key', async () => {

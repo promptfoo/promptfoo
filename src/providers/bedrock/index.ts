@@ -2678,9 +2678,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       tokenUsage.numRequests = 1;
     }
 
-    // Calculate cost if we have token usage
+    // Cached responses do not incur a new Bedrock charge.
     let cost: number | undefined;
-    if (tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
+    if (!cached && tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
       const { inputCost, outputCost } = getTokenCostOverrides(resolvedConfig);
 
       if (inputCost !== undefined && outputCost !== undefined) {
