@@ -13,10 +13,24 @@ import {
 import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
 import { matchesConversationRelevance } from '../matchers/deepeval';
 
-import type { AssertionParams, GradingResult } from '../../types/index';
+import type { AssertionParams, GradingResult, TokenUsage } from '../../types/index';
 import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
+
+function hasRecordedTokenUsage(tokenUsage: TokenUsage): boolean {
+  const basicCounts = [
+    tokenUsage.total,
+    tokenUsage.prompt,
+    tokenUsage.completion,
+    tokenUsage.cached,
+    tokenUsage.numRequests,
+  ];
+  return (
+    basicCounts.some((count) => (count ?? 0) > 0) ||
+    Object.values(tokenUsage.completionDetails ?? {}).some((count) => (count ?? 0) > 0)
+  );
+}
 
 export const handleConversationRelevance = async ({
   assertion,
@@ -129,6 +143,6 @@ export const handleConversationRelevance = async ({
     pass,
     score,
     reason,
-    tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
+    tokensUsed: hasRecordedTokenUsage(tokensUsed) ? tokensUsed : undefined,
   };
 };

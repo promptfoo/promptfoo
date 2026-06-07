@@ -362,6 +362,50 @@ describe('Plugins', () => {
       });
     });
 
+    it('should merge remote generation usage with existing metadata usage', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [
+            {
+              vars: { testVar: 'test content' },
+              metadata: {
+                providerTokenUsage: {
+                  total: 5,
+                  prompt: 3,
+                  completion: 2,
+                  numRequests: 1,
+                },
+              },
+            },
+          ],
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 22,
+        prompt: 13,
+        completion: 9,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
     it('should preserve batched remote generation usage exactly once', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

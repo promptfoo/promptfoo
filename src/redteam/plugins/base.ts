@@ -245,9 +245,7 @@ export abstract class RedteamPluginBase {
     );
     const prompts = sampleArray(allPrompts, n);
     const oneRowGenerationTokenUsage =
-      n === 1 && allPrompts.length === 1 && prompts.length === 1 && hasGenerationTokenUsage
-        ? generationTokenUsage
-        : undefined;
+      n === 1 && prompts.length === 1 && hasGenerationTokenUsage ? generationTokenUsage : undefined;
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
     if (prompts.length !== n) {

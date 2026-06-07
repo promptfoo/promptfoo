@@ -96,7 +96,6 @@ describeEvaluator('evaluator token usage', () => {
           prompt: 30,
           completion: 20,
           cached: 5,
-          numRequests: 1,
         },
       }),
     };
@@ -165,7 +164,7 @@ describeEvaluator('evaluator token usage', () => {
       id: vi.fn().mockReturnValue('provider-with-error-usage'),
       callApi: vi.fn().mockRejectedValue(
         Object.assign(new Error('provider failed'), {
-          tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+          tokenUsage: { total: 9, prompt: 5, completion: 4 },
         }),
       ),
     };
@@ -187,9 +186,22 @@ describeEvaluator('evaluator token usage', () => {
       success: false,
       response: {
         error: expect.stringContaining('provider failed'),
-        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+        tokenUsage: { total: 9, prompt: 5, completion: 4 },
       },
-      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      tokenUsage: { total: 9, prompt: 5, completion: 4 },
     });
+    expect(result.response?.tokenUsage).not.toHaveProperty('numRequests');
+
+    const testSuite: TestSuite = {
+      providers: [providerWithErrorUsage],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.tokenUsage.numRequests).toBe(1);
+    expect(summary.results[0].response?.tokenUsage).not.toHaveProperty('numRequests');
   });
 });

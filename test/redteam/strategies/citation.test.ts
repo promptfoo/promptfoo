@@ -189,7 +189,7 @@ describe('citation strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
   });
 
-  it('should preserve one-row API error usage', async () => {
+  it('should report one-row API error usage without making generation fatal', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
         error: 'Validation error: Required at "result.topic"; Required at "result.citation"',
@@ -200,10 +200,16 @@ describe('citation strategy', () => {
       statusText: 'Error',
     });
 
-    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
-      message: 'Validation error: Required at "result.topic"; Required at "result.citation"',
-      tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
-    });
+    const result = await addCitationTestCases(testCases, 'prompt', {});
+
+    expect(result).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[Citation] Token usage from failed citation generation',
+      {
+        error: 'Validation error: Required at "result.topic"; Required at "result.citation"',
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      },
+    );
   });
 
   it('should preserve multi-row API error usage on the surviving citation result', async () => {
@@ -270,7 +276,7 @@ describe('citation strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
   });
 
-  it('should preserve one-row invalid response usage', async () => {
+  it('should report one-row invalid response usage without making generation fatal', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
         result: {
@@ -283,10 +289,16 @@ describe('citation strategy', () => {
       statusText: 'OK',
     });
 
-    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
-      message: 'Citation generation returned invalid response structure',
-      tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
-    });
+    const result = await addCitationTestCases(testCases, 'prompt', {});
+
+    expect(result).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[Citation] Token usage from failed citation generation',
+      {
+        error: 'Citation generation returned invalid response structure',
+        tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+      },
+    );
   });
 
   it('should handle network errors gracefully', async () => {

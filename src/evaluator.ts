@@ -96,7 +96,6 @@ import {
   accumulateAssertionTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
-  accumulateTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
@@ -1581,10 +1580,7 @@ async function runEvalInternal({
       err && typeof err === 'object' && 'tokenUsage' in err
         ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
         : undefined;
-    const errorTokenUsage = parsedTokenUsage?.success ? createEmptyTokenUsage() : undefined;
-    if (errorTokenUsage && parsedTokenUsage?.success) {
-      accumulateTokenUsage(errorTokenUsage, parsedTokenUsage.data);
-    }
+    const errorTokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
 
     return [
       {
@@ -3226,7 +3222,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (row.tokenUsage) {
-      accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
+      accumulateResponseTokenUsage(this.stats.tokenUsage, {
+        tokenUsage: { ...row.tokenUsage, assertions: undefined },
+      });
     }
   }
 

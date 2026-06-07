@@ -35,6 +35,7 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
+import { mergeProviderTokenUsage } from '../strategies/util';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
@@ -112,7 +113,10 @@ function attachRemotePluginUsage(
           ...testCase,
           metadata: {
             ...(testCase.metadata ?? {}),
-            providerTokenUsage: tokenUsage,
+            providerTokenUsage: mergeProviderTokenUsage(
+              testCase.metadata?.providerTokenUsage,
+              tokenUsage,
+            ),
           },
         }
       : testCase,

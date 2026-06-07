@@ -589,7 +589,7 @@ describe('RedteamPluginBase', () => {
       });
     });
 
-    it('should not duplicate shared generation usage across sampled rows', async () => {
+    it('should preserve generation usage when over-generation is sampled to one emitted row', async () => {
       const fanOutProvider = createMockProvider({
         response: createProviderResponse({
           output: 'Prompt: first prompt\nPrompt: second prompt',
@@ -601,7 +601,34 @@ describe('RedteamPluginBase', () => {
       const tests = await fanOutPlugin.generateTests(1);
 
       expect(tests).toHaveLength(1);
-      expect(tests[0]?.metadata).not.toHaveProperty('providerTokenUsage');
+      expect(tests[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+        },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
+        },
+      });
     });
 
     it('should handle parsing failures gracefully in multi-input mode', async () => {
