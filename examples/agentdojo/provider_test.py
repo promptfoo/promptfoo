@@ -88,7 +88,7 @@ class ResponsesRequestTests(unittest.TestCase):
 
         self.assertEqual(llm._tool_to_openai(func)["strict"], False)
 
-    def test_responses_calls_use_configured_deterministic_temperature(self):
+    def test_responses_calls_use_configured_temperature(self):
         class Responses:
             def __init__(self):
                 self.kwargs = None

@@ -41,7 +41,7 @@ providers:
       defense: null # or tool_filter, spotlighting_with_delimiting
       attack: important_instructions # or injecagent, tool_knowledge
       force_rerun: true # bypass AgentDojo's local trace cache for fresh comparisons
-      temperature: 0 # keep benchmark comparisons deterministic
+      temperature: 0 # reduce sampling variance between benchmark runs
 ```
 
 Custom GPT models use Promptfoo's OpenAI Responses wrapper with an AgentDojo
