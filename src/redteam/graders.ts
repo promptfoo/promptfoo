@@ -14,6 +14,7 @@ import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DataExfilGrader } from './plugins/dataExfil';
+import { DataStructureInjectionGrader } from './plugins/dataStructureInjection';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
@@ -149,6 +150,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:data-exfil': new DataExfilGrader(),
+  'promptfoo:redteam:data-structure-injection': new DataStructureInjectionGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),

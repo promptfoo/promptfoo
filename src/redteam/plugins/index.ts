@@ -42,6 +42,7 @@ import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
+import { DataStructureInjectionPlugin } from './dataStructureInjection';
 import { DebugAccessPlugin } from './debugAccess';
 import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { DoNotAnswerPlugin } from './donotanswer';
@@ -482,6 +483,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
+  createPluginFactory(DataStructureInjectionPlugin, 'data-structure-injection'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(DoNotAnswerPlugin, 'donotanswer'),

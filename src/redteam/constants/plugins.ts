@@ -348,6 +348,7 @@ export const ADDITIONAL_PLUGINS = [
   'cross-session-leak',
   'cyberseceval',
   'data-exfil',
+  'data-structure-injection',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
