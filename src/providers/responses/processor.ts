@@ -372,24 +372,26 @@ export class ResponsesProcessor {
     if (context.suppressReasoningOutput) {
       return Promise.resolve({});
     }
-    if (!item.summary || !item.summary.length) {
-      return Promise.resolve({});
+
+    const reasoning: ReasoningContent[] = [];
+    if (Array.isArray(item.summary)) {
+      const reasoningText = item.summary
+        .map((summary: { text?: unknown }) =>
+          typeof summary.text === 'string' ? summary.text.trim() : '',
+        )
+        .filter(Boolean)
+        .join('\n');
+
+      if (reasoningText) {
+        reasoning.push({ type: 'reasoning', content: reasoningText });
+      }
     }
 
-    const reasoningText = item.summary
-      .map((summary: { text?: unknown }) =>
-        typeof summary.text === 'string' ? summary.text.trim() : '',
-      )
-      .filter(Boolean)
-      .join('\n');
-
-    if (!reasoningText) {
-      return Promise.resolve({});
+    if (typeof item.encrypted_content === 'string' && item.encrypted_content.trim()) {
+      reasoning.push({ type: 'redacted_thinking', data: item.encrypted_content });
     }
 
-    return Promise.resolve({
-      reasoning: [{ type: 'reasoning', content: reasoningText }],
-    });
+    return Promise.resolve(reasoning.length > 0 ? { reasoning } : {});
   }
 
   private processWebSearch(item: any): Promise<{ content?: string }> {

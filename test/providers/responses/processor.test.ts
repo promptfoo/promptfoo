@@ -332,6 +332,74 @@ describe('ResponsesProcessor', () => {
       expect(result.reasoning).toBeUndefined();
     });
 
+    it('should preserve encrypted reasoning without a summary', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'reasoning', encrypted_content: 'encrypted-reasoning-payload' },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Visible answer.' }],
+            },
+          ],
+        },
+        {},
+        false,
+      );
+
+      expect(result.output).toBe('Visible answer.');
+      expect(result.reasoning).toEqual([
+        { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+      ]);
+    });
+
+    it('should preserve summary and encrypted reasoning in response order', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            {
+              type: 'reasoning',
+              summary: [{ text: 'Reasoning summary.' }],
+              encrypted_content: 'encrypted-reasoning-payload',
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Visible answer.' }],
+            },
+          ],
+        },
+        {},
+        false,
+      );
+
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Reasoning summary.' },
+        { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+      ]);
+    });
+
+    it('should suppress encrypted reasoning when showThinking is false', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'reasoning', encrypted_content: 'encrypted-reasoning-payload' },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Visible answer.' }],
+            },
+          ],
+        },
+        { showThinking: false },
+        false,
+      );
+
+      expect(result.output).toBe('Visible answer.');
+      expect(result.reasoning).toBeUndefined();
+    });
+
     it('should handle mixed response types', async () => {
       mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function result');
 

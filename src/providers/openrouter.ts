@@ -39,20 +39,19 @@ function extractOpenRouterReasoning(
     return undefined;
   }
 
-  const reasoning = message?.reasoning;
-  if (typeof reasoning === 'string' && reasoning.trim()) {
-    return [{ type: 'reasoning', content: reasoning }];
-  }
-
   const details = message?.reasoning_details;
   const detailBlocks = Array.isArray(details)
     ? details.map((detail) => normalizeOpenRouterReasoningDetail(detail))
     : [normalizeOpenRouterReasoningDetail(details)];
   const reasoningBlocks = detailBlocks.filter((block): block is ReasoningContent => Boolean(block));
-  if (reasoningBlocks.length === 0) {
-    return undefined;
+  if (reasoningBlocks.length > 0) {
+    return reasoningBlocks;
   }
-  return reasoningBlocks;
+
+  const reasoning = message?.reasoning;
+  return typeof reasoning === 'string' && reasoning.trim()
+    ? [{ type: 'reasoning', content: reasoning }]
+    : undefined;
 }
 
 function firstNonBlankString(...values: unknown[]): string | undefined {
@@ -104,6 +103,10 @@ function normalizeOpenRouterReasoningDetail(detail: any): ReasoningContent | und
     extractOpenRouterSummaryText(detail.summary),
   );
   if (text) {
+    const signature = firstNonBlankString(detail.signature);
+    if (signature) {
+      return { type: 'thinking', thinking: text, signature };
+    }
     return { type: 'reasoning', content: text };
   }
 
