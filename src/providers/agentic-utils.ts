@@ -15,7 +15,40 @@ import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { safeResolve } from '../util/pathUtils';
 
-import type { ProviderResponse } from '../types/index';
+import type { ApiProvider, ProviderResponse } from '../types/index';
+
+const AGENTIC_PROVIDER_IDS = [
+  'anthropic:claude-agent-sdk',
+  'anthropic:claude-code',
+  'openai:codex',
+  'openai:codex-app-server',
+  'openai:codex-desktop',
+  'openai:codex-sdk',
+  'opencode',
+  'opencode:sdk',
+] as const;
+
+/**
+ * Whether a provider runs a coding-agent runtime rather than a plain model API.
+ *
+ * Keep this list aligned with docs/agents/coding-agent-provider-taxonomy.md.
+ */
+export function isAgenticProvider(provider: ApiProvider | null | undefined): boolean {
+  if (!provider || typeof provider.id !== 'function') {
+    return false;
+  }
+
+  let providerId: string;
+  try {
+    providerId = provider.id();
+  } catch {
+    return false;
+  }
+
+  return AGENTIC_PROVIDER_IDS.some(
+    (agenticId) => providerId === agenticId || providerId.startsWith(`${agenticId}:`),
+  );
+}
 
 /**
  * Timeout for working directory fingerprint generation (ms)
