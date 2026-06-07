@@ -19,6 +19,10 @@ import type {
   Prompt,
 } from '../../../src/types/index';
 
+type LegacyCompletedPrompt = Omit<CompletedPrompt, 'metrics'> & {
+  metrics: Omit<NonNullable<CompletedPrompt['metrics']>, 'namedScoresCount'>;
+};
+
 describe('evalTableUtils', () => {
   let mockTable: {
     head: { prompts: CompletedPrompt[]; vars: string[] };
@@ -1182,15 +1186,20 @@ describe('evalTableUtils', () => {
   // Build a CompletedPrompt that mimics legacy/imported persistence: the
   // `metrics` object exists but lacks `namedScoresCount`. The streaming CSV
   // path must fall back to a row-scan discovery pass for these prompts.
+  // `overrides.namedScores` contains aggregate prompt-level metrics; per-row
+  // named scores remain on the individual result rows.
   function createLegacyCompletedPrompt(
     raw: string,
     overrides: { namedScores: Record<string, number> } & Partial<Omit<CompletedPrompt, 'metrics'>>,
-  ): CompletedPrompt {
+  ): LegacyCompletedPrompt {
     const { namedScores, ...rest } = overrides;
     const prompt = createCompletedPrompt(raw, rest);
+    const { namedScoresCount: _namedScoresCount, ...legacyMetrics } = createPromptMetrics({
+      namedScores,
+    });
     return {
       ...prompt,
-      metrics: { ...createPromptMetrics({ namedScores }), namedScoresCount: undefined as never },
+      metrics: legacyMetrics,
     };
   }
 
@@ -1285,7 +1294,7 @@ describe('evalTableUtils', () => {
       isRedteam = false,
     }: {
       vars: string[];
-      prompts: CompletedPrompt[];
+      prompts: Array<CompletedPrompt | LegacyCompletedPrompt>;
       results: unknown[];
       isRedteam?: boolean;
     }): Promise<string> {
