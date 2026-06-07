@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -51,11 +52,13 @@ describe('LocalFileSystemProvider', () => {
     const provider = new LocalFileSystemProvider({ basePath: tempDir });
 
     const payload = Buffer.from('hello');
+    const contentHash = createHash('sha256').update(payload).digest('hex');
     const { ref } = await provider.store(payload, {
       contentType: 'audio/wav',
       mediaType: 'audio',
     });
 
+    expect(ref.key).toBe(`audio/${contentHash}.wav`);
     const retrieved = await provider.retrieve(ref.key);
     expect(retrieved.toString('utf8')).toBe('hello');
   });

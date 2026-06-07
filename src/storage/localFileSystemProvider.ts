@@ -130,8 +130,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   private generateKey(hash: string, metadata: MediaMetadata): string {
     const extension = getExtensionFromContentType(metadata.contentType);
     const prefix = metadata.mediaType || 'media';
-    // Use first 12 chars of hash for shorter filenames while maintaining uniqueness
-    return `${prefix}/${hash.slice(0, 12)}.${extension}`;
+    return `${prefix}/${hash}.${extension}`;
   }
 
   async store(data: Buffer, metadata: MediaMetadata): Promise<StoreResult> {
