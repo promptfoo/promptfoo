@@ -68,7 +68,7 @@ grading, or reports, update the matching pages under `site/docs/red-team/`.
 
 ## Logging
 
-See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.
+See `docs/agents/logging.md` - especially important here since test content may contain harmful/sensitive data.
 
 ## Adding New Plugins
 
