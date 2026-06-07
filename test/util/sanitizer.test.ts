@@ -1619,11 +1619,18 @@ describe('sanitizeUrl', () => {
     });
 
     it('should handle very long URLs', () => {
-      const longParam = 'a'.repeat(1000);
+      const longParam = 'public.value.'.repeat(100);
       const url = `https://example.com/api?data=${longParam}&api_key=secret123`;
       const result = sanitizeUrl(url);
       expect(result).toContain('data=' + longParam);
       expect(result).toContain('api_key=%5BREDACTED%5D');
+    });
+
+    it('should redact long token-like values under non-sensitive parameter names', () => {
+      const token = 'a'.repeat(64);
+      const url = `https://example.com/api?cursor=${token}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
     });
   });
 
@@ -1688,6 +1695,13 @@ describe('sanitizeUrl', () => {
       const url = '/api/endpoint?api_key=secret123&data=public';
       const result = sanitizeUrl(url);
       expect(result).toBe('/api/endpoint?api_key=%5BREDACTED%5D&data=public');
+    });
+
+    it('should redact long token-like values in path-only URLs', () => {
+      const token = 'a'.repeat(64);
+      const url = `/api/endpoint?cursor=${token}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe('/api/endpoint?cursor=%5BREDACTED%5D&data=public');
     });
 
     it('should handle path-only URL with fragment', () => {

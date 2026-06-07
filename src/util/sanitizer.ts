@@ -716,7 +716,7 @@ export function sanitizeUrl(url: string): string {
 
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
-        if (sensitiveParams.test(key) || looksLikeCredentialValue(value)) {
+        if (sensitiveParams.test(key) || looksLikeSecret(value)) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }
       }
