@@ -776,6 +776,19 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('should redact Error messages when requested', () => {
+      const result = sanitizeObject(
+        { error: new Error('Invalid API key sk-error-message-should-not-persist') },
+        { redactErrorMessages: true },
+      );
+
+      expect(result.error).toEqual({
+        name: 'Error',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(result)).not.toContain('sk-error-message-should-not-persist');
+    });
+
     it('should convert Map objects to empty objects via JSON', () => {
       const map = new Map([['key', 'value']]);
       const result = sanitizeObject({ map });

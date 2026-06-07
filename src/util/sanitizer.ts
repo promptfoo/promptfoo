@@ -470,11 +470,17 @@ export function sanitizeObject(
   obj: any,
   options: {
     context?: string;
+    redactErrorMessages?: boolean;
     throwOnError?: boolean;
     maxDepth?: number;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
+  const {
+    context = 'object',
+    redactErrorMessages = false,
+    throwOnError = false,
+    maxDepth = MAX_DEPTH,
+  } = options;
 
   try {
     // Handle null/undefined
@@ -505,7 +511,7 @@ export function sanitizeObject(
           if (val instanceof Error) {
             return {
               name: val.name,
-              message: val.message,
+              message: redactErrorMessages ? REDACTED : val.message,
             };
           }
           return val;

@@ -28,6 +28,7 @@ describe('EvalResult', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   const mockProvider: ProviderOptions = {
@@ -93,11 +94,13 @@ describe('EvalResult', () => {
     });
 
     it('should redact provider configs that contain non-JSON primitives', () => {
+      const errorSecret = 'sk-provider-bigint-error-should-never-persist';
       const providerOptions = {
         id: 'test-provider',
         label: 'Test Provider',
         config: {
           apiKey: 'test-key',
+          lastError: new Error(`Invalid API key ${errorSecret}`),
           retryAfterNanos: 1n,
         },
       } as unknown as ProviderOptions;
@@ -108,9 +111,14 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+          lastError: {
+            name: 'Error',
+            message: '[REDACTED]',
+          },
           retryAfterNanos: '1',
         },
       });
+      expect(JSON.stringify(result)).not.toContain(errorSecret);
     });
 
     it('should omit provider configs that throw during sanitization', () => {
@@ -132,7 +140,6 @@ describe('EvalResult', () => {
       expect(result.config).toEqual({});
       expect(JSON.stringify(result)).not.toContain('sk-should-never-persist');
       expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
-      debugSpy.mockRestore();
     });
 
     it('should handle generic objects with id function', () => {
@@ -174,7 +181,6 @@ describe('EvalResult', () => {
       expect(result).toEqual({ id: 'unknown' });
       expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-never-persist');
       expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('sk-provider-id-should-never-log');
-      debugSpy.mockRestore();
     });
   });
 
@@ -515,7 +521,6 @@ describe('EvalResult', () => {
 
       expect(result.namedScores).toEqual({});
       expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('sk-response-should-never-log');
-      debugSpy.mockRestore();
     });
 
     // Regression context (PR #8688): provider credentials (for example apiKey/token)
@@ -1016,7 +1021,6 @@ describe('EvalResult', () => {
         expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
         expect(result.testCase).toEqual({});
         expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
-        debugSpy.mockRestore();
       });
     });
 

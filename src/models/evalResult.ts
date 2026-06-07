@@ -43,6 +43,7 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
     return sanitizeObject(configToSanitize, {
       context: 'provider config',
       maxDepth: Number.POSITIVE_INFINITY,
+      redactErrorMessages: true,
       throwOnError: true,
     }) as ProviderConfig;
   } catch {
@@ -214,6 +215,7 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
       // Nested provider configs can be deeper than the default maxDepth (4);
       // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
       maxDepth: Number.POSITIVE_INFINITY,
+      redactErrorMessages: true,
       throwOnError: true,
     }) as T;
   } catch {
