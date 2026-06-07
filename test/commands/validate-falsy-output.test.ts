@@ -46,4 +46,18 @@ describe('validate target falsy outputs', () => {
     expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     expect(process.exitCode).toBe(0);
   });
+
+  it('rejects null provider output', async () => {
+    const provider = createMockProvider({
+      id: 'echo',
+      response: { output: null },
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+    await doValidateTarget({ target: 'echo' }, defaultConfig);
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('No output received'));
+    expect(process.exitCode).toBe(1);
+  });
 });
