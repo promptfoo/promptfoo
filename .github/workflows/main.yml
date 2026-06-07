@@ -145,6 +145,9 @@ jobs:
           # Codecov); keep it non-blocking so Codecov infra outages can't fail main.
           fail_ci_if_error: false
           use_oidc: true
+          # Pin the CLI version too: the action SHA pins the wrapper, but the CLI
+          # binary it downloads is otherwise unpinned (action default is latest).
+          version: v11.2.8
 
   build:
     needs: ci-config
@@ -445,6 +448,12 @@ jobs:
         working-directory: site
         run: npm run test:coverage
 
+      # Site has no coverage ratchet, so the Codecov upload is the only consumer of
+      # this report. Since that upload is now non-blocking, verify the artifact was
+      # produced here — otherwise a missing/misnamed report would fail silently.
+      - name: Verify site coverage report exists
+        run: test -s ./site/coverage/coverage-final.json
+
       - name: Upload Site Coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
@@ -455,6 +464,9 @@ jobs:
           # Codecov); keep it non-blocking so Codecov infra outages can't fail main.
           fail_ci_if_error: false
           use_oidc: true
+          # Pin the CLI version too: the action SHA pins the wrapper, but the CLI
+          # binary it downloads is otherwise unpinned (action default is latest).
+          version: v11.2.8
 
   webui:
     name: webui tests
@@ -502,6 +514,9 @@ jobs:
           # Codecov); keep it non-blocking so Codecov infra outages can't fail main.
           fail_ci_if_error: false
           use_oidc: true
+          # Pin the CLI version too: the action SHA pins the wrapper, but the CLI
+          # binary it downloads is otherwise unpinned (action default is latest).
+          version: v11.2.8
 
   integration-tests:
     name: Run Integration Tests
