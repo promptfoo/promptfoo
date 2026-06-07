@@ -64,7 +64,7 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
       logger.error(chalk.red(`  ✗ Connectivity test`));
       logger.error(chalk.red(`    ${result.error}`));
       return { success: false, error: result.error };
-    } else if (result.output) {
+    } else if (result.output !== null && result.output !== undefined) {
       logger.info(chalk.green(`  ✓ Connectivity test`));
       const fullResponse = JSON.stringify(result.output);
       const isTruncated = fullResponse.length > 100;
