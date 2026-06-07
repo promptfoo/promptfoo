@@ -30,8 +30,6 @@ import logger from '../logger';
 import { getLangfuseBaseUrl, LANGFUSE_AUTH_ENV_VARS } from './langfuseShared';
 import type { ApiTraceListParams, ApiTraces } from 'langfuse';
 
-import type { TestCase, VarValue } from '../types';
-
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 const PAGE_SIZE = 100;
@@ -78,6 +76,18 @@ interface LangfuseTracesClient {
   shutdownAsync(): Promise<void>;
 }
 
+type TraceVarValue = string | number | boolean | object | unknown[];
+
+export interface LangfuseTraceTestCase {
+  description?: string;
+  vars?: Record<string, TraceVarValue>;
+  metadata?: Record<string, unknown>;
+  options?: {
+    disableVarExpansion?: boolean;
+  };
+  providerOutput?: string | Record<string, unknown>;
+}
+
 type MessageContent = {
   role?: unknown;
   content?: unknown;
@@ -91,11 +101,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isDefinedVarValue(value: unknown): value is VarValue {
+function isDefinedVarValue(value: unknown): value is TraceVarValue {
   return value !== undefined && value !== null;
 }
 
-function setVar(vars: Record<string, VarValue>, key: string, value: unknown): void {
+function setVar(vars: Record<string, TraceVarValue>, key: string, value: unknown): void {
   if (isDefinedVarValue(value)) {
     vars[key] = value;
   }
@@ -167,8 +177,15 @@ function extractOutputItemText(item: unknown): unknown | undefined {
     return extractTextBlocks(item.content);
   }
 
-  if ((item.type === 'message' || item.role === 'assistant') && item.content !== undefined) {
-    return item.content;
+  if (item.type === 'message' || item.role === 'assistant') {
+    if (item.content !== undefined && item.content !== null) {
+      return item.content;
+    }
+
+    const toolCall = item.tool_calls ?? item.function_call;
+    if (toolCall !== undefined && toolCall !== null) {
+      return toolCall;
+    }
   }
 
   return undefined;
@@ -377,6 +394,13 @@ function extractOutputText(output: unknown): unknown {
     }
   }
 
+  if (obj.type === 'message' || obj.role === 'assistant') {
+    const messageText = extractOutputItemText(obj);
+    if (messageText !== undefined) {
+      return messageText;
+    }
+  }
+
   // Anthropic format: { content: [{type: 'text', text: '...'}] } or { content: '...' }
   if (obj.content !== undefined) {
     if (Array.isArray(obj.content)) {
@@ -407,7 +431,7 @@ function extractOutputText(output: unknown): unknown {
 /**
  * Convert a Langfuse trace to a promptfoo TestCase
  */
-function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
+function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTestCase {
   // Extract input and output, handling different formats
   const inputValue = extractInputText(trace.input);
   const outputValue = extractOutputText(trace.output);
@@ -416,7 +440,7 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
 
   // Create the test case with vars populated from trace data
   // Build vars object, filtering out undefined values
-  const vars: Record<string, VarValue> = {
+  const vars: Record<string, TraceVarValue> = {
     // Prefixed Langfuse fields to avoid collisions
     __langfuse_trace_id: trace.id,
     __langfuse_timestamp: trace.timestamp,
@@ -454,7 +478,7 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   setVar(vars, 'input', inputValue);
   setVar(vars, 'output', outputValue);
 
-  const testCase: TestCase = {
+  const testCase: LangfuseTraceTestCase = {
     description: `Trace: ${trace.name || trace.id} (${new Date(trace.timestamp).toLocaleDateString()})`,
     vars,
     metadata: {
@@ -547,7 +571,7 @@ function shouldFetchNextPage(
  * @param url - The langfuse://traces URL with query parameters
  * @returns Array of TestCase objects
  */
-export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
+export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTestCase[]> {
   const query = parseTracesUrl(url);
   const limit = query.limit ?? DEFAULT_LIMIT;
   const appliedFilters = Object.keys(query).filter((key) => key !== 'limit');
@@ -557,7 +581,7 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
   const langfuse = await getLangfuseClient();
   const baseUrl = getLangfuseBaseUrl();
 
-  const tests: TestCase[] = [];
+  const tests: LangfuseTraceTestCase[] = [];
   let page = 1;
   let hasMore = true;
   const pageLimit = Math.min(PAGE_SIZE, limit);

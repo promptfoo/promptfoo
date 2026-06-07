@@ -602,6 +602,50 @@ describe('langfuseTraces', () => {
       expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
     });
 
+    it('should preserve tool calls from top-level assistant message arrays', async () => {
+      const toolCalls = [
+        {
+          id: 'call_456',
+          type: 'function',
+          function: { name: 'lookup_account', arguments: '{"accountId":"123"}' },
+        },
+      ];
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-top-level-tool-call-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Look up account',
+            output: [{ role: 'assistant', content: null, tool_calls: toolCalls }],
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toEqual(toolCalls);
+      expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
+    });
+
+    it('should preserve tool calls from a top-level assistant message object', async () => {
+      const functionCall = { name: 'lookup_account', arguments: '{"accountId":"456"}' };
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-top-level-function-call-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Look up account',
+            output: { role: 'assistant', content: null, function_call: functionCall },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toEqual(functionCall);
+      expect(tests[0].providerOutput).toBe(JSON.stringify(functionCall));
+    });
+
     it('should handle traces with Anthropic format', async () => {
       mockTraceList.mockResolvedValueOnce({
         data: [

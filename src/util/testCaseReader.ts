@@ -11,8 +11,7 @@ import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
-import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
-import { fetchLangfuseTraces, isLangfuseTracesUrl } from '../integrations/langfuseTraces';
+import { fetchRemoteTestCases, getRemoteTestCaseSource } from '../integrations/remoteTestCases';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
@@ -97,18 +96,12 @@ export async function readStandaloneTestsFile(
 ): Promise<TestCase[]> {
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
-  if (varsPath.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(varsPath);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return await fetchHuggingFaceDataset(varsPath);
-  }
-
-  if (isLangfuseTracesUrl(varsPath)) {
-    telemetry.record('feature_used', {
-      feature: 'langfuse traces',
-    });
-    return await fetchLangfuseTraces(varsPath);
+    return await fetchRemoteTestCases(varsPath, remoteSource);
   }
 
   if (varsPath.startsWith('az://')) {
@@ -466,17 +459,12 @@ export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(loadTestsGlob);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return await fetchHuggingFaceDataset(loadTestsGlob);
-  }
-  if (isLangfuseTracesUrl(loadTestsGlob)) {
-    telemetry.record('feature_used', {
-      feature: 'langfuse traces',
-    });
-    return await fetchLangfuseTraces(loadTestsGlob);
+    return await fetchRemoteTestCases(loadTestsGlob, remoteSource);
   }
 
   if (loadTestsGlob.startsWith('file://')) {
