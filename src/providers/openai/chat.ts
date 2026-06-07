@@ -11,7 +11,6 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { fetchWithRetries } from '../../util/fetch/index';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import {
@@ -20,6 +19,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { fetchProviderRequestWithRetries } from '../fetch';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
@@ -1467,8 +1467,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
     const apiKey = this.getApiKey();
-    const organization = this.getOrganization();
-
     const requestTimeoutMs = getRequestTimeoutMs();
     const streamingAbort = createOpenAiStreamingAbortSignal(
       requestTimeoutMs,
@@ -1490,15 +1488,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const url = `${this.getApiUrl()}/chat/completions`;
       logger.debug(`Starting streaming request to ${url}`, { model: this.modelName });
 
-      const response = await fetchWithRetries(
+      const response = await fetchProviderRequestWithRetries(
         url,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-            ...(organization ? { 'OpenAI-Organization': organization } : {}),
-            ...config.headers,
+            ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(streamBody),
           signal: streamingAbort.signal,

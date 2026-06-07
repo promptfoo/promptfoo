@@ -2797,6 +2797,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       );
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithRetries.mock.calls[0][1]?.headers as Record<
+        string,
+        string
+      >;
+      expect(requestHeaders['X-OpenAI-Originator']).toBe('promptfoo');
       expect(result.output).toBe('Hello world');
       expect(result.tokenUsage).toEqual({
         prompt: 10,
@@ -2810,6 +2815,35 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         statusText: 'OK',
         headers: { 'x-request-id': 'stream-123' },
       });
+    });
+
+    it('should allow custom streaming headers to override OpenAI defaults', async () => {
+      mockFetchWithRetries.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream([
+          'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          stream: true,
+          organization: 'org-default',
+          headers: {
+            'X-OpenAI-Originator': 'custom-originator',
+            'OpenAI-Organization': 'org-override',
+          },
+        },
+      });
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Say hello' }]));
+
+      const requestHeaders = mockFetchWithRetries.mock.calls[0][1]?.headers as Record<
+        string,
+        string
+      >;
+      expect(requestHeaders['X-OpenAI-Originator']).toBe('custom-originator');
+      expect(requestHeaders['OpenAI-Organization']).toBe('org-override');
     });
 
     it('should preserve prompt-cache token details in streaming usage', async () => {
