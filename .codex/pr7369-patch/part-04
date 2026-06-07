@@ -1,0 +1,199 @@
+ates;
+-      this.session.bestMatch = match;
+-      this.session.phase = 'analyzing';
+-      await this.handleAuthRequired(match, results);
+-      return;
+-    }
+ 
+-    if (authCandidates.length > 1) {
+-      this.session.phase = 'analyzing';
+-      this.addMessage(
+-        'question',
+-        'This endpoint requires authentication before I can identify its API format. Select its format to continue.',
+-        {
+-          options: [
+-            { id: 'openai', label: "It's OpenAI-compatible", value: 'openai', primary: true },
+-            { id: 'anthropic', label: "It's Anthropic-compatible", value: 'anthropic' },
+-            { id: 'azure', label: "It's Azure OpenAI", value: 'azure' },
+-            { id: 'custom', label: "It's a custom API", value: 'custom' },
+-          ],
+-        },
+-      );
+-      return;
++      // Check if auth is needed
++      const authNeeded = results.some((r) => r.status === 401 || r.status === 403);
++      if (authNeeded && match) {
++        const normalizedMatch = this.normalizeStrategyMatch(match);
++        // Format might be right, just needs auth
++        this.session.bestMatch = normalizedMatch;
++        this.session.phase = 'analyzing';
++        await this.handleAuthRequired(normalizedMatch, results);
++        return;
++      }
+     }
+ 
+     // No strategy matched
+@@ -631,61 +576,33 @@ export class ConfigurationAgent {
+     });
+   }
+ 
+-  private selectAuthenticatedStrategy(
+-    strategyId: 'openai_compatible' | 'anthropic_compatible' | 'azure_openai',
+-  ): void {
+-    this.session.bestMatch = {
+-      strategyId,
+-      confidence: 0.9,
+-      discoveredConfig: getBaseConfigForStrategy(strategyId),
+-      evidence: ['User selected API format'],
+-    };
+-    this.addMessage(
+-      'info',
+-      `Using ${this.getStrategyDisplayName(strategyId)} format. Do you have an API key?`,
+-      {
+-        inputRequest: {
+-          type: 'api_key',
+-          prompt: 'Enter your API key:',
+-          field: 'apiKey',
+-          sensitive: true,
+-        },
+-        options: [
+-          { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
+-          { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
+-        ],
+-      },
+-    );
+-  }
+-
+   /**
+    * Handle user input
+    */
+   async handleUserInput(input: UserInput): Promise<AgentMessage[]> {
+     // Add user message to conversation
+     if (input.type === 'message') {
+-      this.addMessage('user', input.value);
++      this.addMessage('user', input.value as string);
+     }
+ 
+-    // API keys are persisted only under the canonical sensitive field in
+-    // handleApiKeyInput so a client-supplied alias cannot bypass masking.
+-    if (input.field && input.type !== 'api_key') {
++    // Store the input
++    if (input.field) {
+       this.session.userInputs[input.field] = input.value;
+     }
+ 
+     // Process based on input type and current state
+     switch (input.type) {
+       case 'api_key':
+-        return this.handleApiKeyInput(input.value);
++        return this.handleApiKeyInput(input.value as string);
+ 
+       case 'option':
+-        return this.handleOptionSelect(input.value);
++        return this.handleOptionSelect(input.value as string);
+ 
+       case 'confirmation':
+-        return this.handleConfirmation(input.value);
++        return this.handleConfirmation(input.value as boolean);
+ 
+       case 'message':
+-        return this.handleFreeformMessage(input.value);
++        return this.handleFreeformMessage(input.value as string, input.field);
+ 
+       default:
+         return this.session.messages;
+@@ -794,18 +711,65 @@ export class ConfigurationAgent {
+         break;
+ 
+       case 'openai':
+-        this.selectAuthenticatedStrategy('openai_compatible');
++        this.session.bestMatch = {
++          strategyId: 'openai_compatible',
++          confidence: 0.9,
++          discoveredConfig: this.normalizeConfigForBaseUrl(
++            getBaseConfigForStrategy('openai_compatible'),
++          ),
++          evidence: ['User indicated OpenAI-compatible'],
++        };
++        this.addMessage('info', 'Using OpenAI-compatible format. Do you have an API key?', {
++          inputRequest: {
++            type: 'api_key',
++            prompt: 'Enter your API key:',
++            field: 'apiKey',
++            sensitive: true,
++          },
++          options: [
++            { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
++            { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
++          ],
++        });
+         break;
+ 
+       case 'anthropic':
+-        this.selectAuthenticatedStrategy('anthropic_compatible');
++        this.session.bestMatch = {
++          strategyId: 'anthropic_compatible',
++          confidence: 0.9,
++          discoveredConfig: this.normalizeConfigForBaseUrl(
++            getBaseConfigForStrategy('anthropic_compatible'),
++          ),
++          evidence: ['User indicated Anthropic-compatible'],
++        };
++        this.addMessage('info', 'Using Anthropic-compatible format. Do you have an API key?', {
++          inputRequest: {
++            type: 'api_key',
++            prompt: 'Enter your API key:',
++            field: 'apiKey',
++            sensitive: true,
++          },
++          options: [
++            { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
++            { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
++          ],
++        });
+         break;
+ 
+       case 'azure':
+-        this.selectAuthenticatedStrategy('azure_openai');
++        this.addMessage('info', 'What is the Azure OpenAI deployment name?', {
++          inputRequest: {
++            type: 'text',
++            prompt: 'Enter the deployment name configured in Azure OpenAI:',
++            field: 'azureDeployment',
++            placeholder: 'my-gpt4o-deployment',
++          },
++        });
+         break;
+ 
++      case 'example':
+       case 'custom':
++      case 'manual':
+         this.addMessage(
+           'info',
+           'Can you show me an example of how to call this API? Include the request body format and what the response looks like.',
+@@ -819,6 +783,47 @@ export class ConfigurationAgent {
+         );
+         break;
+ 
++      case 'diff_auth':
++        if (!this.session.bestMatch) {
++          this.addMessage('error', 'No detected API format is available to configure.');
++          break;
++        }
++        this.addMessage('info', 'Which HTTP header carries the API key or token?', {
++          inputRequest: {
++            type: 'text',
++            prompt: 'Enter the authentication header name:',
++            field: 'customAuthHeader',
++            placeholder: 'X-API-Key',
++          },
++        });
++        break;
++
++      case 'test': {
++        const config = this.session.finalConfig || this.session.bestMatch?.discoveredConfig;
++        if (!config) {
++          this.addMessage('error', 'No configuration is available to test.');
++          break;
++        }
++        this.addMessage('status', 'Ru

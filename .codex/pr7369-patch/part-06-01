@@ -1,0 +1,27 @@
+arams) {
++      base.searchParams.set(key, value);
++    }
++    return base.toString();
++  }
++
+   /**
+    * Get display name for strategy
+    */
+diff --git a/src/redteam/configAgent/strategies.ts b/src/redteam/configAgent/strategies.ts
+index 5ad8ee99a..0ed528c8c 100644
+--- a/src/redteam/configAgent/strategies.ts
++++ b/src/redteam/configAgent/strategies.ts
+@@ -10,8 +10,25 @@ import { randomUUID } from 'crypto';
+ import type { DiscoveredConfig, DiscoveryStrategy, ProbeResult, StrategyMatch } from './types';
+ 
+ const AZURE_API_VERSION = '2024-10-21';
+-const AZURE_DEFAULT_DEPLOYMENT = 'gpt-4';
+-const AZURE_CHAT_COMPLETIONS_PATH = `/openai/deployments/${AZURE_DEFAULT_DEPLOYMENT}/chat/completions?api-version=${AZURE_API_VERSION}`;
++export function getAzureChatCompletionsPath(
++  deployment: string,
++  apiVersion = AZURE_API_VERSION,
++): string {
++  return `/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
++}
++
++export functi

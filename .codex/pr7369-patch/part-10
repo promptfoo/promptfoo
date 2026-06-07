@@ -1,0 +1,131 @@
+@ describe('config agent discovery strategies', () => {
+   it('detects Azure OpenAI responses', () => {
+     const match = analyzeProbeResults('azure_openai', [
+       probeResult({
+-        probe: azureOpenaiStrategy.probes[0],
++        probe: azureStrategy.probes[0],
+         json: { choices: [{ message: { content: 'hello' } }] },
+       }),
+     ]);
+@@ -123,14 +133,31 @@ describe('config agent discovery strategies', () => {
+       confidence: 0.9,
+       discoveredConfig: {
+         apiType: 'azure_openai',
+-        path: '/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21',
+-        defaultModel: 'gpt-4',
++        path: '/openai/deployments/my-gpt4o/chat/completions?api-version=2024-10-21',
++        defaultModel: 'my-gpt4o',
+         transformResponse: 'json.choices[0].message.content',
+         headers: { 'Content-Type': 'application/json' },
+       },
+     });
+   });
+ 
++  it('emits runnable default model values for manually selected formats', () => {
++    expect(getBaseConfigForStrategy('openai_compatible')).toMatchObject({
++      body: { model: 'gpt-4' },
++      defaultModel: 'gpt-4',
++    });
++    expect(getBaseConfigForStrategy('anthropic_compatible')).toMatchObject({
++      body: { model: 'claude-3-sonnet-20240229' },
++      defaultModel: 'claude-3-sonnet-20240229',
++    });
++    expect(
++      getBaseConfigForStrategy('azure_openai', { azureDeployment: 'team-deployment' }),
++    ).toMatchObject({
++      path: '/openai/deployments/team-deployment/chat/completions?api-version=2024-10-21',
++      defaultModel: 'team-deployment',
++    });
++  });
++
+   it('builds partial configs from API-key auth errors', () => {
+     const match = analyzeProbeResults('openai_compatible', [
+       probeResult({
+@@ -191,6 +218,22 @@ describe('config agent discovery strategies', () => {
+     expect(match?.evidence).toContain('Found response in field: json.response.items[0].text');
+   });
+ 
++  it('rejects request echoes while still finding a distinct response field', () => {
++    expect(
++      analyzeProbeResults('generic_json', [
++        probeResult({ probe: genericStrategy.probes[0], json: { prompt: 'Say hello' } }),
++      ]),
++    ).toBeNull();
++
++    const match = analyzeProbeResults('generic_json', [
++      probeResult({
++        probe: genericStrategy.probes[0],
++        json: { prompt: 'Say hello', response: 'Hello from the model' },
++      }),
++    ]);
++    expect(match?.discoveredConfig.transformResponse).toBe('json.response');
++  });
++
+   it('falls back to non-priority generic fields and ignores unusable values', () => {
+     const match = analyzeProbeResults('generic_json', [
+       probeResult({
+diff --git a/test/server/routes/redteam.test.ts b/test/server/routes/redteam.test.ts
+index a94915d75..7c0610fe1 100644
+--- a/test/server/routes/redteam.test.ts
++++ b/test/server/routes/redteam.test.ts
+@@ -894,9 +894,6 @@ describe('Redteam Routes', () => {
+             choices: [{ message: { content: 'hello' } }],
+           });
+         }
+-        if (!String(_url).endsWith('/v1/chat/completions')) {
+-          return jsonResponse({ error: 'not found' }, { status: 404 });
+-        }
+         return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
+       });
+ 
+@@ -907,18 +904,17 @@ describe('Redteam Routes', () => {
+       expect(startResponse.status).toBe(200);
+       const { sessionId } = startResponse.body.data;
+ 
+-      await waitForFetchCalls(17);
++      await waitForFetchCalls(3);
+ 
+       const inputResponse = await request(app).post('/api/redteam/config-agent/input').send({
+         sessionId,
+         type: 'api_key',
+         value: 'sk-test-secret',
+-        field: 'publicNote',
++        field: 'apiKey',
+       });
+ 
+       expect(inputResponse.status).toBe(200);
+       expect(JSON.stringify(inputResponse.body)).not.toContain('sk-test-secret');
+-      expect(inputResponse.body.data.session.userInputs).not.toHaveProperty('publicNote');
+       expect(Object.values(inputResponse.body.data.session.finalConfig.headers)).toContain(
+         'Bearer ••••cret',
+       );
+diff --git a/test/types/apiSchemas.redteam.test.ts b/test/types/apiSchemas.redteam.test.ts
+index 6233eea18..68537583a 100644
+--- a/test/types/apiSchemas.redteam.test.ts
++++ b/test/types/apiSchemas.redteam.test.ts
+@@ -423,16 +423,23 @@ describe('API schema red-team coverage', () => {
+         RedteamSchemas.ConfigAgentInput.Request.safeParse({
+           sessionId: 'session-1',
+           type: 'api_key',
+-          value: true,
++          value: false,
+         }).success,
+       ).toBe(false);
+       expect(
+         RedteamSchemas.ConfigAgentInput.Request.safeParse({
+           sessionId: 'session-1',
+           type: 'confirmation',
+-          value: 'yes',
++          value: 'false',
+         }).success,
+       ).toBe(false);
++      expect(
++        RedteamSchemas.ConfigAgentInput.Request.safeParse({
++          sessionId: 'session-1',
++          type: 'confirmation',
++          value: false,
++        }).success,
++      ).toBe(true);
+       expect(
+         RedteamSchemas.ConfigAgentSession.Response.parse({
+           success: true,

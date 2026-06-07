@@ -1,0 +1,210 @@
+@@ function analyzeAnthropicResults(successfulResults: ProbeResult[]): StrategyMatc
+         'anthropic-version': '2023-06-01',
+       },
+       body: {
+-        model: '{{model}}',
++        model: defaultModel,
+         max_tokens: 1024,
+         messages: [{ role: 'user', content: '{{prompt}}' }],
+       },
+       transformResponse: 'json.content[0].text',
+-      defaultModel: (json.model as string) || 'claude-3-sonnet-20240229',
++      defaultModel,
+       supportsStreaming: true,
+     },
+     evidence,
+@@ -414,19 +454,24 @@ function analyzeAzureResults(successfulResults: ProbeResult[]): StrategyMatch |
+ 
+   evidence.push('Response has choices array (Azure OpenAI format)');
+ 
++  const deployment = getAzureDeploymentFromPath(result.probe.path || '');
++  if (!deployment) {
++    return null;
++  }
++
+   return {
+     strategyId: 'azure_openai',
+     confidence: 0.9,
+     discoveredConfig: {
+       apiType: 'azure_openai',
+       method: 'POST',
+-      path: AZURE_CHAT_COMPLETIONS_PATH,
++      path: result.probe.path,
+       headers: { 'Content-Type': 'application/json' },
+       body: {
+         messages: [{ role: 'user', content: '{{prompt}}' }],
+       },
+       transformResponse: 'json.choices[0].message.content',
+-      defaultModel: AZURE_DEFAULT_DEPLOYMENT,
++      defaultModel: deployment,
+     },
+     evidence,
+   };
+@@ -440,7 +485,8 @@ function analyzeGenericResults(successfulResults: ProbeResult[]): StrategyMatch
+     }
+ 
+     const json = result.json as Record<string, unknown>;
+-    const responseField = findTextResponseField(json);
++    const submittedText = collectTextValues(result.probe.body);
++    const responseField = findTextResponseField(json, 'json', submittedText);
+ 
+     if (responseField) {
+       const evidence = [
+@@ -481,14 +527,18 @@ function analyzeGenericResults(successfulResults: ProbeResult[]): StrategyMatch
+ function findTextResponseField(
+   obj: unknown,
+   path = 'json',
++  rejectedValues = new Set<string>(),
+ ): { path: string; value: string } | null {
+   if (typeof obj === 'string' && obj.length > 0 && obj.length < 10000) {
++    if (rejectedValues.has(normalizeTextValue(obj))) {
++      return null;
++    }
+     return { path, value: obj };
+   }
+ 
+   if (Array.isArray(obj)) {
+     for (let i = 0; i < obj.length; i++) {
+-      const result = findTextResponseField(obj[i], `${path}[${i}]`);
++      const result = findTextResponseField(obj[i], `${path}[${i}]`, rejectedValues);
+       if (result) {
+         return result;
+       }
+@@ -513,7 +563,7 @@ function findTextResponseField(
+ 
+     for (const field of priorityFields) {
+       if (field in objRecord) {
+-        const result = findTextResponseField(objRecord[field], `${path}.${field}`);
++        const result = findTextResponseField(objRecord[field], `${path}.${field}`, rejectedValues);
+         if (result) {
+           return result;
+         }
+@@ -523,7 +573,7 @@ function findTextResponseField(
+     // Then try all other fields
+     for (const [key, value] of Object.entries(objRecord)) {
+       if (!priorityFields.includes(key)) {
+-        const result = findTextResponseField(value, `${path}.${key}`);
++        const result = findTextResponseField(value, `${path}.${key}`, rejectedValues);
+         if (result) {
+           return result;
+         }
+@@ -533,3 +583,22 @@ function findTextResponseField(
+ 
+   return null;
+ }
++
++function normalizeTextValue(value: string): string {
++  return value.trim().replace(/\s+/g, ' ').toLowerCase();
++}
++
++function collectTextValues(value: unknown, values = new Set<string>()): Set<string> {
++  if (typeof value === 'string' && value.trim()) {
++    values.add(normalizeTextValue(value));
++  } else if (Array.isArray(value)) {
++    for (const item of value) {
++      collectTextValues(item, values);
++    }
++  } else if (value && typeof value === 'object') {
++    for (const item of Object.values(value)) {
++      collectTextValues(item, values);
++    }
++  }
++  return values;
++}
+diff --git a/src/redteam/configAgent/types.ts b/src/redteam/configAgent/types.ts
+index b4c015299..3e5fcf1ad 100644
+--- a/src/redteam/configAgent/types.ts
++++ b/src/redteam/configAgent/types.ts
+@@ -198,11 +198,6 @@ export interface ConfigAgentSession {
+  */
+ export interface StartSessionRequest {
+   baseUrl: string;
+-  hints?: {
+-    apiType?: string;
+-    hasAuth?: boolean;
+-    authType?: string;
+-  };
+ }
+ 
+ /**
+diff --git a/src/types/api/redteam.ts b/src/types/api/redteam.ts
+index 2d925f15e..49f6b38d3 100644
+--- a/src/types/api/redteam.ts
++++ b/src/types/api/redteam.ts
+@@ -110,33 +110,42 @@ const ConfigAgentMessageSchema = z.unknown();
+ const ConfigAgentSessionSchema = z.unknown();
+ 
+ export const ConfigAgentStartRequestSchema = z.object({
+-  baseUrl: z.string().trim().min(1, 'URL is required'),
+-  hints: z
+-    .object({
+-      apiType: z.string().optional(),
+-      hasAuth: z.boolean().optional(),
+-      authType: z.string().optional(),
+-    })
+-    .optional(),
++  baseUrl: z.string().trim().min(1, 'URL is required').max(4096, 'URL is too long'),
+ });
+ 
+-const ConfigAgentStringInputSchema = z.object({
+-  sessionId: z.string(),
+-  type: z.enum(['message', 'option', 'api_key']),
+-  value: z.string(),
+-  field: z.string().optional(),
+-});
+-
+-const ConfigAgentConfirmationInputSchema = z.object({
+-  sessionId: z.string(),
+-  type: z.literal('confirmation'),
+-  value: z.boolean(),
+-  field: z.string().optional(),
+-});
++const ConfigAgentSessionIdSchema = z.string().min(1).max(128);
++const ConfigAgentFieldSchema = z
++  .string()
++  .min(1)
++  .max(64)
++  .regex(/^[A-Za-z][A-Za-z0-9_-]*$/)
++  .optional();
+ 
+ export const ConfigAgentInputRequestSchema = z.discriminatedUnion('type', [
+-  ConfigAgentStringInputSchema,
+-  ConfigAgentConfirmationInputSchema,
++  z.object({
++    sessionId: ConfigAgentSessionIdSchema,
++    type: z.literal('message'),
++    value: z.string().max(100_000),
++    field: ConfigAgentFieldSchema,
++  }),
++  z.object({
++    sessionId: ConfigAgentSessionIdSchema,
++    type: z.literal('option'),
++    value: z.string().min(1).max(128),
++    field: ConfigAgentFieldSchema,
++  }),
++  z.object({
++    sessionId: ConfigAgentSessionIdSchema,
++    type: z.literal('api_key'),
++    value: z.string().max(32_768),
++    field: ConfigAgentFieldSchema,
++  }),
++  z.object({
++    sessionId: ConfigAgentSessionIdSchema,
++    type: z.literal('confirmation'),
++    value: z.boolean(),
++    field: ConfigAgentFieldSchema,
++  }),
+ ]);
+ 
+ export const ConfigAgentStartResponseSchema = z.object({
+diff --git a/test/redteam/configAgent/agent.test.ts b/test/redteam/configAgent/agent.test.ts
+index e80eb86dc..fe0ef6d19 100644
+--- a/test/redteam/configAgent/agent.test.ts
++++ b/test/redteam/configAgent/agent.test.ts
+@@ -172,6 +172,15 @@ describe('ConfigurationAgent', () => {
+           'Only HTTP and HTTPS protocols are allowed',
+         );
+       });
++
++      it('should reject credentials and fragments in endpoint URLs', () => {
++        expect(() => new ConfigurationAgent('https://user:secret@api.example.com')).to

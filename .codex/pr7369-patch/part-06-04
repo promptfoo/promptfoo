@@ -1,0 +1,26 @@
+orStrategy(strategyId: string): DiscoveredConfig {
++export function getBaseConfigForStrategy(
++  strategyId: string,
++  options: { azureDeployment?: string | null; azureApiVersion?: string } = {},
++): DiscoveredConfig {
+   switch (strategyId) {
+     case 'openai_compatible':
+       return {
+@@ -246,10 +278,11 @@ export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
+         path: '/v1/chat/completions',
+         headers: { 'Content-Type': 'application/json' },
+         body: {
+-          model: '{{model}}',
++          model: 'gpt-4',
+           messages: [{ role: 'user', content: '{{prompt}}' }],
+         },
+         transformResponse: 'json.choices[0].message.content',
++        defaultModel: 'gpt-4',
+       };
+     case 'anthropic_compatible':
+       return {
+@@ -261,24 +294,27 @@ export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
+           'anthropic-version': '2023-06-01',
+         },
+         body: {
+-          model: '{{mod

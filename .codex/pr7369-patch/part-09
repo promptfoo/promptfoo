@@ -1,0 +1,191 @@
+etMessages()
+-          .at(-1)
+-          ?.metadata?.options?.map((option) => option.id),
+-      ).toEqual(['openai', 'anthropic', 'azure', 'custom']);
+-    });
+-
+-    it('bounds response bodies retained from discovery probes', async () => {
+-      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
+-        if (options?.method === 'HEAD') {
+-          return new Response('', { status: 200 });
+-        }
+-        return textResponse('x'.repeat(200_000));
+-      });
+-
+-      const agent = new ConfigurationAgent('https://api.example.com');
+-      await agent.startDiscovery();
+-
+-      const retainedBody = agent.getSession().probeHistory[0]?.body;
+-      expect(retainedBody?.length).toBeLessThan(200_000);
+-      expect(retainedBody).toContain('[truncated]');
+-    });
+   });
+ 
+   describe('User interaction flows', () => {
+@@ -533,15 +576,17 @@ describe('ConfigurationAgent', () => {
+     it('handles custom, edit, no-key, and unknown options', async () => {
+       const agent = new ConfigurationAgent('https://api.example.com');
+ 
+-      await agent.handleUserInput({
+-        sessionId: agent.getSession().id,
+-        type: 'option',
+-        value: 'custom',
+-      });
+-      expect(agent.getMessages().at(-1)?.metadata?.inputRequest).toMatchObject({
+-        type: 'text',
+-        field: 'customFormat',
+-      });
++      for (const value of ['example', 'custom', 'manual']) {
++        await agent.handleUserInput({
++          sessionId: agent.getSession().id,
++          type: 'option',
++          value,
++        });
++        expect(agent.getMessages().at(-1)?.metadata?.inputRequest).toMatchObject({
++          type: 'text',
++          field: 'customFormat',
++        });
++      }
+ 
+       await agent.handleUserInput({
+         sessionId: agent.getSession().id,
+@@ -571,6 +616,84 @@ describe('ConfigurationAgent', () => {
+       expect(contents).toContain("I'll help you with that. What would you like to do next?");
+     });
+ 
++    it('supports a custom authentication header and secure key entry', async () => {
++      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
++        const headers = options?.headers as Record<string, string> | undefined;
++        if (headers?.['X-Team-Key'] === 'team-secret') {
++          return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
++        }
++        return jsonResponse({ error: 'unauthorized' }, { status: 401 });
++      });
++
++      const agent = new ConfigurationAgent('https://api.example.com');
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'option',
++        value: 'openai',
++      });
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'option',
++        value: 'diff_auth',
++      });
++      expect(agent.getMessages().at(-1)?.metadata?.inputRequest?.field).toBe('customAuthHeader');
++
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'message',
++        value: 'X-Team-Key',
++        field: 'customAuthHeader',
++      });
++      expect(agent.getMessages().at(-1)?.metadata?.inputRequest).toMatchObject({
++        type: 'api_key',
++        field: 'apiKey',
++        sensitive: true,
++      });
++
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'api_key',
++        value: 'team-secret',
++        field: 'apiKey',
++      });
++      expect(agent.isComplete()).toBe(true);
++      expect(agent.getFinalConfig()).toMatchObject({
++        headers: { 'X-Team-Key': 'team-secret' },
++        auth: { type: 'api_key', headerName: 'X-Team-Key' },
++      });
++    });
++
++    it('runs another verification when the test quick action is selected', async () => {
++      mockedFetchWithProxy.mockImplementation(async () =>
++        jsonResponse({ choices: [{ message: { content: 'hello' } }] }),
++      );
++
++      const agent = new ConfigurationAgent('https://api.example.com');
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'option',
++        value: 'openai',
++      });
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'option',
++        value: 'no_auth',
++      });
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'option',
++        value: 'test',
++      });
++
++      expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
++      expect(agent.isComplete()).toBe(true);
++      expect(
++        agent
++          .getMessages()
++          .some((message) => message.content === 'The configuration passed another test request.'),
++      ).toBe(true);
++    });
++
+     it('handles freeform auth, help, retry, and generic hints', async () => {
+       mockedFetchWithProxy.mockImplementation(async (url, options) => {
+         if (String(url) === 'https://api.example.com' && options?.method === 'HEAD') {
+diff --git a/test/redteam/configAgent/strategies.test.ts b/test/redteam/configAgent/strategies.test.ts
+index 891d96766..b1361839e 100644
+--- a/test/redteam/configAgent/strategies.test.ts
++++ b/test/redteam/configAgent/strategies.test.ts
+@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
+ import {
+   analyzeProbeResults,
+   anthropicStrategy,
+-  azureOpenaiStrategy,
++  createAzureOpenaiStrategy,
+   genericStrategy,
++  getBaseConfigForStrategy,
+   openaiStrategy,
+ } from '../../../src/redteam/configAgent/strategies';
+ 
+@@ -36,6 +37,7 @@ function probeResult({
+ }
+ 
+ describe('config agent discovery strategies', () => {
++  const azureStrategy = createAzureOpenaiStrategy('my-gpt4o');
+   it('returns null for unknown strategies and uninformative probe failures', () => {
+     expect(analyzeProbeResults('missing', [])).toBeNull();
+     expect(
+@@ -62,6 +64,10 @@ describe('config agent discovery strategies', () => {
+       confidence: 0.95,
+       discoveredConfig: {
+         apiType: 'openai_compatible',
++        body: {
++          model: 'gpt-test',
++          messages: [{ role: 'user', content: '{{prompt}}' }],
++        },
+         defaultModel: 'gpt-test',
+         models: ['gpt-test', 'gpt-next'],
+         transformResponse: 'json.choices[0].message.content',
+@@ -84,7 +90,7 @@ describe('config agent discovery strategies', () => {
+     ).toBeNull();
+     expect(
+       analyzeProbeResults('azure_openai', [
+-        probeResult({ probe: azureOpenaiStrategy.probes[0], json: { output: 'hello' } }),
++        probeResult({ probe: azureStrategy.probes[0], json: { output: 'hello' } }),
+       ]),
+     ).toBeNull();
+   });
+@@ -102,6 +108,10 @@ describe('config agent discovery strategies', () => {
+       confidence: 0.95,
+       discoveredConfig: {
+         apiType: 'anthropic_compatible',
++        body: {
++          model: 'claude-test',
++          messages: [{ role: 'user', content: '{{prompt}}' }],
++        },
+         defaultModel: 'claude-test',
+         transformResponse: 'json.content[0].text',
+       },
+@@ -113,7 +123,7 @

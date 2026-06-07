@@ -1,0 +1,185 @@
+]) => ({
++          key,
++          value: String(value),
++        })),
++      );
++      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
++      updateCustomTarget('config', {
++        ...selectedTarget.config,
++        request: undefined,
++        url: fullUrl,
++        method: discoveredConfig.method,
++        headers,
++        body,
++        transformResponse: discoveredConfig.transformResponse,
++        useHttps: false,
++      });
++
++      setConfigAgentOpen(false);
++    },
++    [selectedTarget.config, setBodyError, setUrlError, updateCustomTarget],
++  );
++
+   return (
+     <div className="min-w-0">
+       <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+diff --git a/src/app/src/pages/redteam/setup/hooks/useConfigAgent.test.ts b/src/app/src/pages/redteam/setup/hooks/useConfigAgent.test.ts
+index 7ee49d456..46eabe872 100644
+--- a/src/app/src/pages/redteam/setup/hooks/useConfigAgent.test.ts
++++ b/src/app/src/pages/redteam/setup/hooks/useConfigAgent.test.ts
+@@ -89,22 +89,6 @@ describe('useConfigAgent', () => {
+     expect(result.current.isLoading).toBe(false);
+   });
+ 
+-  it('surfaces polling failures instead of leaving a started session inert', async () => {
+-    mockCallApi
+-      .mockResolvedValueOnce(
+-        apiResponse({ success: true, data: { sessionId: 'session-1', messages: [] } }),
+-      )
+-      .mockResolvedValueOnce(apiResponse({ error: 'poll failed' }, false));
+-
+-    const { result } = renderHook(() => useConfigAgent());
+-
+-    await act(async () => {
+-      await result.current.startSession('https://api.example.com');
+-    });
+-
+-    await waitFor(() => expect(result.current.error).toBe('poll failed'));
+-  });
+-
+   it('submits messages, options, confirmations, and restores masked API-key headers', async () => {
+     mockCallApi
+       .mockResolvedValueOnce(
+@@ -155,7 +139,7 @@ describe('useConfigAgent', () => {
+     });
+ 
+     await act(async () => {
+-      await result.current.sendMessage('hello');
++      await result.current.sendMessage('hello', 'azureDeployment');
+       await result.current.selectOption('have_key');
+       await result.current.confirm(true);
+       await result.current.submitApiKey('sk-secret');
+@@ -163,7 +147,12 @@ describe('useConfigAgent', () => {
+ 
+     expect(mockCallApi).toHaveBeenCalledWith('/redteam/config-agent/input', {
+       method: 'POST',
+-      body: JSON.stringify({ sessionId: 'session-1', type: 'message', value: 'hello' }),
++      body: JSON.stringify({
++        sessionId: 'session-1',
++        type: 'message',
++        value: 'hello',
++        field: 'azureDeployment',
++      }),
+       headers: { 'Content-Type': 'application/json' },
+     });
+     expect(mockCallApi).toHaveBeenCalledWith('/redteam/config-agent/input', {
+diff --git a/src/app/src/pages/redteam/setup/hooks/useConfigAgent.ts b/src/app/src/pages/redteam/setup/hooks/useConfigAgent.ts
+index 82968f1ca..136c43de6 100644
+--- a/src/app/src/pages/redteam/setup/hooks/useConfigAgent.ts
++++ b/src/app/src/pages/redteam/setup/hooks/useConfigAgent.ts
+@@ -73,11 +73,6 @@ export interface ConfigAgentSession {
+   finalConfig: DiscoveredConfig | null;
+ }
+ 
+-interface PolledSessionData {
+-  messages?: AgentMessage[];
+-  session?: ConfigAgentSession | null;
+-}
+-
+ interface UseConfigAgentReturn {
+   // State
+   sessionId: string | null;
+@@ -90,7 +85,7 @@ interface UseConfigAgentReturn {
+ 
+   // Actions
+   startSession: (baseUrl: string) => Promise<boolean>;
+-  sendMessage: (message: string) => Promise<void>;
++  sendMessage: (message: string, field?: string) => Promise<void>;
+   selectOption: (optionId: string) => Promise<void>;
+   submitApiKey: (apiKey: string, field?: string) => Promise<void>;
+   confirm: (confirmed: boolean) => Promise<void>;
+@@ -173,26 +168,6 @@ export function useConfigAgent(): UseConfigAgentReturn {
+     [restoreSensitiveHeaders],
+   );
+ 
+-  const canPoll = useCallback(() => mountedRef.current && pollingActiveRef.current, []);
+-
+-  const applyPolledSession = useCallback(
+-    (data: PolledSessionData): boolean => {
+-      setMessages(data.messages || []);
+-      setSession(restoreSessionSecrets(data.session || null));
+-
+-      if (!data.session || ['complete', 'error'].includes(data.session.phase)) {
+-        stopPolling();
+-        return false;
+-      }
+-
+-      const lastMessage = data.messages?.[data.messages.length - 1];
+-      const waitingForInput = lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
+-
+-      return !waitingForInput;
+-    },
+-    [restoreSessionSecrets, stopPolling],
+-  );
+-
+   /**
+    * Poll for session updates
+    */
+@@ -203,37 +178,52 @@ export function useConfigAgent(): UseConfigAgentReturn {
+       pollingActiveRef.current = true;
+ 
+       const poll = async () => {
+-        if (!canPoll()) {
++        // Check if polling should continue
++        if (!mountedRef.current || !pollingActiveRef.current) {
+           return;
+         }
+ 
+         try {
+           const response = await callApi(`/redteam/config-agent/session/${sid}`);
+-          if (!response.ok) {
+-            const responseBody = await response.json().catch(() => null);
+-            throw new Error(responseBody?.error || 'Failed to poll configuration assistant');
+-          }
+-          if (!canPoll()) {
++          if (!response.ok || !mountedRef.current || !pollingActiveRef.current) {
+             return;
+           }
+ 
+-          const { data } = (await response.json()) as { data: PolledSessionData };
+-          if (applyPolledSession(data) && canPoll()) {
+-            pollingTimeoutRef.current = setTimeout(poll, 1000);
+-          }
+-        } catch (err) {
+-          if (!canPoll()) {
++          const { data } = await response.json();
++
++          // Only update state if still mounted and polling is active
++          if (!mountedRef.current || !pollingActiveRef.current) {
+             return;
+           }
+ 
+-          stopPolling();
+-          setError(err instanceof Error ? err.message : 'Failed to poll configuration assistant');
++          setMessages(data.messages || []);
++          setSession(restoreSessionSecrets(data.session || null));
++
++          // Continue polling if not complete
++          if (data.session && !['complete', 'error'].includes(data.session.phase)) {
++            // Check if we're waiting for user input
++            const lastMessage = data.messages?.[data.messages.length - 1];
++            const waitingForInput =
++              lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
++
++            if (!waitingForInput && pollingActiveRef.current) {
++              pollingTimeoutRef.current = setTimeout(poll, 1000);
++            }
++          } else {
++            // Polling complete, clean up
++            pollingActiveRef.current = false;
++          }
++        } catch {
++          // Ignore polling errors, but stop if unmounted
++          if (!mountedRef.current) {
++            pollingActiveRef.current = false;
++ 

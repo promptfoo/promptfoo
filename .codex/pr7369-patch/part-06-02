@@ -1,0 +1,36 @@
+on getAzureDeploymentFromPath(path: string): string | null {
++  const pathname = new URL(path, 'https://azure.example.com').pathname;
++  const match = pathname.match(/\/openai\/deployments\/([^/]+)\/chat\/completions$/i);
++  if (!match) {
++    return null;
++  }
++  try {
++    return decodeURIComponent(match[1]);
++  } catch {
++    return null;
++  }
++}
+ 
+ /**
+  * Helper to create a probe with a unique ID
+@@ -86,22 +103,32 @@ export const anthropicStrategy: DiscoveryStrategy = {
+ export const azureOpenaiStrategy: DiscoveryStrategy = {
+   id: 'azure_openai',
+   name: 'Azure OpenAI',
+-  description: 'Azure OpenAI API format',
++  description: 'Azure OpenAI API format (requires a deployment name)',
+   minConfidence: 0.8,
+-  probes: [
+-    probe(
+-      'POST',
+-      AZURE_CHAT_COMPLETIONS_PATH,
+-      {
+-        messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }],
+-        max_tokens: 10,
+-      },
+-      {},
+-      'Azure OpenAI chat format',
+-    ),
+-  ],
++  probes: [],
+ 

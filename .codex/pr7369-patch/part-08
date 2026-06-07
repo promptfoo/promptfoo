@@ -1,0 +1,174 @@
+Throw(
++          'Credentials in endpoint URLs are not allowed',
++        );
++        expect(() => new ConfigurationAgent('https://api.example.com/v1#token')).toThrow(
++          'URL fragments are not allowed',
++        );
++      });
+     });
+ 
+     it('should reject hostnames that resolve to private addresses', async () => {
+@@ -262,9 +271,6 @@ describe('ConfigurationAgent', () => {
+             choices: [{ message: { content: 'hello' } }],
+           });
+         }
+-        if (!String(_url).endsWith('/v1/chat/completions')) {
+-          return jsonResponse({ error: 'not found' }, { status: 404 });
+-        }
+         return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
+       });
+ 
+@@ -312,6 +318,10 @@ describe('ConfigurationAgent', () => {
+       expect(agent.getFinalConfig()).toMatchObject({
+         apiType: 'openai_compatible',
+         path: '/v1/chat/completions',
++        body: {
++          model: 'gpt-test',
++          messages: [{ role: 'user', content: '{{prompt}}' }],
++        },
+         defaultModel: 'gpt-test',
+       });
+       expect(agent.getMessages().some((message) => message.content.includes('Found a match'))).toBe(
+@@ -319,36 +329,108 @@ describe('ConfigurationAgent', () => {
+       );
+     });
+ 
+-    it('discovers and verifies Azure using the concrete deployment path it probed', async () => {
++    it('uses a full OpenAI endpoint URL without duplicating its path', async () => {
+       mockedFetchWithProxy.mockImplementation(async (url, options) => {
+         if (options?.method === 'HEAD') {
+           return new Response('', { status: 204 });
+         }
+-        if (
+-          String(url).endsWith('/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21')
+-        ) {
++        if (String(url) === 'https://api.example.com/v1/models?tenant=team-a') {
++          return jsonResponse({ data: [{ id: 'gpt-full-url' }] });
++        }
++        if (String(url) === 'https://api.example.com/v1/chat/completions?tenant=team-a') {
+           return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
+         }
+         return jsonResponse({ error: 'not found' }, { status: 404 });
+       });
+ 
+-      const agent = new ConfigurationAgent('https://azure.example.com');
++      const agent = new ConfigurationAgent(
++        'https://api.example.com/v1/chat/completions?tenant=team-a',
++      );
++      await agent.startDiscovery();
++
++      expect(agent.isComplete()).toBe(true);
++      expect(agent.getFinalConfig()).toMatchObject({
++        apiType: 'openai_compatible',
++        body: { model: 'gpt-full-url' },
++        defaultModel: 'gpt-full-url',
++      });
++      expect(agent.getFinalConfig()?.path).toBeUndefined();
++      expect(
++        mockedFetchWithProxy.mock.calls.some(([url]) =>
++          String(url).includes('/v1/chat/completions/v1/'),
++        ),
++      ).toBe(false);
++    });
++
++    it('discovers an Azure deployment from a full endpoint URL', async () => {
++      const endpoint =
++        'https://azure.example.com/openai/deployments/team-gpt4o/chat/completions?api-version=2025-01-01-preview';
++      mockedFetchWithProxy.mockImplementation(async (url, options) => {
++        if (options?.method === 'HEAD') {
++          return new Response('', { status: 204 });
++        }
++        if (String(url) === endpoint) {
++          return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
++        }
++        return jsonResponse({ error: 'not found' }, { status: 404 });
++      });
++
++      const agent = new ConfigurationAgent(endpoint);
+       await agent.startDiscovery();
+ 
+       expect(agent.isComplete()).toBe(true);
+       expect(agent.getFinalConfig()).toMatchObject({
+         apiType: 'azure_openai',
+-        path: '/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21',
+-        defaultModel: 'gpt-4',
++        defaultModel: 'team-gpt4o',
+       });
++      expect(agent.getFinalConfig()?.path).toBeUndefined();
+       expect(
+-        mockedFetchWithProxy.mock.calls.filter(([url]) =>
+-          String(url).endsWith('/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21'),
++        mockedFetchWithProxy.mock.calls.filter(
++          ([url, options]) => String(url) === endpoint && options?.method === 'POST',
+         ),
+       ).toHaveLength(2);
++    });
++
++    it('asks for and verifies a user-defined Azure deployment name', async () => {
++      const endpoint =
++        'https://azure.example.com/openai/deployments/my-gpt4o/chat/completions?api-version=2024-10-21';
++      mockedFetchWithProxy.mockImplementation(async (url, options) => {
++        if (options?.method === 'HEAD') {
++          return new Response('', { status: 204 });
++        }
++        if (String(url) === endpoint) {
++          return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
++        }
++        return jsonResponse({ error: 'not found' }, { status: 404 });
++      });
++
++      const agent = new ConfigurationAgent('https://azure.example.com');
++      await agent.startDiscovery();
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'option',
++        value: 'azure',
++      });
++      expect(agent.getMessages().at(-1)?.metadata?.inputRequest?.field).toBe('azureDeployment');
++
++      await agent.handleUserInput({
++        sessionId: agent.getSession().id,
++        type: 'message',
++        value: 'my-gpt4o',
++        field: 'azureDeployment',
++      });
++
++      expect(agent.isComplete()).toBe(true);
++      expect(agent.getFinalConfig()).toMatchObject({
++        apiType: 'azure_openai',
++        path: '/openai/deployments/my-gpt4o/chat/completions?api-version=2024-10-21',
++        defaultModel: 'my-gpt4o',
++      });
+       expect(
+-        mockedFetchWithProxy.mock.calls.some(([url]) => String(url).includes('{{model}}')),
+-      ).toBe(false);
++        mockedFetchWithProxy.mock.calls.filter(
++          ([url, options]) => String(url) === endpoint && options?.method === 'POST',
++        ),
++      ).toHaveLength(2);
+     });
+ 
+     it('falls back from HEAD to GET before probing and asks for manual help when nothing matches', async () => {
+@@ -437,45 +519,6 @@ describe('ConfigurationAgent', () => {
+       );
+       expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+     });
+-
+-    it('asks for the API format when authentication masks every probe path', async () => {
+-      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
+-        if (options?.method === 'HEAD') {
+-          return new Response('', { status: 200 });
+-        }
+-        return jsonResponse(
+-          { error: { message: 'Bearer token required' } },
+-          { status: 401, headers: { 'www-authenticate': 'Bearer realm="api"' } },
+-        );
+-      });
+-
+-      const agent = new ConfigurationAgent('https://api.example.com');
+-      await agent.startDiscovery();
+-
+-      expect(agent.getSession().bestMatch).toBeNull();
+-      expect(
+-        agent
+-          .g

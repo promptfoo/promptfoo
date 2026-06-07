@@ -1,0 +1,42 @@
+};
+ 
++export function createAzureOpenaiStrategy(
++  deployment: string,
++  apiVersion = AZURE_API_VERSION,
++): DiscoveryStrategy {
++  return {
++    ...azureOpenaiStrategy,
++    probes: [
++      probe(
++        'POST',
++        getAzureChatCompletionsPath(deployment, apiVersion),
++        {
++          messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }],
++          max_tokens: 10,
++        },
++        {},
++        'Azure OpenAI chat format',
++      ),
++    ],
++  };
++}
++
+ /**
+  * Generic patterns - try common field names
+  */
+@@ -220,7 +247,9 @@ function analyzeAuthErrorResults(
+   }
+ 
+   // Build partial config based on strategy
+-  const baseConfig = getBaseConfigForStrategy(strategy.id);
++  const baseConfig = getBaseConfigForStrategy(strategy.id, {
++    azureDeployment: getAzureDeploymentFromPath(result.probe.path || ''),
++  });
+ 
+   return {
+     strategyId: strategy.id,
+@@ -237,7 +266,10 @@ function analyzeAuthErrorResults(
+   };
+ }
+ 
+-export function getBaseConfigF
