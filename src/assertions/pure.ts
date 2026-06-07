@@ -1,11 +1,6 @@
-import { pureAssertionRegistry } from './pureRegistry';
+import { pureAssertionRegistry, pureInverseAssertionBaseTypes } from './pureRegistry';
 
-import type {
-  PureAssertionParams,
-  PureAssertionType,
-  PureGradingResult,
-  PureInverseAssertionBaseType,
-} from './pureRegistry';
+import type { PureAssertionParams, PureAssertionType, PureGradingResult } from './pureRegistry';
 
 export interface PureAssertion {
   type: PureAssertionType;
@@ -29,29 +24,14 @@ export interface RunPureAssertionOptions {
   prompt?: string;
 }
 
-const PURE_INVERSE_ASSERTION_TYPES = new Set<PureInverseAssertionBaseType>([
-  'bleu',
-  'contains',
-  'contains-all',
-  'contains-any',
-  'equals',
-  'finish-reason',
-  'gleu',
-  'icontains',
-  'icontains-all',
-  'icontains-any',
-  'regex',
-  'starts-with',
-  'tool-call-f1',
-  'word-count',
-]);
+const PURE_INVERSE_ASSERTION_TYPES = new Set<string>(pureInverseAssertionBaseTypes);
 
 function getBaseType(type: string): string {
   if (!type.startsWith('not-')) {
     return type;
   }
 
-  const baseType = type.slice(4) as PureInverseAssertionBaseType;
+  const baseType = type.slice(4);
   if (!PURE_INVERSE_ASSERTION_TYPES.has(baseType)) {
     throw new Error(`Unsupported pure inverse assertion type: ${type}`);
   }
