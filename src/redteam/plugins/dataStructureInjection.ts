@@ -201,6 +201,7 @@ export class DataStructureInjectionPlugin extends RedteamPluginBase {
   }
 
   protected async getTemplate(): Promise<string> {
+    // This plugin overrides generateTests() to emit deterministic canary cases locally.
     return '';
   }
 

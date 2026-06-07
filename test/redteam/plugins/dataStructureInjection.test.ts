@@ -20,7 +20,6 @@ describe('DataStructureInjectionPlugin', () => {
     const expectedCount = STRUCTURE_FORMATS.length * INSTRUCTION_PLACEMENTS.length;
     const tests = await plugin.generateTests(expectedCount);
 
-    expect(tests).toHaveLength(30);
     expect(tests).toHaveLength(expectedCount);
     expect(new Set(tests.map((test) => test.vars?.test_var)).size).toBe(expectedCount);
     expect(new Set(tests.map((test) => test.metadata?.dataStructureInjectionCanary)).size).toBe(
