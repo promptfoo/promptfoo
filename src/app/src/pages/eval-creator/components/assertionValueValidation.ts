@@ -148,6 +148,8 @@ export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-llm-rubric',
   'g-eval',
   'not-g-eval',
+  'video-rubric',
+  'not-video-rubric',
 ]);
 
 export const TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES = new Set<AssertionType>([
@@ -227,6 +229,8 @@ const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
   'not-gleu',
   'g-eval',
   'not-g-eval',
+  'video-rubric',
+  'not-video-rubric',
   'meteor',
   'not-meteor',
   'similar',

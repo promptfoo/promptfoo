@@ -133,6 +133,22 @@ describe('getRunnableAssertionValueError', () => {
     });
   });
 
+  it.each([
+    'video-rubric',
+    'not-video-rubric',
+  ] as const)('validates normalized thresholds for %s', (type) => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type, value: 'The video matches the rubric', threshold: 1.1 }),
+      ),
+    ).toBe('Enter a score threshold from 0 to 1.');
+    expect(
+      getRunnableAssertionValueError(
+        make({ type, value: 'The video matches the rubric', threshold: 0.8 }),
+      ),
+    ).toBeUndefined();
+  });
+
   describe('LLM-graded assertions', () => {
     it('requires criteria for select-best', () => {
       expect(
@@ -147,6 +163,17 @@ describe('getRunnableAssertionValueError', () => {
       expect(getRunnableAssertionValueError(make({ type: 'g-eval', value: '' }))).toBeDefined();
       expect(
         getRunnableAssertionValueError(make({ type: 'g-eval', value: 'is helpful' })),
+      ).toBeUndefined();
+    });
+
+    it('requires criteria for video-rubric', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'video-rubric', value: '' })),
+      ).toBeDefined();
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'video-rubric', value: 'The video matches the rubric' }),
+        ),
       ).toBeUndefined();
     });
   });
