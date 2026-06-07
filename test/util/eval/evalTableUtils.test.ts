@@ -1183,11 +1183,16 @@ describe('evalTableUtils', () => {
     });
   });
 
-  // Build a CompletedPrompt that mimics legacy/imported persistence: the
-  // `metrics` object exists but lacks `namedScoresCount`. The streaming CSV
-  // path must fall back to a row-scan discovery pass for these prompts.
-  // `overrides.namedScores` contains aggregate prompt-level metrics; per-row
-  // named scores remain on the individual result rows.
+  /**
+   * Creates a prompt that mimics legacy persistence without `metrics.namedScoresCount`.
+   *
+   * `overrides.namedScores` contains aggregate prompt metrics; per-row scores
+   * remain on the individual results.
+   *
+   * @param raw - Raw prompt text.
+   * @param overrides - Prompt overrides and aggregate named scores.
+   * @returns A completed prompt in the legacy persisted shape.
+   */
   function createLegacyCompletedPrompt(
     raw: string,
     overrides: { namedScores: Record<string, number> } & Partial<Omit<CompletedPrompt, 'metrics'>>,
@@ -1287,6 +1292,16 @@ describe('evalTableUtils', () => {
       expect(secondIdx).toBeLessThan(thirdIdx);
     });
 
+    /**
+     * Streams fixture results through `streamEvalCsv` and returns the complete CSV output.
+     *
+     * @param params - Fixture data used to construct the mocked eval.
+     * @param params.vars - Variable names included in the CSV.
+     * @param params.prompts - Prompt definitions used by the eval.
+     * @param params.results - Result fixtures yielded by `fetchResultsBatched`.
+     * @param params.isRedteam - Whether to use redteam CSV formatting.
+     * @returns The concatenated CSV chunks emitted by `streamEvalCsv`.
+     */
     async function runStreamEvalCsv({
       vars,
       prompts,
