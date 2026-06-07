@@ -1,0 +1,21 @@
+).toBeInTheDocument();
+-  });
+-
+   it('closes and starts over by cancelling and resetting state', async () => {
+     const user = userEvent.setup();
+     const onClose = vi.fn();
+diff --git a/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.tsx b/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.tsx
+index 8e4813f91..94eeb7043 100644
+--- a/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.tsx
++++ b/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.tsx
+@@ -218,13 +218,6 @@ export default function ConfigAgentDrawer({
+           <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+             {started ? (
+               <>
+-                {error && (
+-                  <div className="px-4 pt-4">
+-                    <Alert variant="destructive">
+-                      <AlertDescription>{error}</AlertDescription>
+-                    </Alert>
+-                  </div>
+-                

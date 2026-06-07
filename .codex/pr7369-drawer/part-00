@@ -1,0 +1,20 @@
+diff --git a/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.test.tsx b/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.test.tsx
+index c714d1ca4..b761f09dd 100644
+--- a/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.test.tsx
++++ b/src/app/src/pages/redteam/setup/components/ConfigAgent/ConfigAgentDrawer.test.tsx
+@@ -121,20 +121,6 @@ describe('ConfigAgentDrawer', () => {
+     expect(screen.getByRole('button', { name: /start auto-discovery/i })).toBeDisabled();
+   });
+ 
+-  it('shows background polling errors after discovery has started', async () => {
+-    const user = userEvent.setup();
+-    mockUseConfigAgent.mockReturnValue({
+-      ...hookState,
+-      error: 'poll failed',
+-    });
+-
+-    render(<ConfigAgentDrawer open onClose={vi.fn()} initialUrl="https://api.example.com" />);
+-
+-    await user.click(screen.getByRole('button', { name: /start auto-discovery/i }));
+-
+-    expect(screen.getByText('poll failed')

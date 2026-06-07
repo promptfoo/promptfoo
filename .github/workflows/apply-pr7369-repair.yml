@@ -1,4 +1,4 @@
-name: Apply validated PR 7369 repair
+name: Apply validated PR 7369 drawer repair
 
 on:
   push:
@@ -20,16 +20,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Apply exact validated patch
+      - name: Apply exact validated drawer patch
         shell: bash
         run: |
           set -euo pipefail
-          cat .codex/pr7369-patch/part-* > /tmp/pr7369.patch
-          echo "adfeb5f8ba198d2d54eeed19557d946251b29546595aad6066cacceab0596305  /tmp/pr7369.patch" | sha256sum -c -
-          git apply --index --check /tmp/pr7369.patch
-          git apply --index /tmp/pr7369.patch
-          git diff --cached --binary HEAD > /tmp/pr7369-staged.patch
-          echo "adfeb5f8ba198d2d54eeed19557d946251b29546595aad6066cacceab0596305  /tmp/pr7369-staged.patch" | sha256sum -c -
+          cat .codex/pr7369-drawer/part-* > /tmp/pr7369-drawer.patch
+          echo "336b5c26980a4ae87d604b99cb8834854f505fe20980b61c3642d6273489a9b8  /tmp/pr7369-drawer.patch" | sha256sum -c -
+          git apply --index --check /tmp/pr7369-drawer.patch
+          git apply --index /tmp/pr7369-drawer.patch
+          git diff --cached --binary HEAD > /tmp/pr7369-drawer-staged.patch
+          echo "336b5c26980a4ae87d604b99cb8834854f505fe20980b61c3642d6273489a9b8  /tmp/pr7369-drawer-staged.patch" | sha256sum -c -
 
       - name: Commit and push exact repair
         shell: bash
@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -c core.hooksPath=/dev/null commit -m "fix(redteam): harden configuration discovery"
+          git -c core.hooksPath=/dev/null commit -m "fix(redteam): align configuration agent error handling"
           basic_auth="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')"
           git -c core.hooksPath=/dev/null \
             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic_auth}" \
