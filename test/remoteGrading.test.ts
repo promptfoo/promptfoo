@@ -10,6 +10,19 @@ import { doRemoteGrading } from '../src/remoteGrading';
 
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
+function containsString(value: unknown, needle: string): boolean {
+  if (typeof value === 'string') {
+    return value.includes(needle);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsString(item, needle));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some((item) => containsString(item, needle));
+  }
+  return false;
+}
+
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
@@ -80,6 +93,39 @@ describe('doRemoteGrading', () => {
     );
   });
 
+  it('does not add grader error metadata when remote grading succeeds without metadata', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({
+      task: 'llm-rubric',
+      rubric: 'Only pass if the response is correct.',
+      output: 'Example output',
+      vars: {},
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+    });
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
   it('redacts inline image data from remote grading debug logs', async () => {
     vi.mocked(getUserEmail).mockReturnValue('user@example.com');
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
@@ -111,7 +157,11 @@ describe('doRemoteGrading', () => {
         images: [{ data: '[REDACTED_IMAGE_DATA]', mimeType: 'image/png' }],
       }),
     });
-    expect(JSON.stringify(mockLoggerDebug.mock.calls)).not.toContain('abc123');
+    const firstDebugPayload = mockLoggerDebug.mock.calls[0][1] as {
+      body: { images: Array<{ data: string; mimeType: string }> };
+    };
+    expect(firstDebugPayload.body.images[0].data).toBe('[REDACTED_IMAGE_DATA]');
+    expect(containsString(mockLoggerDebug.mock.calls, 'abc123')).toBe(false);
     expect(fetchWithCache).toHaveBeenCalledWith(
       'https://api.promptfoo.test/task',
       expect.objectContaining({
