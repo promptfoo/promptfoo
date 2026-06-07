@@ -204,7 +204,7 @@ export async function doTargetPurposeDiscovery(
   let pbar: cliProgress.SingleBar | undefined;
   if (showProgress) {
     pbar = new cliProgress.SingleBar({
-      format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+      format: 'Mapping the target {bar} {percentage}% | {value}/{total} turns',
       barCompleteChar: '\u2588',
       barIncompleteChar: '\u2591',
       hideCursor: true,
@@ -438,10 +438,6 @@ export function discoverCommand(
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
-        if (!defaultConfig) {
-          throw new Error(`Config is invalid at ${defaultConfigPath}`);
-        }
-
         if (!defaultConfig.providers) {
           throw new Error('Config must contain a target or provider');
         }

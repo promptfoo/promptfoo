@@ -178,6 +178,11 @@ describe('doTargetPurposeDiscovery', () => {
       bustCache: true,
     });
 
+    expect(mockSingleBar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'Mapping the target {bar} {percentage}% | {value}/{total} turns',
+      }),
+    );
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
     expect(mockProgressBar.start).toHaveBeenCalledWith(5, 0);
     expect(mockProgressBar.increment).toHaveBeenCalledTimes(2);
