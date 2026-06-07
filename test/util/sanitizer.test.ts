@@ -1632,6 +1632,20 @@ describe('sanitizeUrl', () => {
 
       expect(sanitizeUrl(url)).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
     });
+
+    it('should redact raw base64-like values containing plus signs', () => {
+      const token = `${'a'.repeat(31)}+${'b'.repeat(32)}`;
+      const url = `https://example.com/api?cursor=${token}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
+    });
+
+    it('should preserve base64-like values below the secret-detection threshold', () => {
+      const value = 'a'.repeat(63);
+      const url = `https://example.com/api?cursor=${value}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe(url);
+    });
   });
 
   describe('edge cases', () => {

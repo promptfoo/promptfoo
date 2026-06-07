@@ -672,6 +672,30 @@ export const sanitizeBody = sanitizeObject;
 export const sanitizeHeaders = sanitizeObject;
 export const sanitizeQueryParams = sanitizeObject;
 
+function getSecretLookingRawQueryKeys(search: string): Set<string> {
+  const secretKeys = new Set<string>();
+
+  for (const segment of search.slice(1).split('&')) {
+    const separatorIndex = segment.indexOf('=');
+    if (separatorIndex < 0) {
+      continue;
+    }
+
+    const rawValue = segment.slice(separatorIndex + 1);
+    if (!looksLikeSecret(rawValue)) {
+      continue;
+    }
+
+    const rawKey = segment.slice(0, separatorIndex);
+    const decodedKey = decodeFormComponent(rawKey);
+    if (decodedKey !== undefined) {
+      secretKeys.add(decodedKey);
+    }
+  }
+
+  return secretKeys;
+}
+
 export function sanitizeUrl(url: string): string {
   try {
     // Ensure url is a string and handle edge cases
@@ -713,10 +737,11 @@ export function sanitizeUrl(url: string): string {
     // Sanitize query parameters that might contain sensitive data
     const sensitiveParams =
       /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+    const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
 
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
-        if (sensitiveParams.test(key) || looksLikeSecret(value)) {
+        if (sensitiveParams.test(key) || rawSecretParamKeys.has(key) || looksLikeSecret(value)) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }
       }
