@@ -1769,6 +1769,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt55Provider['isGPT5Model']()).toBe(true);
       expect(prefixedChatLatestProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedChatLatestProvider['getBillingModelName']({})).toBe('chat-latest');
       expect(prefixedGpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isGPT5Model']()).toBe(true);
@@ -1776,6 +1777,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(gpt4Provider['isGPT5Model']()).toBe(false);
       expect(gpt4oProvider['isGPT5Model']()).toBe(false);
       expect(customChatLatestProvider['isGPT5Model']()).toBe(false);
+      expect(customChatLatestProvider['getBillingModelName']({})).toBe('vendor/chat-latest');
       expect(customChatLatestProvider['supportsTemperature']()).toBe(true);
     });
 

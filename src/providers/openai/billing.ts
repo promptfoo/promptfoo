@@ -210,9 +210,8 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
   },
 ]);
 
-// OpenAI publishes chat-latest standard and Batch API prices at the same rates,
-// but does not publish Flex or Priority prices for the alias.
-const STANDARD_BATCH_ONLY_TEXT_MODELS = new Set(['chat-latest']);
+// OpenAI currently publishes only standard pricing for this floating alias.
+const STANDARD_ONLY_TEXT_MODELS = new Set(['chat-latest']);
 const TEXT_PRICED_IMAGE_INPUT_MODELS = new Set(['chat-latest']);
 
 const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
@@ -491,7 +490,7 @@ function getModelRates(
     };
   }
 
-  if ((tier === 'flex' || tier === 'priority') && STANDARD_BATCH_ONLY_TEXT_MODELS.has(modelName)) {
+  if (tier !== 'standard' && STANDARD_ONLY_TEXT_MODELS.has(modelName)) {
     return undefined;
   }
 
@@ -506,8 +505,7 @@ function getModelRates(
 
   const model = TEXT_MODELS_BY_ID.get(modelName);
   const discountedText =
-    (tier === 'batch' && !STANDARD_BATCH_ONLY_TEXT_MODELS.has(modelName)) ||
-    (tier === 'flex' && FLEX_SUPPORTED_TEXT_MODELS.has(modelName))
+    tier === 'batch' || (tier === 'flex' && FLEX_SUPPORTED_TEXT_MODELS.has(modelName))
       ? {
           input: text.input * 0.5,
           ...(text.cachedInput === undefined ? {} : { cachedInput: text.cachedInput * 0.5 }),

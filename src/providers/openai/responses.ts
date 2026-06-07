@@ -193,7 +193,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.getCapabilityModelName();
+    const modelName = this.getCapabilityModelName();
+    return modelName === 'openai/chat-latest' ? 'chat-latest' : modelName;
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {

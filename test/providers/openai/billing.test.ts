@@ -179,7 +179,7 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
   });
 
-  it('uses published batch rates without inventing flex or priority rates for chat-latest', () => {
+  it('does not invent non-standard service-tier pricing for chat-latest', () => {
     const usage = {
       input_tokens: 1_000,
       output_tokens: 100,
@@ -188,7 +188,7 @@ describe('OpenAI billing helpers', () => {
 
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'batch' }),
-    ).toBeCloseTo((600 * 5 + 400 * 0.5 + 100 * 30) / 1e6, 10);
+    ).toBeUndefined();
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' }),
     ).toBeUndefined();

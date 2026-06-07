@@ -214,7 +214,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+    return this.modelName === 'openai/chat-latest' ? 'chat-latest' : this.modelName;
   }
 
   protected getGenAISystem(): string {
