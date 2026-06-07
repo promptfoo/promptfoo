@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { getCloudUserEmail, getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -297,8 +297,8 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
         return;
       }
 
-      const currentUserEmail = getUserEmail();
-      if (!currentUserEmail || author !== currentUserEmail) {
+      const currentUserEmail = await getCloudUserEmail();
+      if (author !== currentUserEmail) {
         res.status(403).json({ error: 'Cloud evals can only be claimed by the current user' });
         return;
       }

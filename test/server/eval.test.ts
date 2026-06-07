@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getUserEmail } from '../../src/globalConfig/accounts';
+import { getCloudUserEmail, getUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -17,6 +17,7 @@ vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../src/globalConfig/accounts')>();
   return {
     ...original,
+    getCloudUserEmail: vi.fn(),
     getUserEmail: vi.fn().mockReturnValue(null),
     setUserEmail: vi.fn(),
   };
@@ -29,6 +30,7 @@ vi.mock('../../src/globalConfig/cloud', () => ({
 }));
 
 const mockedGetUserEmail = vi.mocked(getUserEmail);
+const mockedGetCloudUserEmail = vi.mocked(getCloudUserEmail);
 const mockedCloudConfig = vi.mocked(cloudConfig);
 
 vi.mock('../../src/database/signal', async () => {
@@ -56,6 +58,7 @@ describe('eval routes', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedGetUserEmail.mockReturnValue(null);
+    mockedGetCloudUserEmail.mockResolvedValue('cloud-user@example.com');
     mockedCloudConfig.isEnabled.mockReturnValue(false);
   });
 
@@ -664,7 +667,6 @@ describe('eval routes', () => {
 
     it('should allow a cloud user to claim an unassigned eval as themselves', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
 
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -680,9 +682,47 @@ describe('eval routes', () => {
       expect(updatedEval.author).toBe('cloud-user@example.com');
     });
 
+    it('should allow an API-key-only cloud user to claim without a stored email', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue(null);
+      mockedGetCloudUserEmail.mockResolvedValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'cloud-user@example.com' });
+
+      expect(res.status).toBe(200);
+      expect(mockedGetCloudUserEmail).toHaveBeenCalledOnce();
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('cloud-user@example.com');
+    });
+
+    it('should claim cloud evals whose persisted author is an empty string', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.author = '';
+      await eval_.save();
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'cloud-user@example.com' });
+
+      expect(res.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('cloud-user@example.com');
+    });
+
     it('should allow only one of two concurrent cloud claims', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
 
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -725,7 +765,6 @@ describe('eval routes', () => {
 
     it('should reject claiming a cloud eval for a different email', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
 
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -745,9 +784,49 @@ describe('eval routes', () => {
       expect(updatedEval.author).toBeNull();
     });
 
+    it('should reject a stale local email that does not match the cloud token identity', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('stale@example.com');
+      mockedGetCloudUserEmail.mockResolvedValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'stale@example.com' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty(
+        'error',
+        'Cloud evals can only be claimed by the current user',
+      );
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBeNull();
+    });
+
+    it('should fail closed when the cloud token identity cannot be verified', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetCloudUserEmail.mockRejectedValue(new Error('cloud unavailable'));
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'cloud-user@example.com' });
+
+      expect(res.status).toBe(500);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBeNull();
+    });
+
     it('should reject changing an existing cloud eval author', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
 
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -771,7 +850,6 @@ describe('eval routes', () => {
 
     it('should reject clearing an existing cloud eval author', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
 
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

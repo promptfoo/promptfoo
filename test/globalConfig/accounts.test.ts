@@ -9,6 +9,7 @@ import {
   EmailValidationError,
   getAuthMethod,
   getAuthor,
+  getCloudUserEmail,
   getUserAuthInfo,
   getUserEmail,
   getUserId,
@@ -57,6 +58,7 @@ describe('accounts', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.resetAllMocks();
     vi.unstubAllEnvs();
   });
@@ -156,6 +158,65 @@ describe('accounts', () => {
         id: 'test-id',
       });
       expect(getUserEmail()).toBeNull();
+    });
+  });
+
+  describe('getCloudUserEmail', () => {
+    const cloudIdentity = {
+      user: {
+        id: 'user-id',
+        name: 'Cloud User',
+        email: 'cloud-user@example.com',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      organization: {
+        id: 'org-id',
+        name: 'Cloud Org',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      app: {
+        url: 'https://www.promptfoo.app',
+      },
+    };
+
+    it('resolves API-key-only identities from the cloud token', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('env-api-key');
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://api.promptfoo.app');
+      const validateApiToken = vi
+        .spyOn(cloudConfig, 'validateApiToken')
+        .mockResolvedValue(cloudIdentity);
+
+      await expect(getCloudUserEmail()).resolves.toBe('cloud-user@example.com');
+      expect(validateApiToken).toHaveBeenCalledWith('env-api-key', 'https://api.promptfoo.app');
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: { email: 'cloud-user@example.com' },
+      });
+    });
+
+    it('replaces a stale local email with the token identity', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'stale@example.com' },
+      });
+      vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('api-key');
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://api.promptfoo.app');
+      vi.spyOn(cloudConfig, 'validateApiToken').mockResolvedValue(cloudIdentity);
+
+      await expect(getCloudUserEmail()).resolves.toBe('cloud-user@example.com');
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: { email: 'cloud-user@example.com' },
+      });
+    });
+
+    it('rejects cloud identity resolution when no API key is configured', async () => {
+      vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue(undefined);
+      const validateApiToken = vi.spyOn(cloudConfig, 'validateApiToken');
+
+      await expect(getCloudUserEmail()).rejects.toThrow('Cloud API key is not configured');
+      expect(validateApiToken).not.toHaveBeenCalled();
     });
   });
 

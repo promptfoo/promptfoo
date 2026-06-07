@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -429,7 +429,7 @@ export default class Eval {
   ): Promise<boolean> {
     const db = await getDb();
     const condition = options.onlyIfUnassigned
-      ? and(eq(evalsTable.id, id), isNull(evalsTable.author))
+      ? and(eq(evalsTable.id, id), or(isNull(evalsTable.author), eq(evalsTable.author, '')))
       : eq(evalsTable.id, id);
     const result = await db.update(evalsTable).set({ author }).where(condition).run();
 

@@ -4,6 +4,7 @@ import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
   clearUserEmail,
+  getCloudUserEmail,
   getUserEmail,
   getUserId,
   setUserEmail,
@@ -20,7 +21,7 @@ const CLOUD_MANAGED_EMAIL_ERROR = 'Email is managed through Promptfoo Cloud auth
 
 userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const email = getUserEmail();
+    const email = cloudConfig.isEnabled() ? await getCloudUserEmail() : getUserEmail();
     // Return 200 with null email instead of 404 to avoid console errors when no email is configured
     res.json(UserSchemas.Get.Response.parse({ email: email || null }));
   } catch (error) {
