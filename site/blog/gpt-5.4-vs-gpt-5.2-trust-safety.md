@@ -54,6 +54,12 @@ promptfoo eval \
 
 The clean replay eval ID was `eval-FSB-2026-03-06T07:30:31`.
 
+For reproducibility, OpenAI's dated snapshots for these model versions are
+[`gpt-5.2-2025-12-11`](https://developers.openai.com/api/docs/models/gpt-5.2) and
+[`gpt-5.4-2026-03-05`](https://developers.openai.com/api/docs/models/gpt-5.4). The command
+above preserves the March invocation's model alias. For a later rerun, pin the dated snapshots
+so alias updates cannot change the comparison.
+
 ## Results
 
 ![Same-benchmark comparison of GPT-5.2 and GPT-5.4](/img/blog/gpt-5.4-vs-gpt-5.2/method-comparison.svg)
@@ -122,6 +128,7 @@ We keep that rerun as context, not the headline. It measures what a fresh attack
 - Hydra is replayed as a **fixed saved chat trace**, not regenerated as a fresh attack.
 - The grader is **LLM-based**. We used the same grader on both models to keep the comparison consistent.
 - Many category deltas are based on **4 or 5 prompts per cell**.
+- The documented March invocation uses a moving model alias. Later reproductions should pin the dated snapshots above.
 
 ## Why This Matters
 
