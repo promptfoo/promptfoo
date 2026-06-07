@@ -40,6 +40,13 @@ interface ChartProps {
   datasetId?: string | null;
 }
 
+type ScatterPoint = {
+  x: number;
+  y: number;
+  backgroundColor: string;
+  rowIndex: number;
+};
+
 const COLOR_PALETTE = [
   '#fd7f6f',
   '#7eb0d5',
@@ -243,31 +250,37 @@ function ScatterChart({ table }: ChartProps) {
     const minScore = Math.min(...scores);
     const maxScore = Math.max(...scores);
 
-    const data = table.body
-      .map((row) => {
-        const prompt1Score = row.outputs[xAxisPrompt]?.score;
-        const prompt2Score = row.outputs[yAxisPrompt]?.score;
-        let backgroundColor;
-        if (prompt2Score > prompt1Score) {
-          backgroundColor = 'green';
-        } else if (prompt2Score < prompt1Score) {
-          backgroundColor = 'red';
-        } else {
-          backgroundColor = 'gray';
-        }
-        return {
+    const data = table.body.flatMap<ScatterPoint>((row, rowIndex) => {
+      const prompt1Score = row.outputs[xAxisPrompt]?.score;
+      const prompt2Score = row.outputs[yAxisPrompt]?.score;
+
+      if (
+        typeof prompt1Score !== 'number' ||
+        Number.isNaN(prompt1Score) ||
+        typeof prompt2Score !== 'number' ||
+        Number.isNaN(prompt2Score)
+      ) {
+        return [];
+      }
+
+      let backgroundColor;
+      if (prompt2Score > prompt1Score) {
+        backgroundColor = 'green';
+      } else if (prompt2Score < prompt1Score) {
+        backgroundColor = 'red';
+      } else {
+        backgroundColor = 'gray';
+      }
+
+      return [
+        {
           x: prompt1Score,
           y: prompt2Score,
           backgroundColor,
-        };
-      })
-      .filter(
-        (point) =>
-          typeof point.x === 'number' &&
-          !Number.isNaN(point.x) &&
-          typeof point.y === 'number' &&
-          !Number.isNaN(point.y),
-      );
+          rowIndex,
+        },
+      ];
+    });
 
     scatterChartInstance.current = new Chart(scatterCanvasRef.current, {
       type: 'scatter',
@@ -301,9 +314,16 @@ function ScatterChart({ table }: ChartProps) {
           tooltip: {
             callbacks: {
               label(tooltipItem: TooltipItem<'scatter'>) {
-                const row = table.body[tooltipItem.dataIndex];
-                let prompt1Text = row.outputs[0]?.text || 'No output';
-                let prompt2Text = row.outputs[1]?.text || 'No output';
+                const point = tooltipItem.raw as Partial<ScatterPoint> | undefined;
+                const rowIndex =
+                  typeof point?.rowIndex === 'number' ? point.rowIndex : tooltipItem.dataIndex;
+                const row = table.body[rowIndex];
+                if (!row) {
+                  return '';
+                }
+
+                let prompt1Text = row.outputs[xAxisPrompt]?.text || 'No output';
+                let prompt2Text = row.outputs[yAxisPrompt]?.text || 'No output';
                 if (prompt1Text.length > 30) {
                   prompt1Text = prompt1Text.substring(0, 30) + '...';
                 }
@@ -416,18 +436,19 @@ function MetricChart({ table }: ChartProps) {
 
     const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
     const labels = namedScoreKeys;
-    // Compute each metric's max once; it depends only on the key, not the prompt.
-    const maxValueByKey = new Map(
-      namedScoreKeys.map((key) => [
-        key,
-        Math.max(...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0)),
-      ]),
+    // Compute each metric's normalization value once; it depends only on the key, not the prompt.
+    const normalizationValueByKey = new Map(
+      namedScoreKeys.map((key) => {
+        const values = table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0);
+        const maxValue = Math.max(...values);
+        return [key, maxValue > 0 ? maxValue : Math.max(...values.map(Math.abs))];
+      }),
     );
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
       const data = namedScoreKeys.map((key) => {
         const value = prompt.metrics?.namedScores[key] || 0;
-        const maxValue = maxValueByKey.get(key) ?? 0;
-        return maxValue > 0 ? value / maxValue : 0;
+        const normalizationValue = normalizationValueByKey.get(key) ?? 0;
+        return normalizationValue > 0 ? value / normalizationValue : 0;
       });
       return {
         label: `${table.head.prompts[promptIdx].provider}`,
@@ -496,6 +517,11 @@ interface ProgressData {
   };
 }
 
+function getPassRate(metrics: ProgressData['metrics']): number {
+  const totalTests = metrics.testPassCount + metrics.testFailCount;
+  return totalTests === 0 ? 0 : (metrics.testPassCount / totalTests) * 100;
+}
+
 function PerformanceOverTimeChart({ evalId }: ChartProps) {
   const { config } = useTableStore();
   const lineCanvasRef = useRef(null);
@@ -510,8 +536,12 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
 
       try {
         const res = await callApi(`/history?description=${encodeURIComponent(config.description)}`);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch progress data: ${res.status} ${res.statusText}`);
+        }
+
         const data = await res.json();
-        setProgressData(data.data);
+        setProgressData(Array.isArray(data?.data) ? data.data : []);
       } catch (error) {
         console.error('Error fetching progress data:', error);
       }
@@ -552,10 +582,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
     const datasets = evaluations.reduce<
       Record<number, { x: number; y: number; evalData: ProgressData }[]>
     >((acc, eval_) => {
-      const passRate =
-        (eval_.metrics.testPassCount /
-          (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-        100;
+      const passRate = getPassRate(eval_.metrics);
 
       if (!acc[eval_.evaluationNumber]) {
         acc[eval_.evaluationNumber] = [];
@@ -611,10 +638,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
                 evalData: ProgressData;
               };
               const { evalData } = item;
-              const passRate =
-                (evalData.metrics.testPassCount /
-                  (evalData.metrics.testPassCount + evalData.metrics.testFailCount)) *
-                100;
+              const passRate = getPassRate(evalData.metrics);
               return [
                 `Label: ${evalData.label}`,
                 `Provider: ${evalData.provider}`,

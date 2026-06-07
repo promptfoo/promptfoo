@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scanResponseToSarif } from '../../../src/codeScan/util/sarif';
+import { hasSarifReportableFindings, scanResponseToSarif } from '../../../src/codeScan/util/sarif';
 import { CodeScanSeverity, type Comment, type ScanResponse } from '../../../src/types/codeScan';
 
 function makeFindingResponse(overrides: Partial<Comment> = {}): ScanResponse {
@@ -313,5 +313,47 @@ describe('scanResponseToSarif', () => {
     const sarif = scanResponseToSarif(response);
 
     expect(sarif.runs[0].results).toEqual([]);
+  });
+});
+
+describe('hasSarifReportableFindings', () => {
+  it('returns true when a comment would serialize to a SARIF result', () => {
+    expect(hasSarifReportableFindings(makeFindingResponse())).toBe(true);
+  });
+
+  it('returns true for file-only findings supported by SARIF', () => {
+    expect(
+      hasSarifReportableFindings(
+        makeFindingResponse({ file: 'src/handler.ts', line: null, startLine: undefined }),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for an empty comments array', () => {
+    expect(hasSarifReportableFindings({ success: true, comments: [] })).toBe(false);
+  });
+
+  it('returns false when every comment is filtered by scanResponseToSarif', () => {
+    const response: ScanResponse = {
+      success: true,
+      comments: [
+        {
+          file: 'src/handler.ts',
+          line: 12,
+          finding: 'No issue found on this line.',
+          severity: CodeScanSeverity.NONE,
+        },
+        {
+          file: null,
+          line: null,
+          finding: 'Advisory not pinned to a file.',
+          severity: CodeScanSeverity.HIGH,
+        },
+      ],
+    };
+
+    expect(hasSarifReportableFindings(response)).toBe(false);
+    // Stays in lockstep with the serializer it guards.
+    expect(scanResponseToSarif(response).runs[0].results).toEqual([]);
   });
 });
