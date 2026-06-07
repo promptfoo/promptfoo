@@ -104,8 +104,9 @@ Use OpenAPI `{id}` path params, not Express `:id`.
 
 ## JSON POST Example
 
-For request bodies, use `jsonBody()` so the body schema is registered as a
-reusable component:
+For request bodies, use `jsonBody()` to emit the runtime Zod schema inline in
+the operation. The helper's name argument labels the schema at the call site,
+but the current generator does not add it to `components.schemas`:
 
 ```typescript
 register({
@@ -127,7 +128,7 @@ register({
 
 ## Query Params Example
 
-Query schemas are registered the same way as params:
+Query schemas are emitted inline the same way as params:
 
 ```typescript
 register({
