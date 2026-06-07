@@ -603,6 +603,21 @@ export class AIStudioEmbeddingProvider
 }
 
 const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_VIDEO_GRADING_MODEL = 'gemini-3.5-flash';
+
+function createVideoGradingProvider(env?: EnvOverrides) {
+  return new AIStudioChatProvider(DEFAULT_AI_STUDIO_VIDEO_GRADING_MODEL, {
+    env,
+    config: {
+      generationConfig: {
+        response_mime_type: 'application/json',
+      },
+    },
+  });
+}
+
+// Gemini 3.5 Flash supports video understanding for video-rubric assertions.
+export const DefaultVideoGradingProvider = createVideoGradingProvider();
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });
@@ -615,5 +630,6 @@ export function getGoogleAiStudioProviders(env?: EnvOverrides) {
     llmRubricProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env }),
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
+    videoGradingProvider: createVideoGradingProvider(env),
   };
 }

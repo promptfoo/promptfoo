@@ -98,6 +98,7 @@ import {
   handleTrajectoryToolUsed,
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { handleVideoRubric } from './videoRubric';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -131,6 +132,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
   'search-rubric',
   'trajectory:goal-success',
+  'video-rubric',
 ]);
 
 const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
@@ -311,6 +313,7 @@ const ASSERTION_HANDLERS: Record<
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
+  'video-rubric': handleVideoRubric,
   webhook: handleWebhook,
   'word-count': handleWordCount,
 };
