@@ -191,6 +191,9 @@
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
+        "AWS_BEARER_TOKEN_BEDROCK": {
+          "type": "string"
+        },
         "AWS_BEDROCK_REGION": {
           "type": "string"
         },
@@ -288,6 +291,12 @@
           "type": "string"
         },
         "FAL_KEY": {
+          "type": "string"
+        },
+        "FIREWORKS_API_BASE_URL": {
+          "type": "string"
+        },
+        "FIREWORKS_API_KEY": {
           "type": "string"
         },
         "GITHUB_TOKEN": {
@@ -905,6 +914,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -975,6 +985,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -1658,6 +1669,9 @@
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
+                    "AWS_BEARER_TOKEN_BEDROCK": {
+                      "type": "string"
+                    },
                     "AWS_BEDROCK_REGION": {
                       "type": "string"
                     },
@@ -1755,6 +1769,12 @@
                       "type": "string"
                     },
                     "FAL_KEY": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_KEY": {
                       "type": "string"
                     },
                     "GITHUB_TOKEN": {
@@ -3084,6 +3104,15 @@
         "enabled": {
           "type": "boolean"
         },
+        "failOnReceiverStartFailure": {
+          "type": "boolean"
+        },
+        "commandToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "otlp": {
           "type": "object",
           "properties": {
@@ -3104,6 +3133,12 @@
                   "items": {
                     "type": "string",
                     "enum": ["protobuf", "json"]
+                  }
+                },
+                "redactAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
                 }
               },
@@ -3352,6 +3387,11 @@
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "filterSampleSeed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
         "filterTargets": {

@@ -4,6 +4,67 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.15](https://github.com/promptfoo/promptfoo/compare/0.121.14...0.121.15) (2026-06-05)
+
+### Features
+
+- **assertions:** grade multimodal outputs ([#9617](https://github.com/promptfoo/promptfoo/issues/9617)) ([ec4d3b4](https://github.com/promptfoo/promptfoo/commit/ec4d3b42e29133e0479028d38de394b949c9c092))
+- **build:** add DAG-aware architecture cycle checks ([#9557](https://github.com/promptfoo/promptfoo/issues/9557)) ([9d7d810](https://github.com/promptfoo/promptfoo/commit/9d7d810c2118c63cb537bf05ea2d34c12bd22066))
+- **providers:** add Azure MAI image provider and MAI model recognition ([#9595](https://github.com/promptfoo/promptfoo/issues/9595)) ([e091527](https://github.com/promptfoo/promptfoo/commit/e091527e2eae0539b9b6d78abb462eddc15e093d))
+- **providers:** upgrade MiniMax default model to M3 ([#9598](https://github.com/promptfoo/promptfoo/issues/9598)) ([43b30c5](https://github.com/promptfoo/promptfoo/commit/43b30c5bc50368842ecd08432edc2e37543db5a2))
+
+### Bug Fixes
+
+- **auth:** enable auto-share for on-prem Report Server after login ([#9612](https://github.com/promptfoo/promptfoo/issues/9612)) ([8ece593](https://github.com/promptfoo/promptfoo/commit/8ece593840d8dba3f5d2e1e05f55116ec1a92c30))
+- **auth:** preserve cloud request headers ([#9610](https://github.com/promptfoo/promptfoo/issues/9610)) ([3a2c5e6](https://github.com/promptfoo/promptfoo/commit/3a2c5e64796b3852381b6168ad2da735f3161c1d))
+- **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
+- **code-scan:** reject fractional inline comment lines ([#9556](https://github.com/promptfoo/promptfoo/issues/9556)) ([0a2b329](https://github.com/promptfoo/promptfoo/commit/0a2b32997dd83033e218cf523562b69cebc88527))
+- **eval:** compose metadata and result filters ([#9604](https://github.com/promptfoo/promptfoo/issues/9604)) ([49539ee](https://github.com/promptfoo/promptfoo/commit/49539ee61786540a77bcb9765f23cb8a2c4e1828))
+- **eval:** preserve --config ordering when expanding a directory entry ([#9606](https://github.com/promptfoo/promptfoo/issues/9606)) ([fc081a0](https://github.com/promptfoo/promptfoo/commit/fc081a0bbaa91c27b93bdd4c28533f5912023deb))
+- harden validation and target discovery ([#9614](https://github.com/promptfoo/promptfoo/issues/9614)) ([465d610](https://github.com/promptfoo/promptfoo/commit/465d610aade97837ed5bf731d54c3b2389e92819))
+- **providers:** require deployment name for no-default Azure provider types ([#9603](https://github.com/promptfoo/promptfoo/issues/9603)) ([da48abd](https://github.com/promptfoo/promptfoo/commit/da48abd6bc1b92e44acd5d4c88a0a02058721b3b))
+- **providers:** suppress optional GCP metadata warning ([#9554](https://github.com/promptfoo/promptfoo/issues/9554)) ([8dcc44b](https://github.com/promptfoo/promptfoo/commit/8dcc44bd2b2278db047363545566917cb1566975))
+- **redteam:** restrict remote auth to cloud host ([#9597](https://github.com/promptfoo/promptfoo/issues/9597)) ([1b2c6d9](https://github.com/promptfoo/promptfoo/commit/1b2c6d932494d38ad6162478d0a5fbb9a1a5f1fb))
+
+## [0.121.14](https://github.com/promptfoo/promptfoo/compare/0.121.13...0.121.14) (2026-06-02)
+
+### Features
+
+- add A2A provider ([#9586](https://github.com/promptfoo/promptfoo/issues/9586)) ([963b264](https://github.com/promptfoo/promptfoo/commit/963b264ba22d621282d0bf82efdae2b5defe6d59))
+- **assertions:** add agent-rubric grader ([#9453](https://github.com/promptfoo/promptfoo/issues/9453)) ([cadb3c5](https://github.com/promptfoo/promptfoo/commit/cadb3c500277464f05244c8bc8525c2725aa5c22))
+- **build:** publish a lightweight promptfoo/contracts subpath ([#9535](https://github.com/promptfoo/promptfoo/issues/9535)) ([6e89fd4](https://github.com/promptfoo/promptfoo/commit/6e89fd45abc97696a70079cddcb659492acc66d0))
+- **cli:** add seeded random sampling ([#9522](https://github.com/promptfoo/promptfoo/issues/9522)) ([6e4ba60](https://github.com/promptfoo/promptfoo/commit/6e4ba60eba69ff696d0404aabf5453311214c500))
+- **eval:** extract eval-creator readiness and validation modules ([#9397](https://github.com/promptfoo/promptfoo/issues/9397)) ([d3af118](https://github.com/promptfoo/promptfoo/commit/d3af1180405e82786461eae5bf85e50ce6b73f3a))
+- **eval:** surface trace linkage on result rows ([#9027](https://github.com/promptfoo/promptfoo/issues/9027)) ([9468d66](https://github.com/promptfoo/promptfoo/commit/9468d6607e858f9c1a1c77f43713f58a7dc154c5))
+- **providers:** add OpenAI GPT-5.5/5.4 frontier models + Codex on Amazon Bedrock ([#9587](https://github.com/promptfoo/promptfoo/issues/9587)) ([1e35267](https://github.com/promptfoo/promptfoo/commit/1e35267796ea372e1b4a8700ad15964d8171566b))
+- **providers:** add OpenAI originator header ([#9474](https://github.com/promptfoo/promptfoo/issues/9474)) ([6141070](https://github.com/promptfoo/promptfoo/commit/61410706acbc86772b1d60ac85d6988dc09f2fa6))
+- **providers:** expose traceable agent turn markers ([#9475](https://github.com/promptfoo/promptfoo/issues/9475)) ([4018837](https://github.com/promptfoo/promptfoo/commit/4018837455faf334ce2e07fd39a1fbc33c2960d2))
+- **providers:** promote Fireworks AI from registry stub to dedicated provider ([#9542](https://github.com/promptfoo/promptfoo/issues/9542)) ([2bae148](https://github.com/promptfoo/promptfoo/commit/2bae148be51975dbacaec2a4a5d36c839e897034))
+- **tracing:** add runtime receiver controls ([#9028](https://github.com/promptfoo/promptfoo/issues/9028)) ([90df6a1](https://github.com/promptfoo/promptfoo/commit/90df6a120710191ab4f64926e0b0636a3c891ea4))
+
+### Bug Fixes
+
+- **assertions:** don't classify gen_ai.tool.definitions chat spans as tool calls ([#9524](https://github.com/promptfoo/promptfoo/issues/9524)) ([b59f397](https://github.com/promptfoo/promptfoo/commit/b59f3974851657a8a97c05db09cc87064ba0528d))
+- **cli:** preflight force imports before collision lookup ([#9570](https://github.com/promptfoo/promptfoo/issues/9570)) ([0b93733](https://github.com/promptfoo/promptfoo/commit/0b93733d48727be67e34433cb0fb1ad21026863a))
+- **cloud:** on-prem API host for guardrails and http-generator, with host-resolution tests ([#9580](https://github.com/promptfoo/promptfoo/issues/9580)) ([b9a014a](https://github.com/promptfoo/promptfoo/commit/b9a014a3de85f26402312ac96d94fe787f2ac764))
+- **cloud:** use on-prem API host in checkEmailStatus ([#9576](https://github.com/promptfoo/promptfoo/issues/9576)) ([063c62b](https://github.com/promptfoo/promptfoo/commit/063c62b5d0df93ecf10ccdd6831ab0a2534b4df3))
+- **db:** avoid SQLITE_LOCKED flakiness in shared-cache test database ([#9567](https://github.com/promptfoo/promptfoo/issues/9567)) ([1fdb59b](https://github.com/promptfoo/promptfoo/commit/1fdb59b44f771952e5e96eb01ade2a54035fcaa0))
+- **db:** serialize libsql test database cleanup ([#9540](https://github.com/promptfoo/promptfoo/issues/9540)) ([f4380c2](https://github.com/promptfoo/promptfoo/commit/f4380c23f1e62eb1a2e171155d1437a1645d01dd))
+- **deps:** keep ModelAudit pydantic-core pinned to compatible 2.46.4 ([b2b35b0](https://github.com/promptfoo/promptfoo/commit/b2b35b079aab5ba338700d891a4ec189d4e468d7))
+- **deps:** update dependency ai to ^6.0.190 ([#9577](https://github.com/promptfoo/promptfoo/issues/9577)) ([9ec614a](https://github.com/promptfoo/promptfoo/commit/9ec614a175668d1775c332de8c272a01b6c28341))
+- **eval:** canonicalize retry JSONL output with atomic rewrites ([#9547](https://github.com/promptfoo/promptfoo/issues/9547)) ([8d7c920](https://github.com/promptfoo/promptfoo/commit/8d7c920101f495b87d23bcbd3c32fa01147db10d))
+- **eval:** redact credentials from the persisted browser store ([#9396](https://github.com/promptfoo/promptfoo/issues/9396)) ([4d5bed5](https://github.com/promptfoo/promptfoo/commit/4d5bed56b94de0351d8348f7a6b8b25a1bbc14e1))
+- **evaluator:** preserve and harden programmatic JSONL output ([#9538](https://github.com/promptfoo/promptfoo/issues/9538)) ([8ddd906](https://github.com/promptfoo/promptfoo/commit/8ddd9064de73d8e454ddab5adfaac32f64704137))
+- **output:** redact api-key and legacy transport headers in JSONL/DB ([#9546](https://github.com/promptfoo/promptfoo/issues/9546)) ([e194c85](https://github.com/promptfoo/promptfoo/commit/e194c852a4303faefab109c151c74134e1556403))
+- **providers:** handle Codex SDK rate limits ([#9473](https://github.com/promptfoo/promptfoo/issues/9473)) ([76d3db4](https://github.com/promptfoo/promptfoo/commit/76d3db402b04fbad08580907b025b93120b7d2a4))
+- **providers:** inject n8n sessions into custom bodies ([#9527](https://github.com/promptfoo/promptfoo/issues/9527)) ([9cc0542](https://github.com/promptfoo/promptfoo/commit/9cc05429af81ff6493bc8f4f448be3ce3e1c55c7))
+- **providers:** preserve n8n array body templates ([#9544](https://github.com/promptfoo/promptfoo/issues/9544)) ([6cdf63d](https://github.com/promptfoo/promptfoo/commit/6cdf63d02752bcc23fb2ab68a14e620447460df8))
+- **providers:** preserve streamed Anthropic refusal guardrails ([#9560](https://github.com/promptfoo/promptfoo/issues/9560)) ([ff8eafd](https://github.com/promptfoo/promptfoo/commit/ff8eafd743cf6d63dd85b790ad8a4c73ede5828d))
+- **providers:** serialize persistent browser sessions ([#9414](https://github.com/promptfoo/promptfoo/issues/9414)) ([097ff9b](https://github.com/promptfoo/promptfoo/commit/097ff9bab6d6692b54c385867a72c63fd106f471))
+- **redteam:** authenticate remote-generation requests against on-prem cloud ([#9584](https://github.com/promptfoo/promptfoo/issues/9584)) ([7df8fae](https://github.com/promptfoo/promptfoo/commit/7df8fae21ceb5eb51f4c246bce8ba16a11de2c1c))
+- **util:** restore nested SAS tokens after array reorder ([#9528](https://github.com/promptfoo/promptfoo/issues/9528)) ([9759e5a](https://github.com/promptfoo/promptfoo/commit/9759e5a58099a702e313013daa04149530473e33))
+- **webui:** render negative-only metric charts ([#9526](https://github.com/promptfoo/promptfoo/issues/9526)) ([7ccafa4](https://github.com/promptfoo/promptfoo/commit/7ccafa4c74c391516a5e371c9db2918e415f078f))
+
 ## [0.121.13](https://github.com/promptfoo/promptfoo/compare/0.121.12...0.121.13) (2026-05-28)
 
 ### Features

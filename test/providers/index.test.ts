@@ -729,9 +729,9 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with minimax', async () => {
-    const provider = await loadApiProvider('minimax:MiniMax-M2.7');
+    const provider = await loadApiProvider('minimax:MiniMax-M3');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    expect(provider.id()).toBe('minimax:MiniMax-M3');
     expect(provider.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
     expect(provider.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
   });
