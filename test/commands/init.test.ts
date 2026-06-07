@@ -160,6 +160,44 @@ describe('init command', () => {
         'Network error',
       );
     });
+
+    it('should include Authorization header when GITHUB_TOKEN is set', async () => {
+      process.env.GITHUB_TOKEN = 'test-token-123';
+      try {
+        const mockResponse = createMockResponse({
+          ok: true,
+          json: () => Promise.resolve([]),
+        });
+        mockFetchWithProxy.mockResolvedValueOnce(mockResponse);
+
+        await init.downloadDirectory('example', '/path/to/target');
+
+        expect(mockFetchWithProxy).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'token test-token-123',
+            }),
+          }),
+        );
+      } finally {
+        delete process.env.GITHUB_TOKEN;
+      }
+    });
+
+    it('should not include Authorization header when GITHUB_TOKEN is not set', async () => {
+      delete process.env.GITHUB_TOKEN;
+      const mockResponse = createMockResponse({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+      mockFetchWithProxy.mockResolvedValueOnce(mockResponse);
+
+      await init.downloadDirectory('example', '/path/to/target');
+
+      const headers = mockFetchWithProxy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers).not.toHaveProperty('Authorization');
+    });
   });
 
   describe('downloadExample', () => {

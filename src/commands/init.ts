@@ -6,6 +6,7 @@ import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../constants';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
@@ -36,11 +37,16 @@ interface GitHubContentItem {
   download_url: string | null;
 }
 
-function getGitHubHeaders() {
-  return {
+function getGitHubHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
     Accept: 'application/vnd.github.v3+json',
     'User-Agent': 'promptfoo-cli',
   };
+  const token = getEnvString('GITHUB_TOKEN');
+  if (token) {
+    headers['Authorization'] = `token ${token}`;
+  }
+  return headers;
 }
 
 async function fetchExamplesTree(ref: string): Promise<GitHubTreeItem[]> {
