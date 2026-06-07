@@ -102,6 +102,10 @@ describe('mockGlobal', () => {
 
 describe('removeTempDir', () => {
   it('retries transient recursive cleanup failures', async () => {
+    // Reset the module registry first so the dynamic import below re-evaluates
+    // ./utils against the mocked node:fs, even when this test runs in isolation
+    // (the top-level static import has already cached ./utils with the real fs).
+    vi.resetModules();
     const rmSync = vi.fn();
     vi.doMock('node:fs', async (importOriginal) => {
       const actual = await importOriginal<typeof import('node:fs')>();
@@ -120,6 +124,7 @@ describe('removeTempDir', () => {
   });
 
   it('does not attempt cleanup without a directory', async () => {
+    vi.resetModules();
     const rmSync = vi.fn();
     vi.doMock('node:fs', async (importOriginal) => {
       const actual = await importOriginal<typeof import('node:fs')>();
