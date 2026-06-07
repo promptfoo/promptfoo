@@ -22,6 +22,14 @@ import type {
   WebSearchToolConfig20260209,
 } from '../../../src/providers/anthropic/types';
 
+type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
+  output_tokens_details?: { thinking_tokens?: number } | null;
+};
+
+type AnthropicTestMessage = Anthropic.Messages.Message & {
+  usage: AnthropicUsageWithOutputDetails;
+};
+
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
@@ -378,7 +386,7 @@ describe('Anthropic utilities', () => {
 
   describe('outputFromMessage', () => {
     it('should return an empty string for empty content array', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [],
         id: '',
         model: '',
@@ -406,7 +414,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should return text from a single text block', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [{ type: 'text', text: 'Hello', citations: [] }],
         id: '',
         model: '',
@@ -434,7 +442,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should concatenate text blocks without tool_use blocks', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           { type: 'text', text: 'World', citations: [] },
@@ -465,7 +473,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should handle content with tool_use blocks', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           {
             type: 'tool_use',
@@ -510,7 +518,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should concatenate text and tool_use blocks as JSON strings', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -550,7 +558,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should handle text blocks with citations', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           {
             type: 'text',
@@ -594,7 +602,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should include thinking blocks when showThinking is true', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -632,7 +640,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -668,7 +676,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should include redacted_thinking blocks when showThinking is true', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -703,7 +711,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should exclude redacted_thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: AnthropicTestMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {

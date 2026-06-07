@@ -13,6 +13,7 @@ export const handleLlmRubric = async ({
   inverse,
   renderedValue,
   outputString,
+  providerResponse,
   test,
   providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
@@ -49,7 +50,7 @@ export const handleLlmRubric = async ({
     test.options,
     test.vars,
     assertion,
-    undefined,
+    !assertion.transform && providerResponse?.images?.length ? { providerResponse } : undefined,
     providerCallContext,
   );
   const metadata = safeControlConfig?.context
