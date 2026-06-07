@@ -12,7 +12,7 @@ import {
 } from '../util/video';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt } from './rubric';
-import { fail, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   ApiProvider,
@@ -44,7 +44,7 @@ function failure(
   tokenUsage?: ProviderResponse['tokenUsage'],
 ): GradingResult {
   return {
-    ...fail(reason, tokenUsage),
+    ...graderFail(reason, tokenUsage),
     assertion,
   };
 }
@@ -192,8 +192,15 @@ export async function matchesVideoRubric(
   );
 
   if (resp.error || !resp.output) {
+    if (resp.error) {
+      logger.debug('[VideoRubric] Video grading provider returned an error', {
+        error: resp.error,
+      });
+    }
     return failure(
-      resp.error || 'No output from video grading provider',
+      resp.error
+        ? 'Video grading provider returned an error'
+        : 'No output from video grading provider',
       assertion,
       resp.tokenUsage,
     );
@@ -203,8 +210,8 @@ export async function matchesVideoRubric(
   if (!parsed) {
     return failure(
       typeof resp.output === 'string'
-        ? `Could not extract JSON from video-rubric response: ${resp.output}`
-        : `video-rubric produced malformed response. Output: ${JSON.stringify(resp.output)}`,
+        ? 'Could not extract JSON from video-rubric response'
+        : 'video-rubric produced malformed response',
       assertion,
       resp.tokenUsage,
     );
@@ -213,7 +220,7 @@ export async function matchesVideoRubric(
   const normalized = normalizeVideoRubricResponse(parsed);
   if (!normalized) {
     return failure(
-      `video-rubric response must include a boolean pass and a finite score between 0 and 1. Output: ${JSON.stringify(resp.output)}`,
+      'video-rubric response must include a boolean pass and a finite score between 0 and 1',
       assertion,
       resp.tokenUsage,
     );

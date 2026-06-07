@@ -1,6 +1,7 @@
 ---
 title: Video Rubric
 sidebar_label: Video Rubric
+sidebar_position: 9
 description: 'Score AI-generated videos with secure multimodal rubric grading, explicit thresholds, and managed media from Sora, Veo, Azure, xAI, or Bedrock providers.'
 ---
 

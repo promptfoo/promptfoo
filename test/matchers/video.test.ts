@@ -226,7 +226,7 @@ describe('matchesVideoRubric', () => {
   it('returns provider errors before parsing a grader response', async () => {
     const { matchesVideoRubric } = await import('../../src/matchers/video');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
-      error: 'grader unavailable',
+      error: 'grader unavailable for sk-secret',
       tokenUsage: { total: 2, prompt: 1, completion: 1 },
     });
 
@@ -240,10 +240,12 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: 'grader unavailable',
+        reason: 'Video grading provider returned an error',
+        metadata: { graderError: true },
         tokensUsed: expect.objectContaining({ total: 2 }),
       }),
     );
+    expect(result.reason).not.toContain('sk-secret');
   });
 
   it('returns a default failure when the grader response has no output', async () => {
@@ -263,6 +265,7 @@ describe('matchesVideoRubric', () => {
         pass: false,
         score: 0,
         reason: 'No output from video grading provider',
+        metadata: { graderError: true },
         tokensUsed: expect.objectContaining({ total: 3 }),
       }),
     );
@@ -271,7 +274,7 @@ describe('matchesVideoRubric', () => {
   it('returns a failure when the grader response is not parseable JSON', async () => {
     const { matchesVideoRubric } = await import('../../src/matchers/video');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
-      output: 'not json',
+      output: 'not json sk-secret',
       tokenUsage: { total: 4, prompt: 2, completion: 2 },
     });
 
@@ -285,16 +288,18 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: 'Could not extract JSON from video-rubric response: not json',
+        reason: 'Could not extract JSON from video-rubric response',
+        metadata: { graderError: true },
         tokensUsed: expect.objectContaining({ total: 4 }),
       }),
     );
+    expect(result.reason).not.toContain('sk-secret');
   });
 
   it('returns a malformed-response failure for array grader output', async () => {
     const { matchesVideoRubric } = await import('../../src/matchers/video');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
-      output: ['bad response'],
+      output: ['bad response sk-secret'],
       tokenUsage: { total: 5, prompt: 3, completion: 2 },
     });
 
@@ -308,10 +313,12 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: 'video-rubric produced malformed response. Output: ["bad response"]',
+        reason: 'video-rubric produced malformed response',
+        metadata: { graderError: true },
         tokensUsed: expect.objectContaining({ total: 5 }),
       }),
     );
+    expect(result.reason).not.toContain('sk-secret');
   });
 
   it('coerces object grader output and applies string thresholds', async () => {
@@ -359,6 +366,7 @@ describe('matchesVideoRubric', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining('must include a boolean pass and a finite score'),
+        metadata: { graderError: true },
       }),
     );
   });
@@ -380,6 +388,7 @@ describe('matchesVideoRubric', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining('must include a boolean pass and a finite score'),
+        metadata: { graderError: true },
       }),
     );
   });

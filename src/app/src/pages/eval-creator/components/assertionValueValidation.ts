@@ -50,6 +50,7 @@ const BASE_ASSERTION_TYPES = [
   'rouge-n',
   'ruby',
   'search-rubric',
+  'video-rubric',
   'similar',
   'similar:cosine',
   'similar:dot',

@@ -102,6 +102,7 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider.id()).toBe('test-completion-provider');
     expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
     expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
+    expect(providers.videoGradingProvider?.id()).toBe('test-completion-provider');
 
     expect(providers.embeddingProvider.id()).not.toBe('test-completion-provider');
   });
@@ -118,6 +119,7 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.suggestionsProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.synthesizeProvider.id()).not.toBe('test-embedding-provider');
+    expect(providers.videoGradingProvider?.id()).not.toBe('test-embedding-provider');
   });
 
   it('should allow both completion and embedding provider overrides simultaneously', async () => {
@@ -133,6 +135,7 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider.id()).toBe('test-completion-provider');
     expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
     expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
+    expect(providers.videoGradingProvider?.id()).toBe('test-completion-provider');
 
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
   });

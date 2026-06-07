@@ -216,4 +216,56 @@ describe('handleVideoRubric', () => {
       expect.any(Object),
     );
   });
+
+  it('should invert valid grades for not-video-rubric assertions', async () => {
+    vi.mocked(matchesVideoRubric).mockResolvedValue({
+      pass: true,
+      score: 0.75,
+      reason: 'criterion matched',
+    });
+
+    const result = await handleVideoRubric(
+      createParams({
+        assertion: { type: 'not-video-rubric', value: 'test rubric' },
+        inverse: true,
+        providerResponse: {
+          output: 'test output',
+          video: { blobRef: createBlobRef() },
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0.25,
+      reason: 'criterion matched',
+    });
+  });
+
+  it('should not invert video grader failures', async () => {
+    vi.mocked(matchesVideoRubric).mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'grader failed',
+      metadata: { graderError: true },
+    });
+
+    const result = await handleVideoRubric(
+      createParams({
+        assertion: { type: 'not-video-rubric', value: 'test rubric' },
+        inverse: true,
+        providerResponse: {
+          output: 'test output',
+          video: { blobRef: createBlobRef() },
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'grader failed',
+      metadata: { graderError: true },
+    });
+  });
 });

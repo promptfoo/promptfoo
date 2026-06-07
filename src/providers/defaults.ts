@@ -39,6 +39,7 @@ const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'llmRubricProvider',
   'suggestionsProvider',
   'synthesizeProvider',
+  'videoGradingProvider',
 ];
 
 const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Video Generation
+sidebar_position: 68
 title: Evaluate AI Video Generation
 description: 'Compare Sora, Veo, Nova Reel, and Luma Ray video generations with secure multimodal rubric scoring, repeatable evaluations, and practical provider setup.'
 keywords:

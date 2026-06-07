@@ -4,6 +4,7 @@
  * Uses a multimodal LLM (Gemini) to evaluate video outputs against a rubric.
  */
 
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesVideoRubric } from '../matchers/video';
 import invariant from '../util/invariant';
 
@@ -11,6 +12,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleVideoRubric = async ({
   assertion,
+  inverse,
   renderedValue,
   test,
   providerResponse,
@@ -45,7 +47,7 @@ export const handleVideoRubric = async ({
       ? { ...assertion, value: grading.rubricPrompt }
       : assertion;
 
-  return matchesVideoRubric(
+  const result = await matchesVideoRubric(
     renderedValue ?? '',
     video,
     grading,
@@ -53,4 +55,16 @@ export const handleVideoRubric = async ({
     resultAssertion,
     providerCallContext,
   );
+
+  if (isGraderFailure(result)) {
+    return result;
+  }
+
+  return {
+    ...result,
+    pass: result.pass !== inverse,
+    score: inverse
+      ? Math.min(1, Math.max(0, 1 - (Number.isFinite(result.score) ? result.score : 0)))
+      : result.score,
+  };
 };
