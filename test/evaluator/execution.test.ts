@@ -629,6 +629,14 @@ describeEvaluator('evaluator execution control', () => {
       );
       expect(evalRecord.resultPersistenceFailed).toBe(true);
       expect(evalRecord.hasResultPersistenceFailure({ promptIdx: 0, testIdx: 0 })).toBe(true);
+      expect(evalRecord.runStats?.providers).toEqual([
+        expect.objectContaining({
+          provider: 'test-provider',
+          requests: 1,
+          successes: 1,
+          failures: 0,
+        }),
+      ]);
     } finally {
       mockAddResult.mockRestore();
       errorSpy.mockRestore();

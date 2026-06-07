@@ -299,6 +299,33 @@ describe('doRedteamRun', () => {
     );
   });
 
+  it('should identify record-form promptfoo.dev targets in completion telemetry', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
+      redteam: {
+        plugins: [{ id: 'pii', numTests: 1 }],
+        strategies: [],
+      },
+      targets: [{ 'https://api.promptfoo.dev/v1/redteam/target': {} }],
+    });
+    vi.mocked(doEval).mockResolvedValueOnce({
+      persisted: false,
+      getStats: vi.fn().mockReturnValue({ successes: 1, failures: 0, errors: 0 }),
+      setGenerationDurationMs: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
+      shared: false,
+    } as any);
+
+    await doRedteamRun({});
+
+    expect(telemetry.record).toHaveBeenCalledWith(
+      'redteam run',
+      expect.objectContaining({
+        phase: 'completed',
+        isPromptfooSampleTarget: true,
+      }),
+    );
+  });
+
   it('should not emit custom plugin or strategy file paths in completion telemetry', async () => {
     vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
       redteam: {

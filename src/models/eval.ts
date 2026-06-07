@@ -787,6 +787,23 @@ export default class Eval {
     return this.failedResults.has(getResultIndexKey(result));
   }
 
+  private async getOrCreateFailedEvalResult(key: string, row: EvaluateResult): Promise<EvalResult> {
+    let evalResult = this.failedEvalResults.get(key);
+    if (!evalResult) {
+      evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+      this.failedEvalResults.set(key, evalResult);
+    }
+    return evalResult;
+  }
+
+  async getFailedResults(): Promise<EvalResult[]> {
+    const reconstructed: EvalResult[] = [];
+    for (const [key, row] of this.failedResults) {
+      reconstructed.push(await this.getOrCreateFailedEvalResult(key, row));
+    }
+    return reconstructed;
+  }
+
   // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
   // so the comparison input (which otherwise reads only the database) sees the full set.
   // The reconstruction is cached and reused: when a test has both select-best and max-score,
@@ -796,15 +813,9 @@ export default class Eval {
   async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
     const reconstructed: EvalResult[] = [];
     for (const [key, row] of this.failedResults) {
-      if (row.testIdx !== testIdx) {
-        continue;
+      if (row.testIdx === testIdx) {
+        reconstructed.push(await this.getOrCreateFailedEvalResult(key, row));
       }
-      let evalResult = this.failedEvalResults.get(key);
-      if (!evalResult) {
-        evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
-        this.failedEvalResults.set(key, evalResult);
-      }
-      reconstructed.push(evalResult);
     }
     return reconstructed;
   }

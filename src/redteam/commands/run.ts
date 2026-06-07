@@ -73,9 +73,6 @@ export function redteamRunCommand(program: Command) {
       const opts: RedteamRunOptions = normalizeTagOption(rawOpts);
 
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam run',
-      });
       // Record initial redteam run event with available info
       // Full config details recorded in shared.ts after config is loaded
       telemetry.record('redteam run', {

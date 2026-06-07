@@ -4392,10 +4392,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         : undefined;
 
     if (this.store.persisted) {
+      const seenResultIndexes = this.store.resultPersistenceFailed ? new Set<string>() : undefined;
       for await (const batch of this.store.readResultBatches()) {
-        yield retryErrorResultIds
+        const filteredBatch = retryErrorResultIds
           ? batch.filter((result) => !result.id || !retryErrorResultIds.has(result.id))
           : batch;
+        for (const result of filteredBatch) {
+          seenResultIndexes?.add(getResultIndexKey(result));
+        }
+        yield filteredBatch;
+      }
+      if (this.store.resultPersistenceFailed) {
+        const failedResults = (await this.store.readFailedResults()).filter(
+          (result) => !seenResultIndexes?.has(getResultIndexKey(result)),
+        );
+        if (failedResults.length > 0) {
+          yield failedResults;
+        }
       }
       return;
     }
@@ -4407,9 +4420,32 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     Array<TResult | EvaluateResult>
   > {
     if (this.store.persisted) {
-      yield* this.store.readResultsByIdsBatched(this.invocationResultIds);
-      if (this.unpersistedInvocationResults.length > 0) {
-        yield this.unpersistedInvocationResults;
+      const seenResultIndexes =
+        this.store.resultPersistenceFailed || this.unpersistedInvocationResults.length > 0
+          ? new Set<string>()
+          : undefined;
+      for await (const batch of this.store.readResultsByIdsBatched(this.invocationResultIds)) {
+        for (const result of batch) {
+          seenResultIndexes?.add(getResultIndexKey(result));
+        }
+        yield batch;
+      }
+      const unpersistedResults = this.unpersistedInvocationResults.filter(
+        (result) => !seenResultIndexes?.has(getResultIndexKey(result)),
+      );
+      for (const result of unpersistedResults) {
+        seenResultIndexes?.add(getResultIndexKey(result));
+      }
+      if (unpersistedResults.length > 0) {
+        yield unpersistedResults;
+      }
+      if (this.store.resultPersistenceFailed) {
+        const failedResults = (await this.store.readFailedResults()).filter(
+          (result) => !seenResultIndexes?.has(getResultIndexKey(result)),
+        );
+        if (failedResults.length > 0) {
+          yield failedResults;
+        }
       }
       return;
     }

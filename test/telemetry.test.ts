@@ -64,6 +64,12 @@ describe('sanitizeTelemetryIdentifier', () => {
     expect(sanitizeTelemetryProviderIdentifier('replicate:meta/llama-2-7b-chat')).toBe(
       'replicate:meta/llama-2-7b-chat',
     );
+    expect(
+      sanitizeTelemetryProviderIdentifier('hyperbolic:meta-llama/Llama-3.3-70B-Instruct'),
+    ).toBe('hyperbolic:meta-llama/Llama-3.3-70B-Instruct');
+    expect(
+      sanitizeTelemetryProviderIdentifier('cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct'),
+    ).toBe('cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct');
     expect(sanitizeTelemetryProviderIdentifier('internal:team/private-model')).toBe('custom');
     expect(sanitizeTelemetryProviderIdentifier('internal:private-model')).toBe('custom');
     expect(sanitizeTelemetryIdentifier('custom:./private/redteam-plugin.yaml')).toBe(

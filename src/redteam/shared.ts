@@ -240,6 +240,7 @@ function isSampleTarget(target: unknown): boolean {
   const { id, config } = target as { id?: string; config?: { url?: string } };
   const url = config?.url || '';
   return (
+    Object.keys(target).some((key) => isSampleTarget(key)) ||
     id?.includes('promptfoo:') ||
     id?.includes('promptfoo.app') ||
     id?.includes('promptfoo.dev') ||

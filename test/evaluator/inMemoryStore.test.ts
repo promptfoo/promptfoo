@@ -112,6 +112,7 @@ describe('InMemoryEvaluationStore', () => {
     expect(store.resultPersistenceFailed).toBe(true);
     expect(store.hasResultPersistenceFailure({ testIdx: 2, promptIdx: 0 })).toBe(true);
     expect(store.hasResultPersistenceFailure({ testIdx: 2, promptIdx: 1 })).toBe(false);
+    expect(await store.readFailedResults()).toEqual([first, otherTest]);
 
     const [failed] = await store.readFailedResultsByTestIdx(2);
     failed.score = 0;

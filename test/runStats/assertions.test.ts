@@ -313,6 +313,7 @@ describe('computeAssertionStats', () => {
 
   it('should recognize all model-graded assertion types', () => {
     const modelGradedTypes = [
+      'agent-rubric',
       'answer-relevance',
       'context-faithfulness',
       'context-recall',

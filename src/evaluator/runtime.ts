@@ -47,6 +47,7 @@ export interface EvaluationStore<
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean;
   readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>>;
+  readFailedResults(): Promise<TResult[]>;
   readFailedResultsByTestIdx(testIdx: number): Promise<TResult[]>;
   readResultBatches(batchSize?: number): AsyncGenerator<TResult[]>;
   readResults(): Promise<Array<TResult | EvaluateResult>>;

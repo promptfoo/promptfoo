@@ -71,7 +71,13 @@ const PUBLIC_MODEL_IDENTIFIER_PREFIXES = new Set([
   'xai',
 ]);
 
-const PUBLIC_SLASH_MODEL_IDENTIFIER_PREFIXES = new Set(['huggingface', 'openrouter', 'replicate']);
+const PUBLIC_SLASH_MODEL_IDENTIFIER_PREFIXES = new Set([
+  'cloudflare-ai',
+  'huggingface',
+  'hyperbolic',
+  'openrouter',
+  'replicate',
+]);
 const PUBLIC_BARE_PROVIDER_IDENTIFIERS = new Set(['browser-provider', 'echo', 'mcp']);
 const REDACTED_OPENAI_IDENTIFIER_TYPES = new Set([
   'agents',

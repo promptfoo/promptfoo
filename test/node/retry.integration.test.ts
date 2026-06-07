@@ -462,6 +462,7 @@ describe('retry command', () => {
       });
       const originalFetchResultsBatched = Eval.prototype.fetchResultsBatched;
       vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementation(async function* (
+        this: Eval,
         batchSize?: number,
       ) {
         if (resultPersistenceFailed && !this.resultPersistenceFailed) {

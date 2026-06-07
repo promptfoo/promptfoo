@@ -12,6 +12,7 @@ import type { AssertionType } from '../types/index';
  * These assertions require API calls to grade responses.
  */
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
+  'agent-rubric',
   'answer-relevance',
   'context-faithfulness',
   'context-recall',

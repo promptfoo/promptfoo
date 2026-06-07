@@ -48,6 +48,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return EvalResult.getCompletedIndexPairs(this.id, options);
   }
 
+  readFailedResults(): Promise<EvalResult[]> {
+    return this.evaluation.getFailedResults();
+  }
+
   readFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
     return this.evaluation.getFailedResultsByTestIdx(testIdx);
   }

@@ -97,6 +97,10 @@ export class InMemoryEvaluationStore
     return completedPairs;
   }
 
+  async readFailedResults(): Promise<EvaluateResult[]> {
+    return Array.from(this.failedResultsByIndex.values());
+  }
+
   async readFailedResultsByTestIdx(testIdx: number): Promise<EvaluateResult[]> {
     return Array.from(this.failedResultsByIndex.values()).filter(
       (result) => result.testIdx === testIdx,
