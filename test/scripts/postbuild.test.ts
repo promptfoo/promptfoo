@@ -3,9 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
-// We need to test the postbuild module, but it runs on import
-// So we'll test the exported function after mocking
+import { shouldCopyDrizzlePath } from '../../scripts/postbuild';
 
 describe('postbuild', () => {
   let tempDir: string;
@@ -136,18 +134,10 @@ describe('postbuild', () => {
 
   describe('filter function for drizzle', () => {
     it('should exclude files containing CLAUDE', () => {
-      const filter = (src: string) => {
-        const basename = path.basename(src);
-        const excludePatterns = ['.md', 'CLAUDE', 'AGENTS'];
-        return !excludePatterns.some(
-          (pattern) => basename.includes(pattern) || basename.endsWith(pattern),
-        );
-      };
-
-      expect(filter('/path/to/CLAUDE.md')).toBe(false);
-      expect(filter('/path/to/AGENTS.md')).toBe(false);
-      expect(filter('/path/to/0001_migration.sql')).toBe(true);
-      expect(filter('/path/to/meta/_journal.json')).toBe(true);
+      expect(shouldCopyDrizzlePath('/path/to/CLAUDE.md')).toBe(false);
+      expect(shouldCopyDrizzlePath('/path/to/AGENTS.md')).toBe(false);
+      expect(shouldCopyDrizzlePath('/path/to/0001_migration.sql')).toBe(true);
+      expect(shouldCopyDrizzlePath('/path/to/meta/_journal.json')).toBe(true);
     });
   });
 

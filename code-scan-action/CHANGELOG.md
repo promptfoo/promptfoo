@@ -2,6 +2,15 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.7](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.6...code-scan-action-0.1.7) (2026-05-29)
+
+### Bug Fixes
+
+- **code-scan:** emit structured fork PR skip output ([#9426](https://github.com/promptfoo/promptfoo/issues/9426)) ([61c624c](https://github.com/promptfoo/promptfoo/commit/61c624c7f91808a6f59d8b837dbb3896dd9a74c0))
+- **code-scan:** honor minimum-severity alias when min-severity is unset ([#9433](https://github.com/promptfoo/promptfoo/issues/9433)) ([ea5ea9e](https://github.com/promptfoo/promptfoo/commit/ea5ea9e741da0968431de25c0d67337f2e0e6e20))
+- **eval:** show test descriptions in HTML output ([#9390](https://github.com/promptfoo/promptfoo/issues/9390)) ([206f1dd](https://github.com/promptfoo/promptfoo/commit/206f1dd9848607ed9d4eba1f7998f90b8f87f0ff))
+- **providers:** honor Vertex default host overrides ([#9389](https://github.com/promptfoo/promptfoo/issues/9389)) ([11a8d9b](https://github.com/promptfoo/promptfoo/commit/11a8d9b1c4edf214e8e15dd6794690ab49d24430))
+
 ## [0.1.6](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.5...code-scan-action-0.1.6) (2026-05-21)
 
 ### Features
