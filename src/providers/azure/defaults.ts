@@ -2,6 +2,17 @@ import type { AzureModelCost, AzureVideoSize } from './types';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 
+/**
+ * Default route for Microsoft MAI image generation models in Microsoft Foundry
+ * (e.g. MAI-Image-2.5). Unlike Azure OpenAI image models, MAI image models are
+ * served from a Microsoft-managed `/mai/v1/...` route rather than
+ * `/openai/deployments/<name>/images/generations`, and they do not take an
+ * `api-version` query parameter.
+ *
+ * @see https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai
+ */
+export const DEFAULT_AZURE_MAI_IMAGE_API_PATH = '/mai/v1/images/generations';
+
 // =============================================================================
 // Video Generation Constants (Sora)
 // =============================================================================
@@ -847,5 +858,44 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'Falcon3-7B-Instruct',
     cost: { input: 0.05 / 1000000, output: 0.05 / 1000000 },
+  },
+
+  // =============================================================================
+  // Microsoft MAI Models (Foundry Models sold by Azure)
+  // Microsoft's first-party model family. Image models are billed per token; the
+  // `/mai/v1/images` route reports token counts either under a `usage` object
+  // (num_output_tokens / num_input_text_tokens / num_input_image_tokens) or, in
+  // an older shape, as a top-level `num_output_tokens`. AzureImageProvider reads
+  // both and prices input + output. Cost lookup is keyed by the model id, so set
+  // `model` in the provider config (deployment names can't contain the dots in
+  // ids like `MAI-Image-2.5`) to enable cost reporting. Rates marked
+  // "provisional" are estimates pending published pricing.
+  // =============================================================================
+  {
+    // Reasoning chat model (DeepSeek-R1 lineage). Provisional pricing mirrors
+    // DeepSeek-R1 on Foundry pending a published MAI-DS-R1 rate.
+    id: 'MAI-DS-R1',
+    cost: { input: 0.55 / 1000000, output: 2.19 / 1000000 },
+  },
+  {
+    // Text-to-image. Text input $5/1M; image output $33/1M (Microsoft).
+    id: 'MAI-Image-2',
+    cost: { input: 5 / 1000000, output: 33 / 1000000 },
+  },
+  {
+    // Efficient image. Text input $5/1M; image output $19.50/1M (Microsoft).
+    id: 'MAI-Image-2e',
+    cost: { input: 5 / 1000000, output: 19.5 / 1000000 },
+  },
+  {
+    // Flagship text-to-image + image edits. Text input $5/1M confirmed; image
+    // output rate provisional.
+    id: 'MAI-Image-2.5',
+    cost: { input: 5 / 1000000, output: 33 / 1000000 },
+  },
+  {
+    // Efficient flagship image variant. Pricing provisional (flash tier).
+    id: 'MAI-Image-2.5-Flash',
+    cost: { input: 5 / 1000000, output: 19.5 / 1000000 },
   },
 ];
