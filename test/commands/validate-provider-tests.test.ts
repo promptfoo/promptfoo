@@ -239,6 +239,21 @@ describe('Validate Command Provider Tests', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     });
 
+    it('should not mark an exact 100-character serialized response as truncated', async () => {
+      const output = 'x'.repeat(98);
+      expect(JSON.stringify(output)).toHaveLength(100);
+      mockEchoProvider.callApi.mockResolvedValue({ output });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
+
+      const responseLog = vi
+        .mocked(logger.info)
+        .mock.calls.find(([message]) => String(message).includes('Response:'));
+      expect(responseLog?.[0]).toContain(JSON.stringify(output));
+      expect(responseLog?.[0]).not.toContain('...');
+    });
+
     it('should load cloud provider when -t flag is UUID', async () => {
       const cloudUUID = '12345678-1234-1234-1234-123456789abc';
       const mockProviderOptions = {
