@@ -1694,6 +1694,7 @@ function ResultsTable({
     evalId,
     table,
     setTable,
+    tableRefreshVersion,
     config,
     version,
     filteredResultsCount,
@@ -1896,6 +1897,7 @@ function ResultsTable({
         searchText: debouncedSearchText,
         filters: appliedFiltersString,
         comparisonEvalIds,
+        tableRefreshVersion,
       }),
     [
       evalId,
@@ -1905,6 +1907,7 @@ function ResultsTable({
       debouncedSearchText,
       appliedFiltersString,
       comparisonEvalIds,
+      tableRefreshVersion,
     ],
   );
   const columnSizeSampleBody = useStableColumnSampleBody(columnSizeSampleKey, tableBody);

@@ -4975,6 +4975,72 @@ describe('ResultsTable default column sizing', () => {
     expect(updatedWidth).toBeGreaterThan(initialWidth);
   });
 
+  it('resamples metadata widths when a background refresh replaces the same rows', () => {
+    let table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'short' },
+          vars: ['ok', 'compact'],
+        },
+      ],
+    };
+    let tableRefreshVersion = 0;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      tableRefreshVersion,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const initialHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const initialWidth = Number.parseFloat(initialHeader?.style.width || '0');
+    const initialDescriptionHeader = screen
+      .getByText('Description')
+      .closest('th') as HTMLElement | null;
+    const initialDescriptionWidth = Number.parseFloat(initialDescriptionHeader?.style.width || '0');
+
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'Completed result description '.repeat(20) },
+        },
+      ],
+    };
+    tableRefreshVersion = 1;
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const updatedHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const updatedWidth = Number.parseFloat(updatedHeader?.style.width || '0');
+    const updatedDescriptionHeader = screen
+      .getByText('Description')
+      .closest('th') as HTMLElement | null;
+    const updatedDescriptionWidth = Number.parseFloat(updatedDescriptionHeader?.style.width || '0');
+
+    expect(initialHeader).not.toBeNull();
+    expect(initialDescriptionHeader).not.toBeNull();
+    expect(updatedHeader).not.toBeNull();
+    expect(updatedDescriptionHeader).not.toBeNull();
+    expect(updatedWidth).toBeGreaterThan(initialWidth);
+    expect(updatedDescriptionWidth).toBeGreaterThan(initialDescriptionWidth);
+  });
+
   it('renders matching header and body colgroups for the computed widths', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
