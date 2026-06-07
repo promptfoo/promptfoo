@@ -66,10 +66,10 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
       return { success: false, error: result.error };
     } else if (result.output) {
       logger.info(chalk.green(`  ✓ Connectivity test`));
-      const responsePreview = JSON.stringify(result.output).substring(0, 100);
-      logger.info(
-        chalk.dim(`    Response: ${responsePreview}${responsePreview.length >= 100 ? '...' : ''}`),
-      );
+      const fullResponse = JSON.stringify(result.output);
+      const isTruncated = fullResponse.length > 100;
+      const responsePreview = fullResponse.substring(0, 100);
+      logger.info(chalk.dim(`    Response: ${responsePreview}${isTruncated ? '...' : ''}`));
       return { success: true };
     } else {
       logger.warn(chalk.yellow(`  ✗ Connectivity test`));
