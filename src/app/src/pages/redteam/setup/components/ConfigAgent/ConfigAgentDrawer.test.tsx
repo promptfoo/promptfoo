@@ -121,20 +121,6 @@ describe('ConfigAgentDrawer', () => {
     expect(screen.getByRole('button', { name: /start auto-discovery/i })).toBeDisabled();
   });
 
-  it('shows background polling errors after discovery has started', async () => {
-    const user = userEvent.setup();
-    mockUseConfigAgent.mockReturnValue({
-      ...hookState,
-      error: 'poll failed',
-    });
-
-    render(<ConfigAgentDrawer open onClose={vi.fn()} initialUrl="https://api.example.com" />);
-
-    await user.click(screen.getByRole('button', { name: /start auto-discovery/i }));
-
-    expect(screen.getByText('poll failed')).toBeInTheDocument();
-  });
-
   it('closes and starts over by cancelling and resetting state', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

@@ -218,13 +218,6 @@ export default function ConfigAgentDrawer({
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {started ? (
               <>
-                {error && (
-                  <div className="px-4 pt-4">
-                    <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  </div>
-                )}
                 <div className="min-h-0 flex-1">
                   <ConfigAgentChat
                     messages={messages}
