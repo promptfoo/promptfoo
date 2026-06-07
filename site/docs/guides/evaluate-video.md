@@ -23,14 +23,15 @@ Set credentials for the video provider you plan to run:
 | Provider                  | Promptfoo ID                            | Credentials and setup                                  |
 | ------------------------- | --------------------------------------- | ------------------------------------------------------ |
 | OpenAI Sora               | `openai:video:sora-2`                   | `OPENAI_API_KEY`                                       |
-| Google Veo with AI Studio | `google:video:veo-3.1-generate-preview` | `GEMINI_API_KEY` or `GOOGLE_API_KEY`                   |
+| Google Veo with AI Studio | `google:video:veo-3.1-generate-preview` | `GOOGLE_API_KEY` or `GEMINI_API_KEY`                   |
 | Google Veo with Vertex AI | `vertex:video:veo-3.1-generate-preview` | Vertex project and application default credentials     |
 | Amazon Nova Reel          | `bedrock:video:amazon.nova-reel-v1:1`   | AWS credentials, model access, and an S3 output bucket |
 | Luma Ray on Bedrock       | `bedrock:video:luma.ray-v2:0`           | AWS credentials, model access, and an S3 output bucket |
 
 The default judge is Google AI Studio `google:gemini-3.5-flash`, which requires
-`GEMINI_API_KEY` or `GOOGLE_API_KEY`. To grade through Vertex AI instead, configure a Vertex
-Gemini provider explicitly.
+`GOOGLE_API_KEY` (preferred) or `GEMINI_API_KEY`. If both variables are set,
+`GOOGLE_API_KEY` takes precedence. To grade through Vertex AI instead, configure a Vertex Gemini
+provider explicitly.
 
 ## First Evaluation
 

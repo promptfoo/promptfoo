@@ -44,14 +44,16 @@ providers store the generated video before returning it; Bedrock providers must 
 default `downloadFromS3: true` setting when used with this assertion.
 
 The grading model must support video understanding. By default, it uses Google AI Studio
-`google:gemini-3.5-flash` with `GEMINI_API_KEY` or `GOOGLE_API_KEY`. To use Vertex AI,
-configure `vertex:gemini-3.5-flash` explicitly.
+`google:gemini-3.5-flash` with `GOOGLE_API_KEY` (preferred) or `GEMINI_API_KEY`. If both
+variables are set, `GOOGLE_API_KEY` takes precedence. To use Vertex AI, configure
+`vertex:gemini-3.5-flash` explicitly.
 
 ## Supported video providers
 
 `video-rubric` works with any provider that returns video content:
 
 - `openai:video:sora-2` - OpenAI Sora
+- `google:video:veo-3.1-generate-preview` - Google Veo through AI Studio
 - `vertex:video:veo-3.1-generate-preview` - Google Veo
 - `bedrock:video:amazon.nova-reel-v1:1` - Amazon Nova Reel
 - `bedrock:video:luma.ray-v2:0` - Luma Ray 2 (via AWS Bedrock)
@@ -100,9 +102,10 @@ tests:
 
 ## Video size limits and judge output
 
-Gemini inline requests have a 20MB total request budget. Video bytes are base64-encoded and the
-rubric also counts toward that budget, so usable video files must be smaller than 15MB. Larger
-payloads fail with a size limit error; Gemini File API support is planned for a future release.
+[Gemini inline video requests](https://ai.google.dev/gemini-api/docs/video-understanding#pass-video-data-inline)
+have a 20MB total request budget. Video bytes are base64-encoded and the rubric also counts
+toward that budget, so usable video files must be smaller than 15MB. Larger payloads fail with a
+size limit error; Gemini File API support is planned for a future release.
 
 The judge response must contain a boolean `pass` and a numeric `score` from `0.0` to `1.0`.
 Malformed or out-of-range judge responses fail rather than being interpreted as successful
@@ -162,7 +165,7 @@ tests:
 - A multimodal model that supports video understanding (Gemini 3.5 Flash supported)
 - Promptfoo-managed video storage; external URLs are not downloaded for grading
 - For Vertex AI: `GOOGLE_PROJECT_ID` environment variable and application default credentials
-- For AI Studio: `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable
+- For AI Studio: `GOOGLE_API_KEY` (preferred) or `GEMINI_API_KEY` environment variable
 
 ## Further reading
 

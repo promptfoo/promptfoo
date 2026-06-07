@@ -117,7 +117,7 @@ export function getVideoMimeType(format?: string): string {
     mp4: 'video/mp4',
     webm: 'video/webm',
     mov: 'video/quicktime',
-    avi: 'video/x-msvideo',
+    avi: 'video/avi',
     mkv: 'video/x-matroska',
   };
   return formatMap[format?.toLowerCase() || 'mp4'] || 'video/mp4';

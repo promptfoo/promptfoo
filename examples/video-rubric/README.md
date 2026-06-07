@@ -10,12 +10,15 @@ The `video-rubric` assertion uses Google AI Studio Gemini 3.5 Flash by default t
 
 ## Prerequisites
 
-Set the following environment variables:
+Set a Google AI Studio API key. The same credential is used for both Veo generation and Gemini
+grading:
 
 ```bash
-export GOOGLE_API_KEY=your-google-api-key  # For video generation (Veo)
-export GEMINI_API_KEY=your-gemini-key      # For video evaluation (Gemini 3.5 Flash)
+export GOOGLE_API_KEY=your-google-api-key
 ```
+
+`GEMINI_API_KEY` is also supported as a fallback. If both variables are set,
+`GOOGLE_API_KEY` takes precedence.
 
 ## Usage
 

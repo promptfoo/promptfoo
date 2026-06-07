@@ -82,7 +82,7 @@ describe('video utilities', () => {
     });
 
     it('should return correct MIME type for avi', () => {
-      expect(getVideoMimeType('avi')).toBe('video/x-msvideo');
+      expect(getVideoMimeType('avi')).toBe('video/avi');
     });
 
     it('should return correct MIME type for mkv', () => {
