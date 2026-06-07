@@ -789,6 +789,23 @@ describe('sanitizeObject', () => {
       expect(JSON.stringify(result)).not.toContain('sk-error-message-should-not-persist');
     });
 
+    it('should redact Error messages before custom toJSON serialization', () => {
+      const secret = 'sk-error-to-json-should-not-persist';
+      const error = Object.assign(new Error(`Invalid API key ${secret}`), {
+        toJSON() {
+          return { message: `Invalid API key ${secret}` };
+        },
+      });
+
+      const result = sanitizeObject({ error }, { redactErrorMessages: true });
+
+      expect(result.error).toEqual({
+        name: 'Error',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(result)).not.toContain(secret);
+    });
+
     it('should convert Map objects to empty objects via JSON', () => {
       const map = new Map([['key', 'value']]);
       const result = sanitizeObject({ map });

@@ -95,12 +95,17 @@ describe('EvalResult', () => {
 
     it('should redact provider configs that contain non-JSON primitives', () => {
       const errorSecret = 'sk-provider-bigint-error-should-never-persist';
+      const lastError = Object.assign(new Error(`Invalid API key ${errorSecret}`), {
+        toJSON() {
+          return { message: `Invalid API key ${errorSecret}` };
+        },
+      });
       const providerOptions = {
         id: 'test-provider',
         label: 'Test Provider',
         config: {
           apiKey: 'test-key',
-          lastError: new Error(`Invalid API key ${errorSecret}`),
+          lastError,
           retryAfterNanos: 1n,
         },
       } as unknown as ProviderOptions;

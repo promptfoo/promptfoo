@@ -504,14 +504,16 @@ export function sanitizeObject(
     const safeObj = JSON.parse(
       safeStringify(
         obj,
-        (_key, val) => {
+        function (this: Record<string, unknown>, key, val) {
           if (typeof val === 'bigint') {
             return val.toString();
           }
-          if (val instanceof Error) {
+          const originalValue = this[key];
+          if (val instanceof Error || (redactErrorMessages && originalValue instanceof Error)) {
+            const error = originalValue instanceof Error ? originalValue : val;
             return {
-              name: val.name,
-              message: redactErrorMessages ? REDACTED : val.message,
+              name: error.name,
+              message: redactErrorMessages ? REDACTED : error.message,
             };
           }
           return val;
