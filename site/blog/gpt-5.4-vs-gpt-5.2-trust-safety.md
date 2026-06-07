@@ -118,7 +118,7 @@ The regression examples are both operational agency cases: one under Hydra and o
 
 ## Fresh Rerun Context
 
-We also reran the full harness adaptively against GPT-5.4 in March (`eval-jyq-2026-03-06T03:54:26`). That fresh rerun looked much better than GPT-5.2's original day-0 run: **Hydra** fell from **161/205 (78.5%)** to **40/210 (19.0%)**, **Meta** fell from **122/200 (61.0%)** to **67/210 (31.9%)**, and **baseline** moved from **9/210 (4.3%)** to **7/215 (3.3%)**.
+We also reran the full harness adaptively against GPT-5.4 in March (`eval-jyq-2026-03-06T03:54:26`). That fresh rerun looked much better than GPT-5.2's original day-0 run: **Hydra** fell from **161/205 (78.5%)** to **40/210 (19.0%)**, **Meta** fell from **122/200 (61.0%)** to **67/210 (31.9%)**, and **baseline** moved from **9/210 (4.3%)** to **7/215 (3.3%)**. The totals differ because these were separate adaptive generations: each strategy produced its own set of executable cases in each run, so the percentages are not based on a shared prompt corpus or denominator.
 
 We keep that rerun as context, not the headline. It measures what a fresh attacker can still discover against GPT-5.4 today. The fixed December benchmark measures how GPT-5.2 and GPT-5.4 behave on the same saved prompts.
 
