@@ -13,6 +13,13 @@ import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
 
+function getMediaInfoUrl(key: string, storageUrl: string | null): string | null {
+  if (storageUrl?.startsWith('file://')) {
+    return `/api/media/${key}`;
+  }
+  return storageUrl;
+}
+
 /**
  * Get storage stats
  * Must be defined BEFORE wildcard routes
@@ -61,7 +68,7 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     }
 
     const storage = getMediaStorage();
-    const url = await storage.getUrl(key);
+    const url = getMediaInfoUrl(key, await storage.getUrl(key));
 
     res.json(
       MediaSchemas.Info.Response.parse({

@@ -156,7 +156,7 @@ describe('Media Routes', () => {
     it('should return info when media file exists', async () => {
       const mockStorage = {
         providerId: 'local-fs',
-        getUrl: vi.fn().mockResolvedValue('/media/audio/abcdef123456.mp3'),
+        getUrl: vi.fn().mockResolvedValue('https://storage.example.com/audio/abcdef123456.mp3'),
       } as unknown as MediaStorageProvider;
 
       mockedMediaExists.mockResolvedValue(true);
@@ -170,10 +170,36 @@ describe('Media Routes', () => {
         data: {
           key: 'audio/abcdef123456.mp3',
           exists: true,
-          url: '/media/audio/abcdef123456.mp3',
+          url: 'https://storage.example.com/audio/abcdef123456.mp3',
         },
       });
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+      expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+    });
+
+    it('should return API URL if local storage provides a file URL', async () => {
+      const localPath = '/Users/test-user/.promptfoo/media/audio/abcdef123456.mp3';
+      const mockStorage = {
+        providerId: 'local',
+        getUrl: vi.fn().mockResolvedValue(`file://${localPath}`),
+      } as unknown as MediaStorageProvider;
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue(mockStorage);
+
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          key: 'audio/abcdef123456.mp3',
+          exists: true,
+          url: '/api/media/audio/abcdef123456.mp3',
+        },
+      });
+      expect(response.body.data.url).not.toContain('/Users/test-user');
+      expect(response.body.data.url).not.toMatch(/^file:\/\//);
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
