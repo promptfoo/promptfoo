@@ -141,7 +141,9 @@ jobs:
           files: ./coverage/coverage-final.json
           flags: backend
           name: backend-coverage
-          fail_ci_if_error: true
+          # Coverage upload is informational and runs after tests/ratchets; don't
+          # fail CI on Codecov-side infra issues (e.g. CLI signature verification).
+          fail_ci_if_error: false
           use_oidc: true
           version: v11.2.7
 
@@ -450,7 +452,9 @@ jobs:
           files: ./site/coverage/coverage-final.json
           flags: site
           name: site-coverage
-          fail_ci_if_error: true
+          # Coverage upload is informational and runs after tests/ratchets; don't
+          # fail CI on Codecov-side infra issues (e.g. CLI signature verification).
+          fail_ci_if_error: false
           use_oidc: true
           version: v11.2.7
 
@@ -496,7 +500,9 @@ jobs:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
           name: frontend-coverage
-          fail_ci_if_error: true
+          # Coverage upload is informational and runs after tests/ratchets; don't
+          # fail CI on Codecov-side infra issues (e.g. CLI signature verification).
+          fail_ci_if_error: false
           use_oidc: true
           version: v11.2.7
 
