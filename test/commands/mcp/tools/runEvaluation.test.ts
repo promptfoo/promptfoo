@@ -566,6 +566,77 @@ describe('runEvaluation tool', () => {
       );
     });
 
+    it('should expand a valid test case range after validating the resolved suite', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      let selectedTestCaseIndices: number[] | undefined;
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: [
+              { vars: { input: 'first' } },
+              { vars: { input: 'second' } },
+              { vars: { input: 'third' } },
+              { vars: { input: 'fourth' } },
+            ],
+          };
+          const config = { providers: testSuite.providers };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          selectedTestCaseIndices = customization?.evaluateOptionOverrides?.testCaseIndices;
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: { start: 1, end: 3 },
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(selectedTestCaseIndices).toEqual([1, 2]);
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 2,
+        filters: { testCaseIndices: { start: 1, end: 3 } },
+      });
+    });
+
+    it('should reject an enormous out-of-bounds range before expanding it', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: { start: 0, end: 2 ** 32 },
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(true);
+      expect(payload.error).toBe('Invalid range: start=0, end=4294967296. Available indices: 0-0');
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
     it('should apply deferred scenario filter ranges to the final suite summary', async () => {
       const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(

@@ -250,7 +250,10 @@ function applyMcpEvaluationFilters(
     promptFilter?: string | string[];
     providerFilter?: string | string[];
   },
-): EvaluationFilterSummary {
+): {
+  suiteSummary: EvaluationFilterSummary;
+  selectedTestCaseIndices?: number[];
+} {
   const { testCaseIndices, promptFilter, providerFilter } = options;
   const totals = {
     testCases: countRunnableTestCases(testSuite),
@@ -263,13 +266,26 @@ function applyMcpEvaluationFilters(
   applyProviderFilter(testSuite, providerFilter);
   applyPromptFilter(testSuite, promptFilter);
   validateTestCaseIndices(testSuite, testCaseIndices);
+  const selectedTestCaseIndices = normalizeTestCaseIndices(testCaseIndices);
 
-  return summarizeFilteredSuite(
-    testSuite,
-    totals,
-    undefined,
-    normalizeTestCaseIndices(testCaseIndices)?.length,
-  );
+  return {
+    suiteSummary: summarizeFilteredSuite(
+      testSuite,
+      totals,
+      undefined,
+      selectedTestCaseIndices?.length,
+    ),
+    selectedTestCaseIndices,
+  };
+}
+
+function setSelectedTestCaseIndices(
+  evaluateOptionOverrides: Partial<InternalEvaluateOptions> | undefined,
+  selectedTestCaseIndices: number[] | undefined,
+): void {
+  if (evaluateOptionOverrides && selectedTestCaseIndices) {
+    evaluateOptionOverrides.testCaseIndices = selectedTestCaseIndices;
+  }
 }
 
 function getPromptFilterValidationError(promptFilter?: string | string[]): string | undefined {
@@ -494,7 +510,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           testCaseIndices !== undefined ||
           hasStringFilters(promptFilter) ||
           hasStringFilters(providerFilter);
-        const selectedTestCaseIndices = normalizeTestCaseIndices(testCaseIndices);
+        let selectedTestCaseIndices: number[] | undefined;
         let suiteSummary: EvaluationFilterSummary | undefined;
 
         const cmdObj: Partial<CommandLineOptions & Command> = {
@@ -514,13 +530,10 @@ export function registerRunEvaluationTool(server: McpServer) {
           showProgressBar: false,
         };
         const evaluateOptionOverrides: Partial<InternalEvaluateOptions> | undefined =
-          args.timeoutMs === undefined && selectedTestCaseIndices === undefined
+          args.timeoutMs === undefined && testCaseIndices === undefined
             ? undefined
             : {
                 ...(args.timeoutMs === undefined ? {} : { timeoutMs }),
-                ...(selectedTestCaseIndices === undefined
-                  ? {}
-                  : { testCaseIndices: selectedTestCaseIndices }),
               };
 
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
@@ -528,11 +541,14 @@ export function registerRunEvaluationTool(server: McpServer) {
         const startTime = Date.now();
         const evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
           beforeFilterTestSuite: (testSuite) => {
-            suiteSummary = applyMcpEvaluationFilters(testSuite, {
+            const filteredSuite = applyMcpEvaluationFilters(testSuite, {
               testCaseIndices,
               promptFilter,
               providerFilter,
             });
+            suiteSummary = filteredSuite.suiteSummary;
+            selectedTestCaseIndices = filteredSuite.selectedTestCaseIndices;
+            setSelectedTestCaseIndices(evaluateOptionOverrides, selectedTestCaseIndices);
             if (hasFilters) {
               logger.debug(
                 `Running filtered eval with ${suiteSummary.testCases.filtered} test cases, ${suiteSummary.prompts.filtered} prompts, ${suiteSummary.providers.filtered} providers`,
