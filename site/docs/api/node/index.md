@@ -1,6 +1,7 @@
 ---
 title: Node.js API reference
 sidebar_label: Overview
+sidebar_position: 1
 description: Generated reference for promptfoo's supported Node.js API surface.
 ---
 
