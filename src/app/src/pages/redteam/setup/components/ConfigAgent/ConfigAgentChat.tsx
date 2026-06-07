@@ -25,7 +25,7 @@ import type { AgentMessage, DiscoveredConfig } from '../../hooks/useConfigAgent'
 interface ConfigAgentChatProps {
   messages: AgentMessage[];
   isLoading: boolean;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, field?: string) => void;
   onSelectOption: (optionId: string) => void;
   onSubmitApiKey: (apiKey: string, field?: string) => void;
 }
@@ -59,9 +59,9 @@ export default function ConfigAgentChat({
       return;
     }
 
-    onSendMessage(message);
+    onSendMessage(message, inputRequest?.field);
     setInputValue('');
-  }, [inputValue, onSendMessage]);
+  }, [inputRequest?.field, inputValue, onSendMessage]);
 
   const handleSubmitApiKey = useCallback(() => {
     const apiKey = apiKeyValue.trim();

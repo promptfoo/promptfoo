@@ -14,7 +14,7 @@ const discoveredConfig: DiscoveredConfig = {
   path: '/v1/chat/completions',
   headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-test' },
   body: {
-    model: '{{model}}',
+    model: 'gpt-test',
     messages: [{ role: 'user', content: '{{prompt}}' }],
     temperature: 0,
     stream: false,
@@ -118,7 +118,7 @@ describe('ConfigAgentChat', () => {
     await user.type(input, 'hello');
     const buttons = screen.getAllByRole('button');
     await user.click(buttons[buttons.length - 1]);
-    expect(onSendMessage).toHaveBeenCalledWith('hello');
+    expect(onSendMessage).toHaveBeenCalledWith('hello', undefined);
     expect(input).toHaveValue('');
 
     rerender(
@@ -132,7 +132,42 @@ describe('ConfigAgentChat', () => {
     );
     await user.type(screen.getByPlaceholderText('Type a message... (Enter to send)'), 'retry');
     await user.keyboard('{Enter}');
-    expect(onSendMessage).toHaveBeenCalledWith('retry');
+    expect(onSendMessage).toHaveBeenCalledWith('retry', undefined);
+  });
+
+  it('passes the requested text field with freeform input', async () => {
+    const user = userEvent.setup();
+    const onSendMessage = vi.fn();
+    const messages: AgentMessage[] = [
+      ...baseMessages,
+      {
+        id: 'deployment',
+        type: 'question',
+        content: 'Deployment name?',
+        timestamp: 6,
+        metadata: {
+          inputRequest: {
+            type: 'text',
+            prompt: 'Enter deployment',
+            field: 'azureDeployment',
+          },
+        },
+      },
+    ];
+
+    render(
+      <ConfigAgentChat
+        messages={messages}
+        isLoading={false}
+        onSendMessage={onSendMessage}
+        onSelectOption={vi.fn()}
+        onSubmitApiKey={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByPlaceholderText('Type a message... (Enter to send)'), 'my-gpt4o');
+    await user.keyboard('{Enter}');
+    expect(onSendMessage).toHaveBeenCalledWith('my-gpt4o', 'azureDeployment');
   });
 
   it('handles quick options and secure API-key submission', async () => {

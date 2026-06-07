@@ -198,11 +198,6 @@ export interface ConfigAgentSession {
  */
 export interface StartSessionRequest {
   baseUrl: string;
-  hints?: {
-    apiType?: string;
-    hasAuth?: boolean;
-    authType?: string;
-  };
 }
 
 /**

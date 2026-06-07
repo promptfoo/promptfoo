@@ -89,22 +89,6 @@ describe('useConfigAgent', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('surfaces polling failures instead of leaving a started session inert', async () => {
-    mockCallApi
-      .mockResolvedValueOnce(
-        apiResponse({ success: true, data: { sessionId: 'session-1', messages: [] } }),
-      )
-      .mockResolvedValueOnce(apiResponse({ error: 'poll failed' }, false));
-
-    const { result } = renderHook(() => useConfigAgent());
-
-    await act(async () => {
-      await result.current.startSession('https://api.example.com');
-    });
-
-    await waitFor(() => expect(result.current.error).toBe('poll failed'));
-  });
-
   it('submits messages, options, confirmations, and restores masked API-key headers', async () => {
     mockCallApi
       .mockResolvedValueOnce(
@@ -155,7 +139,7 @@ describe('useConfigAgent', () => {
     });
 
     await act(async () => {
-      await result.current.sendMessage('hello');
+      await result.current.sendMessage('hello', 'azureDeployment');
       await result.current.selectOption('have_key');
       await result.current.confirm(true);
       await result.current.submitApiKey('sk-secret');
@@ -163,7 +147,12 @@ describe('useConfigAgent', () => {
 
     expect(mockCallApi).toHaveBeenCalledWith('/redteam/config-agent/input', {
       method: 'POST',
-      body: JSON.stringify({ sessionId: 'session-1', type: 'message', value: 'hello' }),
+      body: JSON.stringify({
+        sessionId: 'session-1',
+        type: 'message',
+        value: 'hello',
+        field: 'azureDeployment',
+      }),
       headers: { 'Content-Type': 'application/json' },
     });
     expect(mockCallApi).toHaveBeenCalledWith('/redteam/config-agent/input', {

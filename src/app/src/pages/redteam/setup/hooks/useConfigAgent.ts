@@ -73,11 +73,6 @@ export interface ConfigAgentSession {
   finalConfig: DiscoveredConfig | null;
 }
 
-interface PolledSessionData {
-  messages?: AgentMessage[];
-  session?: ConfigAgentSession | null;
-}
-
 interface UseConfigAgentReturn {
   // State
   sessionId: string | null;
@@ -90,7 +85,7 @@ interface UseConfigAgentReturn {
 
   // Actions
   startSession: (baseUrl: string) => Promise<boolean>;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, field?: string) => Promise<void>;
   selectOption: (optionId: string) => Promise<void>;
   submitApiKey: (apiKey: string, field?: string) => Promise<void>;
   confirm: (confirmed: boolean) => Promise<void>;
@@ -173,26 +168,6 @@ export function useConfigAgent(): UseConfigAgentReturn {
     [restoreSensitiveHeaders],
   );
 
-  const canPoll = useCallback(() => mountedRef.current && pollingActiveRef.current, []);
-
-  const applyPolledSession = useCallback(
-    (data: PolledSessionData): boolean => {
-      setMessages(data.messages || []);
-      setSession(restoreSessionSecrets(data.session || null));
-
-      if (!data.session || ['complete', 'error'].includes(data.session.phase)) {
-        stopPolling();
-        return false;
-      }
-
-      const lastMessage = data.messages?.[data.messages.length - 1];
-      const waitingForInput = lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
-
-      return !waitingForInput;
-    },
-    [restoreSessionSecrets, stopPolling],
-  );
-
   /**
    * Poll for session updates
    */
@@ -203,37 +178,52 @@ export function useConfigAgent(): UseConfigAgentReturn {
       pollingActiveRef.current = true;
 
       const poll = async () => {
-        if (!canPoll()) {
+        // Check if polling should continue
+        if (!mountedRef.current || !pollingActiveRef.current) {
           return;
         }
 
         try {
           const response = await callApi(`/redteam/config-agent/session/${sid}`);
-          if (!response.ok) {
-            const responseBody = await response.json().catch(() => null);
-            throw new Error(responseBody?.error || 'Failed to poll configuration assistant');
-          }
-          if (!canPoll()) {
+          if (!response.ok || !mountedRef.current || !pollingActiveRef.current) {
             return;
           }
 
-          const { data } = (await response.json()) as { data: PolledSessionData };
-          if (applyPolledSession(data) && canPoll()) {
-            pollingTimeoutRef.current = setTimeout(poll, 1000);
-          }
-        } catch (err) {
-          if (!canPoll()) {
+          const { data } = await response.json();
+
+          // Only update state if still mounted and polling is active
+          if (!mountedRef.current || !pollingActiveRef.current) {
             return;
           }
 
-          stopPolling();
-          setError(err instanceof Error ? err.message : 'Failed to poll configuration assistant');
+          setMessages(data.messages || []);
+          setSession(restoreSessionSecrets(data.session || null));
+
+          // Continue polling if not complete
+          if (data.session && !['complete', 'error'].includes(data.session.phase)) {
+            // Check if we're waiting for user input
+            const lastMessage = data.messages?.[data.messages.length - 1];
+            const waitingForInput =
+              lastMessage?.metadata?.inputRequest || lastMessage?.metadata?.options;
+
+            if (!waitingForInput && pollingActiveRef.current) {
+              pollingTimeoutRef.current = setTimeout(poll, 1000);
+            }
+          } else {
+            // Polling complete, clean up
+            pollingActiveRef.current = false;
+          }
+        } catch {
+          // Ignore polling errors, but stop if unmounted
+          if (!mountedRef.current) {
+            pollingActiveRef.current = false;
+          }
         }
       };
 
       poll();
     },
-    [applyPolledSession, canPoll, stopPolling],
+    [stopPolling, restoreSessionSecrets],
   );
 
   /**
@@ -241,6 +231,11 @@ export function useConfigAgent(): UseConfigAgentReturn {
    */
   const startSession = useCallback(
     async (baseUrl: string) => {
+      stopPolling();
+      apiKeyRef.current = null;
+      setSessionId(null);
+      setMessages([]);
+      setSession(null);
       setIsLoading(true);
       setError(null);
 
@@ -270,7 +265,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
         setIsLoading(false);
       }
     },
-    [pollSession],
+    [pollSession, stopPolling],
   );
 
   /**
@@ -283,6 +278,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
       }
 
       setIsLoading(true);
+      setError(null);
 
       try {
         const response = await callApi('/redteam/config-agent/input', {
@@ -325,8 +321,8 @@ export function useConfigAgent(): UseConfigAgentReturn {
   );
 
   const sendMessage = useCallback(
-    async (message: string) => {
-      await sendInput('message', message);
+    async (message: string, field?: string) => {
+      await sendInput('message', message, field);
     },
     [sendInput],
   );
@@ -357,26 +353,26 @@ export function useConfigAgent(): UseConfigAgentReturn {
    * Cancel the current session
    */
   const cancelSession = useCallback(async () => {
-    // Stop polling first
     stopPolling();
-
-    if (!sessionId) {
-      return;
-    }
-
-    try {
-      await callApi(`/redteam/config-agent/session/${sessionId}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      // Ignore errors
-    }
+    const sessionIdToCancel = sessionId;
 
     setSessionId(null);
     setMessages([]);
     setSession(null);
     setError(null);
     apiKeyRef.current = null;
+
+    if (!sessionIdToCancel) {
+      return;
+    }
+
+    try {
+      await callApi(`/redteam/config-agent/session/${sessionIdToCancel}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // Local state is already cleared; server-side TTL cleanup is the fallback.
+    }
   }, [sessionId, stopPolling]);
 
   /**

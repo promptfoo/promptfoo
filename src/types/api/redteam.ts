@@ -110,33 +110,42 @@ const ConfigAgentMessageSchema = z.unknown();
 const ConfigAgentSessionSchema = z.unknown();
 
 export const ConfigAgentStartRequestSchema = z.object({
-  baseUrl: z.string().trim().min(1, 'URL is required'),
-  hints: z
-    .object({
-      apiType: z.string().optional(),
-      hasAuth: z.boolean().optional(),
-      authType: z.string().optional(),
-    })
-    .optional(),
+  baseUrl: z.string().trim().min(1, 'URL is required').max(4096, 'URL is too long'),
 });
 
-const ConfigAgentStringInputSchema = z.object({
-  sessionId: z.string(),
-  type: z.enum(['message', 'option', 'api_key']),
-  value: z.string(),
-  field: z.string().optional(),
-});
-
-const ConfigAgentConfirmationInputSchema = z.object({
-  sessionId: z.string(),
-  type: z.literal('confirmation'),
-  value: z.boolean(),
-  field: z.string().optional(),
-});
+const ConfigAgentSessionIdSchema = z.string().min(1).max(128);
+const ConfigAgentFieldSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z][A-Za-z0-9_-]*$/)
+  .optional();
 
 export const ConfigAgentInputRequestSchema = z.discriminatedUnion('type', [
-  ConfigAgentStringInputSchema,
-  ConfigAgentConfirmationInputSchema,
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('message'),
+    value: z.string().max(100_000),
+    field: ConfigAgentFieldSchema,
+  }),
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('option'),
+    value: z.string().min(1).max(128),
+    field: ConfigAgentFieldSchema,
+  }),
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('api_key'),
+    value: z.string().max(32_768),
+    field: ConfigAgentFieldSchema,
+  }),
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('confirmation'),
+    value: z.boolean(),
+    field: ConfigAgentFieldSchema,
+  }),
 ]);
 
 export const ConfigAgentStartResponseSchema = z.object({

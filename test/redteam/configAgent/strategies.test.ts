@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   analyzeProbeResults,
   anthropicStrategy,
-  azureOpenaiStrategy,
+  createAzureOpenaiStrategy,
   genericStrategy,
+  getBaseConfigForStrategy,
   openaiStrategy,
 } from '../../../src/redteam/configAgent/strategies';
 
@@ -36,6 +37,7 @@ function probeResult({
 }
 
 describe('config agent discovery strategies', () => {
+  const azureStrategy = createAzureOpenaiStrategy('my-gpt4o');
   it('returns null for unknown strategies and uninformative probe failures', () => {
     expect(analyzeProbeResults('missing', [])).toBeNull();
     expect(
@@ -62,6 +64,10 @@ describe('config agent discovery strategies', () => {
       confidence: 0.95,
       discoveredConfig: {
         apiType: 'openai_compatible',
+        body: {
+          model: 'gpt-test',
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+        },
         defaultModel: 'gpt-test',
         models: ['gpt-test', 'gpt-next'],
         transformResponse: 'json.choices[0].message.content',
@@ -84,7 +90,7 @@ describe('config agent discovery strategies', () => {
     ).toBeNull();
     expect(
       analyzeProbeResults('azure_openai', [
-        probeResult({ probe: azureOpenaiStrategy.probes[0], json: { output: 'hello' } }),
+        probeResult({ probe: azureStrategy.probes[0], json: { output: 'hello' } }),
       ]),
     ).toBeNull();
   });
@@ -102,6 +108,10 @@ describe('config agent discovery strategies', () => {
       confidence: 0.95,
       discoveredConfig: {
         apiType: 'anthropic_compatible',
+        body: {
+          model: 'claude-test',
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+        },
         defaultModel: 'claude-test',
         transformResponse: 'json.content[0].text',
       },
@@ -113,7 +123,7 @@ describe('config agent discovery strategies', () => {
   it('detects Azure OpenAI responses', () => {
     const match = analyzeProbeResults('azure_openai', [
       probeResult({
-        probe: azureOpenaiStrategy.probes[0],
+        probe: azureStrategy.probes[0],
         json: { choices: [{ message: { content: 'hello' } }] },
       }),
     ]);
@@ -123,11 +133,28 @@ describe('config agent discovery strategies', () => {
       confidence: 0.9,
       discoveredConfig: {
         apiType: 'azure_openai',
-        path: '/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21',
-        defaultModel: 'gpt-4',
+        path: '/openai/deployments/my-gpt4o/chat/completions?api-version=2024-10-21',
+        defaultModel: 'my-gpt4o',
         transformResponse: 'json.choices[0].message.content',
         headers: { 'Content-Type': 'application/json' },
       },
+    });
+  });
+
+  it('emits runnable default model values for manually selected formats', () => {
+    expect(getBaseConfigForStrategy('openai_compatible')).toMatchObject({
+      body: { model: 'gpt-4' },
+      defaultModel: 'gpt-4',
+    });
+    expect(getBaseConfigForStrategy('anthropic_compatible')).toMatchObject({
+      body: { model: 'claude-3-sonnet-20240229' },
+      defaultModel: 'claude-3-sonnet-20240229',
+    });
+    expect(
+      getBaseConfigForStrategy('azure_openai', { azureDeployment: 'team-deployment' }),
+    ).toMatchObject({
+      path: '/openai/deployments/team-deployment/chat/completions?api-version=2024-10-21',
+      defaultModel: 'team-deployment',
     });
   });
 
@@ -189,6 +216,22 @@ describe('config agent discovery strategies', () => {
       },
     });
     expect(match?.evidence).toContain('Found response in field: json.response.items[0].text');
+  });
+
+  it('rejects request echoes while still finding a distinct response field', () => {
+    expect(
+      analyzeProbeResults('generic_json', [
+        probeResult({ probe: genericStrategy.probes[0], json: { prompt: 'Say hello' } }),
+      ]),
+    ).toBeNull();
+
+    const match = analyzeProbeResults('generic_json', [
+      probeResult({
+        probe: genericStrategy.probes[0],
+        json: { prompt: 'Say hello', response: 'Hello from the model' },
+      }),
+    ]);
+    expect(match?.discoveredConfig.transformResponse).toBe('json.response');
   });
 
   it('falls back to non-priority generic fields and ignores unusable values', () => {

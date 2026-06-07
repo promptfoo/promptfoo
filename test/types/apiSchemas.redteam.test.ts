@@ -423,16 +423,23 @@ describe('API schema red-team coverage', () => {
         RedteamSchemas.ConfigAgentInput.Request.safeParse({
           sessionId: 'session-1',
           type: 'api_key',
-          value: true,
+          value: false,
         }).success,
       ).toBe(false);
       expect(
         RedteamSchemas.ConfigAgentInput.Request.safeParse({
           sessionId: 'session-1',
           type: 'confirmation',
-          value: 'yes',
+          value: 'false',
         }).success,
       ).toBe(false);
+      expect(
+        RedteamSchemas.ConfigAgentInput.Request.safeParse({
+          sessionId: 'session-1',
+          type: 'confirmation',
+          value: false,
+        }).success,
+      ).toBe(true);
       expect(
         RedteamSchemas.ConfigAgentSession.Response.parse({
           success: true,

@@ -12,12 +12,19 @@ import { isIP } from 'node:net';
 import { Agent, interceptors } from 'undici';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch';
-import { ALL_STRATEGIES, analyzeProbeResults, getBaseConfigForStrategy } from './strategies';
+import {
+  ALL_STRATEGIES,
+  analyzeProbeResults,
+  createAzureOpenaiStrategy,
+  getAzureDeploymentFromPath,
+  getBaseConfigForStrategy,
+} from './strategies';
 
 import type {
   AgentMessage,
   ConfigAgentSession,
   DiscoveredConfig,
+  DiscoveryStrategy,
   Probe,
   ProbeResult,
   StrategyMatch,
@@ -26,8 +33,6 @@ import type {
 
 const DEFAULT_TIMEOUT = 10000;
 const DNS_CACHE_TTL = DEFAULT_TIMEOUT;
-const MAX_RESPONSE_BODY_BYTES = 64 * 1024;
-const RESPONSE_TRUNCATED_SUFFIX = '\n...[truncated]';
 const CLOUD_METADATA_HOSTS = new Set([
   'metadata.google.internal',
   'metadata.goog',
@@ -37,49 +42,6 @@ const CLOUD_METADATA_HOSTS = new Set([
 
 function cloneValue<T>(value: T): T {
   return structuredClone(value);
-}
-
-async function readBoundedResponseText(response: Response): Promise<string> {
-  if (!response.body) {
-    const contentLength = Number.parseInt(response.headers.get('content-length') ?? '', 10);
-    if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BODY_BYTES) {
-      return RESPONSE_TRUNCATED_SUFFIX.trimStart();
-    }
-    const text = await response.text();
-    return text.length > MAX_RESPONSE_BODY_BYTES
-      ? `${text.slice(0, MAX_RESPONSE_BODY_BYTES)}${RESPONSE_TRUNCATED_SUFFIX}`
-      : text;
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  let truncated = false;
-
-  try {
-    while (total <= MAX_RESPONSE_BODY_BYTES) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-
-      const room = MAX_RESPONSE_BODY_BYTES + 1 - total;
-      const boundedChunk = value.byteLength <= room ? value : value.slice(0, room);
-      chunks.push(boundedChunk);
-      total += boundedChunk.byteLength;
-
-      if (value.byteLength > room || total > MAX_RESPONSE_BODY_BYTES) {
-        truncated = true;
-        await reader.cancel();
-        break;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const text = Buffer.concat(chunks).subarray(0, MAX_RESPONSE_BODY_BYTES).toString('utf8');
-  return truncated ? `${text}${RESPONSE_TRUNCATED_SUFFIX}` : text;
 }
 
 function renderTemplateValue(value: unknown, replacements: Record<string, string>): unknown {
@@ -312,6 +274,13 @@ export class ConfigurationAgent {
 
     assertHostnameAllowed(parsedUrl.hostname);
 
+    if (parsedUrl.username || parsedUrl.password) {
+      throw new Error('Credentials in endpoint URLs are not allowed');
+    }
+    if (parsedUrl.hash) {
+      throw new Error('URL fragments are not allowed');
+    }
+
     // Only allow http and https protocols
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
       throw new Error('Only HTTP and HTTPS protocols are allowed');
@@ -426,9 +395,7 @@ export class ConfigurationAgent {
    * Run through discovery strategies
    */
   private async runDiscoveryStrategies(): Promise<void> {
-    const authCandidates: Array<{ match: StrategyMatch; results: ProbeResult[] }> = [];
-
-    for (const strategy of ALL_STRATEGIES) {
+    for (const strategy of this.getDiscoveryStrategies()) {
       if (this.abortController?.signal.aborted) {
         break;
       }
@@ -443,47 +410,25 @@ export class ConfigurationAgent {
       this.session.probeHistory.push(...results);
 
       const match = analyzeProbeResults(strategy.id, results);
-      const hasSuccessfulResponse = results.some(
-        (result) => result.status !== null && result.status >= 200 && result.status < 300,
-      );
-      const authNeeded = results.some((result) => result.status === 401 || result.status === 403);
-
-      if (!hasSuccessfulResponse && authNeeded && match) {
-        authCandidates.push({ match, results });
-        continue;
-      }
 
       if (match && match.confidence >= strategy.minConfidence) {
-        this.session.bestMatch = match;
+        const normalizedMatch = this.normalizeStrategyMatch(match);
+        this.session.bestMatch = normalizedMatch;
         this.session.phase = 'analyzing';
-        await this.handleMatchFound(match, results);
+        await this.handleMatchFound(normalizedMatch, results);
         return;
       }
-    }
 
-    if (authCandidates.length === 1) {
-      const [{ match, results }] = authCandidates;
-      this.session.bestMatch = match;
-      this.session.phase = 'analyzing';
-      await this.handleAuthRequired(match, results);
-      return;
-    }
-
-    if (authCandidates.length > 1) {
-      this.session.phase = 'analyzing';
-      this.addMessage(
-        'question',
-        'This endpoint requires authentication before I can identify its API format. Select its format to continue.',
-        {
-          options: [
-            { id: 'openai', label: "It's OpenAI-compatible", value: 'openai', primary: true },
-            { id: 'anthropic', label: "It's Anthropic-compatible", value: 'anthropic' },
-            { id: 'azure', label: "It's Azure OpenAI", value: 'azure' },
-            { id: 'custom', label: "It's a custom API", value: 'custom' },
-          ],
-        },
-      );
-      return;
+      // Check if auth is needed
+      const authNeeded = results.some((r) => r.status === 401 || r.status === 403);
+      if (authNeeded && match) {
+        const normalizedMatch = this.normalizeStrategyMatch(match);
+        // Format might be right, just needs auth
+        this.session.bestMatch = normalizedMatch;
+        this.session.phase = 'analyzing';
+        await this.handleAuthRequired(normalizedMatch, results);
+        return;
+      }
     }
 
     // No strategy matched
@@ -631,61 +576,33 @@ export class ConfigurationAgent {
     });
   }
 
-  private selectAuthenticatedStrategy(
-    strategyId: 'openai_compatible' | 'anthropic_compatible' | 'azure_openai',
-  ): void {
-    this.session.bestMatch = {
-      strategyId,
-      confidence: 0.9,
-      discoveredConfig: getBaseConfigForStrategy(strategyId),
-      evidence: ['User selected API format'],
-    };
-    this.addMessage(
-      'info',
-      `Using ${this.getStrategyDisplayName(strategyId)} format. Do you have an API key?`,
-      {
-        inputRequest: {
-          type: 'api_key',
-          prompt: 'Enter your API key:',
-          field: 'apiKey',
-          sensitive: true,
-        },
-        options: [
-          { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
-          { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
-        ],
-      },
-    );
-  }
-
   /**
    * Handle user input
    */
   async handleUserInput(input: UserInput): Promise<AgentMessage[]> {
     // Add user message to conversation
     if (input.type === 'message') {
-      this.addMessage('user', input.value);
+      this.addMessage('user', input.value as string);
     }
 
-    // API keys are persisted only under the canonical sensitive field in
-    // handleApiKeyInput so a client-supplied alias cannot bypass masking.
-    if (input.field && input.type !== 'api_key') {
+    // Store the input
+    if (input.field) {
       this.session.userInputs[input.field] = input.value;
     }
 
     // Process based on input type and current state
     switch (input.type) {
       case 'api_key':
-        return this.handleApiKeyInput(input.value);
+        return this.handleApiKeyInput(input.value as string);
 
       case 'option':
-        return this.handleOptionSelect(input.value);
+        return this.handleOptionSelect(input.value as string);
 
       case 'confirmation':
-        return this.handleConfirmation(input.value);
+        return this.handleConfirmation(input.value as boolean);
 
       case 'message':
-        return this.handleFreeformMessage(input.value);
+        return this.handleFreeformMessage(input.value as string, input.field);
 
       default:
         return this.session.messages;
@@ -794,18 +711,65 @@ export class ConfigurationAgent {
         break;
 
       case 'openai':
-        this.selectAuthenticatedStrategy('openai_compatible');
+        this.session.bestMatch = {
+          strategyId: 'openai_compatible',
+          confidence: 0.9,
+          discoveredConfig: this.normalizeConfigForBaseUrl(
+            getBaseConfigForStrategy('openai_compatible'),
+          ),
+          evidence: ['User indicated OpenAI-compatible'],
+        };
+        this.addMessage('info', 'Using OpenAI-compatible format. Do you have an API key?', {
+          inputRequest: {
+            type: 'api_key',
+            prompt: 'Enter your API key:',
+            field: 'apiKey',
+            sensitive: true,
+          },
+          options: [
+            { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
+            { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
+          ],
+        });
         break;
 
       case 'anthropic':
-        this.selectAuthenticatedStrategy('anthropic_compatible');
+        this.session.bestMatch = {
+          strategyId: 'anthropic_compatible',
+          confidence: 0.9,
+          discoveredConfig: this.normalizeConfigForBaseUrl(
+            getBaseConfigForStrategy('anthropic_compatible'),
+          ),
+          evidence: ['User indicated Anthropic-compatible'],
+        };
+        this.addMessage('info', 'Using Anthropic-compatible format. Do you have an API key?', {
+          inputRequest: {
+            type: 'api_key',
+            prompt: 'Enter your API key:',
+            field: 'apiKey',
+            sensitive: true,
+          },
+          options: [
+            { id: 'have_key', label: 'Yes', value: 'have_key', primary: true },
+            { id: 'no_auth', label: 'No auth needed', value: 'no_auth' },
+          ],
+        });
         break;
 
       case 'azure':
-        this.selectAuthenticatedStrategy('azure_openai');
+        this.addMessage('info', 'What is the Azure OpenAI deployment name?', {
+          inputRequest: {
+            type: 'text',
+            prompt: 'Enter the deployment name configured in Azure OpenAI:',
+            field: 'azureDeployment',
+            placeholder: 'my-gpt4o-deployment',
+          },
+        });
         break;
 
+      case 'example':
       case 'custom':
+      case 'manual':
         this.addMessage(
           'info',
           'Can you show me an example of how to call this API? Include the request body format and what the response looks like.',
@@ -818,6 +782,47 @@ export class ConfigurationAgent {
           },
         );
         break;
+
+      case 'diff_auth':
+        if (!this.session.bestMatch) {
+          this.addMessage('error', 'No detected API format is available to configure.');
+          break;
+        }
+        this.addMessage('info', 'Which HTTP header carries the API key or token?', {
+          inputRequest: {
+            type: 'text',
+            prompt: 'Enter the authentication header name:',
+            field: 'customAuthHeader',
+            placeholder: 'X-API-Key',
+          },
+        });
+        break;
+
+      case 'test': {
+        const config = this.session.finalConfig || this.session.bestMatch?.discoveredConfig;
+        if (!config) {
+          this.addMessage('error', 'No configuration is available to test.');
+          break;
+        }
+        this.addMessage('status', 'Running another test request...', { phase: 'confirming' });
+        const verified = await this.verifyConfiguration(config);
+        if (verified) {
+          this.session.verified = true;
+          this.session.finalConfig = cloneValue(config);
+          this.session.phase = 'complete';
+          this.addMessage('success', 'The configuration passed another test request.');
+          this.addMessage('info', 'Ready to apply this configuration?', {
+            options: [
+              { id: 'apply', label: 'Apply configuration', value: 'apply', primary: true },
+              { id: 'test', label: 'Run another test', value: 'test' },
+            ],
+          });
+        } else {
+          this.session.verified = false;
+          this.addMessage('error', 'The additional test request failed.');
+        }
+        break;
+      }
 
       case 'no_auth':
         // Try without auth
@@ -894,7 +899,39 @@ export class ConfigurationAgent {
   /**
    * Handle freeform message
    */
-  private async handleFreeformMessage(message: string): Promise<AgentMessage[]> {
+  private async handleFreeformMessage(message: string, field?: string): Promise<AgentMessage[]> {
+    if (field === 'azureDeployment') {
+      return this.handleAzureDeployment(message);
+    }
+
+    if (field === 'customAuthHeader') {
+      const headerName = message.trim();
+      if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(headerName)) {
+        this.addMessage('error', 'Enter a valid HTTP header name without a colon.');
+        return this.session.messages;
+      }
+      if (!this.session.bestMatch) {
+        this.addMessage('error', 'No detected API format is available to configure.');
+        return this.session.messages;
+      }
+      this.session.bestMatch = {
+        ...this.session.bestMatch,
+        discoveredConfig: {
+          ...this.session.bestMatch.discoveredConfig,
+          auth: { type: 'api_key', location: 'header', headerName },
+        },
+      };
+      this.addMessage('info', '', {
+        inputRequest: {
+          type: 'api_key',
+          prompt: `Enter the value for ${headerName}:`,
+          field: 'apiKey',
+          sensitive: true,
+        },
+      });
+      return this.session.messages;
+    }
+
     // Simple keyword detection for common requests
     const lower = message.toLowerCase();
 
@@ -995,7 +1032,7 @@ export class ConfigurationAgent {
     extraHeaders?: Record<string, string>,
   ): Promise<boolean> {
     try {
-      const url = config.path ? `${this.session.baseUrl}${config.path}` : this.session.baseUrl;
+      const url = this.resolveRequestUrl(config.path);
 
       // Build test body with a simple prompt
       const body = this.buildTestBody(config, 'Say "hello" and nothing else.');
@@ -1018,7 +1055,7 @@ export class ConfigurationAgent {
         return false;
       }
 
-      const responseText = await readBoundedResponseText(response);
+      const responseText = await response.text();
       let responseJson: unknown;
 
       try {
@@ -1108,7 +1145,7 @@ export class ConfigurationAgent {
       }
 
       try {
-        const url = probe.path ? `${this.session.baseUrl}${probe.path}` : this.session.baseUrl;
+        const url = this.resolveRequestUrl(probe.path);
 
         const start = Date.now();
 
@@ -1120,7 +1157,7 @@ export class ConfigurationAgent {
         });
 
         const timing = Date.now() - start;
-        const body = await readBoundedResponseText(response);
+        const body = await response.text();
 
         let json: unknown = null;
         try {
@@ -1184,6 +1221,124 @@ export class ConfigurationAgent {
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  private getDiscoveryStrategies(): DiscoveryStrategy[] {
+    const deployment = getAzureDeploymentFromPath(this.session.baseUrl);
+    const apiVersion = new URL(this.session.baseUrl).searchParams.get('api-version') || undefined;
+
+    return ALL_STRATEGIES.flatMap((strategy) => {
+      if (strategy.id !== 'azure_openai') {
+        return [strategy];
+      }
+      return deployment ? [createAzureOpenaiStrategy(deployment, apiVersion)] : [];
+    });
+  }
+
+  private async handleAzureDeployment(deploymentInput: string): Promise<AgentMessage[]> {
+    const deployment = deploymentInput.trim();
+    if (!deployment || deployment.includes('/')) {
+      this.addMessage('error', 'Enter a valid Azure deployment name.');
+      return this.session.messages;
+    }
+
+    this.session.userInputs['azureDeployment'] = deployment;
+    const strategy = createAzureOpenaiStrategy(deployment);
+    this.addMessage('status', `Testing Azure deployment ${deployment}...`, {
+      phase: 'probing',
+      strategyId: strategy.id,
+    });
+    const results = await this.runProbes(strategy.probes);
+    this.session.triedStrategies.push(strategy.id);
+    this.session.probeHistory.push(...results);
+    const match = analyzeProbeResults(strategy.id, results);
+
+    if (match && match.confidence >= strategy.minConfidence) {
+      const normalizedMatch = this.normalizeStrategyMatch(match);
+      this.session.bestMatch = normalizedMatch;
+      this.session.phase = 'analyzing';
+      await this.handleMatchFound(normalizedMatch, results);
+      return this.session.messages;
+    }
+
+    if (match && results.some((result) => result.status === 401 || result.status === 403)) {
+      const normalizedMatch = this.normalizeStrategyMatch(match);
+      this.session.bestMatch = normalizedMatch;
+      this.session.phase = 'analyzing';
+      await this.handleAuthRequired(normalizedMatch, results);
+      return this.session.messages;
+    }
+
+    this.addMessage('error', `Could not verify Azure deployment ${deployment}.`);
+    return this.session.messages;
+  }
+
+  private normalizeStrategyMatch(match: StrategyMatch): StrategyMatch {
+    return {
+      ...match,
+      discoveredConfig: this.normalizeConfigForBaseUrl(match.discoveredConfig),
+    };
+  }
+
+  private normalizeConfigForBaseUrl(config: DiscoveredConfig): DiscoveredConfig {
+    if (!config.path || !this.baseUrlAlreadyIncludesPath(config.path)) {
+      return config;
+    }
+    return { ...config, path: undefined };
+  }
+
+  private baseUrlAlreadyIncludesPath(path: string): boolean {
+    const base = new URL(this.session.baseUrl);
+    const requested = new URL(path, base.origin);
+    const normalizePathname = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
+
+    if (normalizePathname(base.pathname) !== normalizePathname(requested.pathname)) {
+      return false;
+    }
+
+    return [...requested.searchParams.entries()].every(([key, value]) =>
+      base.searchParams.getAll(key).includes(value),
+    );
+  }
+
+  private resolveRequestUrl(path?: string): string {
+    if (!path) {
+      return this.session.baseUrl;
+    }
+
+    const base = new URL(this.session.baseUrl);
+    const requested = new URL(path, base.origin);
+    const normalizePathname = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
+
+    if (normalizePathname(base.pathname) === normalizePathname(requested.pathname)) {
+      for (const [key, value] of requested.searchParams) {
+        if (!base.searchParams.has(key)) {
+          base.searchParams.append(key, value);
+        }
+      }
+      return base.toString();
+    }
+
+    const knownEndpointPatterns = [
+      /\/v1\/chat\/completions$/,
+      /\/v1\/messages$/,
+      /\/openai\/deployments\/[^/]+\/chat\/completions$/,
+    ];
+    const endpointPattern = knownEndpointPatterns.find((pattern) => pattern.test(base.pathname));
+    if (endpointPattern) {
+      const prefix = base.pathname.replace(endpointPattern, '');
+      base.pathname = `${prefix}${requested.pathname}`.replace(/\/+/g, '/');
+    } else {
+      base.pathname = `${base.pathname.replace(/\/+$/, '')}/${requested.pathname.replace(
+        /^\/+/,
+        '',
+      )}`.replace(/\/+/g, '/');
+    }
+
+    for (const [key, value] of requested.searchParams) {
+      base.searchParams.set(key, value);
+    }
+    return base.toString();
   }
 
   /**

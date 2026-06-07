@@ -18,24 +18,62 @@ vi.mock('react-simple-code-editor', () => ({
 
 vi.mock('../ConfigAgent', () => ({
   ConfigAgentDrawer: ({ onConfigDiscovered }: any) => (
-    <button
-      type="button"
-      onClick={() =>
-        onConfigDiscovered?.(
-          {
-            apiType: 'openai_compatible',
-            method: 'POST',
-            path: '/v1/chat/completions',
-            headers: { Authorization: 'Bearer edited-token' },
-            body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
-            transformResponse: 'json.choices[0].message.content',
-          },
-          'https://edited.example.com',
-        )
-      }
-    >
-      Apply ConfigAgent result
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          onConfigDiscovered?.(
+            {
+              apiType: 'openai_compatible',
+              method: 'POST',
+              path: '/v1/chat/completions',
+              headers: { Authorization: 'Bearer edited-token' },
+              body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+              transformResponse: 'json.choices[0].message.content',
+            },
+            'https://edited.example.com',
+          )
+        }
+      >
+        Apply ConfigAgent result
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onConfigDiscovered?.(
+            {
+              apiType: 'openai_compatible',
+              method: 'POST',
+              path: '/v1/chat/completions',
+              headers: { 'Content-Type': 'application/json' },
+              body: { model: 'gpt-test', messages: [{ role: 'user', content: '{{prompt}}' }] },
+              transformResponse: 'json.choices[0].message.content',
+            },
+            'https://edited.example.com/v1/chat/completions',
+          )
+        }
+      >
+        Apply full endpoint result
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onConfigDiscovered?.(
+            {
+              apiType: 'openai_compatible',
+              method: 'POST',
+              path: '/v1/chat/completions?api-version=2025-01-01',
+              headers: { 'Content-Type': 'application/json' },
+              body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+              transformResponse: 'json.choices[0].message.content',
+            },
+            'https://edited.example.com/proxy?tenant=team-a',
+          )
+        }
+      >
+        Apply base URL with query
+      </button>
+    </>
   ),
 }));
 
@@ -193,6 +231,54 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
         body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
         transformResponse: 'json.choices[0].message.content',
         useHttps: false,
+      }),
+    );
+  });
+
+  it('does not duplicate a path already present in the discovered base URL', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Apply full endpoint result' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'config',
+      expect.objectContaining({
+        url: 'https://edited.example.com/v1/chat/completions',
+        body: {
+          model: 'gpt-test',
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+        },
+      }),
+    );
+  });
+
+  it('appends the endpoint path before existing base URL query parameters', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Apply base URL with query' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'config',
+      expect.objectContaining({
+        url: 'https://edited.example.com/proxy/v1/chat/completions?tenant=team-a&api-version=2025-01-01',
       }),
     );
   });

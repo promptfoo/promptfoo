@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -53,6 +53,35 @@ import type { DiscoveredConfig } from '../../hooks/useConfigAgent';
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
 
+function joinEndpointUrl(baseUrl: string, path?: string): string {
+  if (!path) {
+    return baseUrl;
+  }
+
+  const base = new URL(baseUrl);
+  const requested = new URL(path, base.origin);
+  const normalizePathname = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
+  if (normalizePathname(base.pathname) === normalizePathname(requested.pathname)) {
+    for (const [key, value] of requested.searchParams) {
+      if (!base.searchParams.has(key)) {
+        base.searchParams.append(key, value);
+      }
+    }
+    return base.toString();
+  }
+
+  const basePath = base.pathname.replace(/\/+$/, '');
+  const requestedPath = requested.pathname.replace(/^\/+/, '');
+  base.pathname = `${basePath}/${requestedPath}`.replace(/\/{2,}/g, '/');
+  for (const [key, value] of requested.searchParams) {
+    if (!base.searchParams.has(key)) {
+      base.searchParams.append(key, value);
+    }
+  }
+  base.hash = requested.hash;
+  return base.toString();
+}
+
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
@@ -78,8 +107,6 @@ interface GeneratedConfig {
   };
 }
 
-type HeaderEntry = { key: string; value: string };
-
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -91,65 +118,6 @@ const highlightJS = (code: string): string => {
     return code;
   }
 };
-
-function useConfigAgentDiscovery({
-  selectedConfig,
-  setBodyError,
-  setConfigAgentOpen,
-  setHeaders,
-  setRequestBody,
-  setUrlError,
-  updateCustomTarget,
-}: {
-  selectedConfig: ProviderOptions['config'];
-  setBodyError: HttpEndpointConfigurationProps['setBodyError'];
-  setConfigAgentOpen: Dispatch<SetStateAction<boolean>>;
-  setHeaders: Dispatch<SetStateAction<HeaderEntry[]>>;
-  setRequestBody: Dispatch<SetStateAction<string>>;
-  setUrlError: HttpEndpointConfigurationProps['setUrlError'];
-  updateCustomTarget: HttpEndpointConfigurationProps['updateCustomTarget'];
-}) {
-  return useCallback(
-    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
-      const fullUrl = discoveredConfig.path
-        ? `${baseUrl.replace(/\/$/, '')}${discoveredConfig.path}`
-        : baseUrl;
-      const headers = discoveredConfig.headers ?? {};
-      const body = discoveredConfig.body ?? '';
-
-      setBodyError(null);
-      setUrlError(null);
-      setHeaders(
-        Object.entries(headers).map(([key, value]) => ({
-          key,
-          value: String(value),
-        })),
-      );
-      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
-      updateCustomTarget('config', {
-        ...selectedConfig,
-        request: undefined,
-        url: fullUrl,
-        method: discoveredConfig.method,
-        headers,
-        body,
-        transformResponse: discoveredConfig.transformResponse,
-        useHttps: false,
-      });
-
-      setConfigAgentOpen(false);
-    },
-    [
-      selectedConfig,
-      setBodyError,
-      setConfigAgentOpen,
-      setHeaders,
-      setRequestBody,
-      setUrlError,
-      updateCustomTarget,
-    ],
-  );
-}
 
 const HttpEndpointConfiguration = ({
   selectedTarget,
@@ -166,7 +134,7 @@ const HttpEndpointConfiguration = ({
       ? selectedTarget.config.body
       : JSON.stringify(selectedTarget.config.body, null, 2) || '',
   );
-  const [headers, setHeaders] = useState<HeaderEntry[]>(
+  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(
     Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
       key,
       value: String(value),
@@ -216,15 +184,6 @@ Content-Type: application/json
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
-  const handleConfigAgentDiscovered = useConfigAgentDiscovery({
-    selectedConfig: selectedTarget.config,
-    setBodyError,
-    setConfigAgentOpen,
-    setHeaders,
-    setRequestBody,
-    setUrlError,
-    updateCustomTarget,
-  });
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -599,6 +558,37 @@ ${exampleRequest}`;
       updateCustomTarget('body', config.body);
     }
   };
+
+  const handleConfigAgentDiscovered = useCallback(
+    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
+      const fullUrl = joinEndpointUrl(baseUrl, discoveredConfig.path);
+      const headers = discoveredConfig.headers ?? {};
+      const body = discoveredConfig.body ?? '';
+
+      setBodyError(null);
+      setUrlError(null);
+      setHeaders(
+        Object.entries(headers).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+      updateCustomTarget('config', {
+        ...selectedTarget.config,
+        request: undefined,
+        url: fullUrl,
+        method: discoveredConfig.method,
+        headers,
+        body,
+        transformResponse: discoveredConfig.transformResponse,
+        useHttps: false,
+      });
+
+      setConfigAgentOpen(false);
+    },
+    [selectedTarget.config, setBodyError, setUrlError, updateCustomTarget],
+  );
 
   return (
     <div className="min-w-0">

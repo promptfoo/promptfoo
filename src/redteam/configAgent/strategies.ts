@@ -10,8 +10,25 @@ import { randomUUID } from 'crypto';
 import type { DiscoveredConfig, DiscoveryStrategy, ProbeResult, StrategyMatch } from './types';
 
 const AZURE_API_VERSION = '2024-10-21';
-const AZURE_DEFAULT_DEPLOYMENT = 'gpt-4';
-const AZURE_CHAT_COMPLETIONS_PATH = `/openai/deployments/${AZURE_DEFAULT_DEPLOYMENT}/chat/completions?api-version=${AZURE_API_VERSION}`;
+export function getAzureChatCompletionsPath(
+  deployment: string,
+  apiVersion = AZURE_API_VERSION,
+): string {
+  return `/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
+}
+
+export function getAzureDeploymentFromPath(path: string): string | null {
+  const pathname = new URL(path, 'https://azure.example.com').pathname;
+  const match = pathname.match(/\/openai\/deployments\/([^/]+)\/chat\/completions$/i);
+  if (!match) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Helper to create a probe with a unique ID
@@ -86,21 +103,31 @@ export const anthropicStrategy: DiscoveryStrategy = {
 export const azureOpenaiStrategy: DiscoveryStrategy = {
   id: 'azure_openai',
   name: 'Azure OpenAI',
-  description: 'Azure OpenAI API format',
+  description: 'Azure OpenAI API format (requires a deployment name)',
   minConfidence: 0.8,
-  probes: [
-    probe(
-      'POST',
-      AZURE_CHAT_COMPLETIONS_PATH,
-      {
-        messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }],
-        max_tokens: 10,
-      },
-      {},
-      'Azure OpenAI chat format',
-    ),
-  ],
+  probes: [],
 };
+
+export function createAzureOpenaiStrategy(
+  deployment: string,
+  apiVersion = AZURE_API_VERSION,
+): DiscoveryStrategy {
+  return {
+    ...azureOpenaiStrategy,
+    probes: [
+      probe(
+        'POST',
+        getAzureChatCompletionsPath(deployment, apiVersion),
+        {
+          messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }],
+          max_tokens: 10,
+        },
+        {},
+        'Azure OpenAI chat format',
+      ),
+    ],
+  };
+}
 
 /**
  * Generic patterns - try common field names
@@ -220,7 +247,9 @@ function analyzeAuthErrorResults(
   }
 
   // Build partial config based on strategy
-  const baseConfig = getBaseConfigForStrategy(strategy.id);
+  const baseConfig = getBaseConfigForStrategy(strategy.id, {
+    azureDeployment: getAzureDeploymentFromPath(result.probe.path || ''),
+  });
 
   return {
     strategyId: strategy.id,
@@ -237,7 +266,10 @@ function analyzeAuthErrorResults(
   };
 }
 
-export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
+export function getBaseConfigForStrategy(
+  strategyId: string,
+  options: { azureDeployment?: string | null; azureApiVersion?: string } = {},
+): DiscoveredConfig {
   switch (strategyId) {
     case 'openai_compatible':
       return {
@@ -246,10 +278,11 @@ export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
         path: '/v1/chat/completions',
         headers: { 'Content-Type': 'application/json' },
         body: {
-          model: '{{model}}',
+          model: 'gpt-4',
           messages: [{ role: 'user', content: '{{prompt}}' }],
         },
         transformResponse: 'json.choices[0].message.content',
+        defaultModel: 'gpt-4',
       };
     case 'anthropic_compatible':
       return {
@@ -261,24 +294,27 @@ export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
           'anthropic-version': '2023-06-01',
         },
         body: {
-          model: '{{model}}',
+          model: 'claude-3-sonnet-20240229',
           max_tokens: 1024,
           messages: [{ role: 'user', content: '{{prompt}}' }],
         },
         transformResponse: 'json.content[0].text',
+        defaultModel: 'claude-3-sonnet-20240229',
       };
-    case 'azure_openai':
+    case 'azure_openai': {
+      const deployment = options.azureDeployment || 'your-deployment-name';
       return {
         apiType: 'azure_openai',
         method: 'POST',
-        path: AZURE_CHAT_COMPLETIONS_PATH,
+        path: getAzureChatCompletionsPath(deployment, options.azureApiVersion),
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: [{ role: 'user', content: '{{prompt}}' }],
         },
         transformResponse: 'json.choices[0].message.content',
-        defaultModel: AZURE_DEFAULT_DEPLOYMENT,
+        defaultModel: deployment,
       };
+    }
     default:
       return {
         apiType: 'unknown',
@@ -328,6 +364,8 @@ function analyzeOpenAIResults(
     }
   }
 
+  const defaultModel = models?.[0] || 'gpt-4';
+
   return {
     strategyId: 'openai_compatible',
     confidence: 0.95,
@@ -337,12 +375,12 @@ function analyzeOpenAIResults(
       path: '/v1/chat/completions',
       headers: { 'Content-Type': 'application/json' },
       body: {
-        model: '{{model}}',
+        model: defaultModel,
         messages: [{ role: 'user', content: '{{prompt}}' }],
       },
       transformResponse: 'json.choices[0].message.content',
       models,
-      defaultModel: models?.[0] || 'gpt-4',
+      defaultModel,
       supportsStreaming: true,
     },
     evidence,
@@ -374,6 +412,8 @@ function analyzeAnthropicResults(successfulResults: ProbeResult[]): StrategyMatc
     evidence.push(`Model: ${json.model}`);
   }
 
+  const defaultModel = typeof json.model === 'string' ? json.model : 'claude-3-sonnet-20240229';
+
   return {
     strategyId: 'anthropic_compatible',
     confidence: 0.95,
@@ -386,12 +426,12 @@ function analyzeAnthropicResults(successfulResults: ProbeResult[]): StrategyMatc
         'anthropic-version': '2023-06-01',
       },
       body: {
-        model: '{{model}}',
+        model: defaultModel,
         max_tokens: 1024,
         messages: [{ role: 'user', content: '{{prompt}}' }],
       },
       transformResponse: 'json.content[0].text',
-      defaultModel: (json.model as string) || 'claude-3-sonnet-20240229',
+      defaultModel,
       supportsStreaming: true,
     },
     evidence,
@@ -414,19 +454,24 @@ function analyzeAzureResults(successfulResults: ProbeResult[]): StrategyMatch | 
 
   evidence.push('Response has choices array (Azure OpenAI format)');
 
+  const deployment = getAzureDeploymentFromPath(result.probe.path || '');
+  if (!deployment) {
+    return null;
+  }
+
   return {
     strategyId: 'azure_openai',
     confidence: 0.9,
     discoveredConfig: {
       apiType: 'azure_openai',
       method: 'POST',
-      path: AZURE_CHAT_COMPLETIONS_PATH,
+      path: result.probe.path,
       headers: { 'Content-Type': 'application/json' },
       body: {
         messages: [{ role: 'user', content: '{{prompt}}' }],
       },
       transformResponse: 'json.choices[0].message.content',
-      defaultModel: AZURE_DEFAULT_DEPLOYMENT,
+      defaultModel: deployment,
     },
     evidence,
   };
@@ -440,7 +485,8 @@ function analyzeGenericResults(successfulResults: ProbeResult[]): StrategyMatch 
     }
 
     const json = result.json as Record<string, unknown>;
-    const responseField = findTextResponseField(json);
+    const submittedText = collectTextValues(result.probe.body);
+    const responseField = findTextResponseField(json, 'json', submittedText);
 
     if (responseField) {
       const evidence = [
@@ -481,14 +527,18 @@ function analyzeGenericResults(successfulResults: ProbeResult[]): StrategyMatch 
 function findTextResponseField(
   obj: unknown,
   path = 'json',
+  rejectedValues = new Set<string>(),
 ): { path: string; value: string } | null {
   if (typeof obj === 'string' && obj.length > 0 && obj.length < 10000) {
+    if (rejectedValues.has(normalizeTextValue(obj))) {
+      return null;
+    }
     return { path, value: obj };
   }
 
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
-      const result = findTextResponseField(obj[i], `${path}[${i}]`);
+      const result = findTextResponseField(obj[i], `${path}[${i}]`, rejectedValues);
       if (result) {
         return result;
       }
@@ -513,7 +563,7 @@ function findTextResponseField(
 
     for (const field of priorityFields) {
       if (field in objRecord) {
-        const result = findTextResponseField(objRecord[field], `${path}.${field}`);
+        const result = findTextResponseField(objRecord[field], `${path}.${field}`, rejectedValues);
         if (result) {
           return result;
         }
@@ -523,7 +573,7 @@ function findTextResponseField(
     // Then try all other fields
     for (const [key, value] of Object.entries(objRecord)) {
       if (!priorityFields.includes(key)) {
-        const result = findTextResponseField(value, `${path}.${key}`);
+        const result = findTextResponseField(value, `${path}.${key}`, rejectedValues);
         if (result) {
           return result;
         }
@@ -532,4 +582,23 @@ function findTextResponseField(
   }
 
   return null;
+}
+
+function normalizeTextValue(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function collectTextValues(value: unknown, values = new Set<string>()): Set<string> {
+  if (typeof value === 'string' && value.trim()) {
+    values.add(normalizeTextValue(value));
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      collectTextValues(item, values);
+    }
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) {
+      collectTextValues(item, values);
+    }
+  }
+  return values;
 }
