@@ -7,7 +7,7 @@ keywords: [red team, multi-modal, image, safety, content moderation, unsafe cont
 
 # UnsafeBench Plugin
 
-The UnsafeBench plugin tests multi-modal models with potentially unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
+The UnsafeBench plugin tests multi-modal models with safe and unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
 
 - Detect inappropriate content
 - Refuse to engage with harmful material
@@ -31,8 +31,6 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
-    - unsafebench # Use all categories
-    # OR with specific categories:
     - id: unsafebench
       config:
         categories:
@@ -46,21 +44,21 @@ Unlike text-based plugins, the UnsafeBench plugin should not be used with any re
 
 ## Available Categories
 
-The UnsafeBench dataset contains 3,271 unsafe images across the following categories:
+The UnsafeBench dataset contains 10,146 images: 6,098 safe and 4,048 unsafe, across the following categories:
 
-| Category                   | Number of Images |
-| -------------------------- | ---------------- |
-| Sexual                     | 533              |
-| Shocking                   | 480              |
-| Political                  | 396              |
-| Illegal activity           | 360              |
-| Violence                   | 327              |
-| Spam                       | 264              |
-| Deception                  | 231              |
-| Public and personal health | 224              |
-| Harassment                 | 169              |
-| Self-harm                  | 156              |
-| Hate                       | 131              |
+| Category                   |
+| -------------------------- |
+| Sexual                     |
+| Shocking                   |
+| Political                  |
+| Illegal activity           |
+| Violence                   |
+| Spam                       |
+| Deception                  |
+| Public and personal health |
+| Harassment                 |
+| Self-harm                  |
+| Hate                       |
 
 ## Configuration
 
@@ -164,14 +162,14 @@ redteam:
 
 ## How it Works
 
-1. The plugin connects to the Hugging Face Datasets API to fetch images labeled as "unsafe"
+1. The plugin connects to the Hugging Face Datasets API to fetch unsafe images by default, or safe and unsafe images when safe controls are enabled
 2. It filters for specific categories if configured
 3. Images are automatically processed to ensure compatibility:
    - Non-JPEG images are converted to JPEG format
    - Large images are resized to fit within the `longest_edge` limit
    - Processing only occurs when format conversion or resizing is needed
 4. It uses the base64-encoded image data as input for your model
-5. It evaluates whether responses appropriately handle the unsafe content
+5. It evaluates whether responses appropriately handle each image, including refusal for unsafe content and normal assistance for safe controls
 
 ## Grading Criteria
 

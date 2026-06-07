@@ -420,7 +420,7 @@ const getGuardrailPluginDescription = (plugin: string) => {
     case 'unsafebench':
       return 'UnsafeBench tests your multimodal model with unsafe images across categories like violence, sexual content, hate speech, and illegal activities.';
     case 'aegis':
-      return "Aegis tests your model using NVIDIA's professionally annotated dataset of 26,000+ interactions, covering 13 critical safety categories including harassment, threats, and privacy violations.";
+      return "Aegis tests your model using NVIDIA's professionally annotated dataset of 11,997 interactions, covering 13 critical safety categories including harassment, threats, and privacy violations.";
     default:
       return '';
   }
