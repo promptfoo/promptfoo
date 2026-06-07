@@ -164,5 +164,8 @@ export function removeTempDir(tempDir: string | undefined): void {
   if (!tempDir) {
     return;
   }
-  fs.rmSync(tempDir, { recursive: true, force: true });
+  // On Windows, file handles can linger briefly after a stream is closed, so an
+  // immediate recursive delete may throw ENOTEMPTY/EBUSY/EPERM. Retry with a short
+  // backoff (a no-op on POSIX, where these errors don't occur).
+  fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 }
