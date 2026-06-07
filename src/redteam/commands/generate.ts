@@ -52,6 +52,7 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   type Severity,
 } from '../constants';
+import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
@@ -604,9 +605,22 @@ async function doGenerateRedteamInternal(
   let purposeDetails = '';
   let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
   try {
+    const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
+    if (a2aAgentCardInfo) {
+      purposeDetails += a2aAgentCardInfo;
+      logger.info('Added A2A Agent Card information to red team purpose');
+    }
+  } catch (error) {
+    logger.warn(
+      `Failed to extract A2A Agent Card information: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
-      purposeDetails = mcpToolsInfo;
+      purposeDetails += mcpToolsInfo;
       logger.info('Added MCP tools information to red team purpose');
       augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
