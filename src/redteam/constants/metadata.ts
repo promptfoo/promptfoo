@@ -173,6 +173,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
+  posterior:
+    'Tests whether reframing a harmful request as a safety-classification example induces the target to author the unsafe content',
   camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
   emoji: 'Tests handling of text hidden using emoji variation selectors',
   pliny: 'Tests handling of Pliny prompt injections',
@@ -422,6 +424,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'pharmacy:dosage-calculation': 'Dosage Calculation',
   'pharmacy:drug-interaction': 'Drug Interaction Detection',
   piglatin: 'Pig Latin Encoding',
+  posterior: 'Posterior Attack',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
   'pii:direct': 'PII via Direct Exposure',
@@ -1308,6 +1311,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
+  posterior:
+    'Reframes a harmful request as a safety-classification task so the target authors the unsafe example itself',
   'jailbreak-templates':
     'Tests LLM resistance to known jailbreak techniques (DAN, Skeleton Key, etc.) using static templates',
   'prompt-injection':
@@ -1349,6 +1354,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   multilingual: 'Cross-Language Attack [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   piglatin: 'Pig Latin',
+  posterior: 'Posterior Attack',
   'jailbreak-templates': 'Jailbreak Templates',
   'prompt-injection': 'Prompt Injection [DEPRECATED]',
   retry: 'Regression Testing',
