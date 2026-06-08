@@ -4,6 +4,7 @@ import { ResultFailureReason } from '../../types/index';
 import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
+  EnvOverrides,
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateTableRow,
@@ -37,6 +38,14 @@ export interface GenerateEvalCsvOptions {
    * If not provided, comparison exports will throw an error.
    */
   findEvalById?: (id: string) => Promise<Eval | null | undefined>;
+}
+
+/** Options shared by direct table-to-CSV exports. */
+export interface EvalTableCsvOptions {
+  /** Whether to include redteam metadata columns. */
+  isRedteam?: boolean;
+  /** Evaluation-level environment overrides, which take precedence over process.env. */
+  env?: EnvOverrides;
 }
 
 /**
@@ -444,11 +453,16 @@ export function tableRowToCsvValues(
  */
 function escapeCsvRowsForFormulaInjection(
   rows: (string | number | boolean)[][],
+  env?: EnvOverrides,
 ): (string | number | boolean)[][] {
-  // Keep this process-level opt-out local to the node-layer export path so CSV
-  // serialization does not add another dependency on the legacy runtime layer.
+  // Resolve the persisted evaluation config before process.env, matching the
+  // environment precedence used by the rest of promptfoo without importing the
+  // legacy runtime environment module into this node-layer export path.
+  const configuredValue =
+    env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING ??
+    process.env.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING;
   const disableEscaping = ['1', 'true', 'yes', 'yup', 'yeppers'].includes(
-    process.env.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?.toLowerCase() ?? '',
+    configuredValue?.toLowerCase() ?? '',
   );
   if (disableEscaping) {
     return rows;
@@ -516,9 +530,9 @@ export function escapeCsvFormula(value: string): string {
  */
 export function evalTableToCsv(
   table: { head: { prompts: Prompt[]; vars: string[] }; body: EvaluateTableRow[] },
-  options: { isRedteam?: boolean } = { isRedteam: false },
+  options: EvalTableCsvOptions = {},
 ): string {
-  const { isRedteam } = options;
+  const { env, isRedteam = false } = options;
   const hasDescriptions = table.body.some((row) => row.test.description);
 
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
@@ -535,7 +549,7 @@ export function evalTableToCsv(
     ),
   ];
 
-  return csvStringify(escapeCsvRowsForFormulaInjection(csvRows));
+  return csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env));
 }
 
 /**
@@ -720,6 +734,7 @@ export async function generateEvalCsv(
   }
 
   return evalTableToCsv(finalTable, {
+    env: eval_.config.env,
     isRedteam: Boolean(eval_.config.redteam),
   });
 }
@@ -748,6 +763,7 @@ export interface StreamCsvOptions {
  */
 export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
   const { isRedteam = false, write } = options;
+  const env = eval_.config?.env;
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
@@ -792,7 +808,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     isRedteam,
     namedScoreNamesByPrompt,
   });
-  await write(csvStringify(escapeCsvRowsForFormulaInjection([headers])));
+  await write(csvStringify(escapeCsvRowsForFormulaInjection([headers], env)));
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
@@ -805,7 +821,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     );
 
     if (csvRows.length > 0) {
-      await write(csvStringify(escapeCsvRowsForFormulaInjection(csvRows)));
+      await write(csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env)));
     }
   }
 }

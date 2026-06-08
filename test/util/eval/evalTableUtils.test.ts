@@ -5,6 +5,7 @@ import {
   escapeCsvFormula,
   evalTableToCsv,
   evalTableToJson,
+  generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
   STRIPPED_TABLE_CELL_PROMPT,
@@ -1958,6 +1959,68 @@ describe('evalTableToCsv formula injection (CWE-1236)', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('uses the evaluation config env before process.env', () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING', 'true');
+    try {
+      const [, dataRow] = parseCsv(
+        evalTableToCsv(buildFormulaTable(), {
+          env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'false' },
+        }),
+      ) as string[][];
+
+      expect(dataRow[1]).toBe("'=cmd|calc");
+      expect(dataRow[2]).toBe('\'=HYPERLINK("http://evil.example","click")');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('uses config.env for full-table evaluation exports', async () => {
+    const csv = await generateEvalCsv({
+      config: { env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'true' } },
+      getTablePage: vi.fn().mockResolvedValue(buildFormulaTable()),
+    } as unknown as Eval);
+    const [, dataRow] = parseCsv(csv) as string[][];
+
+    expect(dataRow[1]).toBe('=cmd|calc');
+    expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
+  });
+
+  it('uses config.env for streaming evaluation exports', async () => {
+    const mockEval = {
+      config: { env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'true' } },
+      vars: ['input'],
+      prompts: [createCompletedPrompt('{{input}}', { provider: 'echo', label: 'Prompt 1' })],
+      fetchResultsBatched: async function* () {
+        yield [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { input: '=cmd|calc' }, description: '=danger' },
+            response: { output: '=HYPERLINK("http://evil.example","click")' },
+            success: false,
+            score: 0,
+            namedScores: {},
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: { pass: false, reason: '@SUM(A1)', comment: 'plain comment' },
+            metadata: {},
+          },
+        ];
+      },
+    } as unknown as Eval;
+    const chunks: string[] = [];
+
+    await streamEvalCsv(mockEval, {
+      write: (data) => {
+        chunks.push(data);
+      },
+    });
+    const [, dataRow] = parseCsv(chunks.join('')) as string[][];
+
+    expect(dataRow[1]).toBe('=cmd|calc');
+    expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
   });
 
   it('escapes formula triggers in header cells (var name and bare prompt label)', () => {
