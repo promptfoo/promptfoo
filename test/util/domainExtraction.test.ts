@@ -116,6 +116,16 @@ describe('domainExtraction', () => {
       expect(repos.find((r) => r.full_name === 'foo/bar')).toBeUndefined();
     });
 
+    it('ignores bare github.com/owner/repo embedded inside another URL', () => {
+      // Regression: a `github.com/foo/bar` substring inside an unrelated URL's
+      // path used to be mis-extracted as a separate repo. The outer URL's host
+      // should still surface as a domain, but no repo entry should appear.
+      const repos = extractGithubRepos(
+        'See https://blog.example.com/post/about-github.com/foo/bar',
+      );
+      expect(repos.find((r) => r.full_name === 'foo/bar')).toBeUndefined();
+    });
+
     it('deduplicates repos', () => {
       const text = 'github.com/owner/repo mentioned twice github.com/owner/repo';
       const repos = extractGithubRepos(text);
@@ -200,6 +210,16 @@ describe('domainExtraction', () => {
       const hosts = urls.map((u) => u.host);
       expect(hosts.every((h) => h === 'example.com')).toBe(true);
     });
+
+    it('does not re-extract www inside an http url as a phantom https variant', () => {
+      // Regression: WWW_PATTERN used to match the `www...` substring inside an
+      // already-matched http URL, then normalizeUrl turned it into a separate
+      // https:// reference the model never cited.
+      const urls = extractUrls('Visit http://www.example.com/page for details.');
+      expect(urls).toHaveLength(1);
+      expect(urls[0].normalized).toBe('http://www.example.com/page');
+      expect(urls[0].scheme).toBe('http');
+    });
   });
 
   describe('extractDomains edge cases', () => {
@@ -263,6 +283,17 @@ describe('domainExtraction', () => {
       expect(d?.subdomain).toBe('api.staging');
       expect(d?.domain).toBe('example');
       expect(d?.suffix).toBe('com');
+    });
+
+    it('ignores bare domains embedded inside URL query strings', () => {
+      // Regression: a domain-like token inside a URL's query string used to
+      // surface as a separate bare domain, causing the grader to verify a URL
+      // the model never cited.
+      const text = 'Search via https://example.com/search?q=nonexistent-lib.dev';
+      const result = extractAllDomains(text);
+      expect(result.domains.find((d) => d.host === 'nonexistent-lib.dev')).toBeUndefined();
+      // The outer URL's host should still appear as a domain.
+      expect(result.domains.find((d) => d.host === 'example.com')).toBeDefined();
     });
   });
 

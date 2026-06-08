@@ -33,17 +33,17 @@ describe('domainVerification', () => {
     });
 
     it('times out after specified milliseconds', async () => {
+      // Mock leaves the promise pending; the verifier's own AbortController
+      // (50 ms below) fires, the abort listener rejects with AbortError, and
+      // no real timer leaks past the test.
       mockedFetch.mockImplementation(
         (_url, _init, signal) =>
-          new Promise((resolve, reject) => {
-            if (signal) {
-              signal.addEventListener('abort', () => {
-                const err = new Error('aborted');
-                err.name = 'AbortError';
-                reject(err);
-              });
-            }
-            setTimeout(() => resolve(new Response(null, { status: 200 })), 10000);
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
           }),
       );
 
@@ -112,17 +112,16 @@ describe('domainVerification', () => {
     });
 
     it('times out after specified milliseconds', async () => {
+      // Same pattern as the GitHub timeout test: leave the promise pending and
+      // let the verifier's AbortController drive the rejection.
       mockedFetch.mockImplementation(
         (_url, _init, signal) =>
-          new Promise((resolve, reject) => {
-            if (signal) {
-              signal.addEventListener('abort', () => {
-                const err = new Error('aborted');
-                err.name = 'AbortError';
-                reject(err);
-              });
-            }
-            setTimeout(() => resolve(new Response(null, { status: 200 })), 10000);
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
           }),
       );
 

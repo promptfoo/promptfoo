@@ -1,5 +1,11 @@
 const URL_PATTERN = /https?:\/\/[^\s<>()\[\]{}"']+/gi;
-const WWW_PATTERN = /(?<![@\w-])www\.[^\s<>()\[\]{}"']+/gi;
+// Lookbehind excludes:
+//   @         email locals (foo@www.x)
+//   \w        already inside a longer host token (mywww.x)
+//   -         host like a-www.x
+//   /  :      already inside an http(s):// URL (don't double-extract)
+//   .         already a subdomain of another host (sub.www.x)
+const WWW_PATTERN = /(?<![@\w\-/:.])www\.[^\s<>()\[\]{}"']+/gi;
 const DOMAIN_PATTERN =
   /(?<![@\w-/])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?![\w-])/gi;
 // Lookbehind `(?<![\w.-])` ensures the match is anchored on a real `github.com`
@@ -78,6 +84,40 @@ export interface ExtractedEntities {
   domains: ExtractedDomain[];
   github_repos: ExtractedGithubRepo[];
   no_links: boolean;
+}
+
+type Span = [number, number];
+
+/**
+ * Collect [start, end) spans of every full-URL match (URL_PATTERN + WWW_PATTERN)
+ * in `text` so downstream extractors can skip matches that fall inside an
+ * already-recognized URL (e.g. a domain in a query string).
+ */
+function collectUrlSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  for (const re of [URL_PATTERN, WWW_PATTERN]) {
+    for (const match of text.matchAll(re)) {
+      if (match.index !== undefined) {
+        spans.push([match.index, match.index + match[0].length]);
+      }
+    }
+  }
+  return spans;
+}
+
+/**
+ * Strict "inside" check — `idx` must lie strictly between a span's start and
+ * end. A match that begins exactly at `start` is treated as the span itself
+ * (e.g. `www.github.com/...` is both a `WWW_PATTERN` URL and a github repo)
+ * and is not suppressed.
+ */
+function isInsideAnySpan(idx: number, spans: Span[]): boolean {
+  for (const [start, end] of spans) {
+    if (idx > start && idx < end) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function cleanUrl(raw: string): string {
@@ -276,7 +316,14 @@ export function extractDomains(
     });
   }
 
+  // Avoid re-extracting bare domains that already live inside a URL span,
+  // e.g. `nonexistent-lib.dev` inside `https://example.com/search?q=nonexistent-lib.dev`.
+  const urlSpans = collectUrlSpans(text);
+
   for (const match of text.matchAll(DOMAIN_PATTERN)) {
+    if (match.index !== undefined && isInsideAnySpan(match.index, urlSpans)) {
+      continue;
+    }
     const raw = match[0];
     const normalized = normalizeDomain(raw);
     if (!normalized || seen.has(normalized)) {
@@ -308,7 +355,21 @@ export function extractGithubRepos(
   const results: ExtractedGithubRepo[] = [];
   const seen = new Set<string>();
 
+  // The GitHub pattern accepts an optional leading `https?://`, so a bare
+  // `github.com/owner/repo` substring inside a different URL's path or query
+  // would otherwise be mis-extracted as a repo. Skip any match that starts
+  // inside an already-recognized URL span.
+  const urlSpans = collectUrlSpans(text);
+
   for (const match of text.matchAll(GITHUB_PATTERN)) {
+    if (match.index !== undefined) {
+      const matchedText = match[0];
+      const hasOwnScheme = /^https?:\/\//i.test(matchedText);
+      if (!hasOwnScheme && isInsideAnySpan(match.index, urlSpans)) {
+        continue;
+      }
+    }
+
     const owner = match[1];
     let repo = match[2];
 
