@@ -169,38 +169,39 @@ export type UpdateEvalResponse = z.infer<typeof UpdateEvalResponseSchema>;
 export const AddResultsParamsSchema = EvalIdParamSchema;
 
 /**
- * Results uploaded by sharing are serialized EvalResult database rows. These
- * fields are required for the row to remain readable after direct insertion;
- * passthrough preserves the richer evaluator payload.
+ * Older clients send only the core score coordinates, while sharing uploads
+ * include the richer serialized EvalResult row. Keep the richer fields bounded
+ * when present without rejecting the legacy public request shape.
  */
-export const AddResultsRequestSchema = z
-  .array(
-    z
-      .object({
-        id: z.string().min(1),
-        promptIdx: z.number().int().nonnegative(),
-        testIdx: z.number().int().nonnegative(),
-        testCase: z.object({}).passthrough(),
-        prompt: z
-          .object({
-            raw: z.string(),
-            label: z.string(),
-          })
-          .passthrough(),
-        provider: z.union([
+export const AddResultsRequestSchema = z.array(
+  z
+    .object({
+      promptIdx: z.number().int().nonnegative(),
+      testIdx: z.number().int().nonnegative(),
+      success: z.boolean(),
+      score: z.number(),
+      id: z.string().min(1).optional(),
+      testCase: z.object({}).passthrough().optional(),
+      prompt: z
+        .object({
+          raw: z.string(),
+          label: z.string(),
+        })
+        .passthrough()
+        .optional(),
+      provider: z
+        .union([
           z.string(),
           z
             .object({
               id: z.string().min(1),
             })
             .passthrough(),
-        ]),
-        success: z.boolean(),
-        score: z.number(),
-      })
-      .passthrough(),
-  )
-  .min(1, 'At least one result is required');
+        ])
+        .optional(),
+    })
+    .passthrough(),
+);
 
 export type AddResultsParams = z.infer<typeof AddResultsParamsSchema>;
 export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;

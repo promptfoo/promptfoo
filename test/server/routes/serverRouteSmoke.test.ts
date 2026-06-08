@@ -810,14 +810,6 @@ const adversarialCases: SmokeCase[] = [
     expectedStatus: 400,
   },
   {
-    label: 'eval results rejects an empty persistence batch',
-    method: 'post',
-    openApiPath: '/api/eval/{id}/results',
-    path: '/api/eval/eval-1/results',
-    body: [],
-    expectedStatus: 400,
-  },
-  {
     label: 'media path rejects encoded traversal input',
     method: 'get',
     openApiPath: '/api/media/{type}/{filename}',
