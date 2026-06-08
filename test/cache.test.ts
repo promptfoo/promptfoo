@@ -472,6 +472,44 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it('should isolate in-flight requests with different transport policies', async () => {
+      let resolveShortRequest: (response: Response) => void = () => {};
+      let resolveLongRequest: (response: Response) => void = () => {};
+      let resolveRetryRequest: (response: Response) => void = () => {};
+      mockFetchWithRetries
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveShortRequest = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveLongRequest = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveRetryRequest = resolve;
+            }),
+        );
+
+      const shortRequest = fetchWithCache(url, {}, 100);
+      const longRequest = fetchWithCache(url, {}, 1000);
+      const retryRequest = fetchWithCache(url, {}, 100, 'json', false, 2);
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(3));
+      resolveShortRequest(mockFetchWithRetriesResponse(true, { data: 'short' }));
+      resolveLongRequest(mockFetchWithRetriesResponse(true, { data: 'long' }));
+      resolveRetryRequest(mockFetchWithRetriesResponse(true, { data: 'retry' }));
+
+      await expect(shortRequest).resolves.toMatchObject({ data: { data: 'short' } });
+      await expect(longRequest).resolves.toMatchObject({ data: { data: 'long' } });
+      await expect(retryRequest).resolves.toMatchObject({ data: { data: 'retry' } });
+    });
+
     it('should isolate in-flight fetch deduping by namespace', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 0' }))
@@ -767,6 +805,95 @@ describe('fetchWithCache', () => {
         expect(signaledResult.reason.message).toBe('Aborted');
       }
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should safely deduplicate abortable requests while another caller remains active', async () => {
+      const firstController = new AbortController();
+      const secondController = new AbortController();
+      let sharedSignal: AbortSignal | undefined;
+      let resolveUpstreamRequest: (response: Response) => void = () => {};
+
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        sharedSignal = requestOptions?.signal ?? undefined;
+        return new Promise<Response>((resolve, reject) => {
+          resolveUpstreamRequest = resolve;
+          sharedSignal?.addEventListener(
+            'abort',
+            () => reject(sharedSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const sdkHeaders = {
+        'user-agent': 'OpenAI/JS 6.37.0',
+        'x-stainless-lang': 'js',
+      };
+      const firstRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: firstController.signal },
+        1000,
+      );
+      const secondRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: secondController.signal },
+        1000,
+      );
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(1));
+      expect(sharedSignal).toBeInstanceOf(AbortSignal);
+      expect(sharedSignal).not.toBe(firstController.signal);
+      expect(sharedSignal).not.toBe(secondController.signal);
+
+      firstController.abort();
+      await expect(firstRequest).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(false);
+
+      resolveUpstreamRequest(mockFetchWithRetriesResponse(true, { data: 'shared' }));
+      await expect(secondRequest).resolves.toMatchObject({ data: { data: 'shared' } });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should abort a deduplicated upstream request after every caller aborts', async () => {
+      const firstController = new AbortController();
+      const secondController = new AbortController();
+      let sharedSignal: AbortSignal | undefined;
+
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        sharedSignal = requestOptions?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          sharedSignal?.addEventListener(
+            'abort',
+            () => reject(sharedSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const sdkHeaders = {
+        'user-agent': 'OpenAI/JS 6.37.0',
+        'x-stainless-lang': 'js',
+      };
+      const firstRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: firstController.signal },
+        1000,
+      );
+      const secondRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: secondController.signal },
+        1000,
+      );
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(1));
+      firstController.abort();
+      await expect(firstRequest).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(false);
+
+      secondController.abort();
+      await expect(secondRequest).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
     it('should handle request options in cache key', async () => {

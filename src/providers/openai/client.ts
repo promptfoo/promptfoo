@@ -129,10 +129,7 @@ export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOpti
       requestMetadata.status = response.status;
       requestMetadata.statusText = response.statusText;
 
-      const headers = new Headers(response.headers);
-      if (!headers.has('content-type')) {
-        headers.set('content-type', 'application/json');
-      }
+      const headers = getReconstructedJsonHeaders(response.headers);
 
       return new Response(JSON.stringify(response.data), {
         headers,
@@ -286,6 +283,24 @@ function getAmbientOpenAiCustomHeaderNames(headers?: Record<string, string>): Se
   }
 
   return ambientHeaderNames;
+}
+
+function getReconstructedJsonHeaders(headers?: Record<string, string>) {
+  const reconstructedHeaders = new Headers(headers);
+  reconstructedHeaders.set('content-type', 'application/json');
+
+  for (const headerName of [
+    'content-digest',
+    'content-encoding',
+    'content-length',
+    'content-md5',
+    'digest',
+    'transfer-encoding',
+  ]) {
+    reconstructedHeaders.delete(headerName);
+  }
+
+  return reconstructedHeaders;
 }
 
 // Exported for tests. The OpenAI SDK probes upload capability with a `data:`

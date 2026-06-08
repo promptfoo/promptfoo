@@ -285,6 +285,16 @@ type PreparedFetchResponse = {
 };
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+type SharedAbortableInflightFetchResponse = {
+  activeCallers: number;
+  controller: AbortController;
+  promise: Promise<SerializedFetchResponse>;
+  settled: boolean;
+};
+const sharedAbortableInflightFetchResponses = new Map<
+  string,
+  SharedAbortableInflightFetchResponse
+>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // Headers that describe the transport/runtime rather than the selected
@@ -323,6 +333,14 @@ function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
     SDK_USER_AGENT_PATTERN.test(headers.get(name) ?? '') &&
     Array.from(headers.keys()).some((headerName) => headerName.startsWith('x-stainless-'))
   );
+}
+
+function hasSdkTransportHeaders(url: RequestInfo, options: RequestInit) {
+  const headers = new Headers(getFetchWithProxyHeaders(url, options));
+  // Stainless SDKs create a fresh AbortController for every request, even when
+  // the caller did not provide a signal. Those transport-only signals should
+  // share an upstream request while retaining per-caller cancellation below.
+  return Array.from(headers.keys()).some((headerName) => headerName.startsWith('x-stainless-'));
 }
 
 function fingerprintFetchCacheSecret(value: string) {
@@ -569,9 +587,85 @@ function getAbortSignalId(signal: AbortSignal) {
   return signalId;
 }
 
-function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
+function getInflightFetchCacheKey(
+  cacheKey: string,
+  url: RequestInfo,
+  options: RequestInit,
+  timeout: number,
+  maxRetries: number | undefined,
+  isolateBySignal = true,
+) {
+  const transportKey = `${cacheKey}:timeout:${timeout}:maxRetries:${maxRetries ?? 'default'}`;
+  if (!isolateBySignal) {
+    return transportKey;
+  }
+
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+  return signal ? `${transportKey}:signal:${getAbortSignalId(signal)}` : transportKey;
+}
+
+function getAbortReason(signal: AbortSignal) {
+  return signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+}
+
+function abortSharedInflightIfUnused(
+  inflightCacheKey: string,
+  inflightResponse: SharedAbortableInflightFetchResponse,
+) {
+  if (inflightResponse.activeCallers !== 0 || inflightResponse.settled) {
+    return;
+  }
+
+  if (sharedAbortableInflightFetchResponses.get(inflightCacheKey) === inflightResponse) {
+    sharedAbortableInflightFetchResponses.delete(inflightCacheKey);
+  }
+  inflightResponse.controller.abort();
+}
+
+function waitForSharedAbortableInflightResponse(
+  inflightCacheKey: string,
+  inflightResponse: SharedAbortableInflightFetchResponse,
+  signal?: AbortSignal,
+): Promise<SerializedFetchResponse> {
+  if (signal?.aborted) {
+    abortSharedInflightIfUnused(inflightCacheKey, inflightResponse);
+    return Promise.reject(getAbortReason(signal));
+  }
+
+  inflightResponse.activeCallers += 1;
+  return new Promise<SerializedFetchResponse>((resolve, reject) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) {
+        return false;
+      }
+      finished = true;
+      signal?.removeEventListener('abort', handleAbort);
+      inflightResponse.activeCallers -= 1;
+      return true;
+    };
+    const handleAbort = () => {
+      if (!signal || !finish()) {
+        return;
+      }
+      abortSharedInflightIfUnused(inflightCacheKey, inflightResponse);
+      reject(getAbortReason(signal));
+    };
+    signal?.addEventListener('abort', handleAbort, { once: true });
+
+    inflightResponse.promise.then(
+      (response) => {
+        if (finish()) {
+          resolve(response);
+        }
+      },
+      (error) => {
+        if (finish()) {
+          reject(error);
+        }
+      },
+    );
+  });
 }
 
 function serializeFetchResponse(
@@ -763,6 +857,8 @@ export async function fetchWithCache<T = unknown>(
   // headers arrived; only the response body stream failed).
   const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
+  const callerSignal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const dedupeAbortableRequests = Boolean(callerSignal && hasSdkTransportHeaders(url, options));
 
   const cacheEnabled = getEffectiveCacheEnabled();
   const cacheKey =
@@ -800,28 +896,73 @@ export async function fetchWithCache<T = unknown>(
   const cache = getCacheInstance();
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+  if (dedupeAbortableRequests && callerSignal?.aborted) {
+    throw getAbortReason(callerSignal);
+  }
   if (cachedResponse != null) {
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(
+    cacheKey,
+    url,
+    options,
+    timeout,
+    maxRetries,
+    !dedupeAbortableRequests,
+  );
+  const fetchResponse = async (requestOptions: RequestInit) => {
+    const preparedResponse = await prepareFetchResponse(
+      url,
+      requestOptions,
+      timeout,
+      maxRetries,
+      isIdempotent,
+      format,
+    );
+    if (preparedResponse.cacheable) {
+      await cache.set(cacheKey, preparedResponse.response);
+    }
+    return preparedResponse.response;
+  };
+
+  if (dedupeAbortableRequests) {
+    let inflightResponse = sharedAbortableInflightFetchResponses.get(inflightCacheKey);
+    if (!inflightResponse) {
+      const controller = new AbortController();
+      const sharedRequestOptions = {
+        ...options,
+        signal: controller.signal,
+      };
+      const sharedRequest = fetchResponse(sharedRequestOptions);
+      const newInflightResponse: SharedAbortableInflightFetchResponse = {
+        activeCallers: 0,
+        controller,
+        promise: sharedRequest,
+        settled: false,
+      };
+      newInflightResponse.promise = sharedRequest.finally(() => {
+        newInflightResponse.settled = true;
+        if (sharedAbortableInflightFetchResponses.get(inflightCacheKey) === newInflightResponse) {
+          sharedAbortableInflightFetchResponses.delete(inflightCacheKey);
+        }
+      });
+      sharedAbortableInflightFetchResponses.set(inflightCacheKey, newInflightResponse);
+      inflightResponse = newInflightResponse;
+    }
+
+    const response = await waitForSharedAbortableInflightResponse(
+      inflightCacheKey,
+      inflightResponse,
+      callerSignal ?? undefined,
+    );
+    return deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  }
+
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   if (!inflightResponse) {
-    inflightResponse = (async () => {
-      const preparedResponse = await prepareFetchResponse(
-        url,
-        options,
-        timeout,
-        maxRetries,
-        isIdempotent,
-        format,
-      );
-      if (preparedResponse.cacheable) {
-        await cache.set(cacheKey, preparedResponse.response);
-      }
-      return preparedResponse.response;
-    })().finally(() => {
+    inflightResponse = fetchResponse(options).finally(() => {
       inflightFetchResponses.delete(inflightCacheKey);
     });
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
