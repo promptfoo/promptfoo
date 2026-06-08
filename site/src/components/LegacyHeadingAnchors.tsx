@@ -1,3 +1,5 @@
+import React from 'react';
+
 import legacyNodeApiAnchors from '@site/src/data/nodeApiLegacyAnchors.json';
 
 type LegacyNodeApiPage = keyof typeof legacyNodeApiAnchors;
