@@ -441,14 +441,21 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         completion: data.usage.output_tokens ?? 0,
       };
 
-      // Track Anthropic prompt caching details (stored in completionDetails since there is no dedicated inputDetails field)
-      if (
+      const thinkingTokens = data.usage.output_tokens_details?.thinking_tokens;
+      const hasCacheDetails =
         data.usage.cache_read_input_tokens != null ||
-        data.usage.cache_creation_input_tokens != null
-      ) {
+        data.usage.cache_creation_input_tokens != null;
+
+      if (thinkingTokens != null || hasCacheDetails) {
         usage.completionDetails = {
-          cacheReadInputTokens: cacheRead,
-          cacheCreationInputTokens: cacheCreation,
+          ...(thinkingTokens == null ? {} : { reasoning: thinkingTokens }),
+          // Anthropic has no dedicated input-details field in Promptfoo's usage contract.
+          ...(hasCacheDetails
+            ? {
+                cacheReadInputTokens: cacheRead,
+                cacheCreationInputTokens: cacheCreation,
+              }
+            : {}),
         };
       }
 

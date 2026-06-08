@@ -1528,6 +1528,23 @@ describe('Anthropic utilities', () => {
       expect(result).toEqual({ total: 150, prompt: 100, completion: 50 });
     });
 
+    it('should preserve Anthropic thinking token usage', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 20 },
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({
+        total: 150,
+        prompt: 100,
+        completion: 50,
+        completionDetails: { reasoning: 20 },
+      });
+    });
+
     it('should return cached token usage', () => {
       const data = { usage: { input_tokens: 100, output_tokens: 50 } };
       const result = getTokenUsage(data, true);
