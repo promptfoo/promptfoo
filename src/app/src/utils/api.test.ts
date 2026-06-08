@@ -130,6 +130,7 @@ describe('callApi', () => {
 describe('typed route API helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetch.mockReset();
     vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
   });
 
@@ -139,7 +140,7 @@ describe('typed route API helpers', () => {
     const result = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response);
 
     expect(result).toEqual({ email: 'test@example.com' });
-    expect(mockFetch).toHaveBeenCalledWith('/api/user/email', {});
+    expect(mockFetch).toHaveBeenCalledWith('/api/user/email', { method: 'GET' });
   });
 
   it('uses standalone route paths without adding the API prefix', async () => {
@@ -148,7 +149,25 @@ describe('typed route API helpers', () => {
     const result = await callApiJson(ApiRoutes.Health, ServerResponseSchemas.Health.Response);
 
     expect(result).toEqual({ status: 'ok', version: '1.0.0' });
-    expect(mockFetch).toHaveBeenCalledWith('/health', {});
+    expect(mockFetch).toHaveBeenCalledWith('/health', { method: 'GET' });
+  });
+
+  it('derives non-GET methods from the route contract', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, message: 'Logged out' })),
+    );
+
+    const result = await callApiJson(ApiRoutes.User.Logout, UserSchemas.Logout.Response);
+
+    expect(result).toEqual({ success: true, message: 'Logged out' });
+    expect(mockFetch).toHaveBeenCalledWith('/api/user/logout', { method: 'POST' });
+  });
+
+  it('rejects request methods that conflict with the route contract', async () => {
+    await expect(
+      callApiJson(ApiRoutes.User.Logout, UserSchemas.Logout.Response, { method: 'GET' }),
+    ).rejects.toThrow('API route logoutUser requires POST, received GET');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('returns parsed error envelopes without requiring raw response casts', async () => {

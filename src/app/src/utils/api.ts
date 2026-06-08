@@ -70,6 +70,8 @@ export type ApiRequestOptions = RequestInit & {
   query?: URLSearchParams;
 };
 
+type CallableApiRoute = Pick<ApiRouteContract, 'expressPath' | 'method' | 'operationId'>;
+
 export class ApiResponseError extends Error {
   constructor(
     public readonly status: number,
@@ -96,12 +98,22 @@ function createRoutePath(
 }
 
 async function callContractApi(
-  route: Pick<ApiRouteContract, 'expressPath'>,
+  route: CallableApiRoute,
   params: Record<string, string | number> | undefined,
   query: URLSearchParams | undefined,
   requestInit: RequestInit,
 ): Promise<Response> {
-  return fetch(`${getApiBaseUrl()}${createRoutePath(route, params, query)}`, requestInit);
+  const expectedMethod = route.method.toUpperCase();
+  const requestedMethod = requestInit.method?.toUpperCase();
+  if (requestedMethod && requestedMethod !== expectedMethod) {
+    throw new Error(
+      `API route ${route.operationId} requires ${expectedMethod}, received ${requestedMethod}`,
+    );
+  }
+  return fetch(`${getApiBaseUrl()}${createRoutePath(route, params, query)}`, {
+    ...requestInit,
+    method: expectedMethod,
+  });
 }
 
 async function readErrorResponse(response: Response): Promise<ApiResponseError> {
@@ -118,7 +130,7 @@ async function readErrorResponse(response: Response): Promise<ApiResponseError> 
 }
 
 export async function callApiResult<T>(
-  route: Pick<ApiRouteContract, 'expressPath'>,
+  route: CallableApiRoute,
   schema: ZodType<T>,
   options: ApiRequestOptions = {},
 ): Promise<ApiResult<T>> {
@@ -131,7 +143,7 @@ export async function callApiResult<T>(
 }
 
 export async function callApiJson<T>(
-  route: Pick<ApiRouteContract, 'expressPath'>,
+  route: CallableApiRoute,
   schema: ZodType<T>,
   options: ApiRequestOptions = {},
 ): Promise<T> {
@@ -143,7 +155,7 @@ export async function callApiJson<T>(
 }
 
 export async function callApiEmpty(
-  route: Pick<ApiRouteContract, 'expressPath'>,
+  route: CallableApiRoute,
   options: ApiRequestOptions = {},
 ): Promise<void> {
   const { params, query, ...requestInit } = options;
