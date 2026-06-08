@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: TransformFunction\\<TIn, TOut\\>"
 description: 'A function that transforms output or vars at various stages of the evaluation pipeline.'
+sidebar_position: 12
 ---
 
 ## Import

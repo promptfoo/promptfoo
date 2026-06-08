@@ -5,7 +5,11 @@ title: Node API guide
 description: Guide to promptfoo's supported Node.js API surface, with links to generated reference pages for evals, providers, assertions, and caching.
 ---
 
+import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
+
 # Node.js API guide
+
+<LegacyHeadingAnchors page="reference" />
 
 This page is the hand-written companion to the generated
 [Node.js API reference](/docs/api/node/). Use this guide for orientation and the

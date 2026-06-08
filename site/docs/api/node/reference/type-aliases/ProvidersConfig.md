@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: ProvidersConfig'
 description: 'Provider input accepted by evaluate() and loadApiProviders().'
+sidebar_position: 10
 ---
 
 ## Import

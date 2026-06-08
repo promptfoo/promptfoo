@@ -5,7 +5,11 @@ title: Node API examples
 description: Practical examples for using promptfoo programmatically from Node.js, including evals, providers, assertions, progress callbacks, and cache isolation.
 ---
 
+import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
+
 # Node.js API examples
+
+<LegacyHeadingAnchors page="examples" />
 
 These examples complement the [Node.js API guide](/docs/usage/node-api-reference)
 and the generated [Node.js API reference](/docs/api/node/).

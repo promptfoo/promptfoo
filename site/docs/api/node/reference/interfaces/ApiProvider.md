@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ApiProvider'
 description: 'Provider object shape accepted by the Node.js API.'
+sidebar_position: 1
 ---
 
 ## Import

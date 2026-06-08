@@ -5,7 +5,11 @@ title: Node API quick reference
 description: Quick lookup for promptfoo's supported Node.js API surface, including evals, providers, assertions, and caching.
 ---
 
+import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
+
 # Node.js API quick reference
+
+<LegacyHeadingAnchors page="quickReference" />
 
 ## Import
 

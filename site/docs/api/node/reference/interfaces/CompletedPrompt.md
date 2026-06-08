@@ -1,6 +1,7 @@
 ---
 title: 'Interface: CompletedPrompt'
 description: 'Prompt metadata attached to completed eval results.'
+sidebar_position: 15
 ---
 
 ## Import

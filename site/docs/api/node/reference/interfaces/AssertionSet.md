@@ -1,6 +1,7 @@
 ---
 title: 'Interface: AssertionSet'
 description: 'Grouped assertions evaluated under one shared threshold.'
+sidebar_position: 4
 ---
 
 ## Import

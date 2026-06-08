@@ -1,6 +1,7 @@
 ---
 title: 'Interface: GradingResult'
 description: 'Result returned by assertions and matcher helpers.'
+sidebar_position: 23
 ---
 
 ## Import

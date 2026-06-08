@@ -1,6 +1,7 @@
 ---
 title: 'Interface: EvaluateOptions'
 description: 'Runtime-only options accepted by evaluate().'
+sidebar_position: 18
 ---
 
 ## Import

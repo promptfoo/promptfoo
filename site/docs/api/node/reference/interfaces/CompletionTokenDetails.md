@@ -1,6 +1,7 @@
 ---
 title: 'Interface: CompletionTokenDetails'
 description: 'Detailed completion-token breakdown reported by reasoning-capable models.'
+sidebar_position: 16
 ---
 
 ## Import

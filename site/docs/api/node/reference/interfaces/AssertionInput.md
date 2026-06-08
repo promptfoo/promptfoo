@@ -1,6 +1,7 @@
 ---
 title: 'Interface: AssertionInput'
 description: 'Assertion input accepted by runAssertion().'
+sidebar_position: 3
 ---
 
 ## Import

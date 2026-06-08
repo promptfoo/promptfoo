@@ -1,6 +1,7 @@
 ---
 title: 'Interface: AssertionValueFunctionContext'
 description: 'Runtime context passed to function-valued assertions.'
+sidebar_position: 7
 ---
 
 ## Import

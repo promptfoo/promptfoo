@@ -1,6 +1,7 @@
 ---
 title: 'Interface: AssertionTokenUsage'
 description: 'Token accounting attributed to model-graded assertions.'
+sidebar_position: 6
 ---
 
 ## Import

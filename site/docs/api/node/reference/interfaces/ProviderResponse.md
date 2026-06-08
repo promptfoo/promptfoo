@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ProviderResponse'
 description: 'Response shape returned by custom providers.'
+sidebar_position: 38
 ---
 
 ## Import

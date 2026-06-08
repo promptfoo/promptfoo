@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ProviderEmbeddingResponse'
 description: 'Response returned by embedding-capable providers.'
+sidebar_position: 36
 ---
 
 ## Import

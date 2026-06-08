@@ -1,6 +1,7 @@
 ---
 title: 'Interface: BlobRef'
 description: 'External blob reference used by media-capable provider responses.'
+sidebar_position: 10
 ---
 
 ## Import

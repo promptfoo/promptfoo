@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ImageOutput'
 description: 'Image attachment returned by providers that produce images.'
+sidebar_position: 25
 ---
 
 ## Import

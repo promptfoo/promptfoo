@@ -1,6 +1,7 @@
 ---
 title: 'Interface: LoadApiProvidersOptions'
 description: 'Shared options for loading one or more providers.'
+sidebar_position: 27
 ---
 
 ## Import

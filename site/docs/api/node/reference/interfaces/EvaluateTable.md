@@ -1,6 +1,7 @@
 ---
 title: 'Interface: EvaluateTable'
 description: 'Table-shaped eval output used by generateTable() and the web UI.'
+sidebar_position: 19
 ---
 
 ## Import

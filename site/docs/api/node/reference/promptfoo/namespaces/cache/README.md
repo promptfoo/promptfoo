@@ -1,6 +1,7 @@
 ---
 title: 'cache'
 description: 'Cache helpers exposed through the Node.js package.'
+sidebar_position: 1
 ---
 
 ## Import

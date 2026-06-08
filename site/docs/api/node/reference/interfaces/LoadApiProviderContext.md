@@ -1,6 +1,7 @@
 ---
 title: 'Interface: LoadApiProviderContext'
 description: 'Optional context accepted by loadApiProvider().'
+sidebar_position: 26
 ---
 
 ## Import

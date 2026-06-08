@@ -1,6 +1,7 @@
 ---
 title: 'Interface: TestCaseMetadata'
 description: 'Arbitrary metadata attached to a test case.'
+sidebar_position: 44
 ---
 
 ## Import

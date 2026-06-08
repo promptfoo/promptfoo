@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ProviderClassificationResponse'
 description: 'Response returned by classification-capable providers.'
+sidebar_position: 35
 ---
 
 ## Import

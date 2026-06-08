@@ -1,6 +1,7 @@
 ---
 title: 'Function: clearCache()'
 description: 'Clear the shared promptfoo cache.'
+sidebar_position: 1
 ---
 
 ## Import

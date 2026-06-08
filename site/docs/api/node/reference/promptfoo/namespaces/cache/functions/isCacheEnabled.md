@@ -1,6 +1,7 @@
 ---
 title: 'Function: isCacheEnabled()'
 description: 'Return whether the shared promptfoo cache is enabled.'
+sidebar_position: 6
 ---
 
 ## Import

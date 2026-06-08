@@ -1,6 +1,7 @@
 ---
 title: 'Function: fetchWithCache()'
 description: "Fetch a URL through promptfoo's retrying cache wrapper."
+sidebar_position: 4
 ---
 
 ## Import

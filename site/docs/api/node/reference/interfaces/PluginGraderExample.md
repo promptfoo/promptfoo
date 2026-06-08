@@ -1,6 +1,7 @@
 ---
 title: 'Interface: PluginGraderExample'
 description: 'Example grader outcome used to calibrate plugin-specific red-team grading.'
+sidebar_position: 30
 ---
 
 ## Import

@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: AssertionOrSet'
 description: 'Assertion entry accepted by test cases.'
+sidebar_position: 1
 ---
 
 ## Import

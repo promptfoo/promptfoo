@@ -1,6 +1,7 @@
 ---
 title: 'Interface: EvaluateTableRow'
 description: 'One row in an eval table.'
+sidebar_position: 22
 ---
 
 ## Import

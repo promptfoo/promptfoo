@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: PromptFunction'
 description: 'Function form accepted anywhere the Node.js API accepts a prompt.'
+sidebar_position: 7
 ---
 
 ## Import

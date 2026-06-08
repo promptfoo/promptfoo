@@ -1,6 +1,7 @@
 ---
 title: 'Interface: TestCase'
 description: 'Author-facing test case configuration accepted by eval suites.'
+sidebar_position: 43
 ---
 
 ## Import

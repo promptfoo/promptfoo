@@ -1,6 +1,7 @@
 ---
 title: 'Function: isTransformFunction()'
 description: 'Runtime type guard for TransformFunction values.'
+sidebar_position: 3
 ---
 
 ## Import

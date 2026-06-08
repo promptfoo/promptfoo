@@ -1,6 +1,7 @@
 ---
 title: 'Interface: PluginConfig'
 description: 'Advanced plugin configuration carried on generated red-team test cases.'
+sidebar_position: 29
 ---
 
 ## Import

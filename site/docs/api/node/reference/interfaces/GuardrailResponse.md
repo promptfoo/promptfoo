@@ -1,6 +1,7 @@
 ---
 title: 'Interface: GuardrailResponse'
 description: 'Guardrail outcome metadata returned by moderation-aware providers.'
+sidebar_position: 24
 ---
 
 ## Import

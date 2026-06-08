@@ -5,7 +5,11 @@ title: Node.js API
 description: Use promptfoo programmatically from Node.js with supported APIs for evals, providers, assertions, caching, and advanced TypeScript workflows.
 ---
 
+import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
+
 # Using the Node.js API
+
+<LegacyHeadingAnchors page="package" />
 
 The Node.js API is for cases where a static YAML config is not enough: generating
 tests from code, composing providers dynamically, reusing promptfoo assertions in

@@ -1,6 +1,7 @@
 ---
 title: 'Interface: EvaluateTableHead'
 description: 'Header metadata for an eval table.'
+sidebar_position: 20
 ---
 
 ## Import

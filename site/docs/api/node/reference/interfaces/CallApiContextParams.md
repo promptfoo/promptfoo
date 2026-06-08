@@ -1,6 +1,7 @@
 ---
 title: 'Interface: CallApiContextParams'
 description: 'Runtime context passed to custom provider functions.'
+sidebar_position: 11
 ---
 
 ## Import

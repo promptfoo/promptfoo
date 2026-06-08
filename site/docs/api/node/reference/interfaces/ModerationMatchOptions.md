@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ModerationMatchOptions'
 description: 'Input passed to assertions.matchesModeration().'
+sidebar_position: 28
 ---
 
 ## Import

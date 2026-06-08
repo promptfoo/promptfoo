@@ -1,6 +1,7 @@
 ---
 title: 'Interface: TransformPrompt'
 description: 'Conventional shape for TransformContext.prompt.'
+sidebar_position: 48
 ---
 
 ## Import

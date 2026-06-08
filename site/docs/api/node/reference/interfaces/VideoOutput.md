@@ -1,6 +1,7 @@
 ---
 title: 'Interface: VideoOutput'
 description: 'Video attachment returned by providers that produce video.'
+sidebar_position: 49
 ---
 
 ## Import

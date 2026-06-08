@@ -1,6 +1,7 @@
 ---
 title: 'Interface: StrategyConfig'
 description: 'Advanced strategy configuration carried on generated red-team test cases.'
+sidebar_position: 42
 ---
 
 ## Import

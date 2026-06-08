@@ -1,6 +1,7 @@
 ---
 title: 'Interface: AudioOutput'
 description: 'Audio attachment returned by providers that produce or transform sound.'
+sidebar_position: 9
 ---
 
 ## Import

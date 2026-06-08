@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: EvaluateProgressCallback'
 description: 'Progress callback invoked as rows finish during evaluation.'
+sidebar_position: 4
 ---
 
 ## Import

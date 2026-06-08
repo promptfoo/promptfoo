@@ -1,6 +1,7 @@
 ---
 title: 'Interface: CallApiOptionsParams'
 description: 'Per-request options passed to custom providers.'
+sidebar_position: 13
 ---
 
 ## Import

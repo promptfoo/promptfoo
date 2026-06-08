@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: ProviderFunction'
 description: 'Function form accepted anywhere the Node.js API accepts a provider.'
+sidebar_position: 9
 ---
 
 ## Import

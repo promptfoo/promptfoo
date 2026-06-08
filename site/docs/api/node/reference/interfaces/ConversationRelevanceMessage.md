@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ConversationRelevanceMessage'
 description: 'One user / assistant exchange used by conversation-relevance grading.'
+sidebar_position: 17
 ---
 
 ## Import

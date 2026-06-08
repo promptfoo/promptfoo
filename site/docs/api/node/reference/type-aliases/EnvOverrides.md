@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: EnvOverrides'
 description: 'Environment-variable overrides accepted by provider-loading APIs.'
+sidebar_position: 3
 ---
 
 ## Import

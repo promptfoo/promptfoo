@@ -1,6 +1,7 @@
 ---
 title: 'Interface: PromptMetrics'
 description: 'Aggregate metrics tracked for one completed prompt.'
+sidebar_position: 34
 ---
 
 ## Import

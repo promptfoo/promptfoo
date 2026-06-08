@@ -1,6 +1,7 @@
 ---
 title: 'Interface: RunAssertionOptions'
 description: 'Options for runAssertion().'
+sidebar_position: 40
 ---
 
 ## Import

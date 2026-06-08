@@ -1,6 +1,7 @@
 ---
 title: 'Interface: PromptConfig'
 description: 'Prompt-local text decoration applied before provider execution.'
+sidebar_position: 32
 ---
 
 ## Import

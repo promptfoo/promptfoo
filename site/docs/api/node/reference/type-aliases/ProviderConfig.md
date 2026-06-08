@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: ProviderConfig'
 description: 'Provider override accepted anywhere a single provider configuration is allowed.'
+sidebar_position: 8
 ---
 
 ## Import

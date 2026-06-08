@@ -1,6 +1,7 @@
 ---
 title: 'Interface: PromptFunctionResult'
 description: 'Result type for prompt functions.'
+sidebar_position: 33
 ---
 
 ## Import

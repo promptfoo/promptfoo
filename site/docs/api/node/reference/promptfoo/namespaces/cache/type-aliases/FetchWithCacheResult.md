@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: FetchWithCacheResult\\<T\\>"
 description: 'Metadata returned by fetchWithCache().'
+sidebar_position: 1
 ---
 
 ## Import

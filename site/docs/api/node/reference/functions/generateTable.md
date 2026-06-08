@@ -1,6 +1,7 @@
 ---
 title: 'Function: generateTable()'
 description: 'Render eval table data as terminal-friendly text.'
+sidebar_position: 2
 ---
 
 ## Import

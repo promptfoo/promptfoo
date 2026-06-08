@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ChatMessage'
 description: 'Chat message reported by providers for multi-turn prompts and transcripts.'
+sidebar_position: 14
 ---
 
 ## Import

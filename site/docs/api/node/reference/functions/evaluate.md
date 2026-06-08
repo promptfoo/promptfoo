@@ -1,6 +1,7 @@
 ---
 title: 'Function: evaluate()'
 description: 'Run an eval from a JavaScript or TypeScript program.'
+sidebar_position: 1
 ---
 
 ## Import

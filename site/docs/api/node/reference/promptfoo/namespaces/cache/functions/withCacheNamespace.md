@@ -1,6 +1,7 @@
 ---
 title: 'Function: withCacheNamespace()'
 description: 'Run an async operation inside an isolated cache namespace.'
+sidebar_position: 7
 ---
 
 ## Import

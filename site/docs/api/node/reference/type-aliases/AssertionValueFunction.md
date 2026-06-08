@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: AssertionValueFunction'
 description: 'Function form accepted by JavaScript assertions.'
+sidebar_position: 2
 ---
 
 ## Import

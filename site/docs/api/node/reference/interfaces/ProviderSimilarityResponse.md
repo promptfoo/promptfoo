@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ProviderSimilarityResponse'
 description: 'Response returned by similarity-capable providers.'
+sidebar_position: 39
 ---
 
 ## Import

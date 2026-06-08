@@ -1,6 +1,7 @@
 ---
 title: 'Function: loadApiProvider()'
 description: 'Load one provider by id or config-file reference.'
+sidebar_position: 4
 ---
 
 ## Import

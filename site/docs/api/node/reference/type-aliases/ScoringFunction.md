@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: ScoringFunction'
 description: 'Custom scorer used to aggregate named assertion scores for one test case.'
+sidebar_position: 11
 ---
 
 ## Import

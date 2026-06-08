@@ -1,6 +1,7 @@
 ---
 title: 'Interface: AtomicTestCase'
 description: 'Fully materialized test case used during evaluation.'
+sidebar_position: 8
 ---
 
 ## Import

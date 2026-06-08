@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: PromptContent'
 description: 'Prompt payload accepted from function-valued prompts.'
+sidebar_position: 6
 ---
 
 ## Import

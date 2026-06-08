@@ -1,6 +1,7 @@
 ---
 title: 'Interface: TransformContext'
 description: 'Metadata supplied to every transform invocation.'
+sidebar_position: 47
 ---
 
 ## Import

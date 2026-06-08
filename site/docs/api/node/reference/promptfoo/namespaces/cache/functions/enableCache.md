@@ -1,6 +1,7 @@
 ---
 title: 'Function: enableCache()'
 description: 'Enable the shared promptfoo cache.'
+sidebar_position: 3
 ---
 
 ## Import

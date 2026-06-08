@@ -1,6 +1,7 @@
 ---
 title: 'Type Alias: EvaluateTestSuite'
 description: 'Test-suite shape accepted by the Node.js evaluate() API.'
+sidebar_position: 5
 ---
 
 ## Import

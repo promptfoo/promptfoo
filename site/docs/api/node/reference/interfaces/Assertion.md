@@ -1,6 +1,7 @@
 ---
 title: 'Interface: Assertion'
 description: 'Assertion configuration accepted by eval tests and low-level assertion APIs.'
+sidebar_position: 2
 ---
 
 ## Import

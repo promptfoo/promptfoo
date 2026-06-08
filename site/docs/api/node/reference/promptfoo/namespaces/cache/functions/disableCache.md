@@ -1,6 +1,7 @@
 ---
 title: 'Function: disableCache()'
 description: 'Disable the shared promptfoo cache for future calls.'
+sidebar_position: 2
 ---
 
 ## Import

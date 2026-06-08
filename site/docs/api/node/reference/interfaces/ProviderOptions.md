@@ -1,6 +1,7 @@
 ---
 title: 'Interface: ProviderOptions'
 description: 'Declarative provider configuration accepted by provider-loading APIs.'
+sidebar_position: 37
 ---
 
 ## Import

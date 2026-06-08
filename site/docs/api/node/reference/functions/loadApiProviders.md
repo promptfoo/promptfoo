@@ -1,6 +1,7 @@
 ---
 title: 'Function: loadApiProviders()'
 description: 'Load one or more providers from provider config input.'
+sidebar_position: 5
 ---
 
 ## Import

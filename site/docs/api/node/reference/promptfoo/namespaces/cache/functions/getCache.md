@@ -1,6 +1,7 @@
 ---
 title: 'Function: getCache()'
 description: 'Return the active promptfoo cache instance.'
+sidebar_position: 5
 ---
 
 ## Import

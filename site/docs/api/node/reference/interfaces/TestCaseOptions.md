@@ -1,6 +1,7 @@
 ---
 title: 'Interface: TestCaseOptions'
 description: 'Additional per-test options merged with prompt, output, and grading behavior.'
+sidebar_position: 45
 ---
 
 ## Import
