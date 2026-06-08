@@ -712,6 +712,9 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private initialized: boolean = false;
+  // Keep pooled session factories isolated per provider without including
+  // API keys, headers, or endpoint details in the template key.
+  private readonly poolTemplateNamespace = crypto.randomUUID();
   private readonly pooledClientSecretFactory = () => this.createChatKitClientSecret();
 
   // Static userId for consistent template keys across concurrent evaluations
@@ -1196,6 +1199,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       workflowId,
       this.chatKitConfig.version,
       userId,
+      this.poolTemplateNamespace,
     );
 
     // Register the HTML template for this workflow

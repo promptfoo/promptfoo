@@ -156,13 +156,18 @@ export class ChatKitBrowserPool {
   }
 
   /**
-   * Generate a template key from workflow configuration.
-   * This ensures different workflows get isolated pages.
+   * Generate a template key from workflow and provider configuration.
+   * The provider namespace keeps session factories isolated without putting
+   * credentials or endpoint details into the key.
    */
-  static generateTemplateKey(workflowId: string, version?: string, userId?: string): string {
-    // Use a simple concatenation - workflowId is the primary differentiator
-    // version and userId are included for completeness but workflowId is key
-    return `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+  static generateTemplateKey(
+    workflowId: string,
+    version?: string,
+    userId?: string,
+    providerNamespace?: string,
+  ): string {
+    const workflowKey = `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+    return providerNamespace ? `${workflowKey}:${providerNamespace}` : workflowKey;
   }
 
   /**

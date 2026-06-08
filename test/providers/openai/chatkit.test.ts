@@ -5,6 +5,7 @@ import {
   generateChatKitHTML,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -149,6 +150,50 @@ describe('OpenAiChatKitProvider', () => {
         expect(result.error).toContain('API key');
       } finally {
         restoreEnv();
+      }
+    });
+
+    it('should keep pooled session factories isolated by provider instance', async () => {
+      const registeredTemplates = new Map<string, () => Promise<string>>();
+      const setTemplate = vi.fn(
+        (templateKey: string, _html: string, createClientSecret: () => Promise<string>) => {
+          registeredTemplates.set(templateKey, createClientSecret);
+        },
+      );
+      const getInstanceSpy = vi.spyOn(ChatKitBrowserPool, 'getInstance').mockReturnValue({
+        setTemplate,
+        acquirePage: vi.fn().mockRejectedValue(new Error('stop after template registration')),
+        releasePage: vi.fn(),
+      } as unknown as ChatKitBrowserPool);
+      const sharedConfig = {
+        usePool: true,
+        workflowId: 'wf_shared',
+        userId: 'shared-user',
+      };
+      const firstProvider = new OpenAiChatKitProvider('wf_shared', {
+        config: { ...sharedConfig, apiKey: 'first-key' },
+      });
+      const secondProvider = new OpenAiChatKitProvider('wf_shared', {
+        config: { ...sharedConfig, apiKey: 'second-key' },
+      });
+
+      try {
+        await Promise.all([
+          firstProvider.callApi('first prompt'),
+          secondProvider.callApi('second prompt'),
+        ]);
+        await firstProvider.callApi('third prompt');
+
+        const [firstKey, secondKey, repeatedFirstKey] = setTemplate.mock.calls.map(
+          ([templateKey]) => templateKey,
+        );
+        expect(firstKey).toBe(repeatedFirstKey);
+        expect(firstKey).not.toBe(secondKey);
+        expect(registeredTemplates.size).toBe(2);
+        expect(firstKey).not.toContain('first-key');
+        expect(secondKey).not.toContain('second-key');
+      } finally {
+        getInstanceSpy.mockRestore();
       }
     });
   });

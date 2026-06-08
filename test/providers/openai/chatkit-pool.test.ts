@@ -139,6 +139,25 @@ describe('ChatKitBrowserPool', () => {
       const key = ChatKitBrowserPool.generateTemplateKey('wf_abc123', '3', 'user@test.com');
       expect(key).toBe('wf_abc123:3:user@test.com');
     });
+
+    it('should isolate provider instances without embedding auth context', () => {
+      const firstKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_abc123',
+        '3',
+        'user@test.com',
+        'provider-1',
+      );
+      const secondKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_abc123',
+        '3',
+        'user@test.com',
+        'provider-2',
+      );
+
+      expect(firstKey).toBe('wf_abc123:3:user@test.com:provider-1');
+      expect(secondKey).toBe('wf_abc123:3:user@test.com:provider-2');
+      expect(firstKey).not.toBe(secondKey);
+    });
   });
 
   describe('setTemplate', () => {
@@ -253,6 +272,63 @@ describe('ChatKitBrowserPool', () => {
 
       expect(writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
       expect(end).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'pooled-secret-123' }));
+    });
+
+    it('should route namespaced templates to their own session factories', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      const firstKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_shared',
+        undefined,
+        'shared-user',
+        'provider-1',
+      );
+      const secondKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_shared',
+        undefined,
+        'shared-user',
+        'provider-2',
+      );
+      const firstFactory = vi.fn().mockResolvedValue('first-secret');
+      const secondFactory = vi.fn().mockResolvedValue('second-secret');
+      instance.setTemplate(firstKey, TEST_HTML, firstFactory);
+      instance.setTemplate(secondKey, TEST_HTML, secondFactory);
+      await instance.initialize();
+
+      const firstEnd = vi.fn();
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(firstKey)}/session`,
+        },
+        {
+          writeHead: vi.fn(),
+          end: firstEnd,
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(firstFactory).toHaveBeenCalledOnce();
+      expect(secondFactory).not.toHaveBeenCalled();
+      expect(firstEnd).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'first-secret' }));
+
+      const secondEnd = vi.fn();
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(secondKey)}/session`,
+        },
+        {
+          writeHead: vi.fn(),
+          end: secondEnd,
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(firstFactory).toHaveBeenCalledOnce();
+      expect(secondFactory).toHaveBeenCalledOnce();
+      expect(secondEnd).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'second-secret' }));
     });
 
     it('should redact pooled session minting failures in browser responses', async () => {
