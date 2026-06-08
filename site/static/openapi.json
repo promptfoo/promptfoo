@@ -2803,10 +2803,6 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string",
-                      "minLength": 1
-                    },
                     "promptIdx": {
                       "type": "integer",
                       "minimum": 0
@@ -2814,6 +2810,16 @@
                     "testIdx": {
                       "type": "integer",
                       "minimum": 0
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
                     },
                     "testCase": {
                       "type": "object",
@@ -2850,27 +2856,11 @@
                           "additionalProperties": {}
                         }
                       ]
-                    },
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "score": {
-                      "type": "number"
                     }
                   },
-                  "required": [
-                    "id",
-                    "promptIdx",
-                    "testIdx",
-                    "testCase",
-                    "prompt",
-                    "provider",
-                    "success",
-                    "score"
-                  ],
+                  "required": ["promptIdx", "testIdx", "success", "score"],
                   "additionalProperties": {}
-                },
-                "minItems": 1
+                }
               }
             }
           }

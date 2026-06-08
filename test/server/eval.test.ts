@@ -399,13 +399,39 @@ describe('eval routes', () => {
   });
 
   describe('post("/:id/results")', () => {
-    it('rejects sparse shared rows before they can corrupt subsequent table reads', async () => {
+    it('hydrates sparse shared rows without corrupting subsequent table reads', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       testEvalIds.add(eval_.id);
 
       const appendRes = await api.post(`/api/eval/${eval_.id}/results`).send([
         {
           promptIdx: 0,
+          testIdx: 0,
+          success: true,
+          score: 1,
+        },
+      ]);
+
+      expect(appendRes.status).toBe(204);
+
+      const tableRes = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(tableRes.status).toBe(200);
+      expect(tableRes.body.table.body[0].outputs[0]).toMatchObject({
+        pass: true,
+        score: 1,
+        prompt: 'What is the capital of california?',
+        provider: 'test-provider',
+      });
+      expect(tableRes.body.table.body[0].test).toEqual({});
+    });
+
+    it('rejects prompt indices that would create sparse table output arrays', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      testEvalIds.add(eval_.id);
+
+      const appendRes = await api.post(`/api/eval/${eval_.id}/results`).send([
+        {
+          promptIdx: 100_000,
           testIdx: 0,
           success: true,
           score: 1,

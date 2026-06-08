@@ -6,7 +6,7 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
-import { EvalSchemas } from '../../types/api/eval';
+import { type AddResultsRequest, EvalSchemas } from '../../types/api/eval';
 import { ApiRoutes } from '../../types/api/routes';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
@@ -41,6 +41,33 @@ import type {
 } from '../../types/index';
 
 export const evalRouter = Router();
+
+function normalizeAddResult(eval_: Eval, result: AddResultsRequest[number]): EvalResult {
+  const completedPrompt = eval_.prompts[result.promptIdx];
+  invariant(completedPrompt, 'Result prompt index must be validated before normalization');
+  const {
+    provider: completedPromptProvider,
+    metrics: _metrics,
+    ...fallbackPrompt
+  } = completedPrompt;
+
+  const fallbackProviderId = completedPromptProvider || 'unknown';
+  const provider =
+    typeof result.provider === 'string'
+      ? { id: result.provider || fallbackProviderId }
+      : (result.provider ?? { id: fallbackProviderId });
+
+  return {
+    ...result,
+    id: result.id ?? crypto.randomUUID(),
+    // Source config tests do not map 1:1 to resolved result indices after repeats,
+    // scenarios, or variable expansion. An empty atomic test is safer than attaching
+    // assertions or variables from an unrelated source row.
+    testCase: result.testCase ?? {},
+    prompt: result.prompt ?? fallbackPrompt,
+    provider,
+  } as unknown as EvalResult;
+}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -597,14 +624,23 @@ evalRouter.post(ApiRoutes.Eval.AddResults.routerPath, async (req: Request, res: 
   }
 
   const { id } = paramsResult.data;
-  // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvalResult[]
-  const results = bodyResult.data as unknown as EvalResult[];
-
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     res.status(404).json({ error: 'Eval not found' });
     return;
   }
+
+  const resultWithInvalidPrompt = bodyResult.data.find(
+    (result) => !eval_.prompts[result.promptIdx],
+  );
+  if (resultWithInvalidPrompt) {
+    res.status(400).json({
+      error: `promptIdx ${resultWithInvalidPrompt.promptIdx} does not reference a stored prompt`,
+    });
+    return;
+  }
+
+  const results = bodyResult.data.map((result) => normalizeAddResult(eval_, result));
   try {
     await eval_.setResults(results);
   } catch (error) {
