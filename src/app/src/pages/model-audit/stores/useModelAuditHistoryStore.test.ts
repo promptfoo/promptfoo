@@ -1,11 +1,12 @@
-import { callApi } from '@app/utils/api';
+import { callApiJson, callApiResult } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditHistoryStore } from './useModelAuditHistoryStore';
 
 vi.mock('@app/utils/api');
 
-const mockCallApi = vi.mocked(callApi);
+const mockCallApiJson = vi.mocked(callApiJson);
+const mockCallApiResult = vi.mocked(callApiResult);
 
 const createMockScan = (id: string, name: string) => ({
   id,
@@ -44,10 +45,7 @@ describe('useModelAuditHistoryStore', () => {
     it('should fetch historical scans', async () => {
       const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
 
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ scans: mockScans, total: 2 }),
-      } as Response);
+      mockCallApiJson.mockResolvedValueOnce({ scans: mockScans, total: 2 } as any);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -63,9 +61,7 @@ describe('useModelAuditHistoryStore', () => {
     });
 
     it('should handle fetch error', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+      mockCallApiJson.mockRejectedValueOnce(new Error('Failed to fetch historical scans'));
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -82,7 +78,7 @@ describe('useModelAuditHistoryStore', () => {
     it('should ignore abort errors', async () => {
       const abortError = new Error('Aborted');
       abortError.name = 'AbortError';
-      mockCallApi.mockRejectedValueOnce(abortError);
+      mockCallApiJson.mockRejectedValueOnce(abortError);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -95,10 +91,7 @@ describe('useModelAuditHistoryStore', () => {
     });
 
     it('should include search query in request', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ scans: [], total: 0 }),
-      } as Response);
+      mockCallApiJson.mockResolvedValueOnce({ scans: [], total: 0 } as any);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -110,17 +103,11 @@ describe('useModelAuditHistoryStore', () => {
         await result.current.fetchHistoricalScans();
       });
 
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('search=test+query'),
-        expect.any(Object),
-      );
+      expect(mockCallApiJson.mock.calls[0][2]?.query?.toString()).toContain('search=test+query');
     });
 
     it('should include pagination params in request', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ scans: [], total: 0 }),
-      } as Response);
+      mockCallApiJson.mockResolvedValueOnce({ scans: [], total: 0 } as any);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -133,14 +120,9 @@ describe('useModelAuditHistoryStore', () => {
         await result.current.fetchHistoricalScans();
       });
 
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('limit=50'),
-        expect.any(Object),
-      );
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('offset=100'),
-        expect.any(Object),
-      );
+      const query = mockCallApiJson.mock.calls[0][2]?.query?.toString();
+      expect(query).toContain('limit=50');
+      expect(query).toContain('offset=100');
     });
   });
 
@@ -148,10 +130,10 @@ describe('useModelAuditHistoryStore', () => {
     it('should fetch a single scan by ID', async () => {
       const mockScan = createMockScan('123', 'Test Scan');
 
-      mockCallApi.mockResolvedValueOnce({
+      mockCallApiResult.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockScan),
-      } as Response);
+        data: mockScan,
+      } as any);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -164,10 +146,10 @@ describe('useModelAuditHistoryStore', () => {
     });
 
     it('should return null for 404', async () => {
-      mockCallApi.mockResolvedValueOnce({
+      mockCallApiResult.mockResolvedValueOnce({
         ok: false,
-        status: 404,
-      } as Response);
+        error: { status: 404 },
+      } as any);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -182,7 +164,7 @@ describe('useModelAuditHistoryStore', () => {
     it('should re-throw AbortError for caller to handle', async () => {
       const abortError = new Error('Aborted');
       abortError.name = 'AbortError';
-      mockCallApi.mockRejectedValueOnce(abortError);
+      mockCallApiResult.mockRejectedValueOnce(abortError);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -194,10 +176,10 @@ describe('useModelAuditHistoryStore', () => {
       const scanId = 'scan-abc-2025-12-06T10:30:45';
       const mockScan = createMockScan(scanId, 'Test Scan');
 
-      mockCallApi.mockResolvedValueOnce({
+      mockCallApiResult.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockScan),
-      } as Response);
+        data: mockScan,
+      } as any);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -206,7 +188,7 @@ describe('useModelAuditHistoryStore', () => {
       });
 
       // IDs are passed directly - colons are valid in URL paths per RFC 3986
-      expect(mockCallApi).toHaveBeenCalledWith(`/model-audit/scans/${scanId}`, expect.any(Object));
+      expect(mockCallApiResult.mock.calls[0][2]?.params).toEqual({ id: scanId });
     });
   });
 
@@ -220,10 +202,7 @@ describe('useModelAuditHistoryStore', () => {
         totalCount: 2,
       });
 
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      } as Response);
+      mockCallApiJson.mockResolvedValueOnce({ success: true, message: 'deleted' });
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -245,9 +224,7 @@ describe('useModelAuditHistoryStore', () => {
         totalCount: 2,
       });
 
-      mockCallApi.mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+      mockCallApiJson.mockRejectedValueOnce(new Error('Failed to delete scan'));
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -282,9 +259,7 @@ describe('useModelAuditHistoryStore', () => {
         totalCount: 3,
       });
 
-      mockCallApi.mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+      mockCallApiJson.mockRejectedValueOnce(new Error('Failed to delete scan'));
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 

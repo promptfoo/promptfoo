@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import TransformTestDialog from './TransformTestDialog';
 
 interface ResponseParserTestModalProps {
@@ -28,33 +28,37 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
 
   // Test handler function for response transform
   const handleTest = async (transformCode: string, testInput: string) => {
-    const response = await callApi('/providers/test-response-transform', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await callApiResult(
+      ApiRoutes.Providers.TestResponseTransform,
+      ProviderResponseSchemas.TestResponseTransform.Response,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transformCode,
+          response: testInput,
+        }),
       },
-      body: JSON.stringify({
-        transformCode,
-        response: testInput,
-      }),
-    });
+    );
 
     if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }));
-
       return {
         success: false,
-        error: errorData.error || 'Failed to test transform',
+        error: response.error.message || 'Failed to test transform',
       };
     }
 
-    const data = await response.json();
+    const data = response.data;
+    const result =
+      typeof data.result === 'object' && data.result !== null && 'output' in data.result
+        ? data.result.output
+        : data.result;
     return {
       success: data.success,
-      result: data.result?.output ?? data.result,
-      error: data.error,
+      result,
+      error: data.success ? undefined : data.error,
     };
   };
 

@@ -27,7 +27,7 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import {
   type EvaluateResult,
@@ -37,7 +37,6 @@ import {
   ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
-  type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
@@ -88,11 +87,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const resp = await callApi(`/results/${id}`, {
+      const body = await callApiJson(ApiRoutes.Results.Get, ServerResponseSchemas.Result.Response, {
+        params: { id },
         cache: 'no-store',
       });
-      const body = (await resp.json()) as SharedResults;
-      setEvalData(body.data);
+      setEvalData(body.data as ResultsFile);
 
       // Track funnel event for report viewed
       recordEvent('funnel', {
@@ -119,14 +118,13 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         // Need to fetch the latest evalId from the server
         const fetchLatestEvalId = async () => {
           try {
-            const resp = await callApi('/results', { cache: 'no-store' });
-            if (!resp.ok) {
-              console.error('Failed to fetch recent evals');
-              return;
-            }
-            const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+            const body = await callApiJson(
+              ApiRoutes.Results.List,
+              ServerResponseSchemas.ResultList.Response,
+              { cache: 'no-store' },
+            );
             if (body.data && body.data.length > 0) {
-              const latestEvalId = body.data[0].evalId;
+              const latestEvalId = (body.data as unknown as ResultLightweightWithLabel[])[0].evalId;
               setEvalId(latestEvalId);
               fetchEvalById(latestEvalId);
             } else {

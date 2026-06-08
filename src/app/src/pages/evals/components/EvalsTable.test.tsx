@@ -1,4 +1,4 @@
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiEmpty, callApiJson } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -131,11 +131,7 @@ describe('EvalsTable', () => {
   });
 
   it('should fetch data on initial mount', async () => {
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
 
     render(
       <MemoryRouter>
@@ -144,8 +140,9 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith(
-        '/results',
+      expect(callApiJson).toHaveBeenCalledWith(
+        ApiRoutes.Results.List,
+        expect.anything(),
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -159,7 +156,7 @@ describe('EvalsTable', () => {
   });
 
   it('should handle fetch errors gracefully', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Failed to fetch evals'));
+    vi.mocked(callApiJson).mockRejectedValue(new Error('Failed to fetch evals'));
 
     render(
       <MemoryRouter>
@@ -173,11 +170,7 @@ describe('EvalsTable', () => {
   });
 
   it('should display only evals with the same datasetId as the focused eval when filterByDatasetId is true', async () => {
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithMultipleDatasets }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvalsWithMultipleDatasets } as any);
 
     render(
       <MemoryRouter>
@@ -190,8 +183,9 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
       expect(screen.queryByTestId('row-eval-3')).toBeNull();
     });
-    expect(callApi).toHaveBeenCalledWith(
-      '/results',
+    expect(callApiJson).toHaveBeenCalledWith(
+      ApiRoutes.Results.List,
+      expect.anything(),
       expect.objectContaining({
         cache: 'no-store',
         signal: expect.any(AbortSignal),
@@ -200,11 +194,7 @@ describe('EvalsTable', () => {
   });
 
   it('should request only the focused dataset for comparison when its datasetId is known', async () => {
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
 
     render(
       <MemoryRouter>
@@ -218,13 +208,14 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith(
-        '/results?datasetId=dataset-1',
+      const options = vi.mocked(callApiJson).mock.calls[0][2];
+      expect(options).toEqual(
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
         }),
       );
+      expect(options?.query?.toString()).toBe('datasetId=dataset-1');
     });
   });
 
@@ -232,11 +223,7 @@ describe('EvalsTable', () => {
     ['null', null],
     ['undefined', undefined],
   ] as const)('should request all evals and let the client narrow when focusedDatasetId is %s', async (_label, focusedDatasetId) => {
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithMultipleDatasets }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvalsWithMultipleDatasets } as any);
 
     render(
       <MemoryRouter>
@@ -250,13 +237,14 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith(
-        '/results',
+      const options = vi.mocked(callApiJson).mock.calls[0][2];
+      expect(options).toEqual(
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
         }),
       );
+      expect(options?.query).toBeUndefined();
       // Client-side filter still narrows to focusedEval.datasetId.
       expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
@@ -265,11 +253,7 @@ describe('EvalsTable', () => {
   });
 
   it('should encode focusedDatasetId so dataset ids with special characters are safe', async () => {
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
 
     render(
       <MemoryRouter>
@@ -283,23 +267,14 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith(
-        '/results?datasetId=dataset%20id%20with%20spaces%20%26%20symbols',
-        expect.objectContaining({
-          cache: 'no-store',
-          signal: expect.any(AbortSignal),
-        }),
-      );
+      const options = vi.mocked(callApiJson).mock.calls[0][2];
+      expect(options?.query?.toString()).toBe('datasetId=dataset+id+with+spaces+%26+symbols');
     });
   });
 
   it('should call onEvalSelected when a row is clicked', async () => {
     const user = userEvent.setup();
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
 
     const onEvalSelected = vi.fn();
 
@@ -320,18 +295,8 @@ describe('EvalsTable', () => {
 
   it('should delete selected evals when delete button is clicked', async () => {
     const user = userEvent.setup();
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-
-    const mockCall = vi.mocked(callApi);
-    mockCall.mockImplementation((_url: string, options?: any) => {
-      if (!options || options.method !== 'DELETE') {
-        return Promise.resolve(mockResponse as any);
-      }
-      return Promise.resolve({ ok: true } as any);
-    });
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
+    vi.mocked(callApiEmpty).mockResolvedValue(undefined);
 
     render(
       <MemoryRouter>
@@ -354,7 +319,7 @@ describe('EvalsTable', () => {
     await user.click(confirmDelete);
 
     await waitFor(() => {
-      expect(mockCall).toHaveBeenCalledWith('/eval', {
+      expect(callApiEmpty).toHaveBeenCalledWith(ApiRoutes.Eval.BulkDelete, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -366,13 +331,7 @@ describe('EvalsTable', () => {
 
   it('should not delete evals when user cancels the confirmation dialog', async () => {
     const user = userEvent.setup();
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-
-    const mockCall = vi.mocked(callApi);
-    mockCall.mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
 
     render(
       <MemoryRouter>
@@ -395,20 +354,12 @@ describe('EvalsTable', () => {
     await user.click(cancelButton);
 
     // DELETE API should not have been called
-    expect(mockCall).not.toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ method: 'DELETE' }),
-    );
+    expect(callApiEmpty).not.toHaveBeenCalled();
   });
 
   it('should show delete button only when evals are selected', async () => {
     const user = userEvent.setup();
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
 
     render(
       <MemoryRouter>
@@ -439,20 +390,8 @@ describe('EvalsTable', () => {
 
   it('should handle API errors during deletion gracefully', async () => {
     const user = userEvent.setup();
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
-    };
-
-    const mockCall = vi.mocked(callApi);
-    let callCount = 0;
-    mockCall.mockImplementation((_url: string, _options?: any) => {
-      callCount++;
-      if (callCount === 1) {
-        return Promise.resolve(mockResponse as any);
-      }
-      return Promise.resolve({ ok: false } as any);
-    });
+    vi.mocked(callApiJson).mockResolvedValue({ data: mockEvals } as any);
+    vi.mocked(callApiEmpty).mockRejectedValue(new Error('Failed to delete evals'));
 
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});

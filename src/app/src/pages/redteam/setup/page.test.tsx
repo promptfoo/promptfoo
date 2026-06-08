@@ -33,8 +33,27 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
+  callApiJson: vi.fn(
+    async (
+      route: { clientPath: string },
+      _schema: unknown,
+      options: {
+        params?: Record<string, string | number>;
+        query?: URLSearchParams;
+      } & RequestInit = {},
+    ) => {
+      let path = route.clientPath;
+      for (const [name, value] of Object.entries(options.params ?? {})) {
+        path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+      }
+      const search = options.query?.toString();
+      const response = await vi.mocked(callApi)(search ? `${path}?${search}` : path, options);
+      return response.json();
+    },
+  ),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),

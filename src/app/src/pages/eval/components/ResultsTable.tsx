@@ -12,10 +12,15 @@ import {
 } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import {
+  ApiRoutes,
+  callApiJson,
+  EVAL_TABLE_MAX_PAGE_SIZE,
+  EvalResponseSchemas,
+} from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -29,7 +34,6 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -977,25 +981,24 @@ async function saveManualRating({
 }): Promise<void> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
 
-  const response =
-    version && version >= 4
-      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...gradingResult }),
-        })
-      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ table }),
-        });
-
-  if (!response.ok) {
-    throw new Error('Network response was not ok');
+  if (version && version >= 4) {
+    await callApiJson(ApiRoutes.Eval.SubmitRating, EvalResponseSchemas.SubmitRating.Response, {
+      params: { evalId, id: resultId },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...gradingResult }),
+    });
+  } else {
+    await callApiJson(ApiRoutes.Eval.Update, EvalResponseSchemas.Update.Response, {
+      params: { id: evalId },
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ table }),
+    });
   }
 }
 

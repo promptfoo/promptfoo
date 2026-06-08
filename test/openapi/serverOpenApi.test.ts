@@ -9,22 +9,22 @@ import {
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
 import { createApp } from '../../src/server/server';
+import { ALL_API_ROUTES, ApiRoutes, buildApiPath } from '../../src/types/api/routes';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
-
-const ROUTE_PREFIXES = new Map([
-  ['src/server/server.ts', ''],
-  ['src/server/routes/blobs.ts', '/api/blobs'],
-  ['src/server/routes/configs.ts', '/api/configs'],
-  ['src/server/routes/eval.ts', '/api/eval'],
-  ['src/server/routes/media.ts', '/api/media'],
-  ['src/server/routes/modelAudit.ts', '/api/model-audit'],
-  ['src/server/routes/providers.ts', '/api/providers'],
-  ['src/server/routes/redteam.ts', '/api/redteam'],
-  ['src/server/routes/traces.ts', '/api/traces'],
-  ['src/server/routes/user.ts', '/api/user'],
-  ['src/server/routes/version.ts', '/api/version'],
-]);
+const ROOT_SERVER_FILE = 'src/server/server.ts';
+const ROUTER_SOURCE_FILES = [
+  'src/server/routes/blobs.ts',
+  'src/server/routes/configs.ts',
+  'src/server/routes/eval.ts',
+  'src/server/routes/media.ts',
+  'src/server/routes/modelAudit.ts',
+  'src/server/routes/providers.ts',
+  'src/server/routes/redteam.ts',
+  'src/server/routes/traces.ts',
+  'src/server/routes/user.ts',
+  'src/server/routes/version.ts',
+] as const;
 
 function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   return Object.entries(document.paths ?? {}).flatMap(([path, pathItem]) =>
@@ -37,44 +37,59 @@ function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   );
 }
 
-function normalizeRoutePath(prefix: string, routePath: string) {
-  const joined = routePath === '/' ? prefix || '/' : `${prefix}${routePath}`;
-  return joined.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
-}
-
-function sourceRouteOperations() {
-  const routePattern =
-    /(?:app|\w+Router|router)\.(get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\2/g;
-
-  return [...ROUTE_PREFIXES.entries()].flatMap(([file, prefix]) => {
-    const source = fs.readFileSync(path.resolve(file), 'utf8');
-    return [...source.matchAll(routePattern)]
-      .map((match) => ({
-        method: match[1].toUpperCase(),
-        path: normalizeRoutePath(prefix, match[3]),
-      }))
-      .filter(({ path }) => path !== '/*splat' && !path.includes('/*'));
-  });
-}
-
 describe('server OpenAPI generation', () => {
   it('registers every server route exactly once', () => {
     const { routes } = createServerOpenApiRegistry();
     const document = createServerOpenApiDocument();
     const generatedOperations = operations(document);
-    const sourceOperations = sourceRouteOperations();
+    const contractKeys = ALL_API_ROUTES.map(
+      ({ method, openApiPath }) => `${method.toUpperCase()} ${openApiPath}`,
+    );
 
     expect(routes).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
     expect(generatedOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(sourceOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
+    expect(ALL_API_ROUTES).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
 
     const generatedKeys = generatedOperations.map(
       ({ method, path }) => `${method.toUpperCase()} ${path}`,
     );
-    const sourceKeys = sourceOperations.map(({ method, path }) => `${method} ${path}`);
     expect(new Set(generatedKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedKeys.sort()).toEqual(sourceKeys.sort());
+    expect(new Set(contractKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
+    expect(generatedKeys.sort()).toEqual(contractKeys.sort());
     expect(generatedKeys.some((key) => key.includes('/:'))).toBe(false);
+  });
+
+  it('builds encoded client paths from route contracts', () => {
+    expect(buildApiPath(ApiRoutes.Eval.Table, { id: 'suite/result 1' })).toBe(
+      '/eval/suite%2Fresult%201/table',
+    );
+    expect(() => buildApiPath(ApiRoutes.Blobs.Get)).toThrow('Missing API path parameter: hash');
+  });
+
+  it('requires server API registrations to use shared route contracts', () => {
+    const rootSource = fs.readFileSync(path.resolve(ROOT_SERVER_FILE), 'utf8');
+    const rootLiteralPaths = [
+      ...rootSource.matchAll(/\bapp\.(?:get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\1/g),
+    ]
+      .map((match) => match[2])
+      .filter((registeredPath) => registeredPath !== '/*splat');
+    const literalApiMounts = [
+      ...rootSource.matchAll(/\bapp\.use\(\s*(['"`])(\/api(?:\/[^'"`]*)?)\1/g),
+    ].map((match) => match[2]);
+
+    expect(rootLiteralPaths).toEqual([]);
+    expect(literalApiMounts).toEqual([]);
+
+    for (const sourceFile of ROUTER_SOURCE_FILES) {
+      const source = fs.readFileSync(path.resolve(sourceFile), 'utf8');
+      const literalHandlerPaths = [
+        ...source.matchAll(
+          /\b(?:[A-Za-z]+Router|router)\.(?:get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\1/g,
+        ),
+      ].map((match) => match[2]);
+
+      expect(literalHandlerPaths, sourceFile).toEqual([]);
+    }
   });
 
   it('documents representative request and response shapes', () => {
@@ -120,6 +135,18 @@ describe('server OpenAPI generation', () => {
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
     ).toEqual(expect.arrayContaining(['prompts', 'providers']));
+    const createEvalJobSchema =
+      createEvalJobOperation?.requestBody?.content?.['application/json']?.schema;
+    expect(createEvalJobSchema?.properties?.sourceEvalId).toEqual(
+      expect.objectContaining({ minLength: 1, type: 'string' }),
+    );
+    expect(createEvalJobSchema?.properties?.tests?.oneOf).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'string' })]),
+    );
+    expect(
+      addEvalResultsOperation?.requestBody?.content?.['application/json']?.schema?.items?.properties
+        ?.provider?.oneOf,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'string' })]));
     expect(
       getMediaOperation?.responses['200']?.content?.['application/octet-stream']?.schema,
     ).toEqual(expect.objectContaining({ format: 'binary', type: 'string' }));
@@ -282,6 +309,21 @@ describe('server OpenAPI generation', () => {
     for (const operation of explicitServerErrorOperations) {
       expect(operation?.responses?.['500']).toEqual(
         expect.objectContaining({ description: 'Server error' }),
+      );
+    }
+  });
+
+  it('documents shared parser and CSRF failures for mutation routes', () => {
+    const mutationOperations = operations(createServerOpenApiDocument()).filter(
+      ({ path, method }) => path.startsWith('/api/') && method !== 'get',
+    );
+
+    for (const { operation } of mutationOperations) {
+      expect((operation as any).responses?.['400']).toEqual(
+        expect.objectContaining({ description: expect.any(String) }),
+      );
+      expect((operation as any).responses?.['403']).toEqual(
+        expect.objectContaining({ description: 'CSRF protection rejected request' }),
       );
     }
   });

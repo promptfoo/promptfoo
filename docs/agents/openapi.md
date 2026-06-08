@@ -45,7 +45,8 @@ npm run openapi:check
 
 ## Where Things Live
 
-- Route DTOs: `src/types/api/*.ts`
+- Shared route and DTO contracts: `src/contracts/api/*.ts`
+- Runtime compatibility shims: `src/types/api/*.ts`
 - OpenAPI route registry: `src/openapi/server.ts`
 - Runtime endpoint: `GET /api/openapi.json`
 - Generation script: `scripts/generateOpenApi.ts`
@@ -56,20 +57,23 @@ npm run openapi:check
 ## Add Or Change A Route
 
 1. Define or update the request/response Zod schemas in
-   `src/types/api/<area>.ts`.
-2. Use those schemas in the Express route with `.safeParse()` for requests and
-   `.parse()` for responses.
-3. Register the route in `src/openapi/server.ts`.
-4. Run the route inventory and OpenAPI tests.
-5. Regenerate `site/static/openapi.json`.
-6. Run `npm run openapi:check` before pushing.
+   `src/contracts/api/<area>.ts` and keep its `src/types/api/<area>.ts` shim
+   compatible when one exists.
+2. Define the method, paths, operation ID, tag, and summary once in
+   `src/contracts/api/routes.ts`.
+3. Use that `ApiRoutes` contract in the Express route with `.safeParse()` for
+   requests and `.parse()` for responses.
+4. Register the same contract with `registerContract()` in
+   `src/openapi/server.ts`.
+5. Run the route contract and OpenAPI tests.
+6. Regenerate `site/static/openapi.json` and run `npm run openapi:check`.
 
 ## JSON GET Example
 
 For a route like:
 
 ```typescript
-router.get('/:id', async (req, res) => {
+widgetRouter.get(ApiRoutes.Widgets.Get.routerPath, async (req, res) => {
   const params = WidgetSchemas.Get.Params.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: z.prettifyError(params.error) });
@@ -80,15 +84,11 @@ router.get('/:id', async (req, res) => {
 });
 ```
 
-Register it like this:
+Assuming `ApiRoutes.Widgets.Get` contains the method and path metadata, register
+the operation-specific schemas and responses like this:
 
 ```typescript
-register({
-  method: 'get',
-  path: '/api/widgets/{id}',
-  operationId: 'getWidget',
-  tags: ['Widgets'],
-  summary: 'Get one widget',
+registerContract(ApiRoutes.Widgets.Get, {
   request: {
     params: params('WidgetGetParams', WidgetSchemas.Get.Params),
   },
@@ -100,7 +100,8 @@ register({
 });
 ```
 
-Use OpenAPI `{id}` path params, not Express `:id`.
+The shared contract derives OpenAPI `{id}` paths from the Express `:id` path,
+so do not duplicate either form in the registry.
 
 ## JSON POST Example
 
@@ -109,12 +110,7 @@ the operation. The helper's name argument labels the schema at the call site,
 but the current generator does not add it to `components.schemas`:
 
 ```typescript
-register({
-  method: 'post',
-  path: '/api/widgets',
-  operationId: 'createWidget',
-  tags: ['Widgets'],
-  summary: 'Create a widget',
+registerContract(ApiRoutes.Widgets.Create, {
   request: {
     body: jsonBody('WidgetCreateRequest', WidgetSchemas.Create.Request),
   },
@@ -131,12 +127,7 @@ register({
 Query schemas are emitted inline the same way as params:
 
 ```typescript
-register({
-  method: 'get',
-  path: '/api/widgets',
-  operationId: 'listWidgets',
-  tags: ['Widgets'],
-  summary: 'List widgets',
+registerContract(ApiRoutes.Widgets.List, {
   request: {
     query: query('WidgetListQuery', WidgetSchemas.List.Query),
   },
@@ -157,12 +148,7 @@ Runtime binary schemas such as `z.instanceof(Uint8Array)` do not map cleanly to
 OpenAPI. Register the route with `binaryResponse()`:
 
 ```typescript
-register({
-  method: 'get',
-  path: '/api/files/{hash}',
-  operationId: 'getFile',
-  tags: ['Files'],
-  summary: 'Fetch file bytes',
+registerContract(ApiRoutes.Files.Get, {
   request: {
     params: params('FileHashParams', FileSchemas.Get.Params),
   },

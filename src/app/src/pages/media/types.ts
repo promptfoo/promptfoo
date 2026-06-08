@@ -2,58 +2,22 @@
  * Types for the Media Library page
  */
 
-// Import and re-export MediaKind from the shared utility to avoid duplication
+import type {
+  EvalOption as ApiEvalOption,
+  GraderResult as ApiGraderResult,
+  MediaItemContext as ApiMediaContext,
+  MediaItem as ApiMediaItem,
+  MediaLibraryResponse as ApiMediaLibraryResponse,
+} from '@app/utils/api';
 import type { MediaKind } from '@app/utils/media';
 
 export type { MediaKind };
 
-export interface GraderResult {
-  name: string;
-  pass: boolean;
-  score: number;
-  reason?: string;
-}
-
-export interface MediaContext {
-  evalId: string;
-  evalDescription?: string;
-  testIdx?: number;
-  promptIdx?: number;
-  location?: string;
-  provider?: string;
-  prompt?: string;
-  // Evaluation results
-  pass?: boolean;
-  score?: number;
-  variables?: Record<string, string>;
-  graderResults?: GraderResult[];
-  latencyMs?: number;
-  cost?: number;
-}
-
-export interface MediaItem {
-  hash: string;
-  mimeType: string;
-  sizeBytes: number;
-  kind: MediaKind;
-  createdAt: string;
-  url: string;
-  context: MediaContext;
-}
-
-export interface MediaLibraryResponse {
-  items: MediaItem[];
-  total: number;
-  hasMore: boolean;
-  /** False when blob storage is not configured. Undefined for backwards compat. */
-  blobStorageEnabled?: boolean;
-}
-
-export interface EvalOption {
-  evalId: string;
-  description: string;
-  createdAt?: string;
-}
+export type GraderResult = ApiGraderResult;
+export type MediaContext = ApiMediaContext;
+export type MediaItem = ApiMediaItem;
+export type MediaLibraryResponse = ApiMediaLibraryResponse['data'];
+export type EvalOption = ApiEvalOption;
 
 export type MediaTypeFilter = 'all' | MediaKind;
 

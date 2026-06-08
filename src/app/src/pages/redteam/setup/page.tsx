@@ -24,7 +24,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, ConfigSchemas, callApiJson } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
@@ -225,7 +225,7 @@ export default function RedTeamSetupPage() {
     });
 
     try {
-      const response = await callApi('/configs', {
+      const data = await callApiJson(ApiRoutes.Configs.Create, ConfigSchemas.Create.Response, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,18 +236,12 @@ export default function RedTeamSetupPage() {
           config,
         }),
       });
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
       toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
       setConfigName(configName);
-      setConfigDate(data.createdAt);
+      setConfigDate(String(data.createdAt));
     } catch (error) {
       console.error('Failed to save configuration', error);
       toast.showToast(
@@ -262,20 +256,19 @@ export default function RedTeamSetupPage() {
   const loadConfigs = async () => {
     recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
-      const response = await callApi('/configs?type=redteam');
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const data = await callApiJson(ApiRoutes.Configs.List, ConfigSchemas.List.Response, {
+        query: new URLSearchParams({ type: 'redteam' }),
+      });
 
       setHasUnsavedChanges(false);
 
+      const configs: SavedConfig[] = data.configs.map(({ id, name, updatedAt }) => ({
+        id,
+        name,
+        updatedAt: String(updatedAt),
+      }));
       setSavedConfigs(
-        data.configs.sort(
-          (a: SavedConfig, b: SavedConfig) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-        ),
+        configs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
       );
     } catch (error) {
       console.error('Failed to load configurations', error);
@@ -289,16 +282,13 @@ export default function RedTeamSetupPage() {
 
   const handleLoadConfig = async (id: string) => {
     try {
-      const response = await callApi(`/configs/redteam/${id}`);
-      const data = await response.json();
+      const data = await callApiJson(ApiRoutes.Configs.Get, ConfigSchemas.Get.Response, {
+        params: { type: 'redteam', id },
+      });
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setFullConfig(data.config);
+      setFullConfig(data.config as Config);
       setConfigName(data.name);
-      setConfigDate(data.updatedAt);
+      setConfigDate(String(data.updatedAt));
       lastSavedConfig.current = JSON.stringify(data.config);
       setHasUnsavedChanges(false);
 

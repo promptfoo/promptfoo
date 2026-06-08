@@ -30,7 +30,7 @@ import {
 import { Switch } from '@app/components/ui/switch';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import yaml from 'js-yaml';
 import {
   AlignLeft,
@@ -175,14 +175,18 @@ Content-Type: application/json
     }
 
     try {
-      const response = await callApi('/providers/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: selectedTarget }),
-      });
+      const response = await callApiResult(
+        ApiRoutes.Providers.Test,
+        ProviderResponseSchemas.Test.Response,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providerOptions: selectedTarget }),
+        },
+      );
 
       if (response.ok) {
-        const data = await response.json();
+        const data = response.data;
 
         // Check for changes_needed field (configuration issues) or success field
         const hasConfigIssues = data.testResult?.changes_needed === true;
@@ -197,20 +201,17 @@ Content-Type: application/json
         setTestResult({
           success: isSuccess,
           message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
+          providerResponse: (data.providerResponse as TestResult['providerResponse']) || {},
+          transformedRequest: data.transformedRequest as TestResult['transformedRequest'],
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
         });
         setTestDetailsExpanded(!isSuccess || hasConfigIssues);
         onTargetTested?.(isSuccess);
       } else {
-        const errorData = await response.json();
         setTestResult({
           success: false,
-          message: errorData.error || 'Failed to test target configuration',
-          providerResponse: errorData.providerResponse || {},
-          transformedRequest: errorData.transformedRequest,
+          message: response.error.message || 'Failed to test target configuration',
         });
         setTestDetailsExpanded(true);
         onTargetTested?.(false);
@@ -431,22 +432,19 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await callApi('/providers/http-generator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestExample: request,
-          responseExample: response,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
-      }
-
-      const data = await res.json();
-      setGeneratedConfig(data);
+      const data = await callApiJson(
+        ApiRoutes.Providers.HttpGenerator,
+        ProviderResponseSchemas.HttpGenerator.Response,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestExample: request,
+            responseExample: response,
+          }),
+        },
+      );
+      setGeneratedConfig(data as unknown as GeneratedConfig);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred');
     } finally {

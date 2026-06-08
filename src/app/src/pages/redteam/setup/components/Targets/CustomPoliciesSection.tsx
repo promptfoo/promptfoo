@@ -19,7 +19,7 @@ import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, RedteamResponseSchemas } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -385,39 +385,28 @@ export const CustomPoliciesSection = () => {
       ];
 
       // Send the request to `/redteam/:taskId`:
-      const response = await callApi('/redteam/custom-policy-generation-task', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          applicationDefinition: config.applicationDefinition,
-          existingPolicies,
-        }),
-      });
-
-      // Parse the request body prior to handling success/error cases.
-      let data;
-      try {
-        data = (await response.json()) as {
-          result: PolicyObject[];
-          error: string | null;
-          task: string;
-          details?: string; // Optionally set in `logAndSendError`
-        };
-      } catch (error) {
-        // Handle JSON parsing errors
-        toast.showToast(
-          `Failed to generate policies: ${error instanceof Error ? error.message : String(error)}`,
-          'error',
-        );
-        return;
-      }
+      const data = (await callApiJson(
+        ApiRoutes.Redteam.Task,
+        RedteamResponseSchemas.Task.Response,
+        {
+          params: { taskId: 'custom-policy-generation-task' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            applicationDefinition: config.applicationDefinition,
+            existingPolicies,
+          }),
+        },
+      )) as {
+        result: PolicyObject[];
+        error: string | null;
+        task: string;
+        details?: string; // Optionally set in `logAndSendError`
+      };
 
       // Handle potential errors:
-      if (!response.ok || data.error) {
-        const errorMessage =
-          data?.details ??
-          data?.error ??
-          `Failed to generate policies: ${response.statusText || response.status}`;
+      if (data.error) {
+        const errorMessage = data.details ?? data.error;
         throw new Error(errorMessage);
       }
 

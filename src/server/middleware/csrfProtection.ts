@@ -1,5 +1,6 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { replyError } from '../utils/errors';
 import type { NextFunction, Request, Response } from 'express';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -82,7 +83,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
       host,
       secFetchSite,
     });
-    res.status(403).json({ error: 'Cross-site requests are not allowed' });
+    replyError(res, 403, 'Cross-site requests are not allowed');
     return;
   }
 
@@ -106,7 +107,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
       origin,
       host,
     });
-    res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+    replyError(res, 403, 'Cross-origin requests are not allowed');
     return;
   }
 

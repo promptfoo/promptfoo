@@ -346,23 +346,40 @@ describe('Eval Routes - Zod Validation', () => {
       expect(response.body.error).toBeDefined();
     });
 
-    it('should return 400 when result is missing required fields', async () => {
+    it('should return 400 when results is an empty batch', async () => {
+      const response = await api.post('/api/eval/test-id/results').send([]);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('At least one result is required');
+      expect(mockFindById).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 when result is missing serialized persistence fields', async () => {
       const response = await api.post('/api/eval/test-id/results').send([
         {
+          id: 'result-id',
           promptIdx: 0,
-          // Missing testIdx, success, score
+          testIdx: 0,
+          success: true,
+          score: 1,
+          // Missing testCase, prompt, and provider.
         },
       ]);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
+      expect(mockFindById).not.toHaveBeenCalled();
     });
 
     it('should return 400 when promptIdx is negative', async () => {
       const response = await api.post('/api/eval/test-id/results').send([
         {
+          id: 'result-id',
           promptIdx: -1,
           testIdx: 0,
+          testCase: {},
+          prompt: { raw: 'hello', label: 'hello' },
+          provider: { id: 'echo' },
           success: true,
           score: 1,
         },
