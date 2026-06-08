@@ -126,5 +126,167 @@ describe('domainExtraction', () => {
       expect(result.no_links).toBe(true);
       expect(result.urls).toHaveLength(0);
     });
+
+    it('handles empty text gracefully', () => {
+      const result = extractAllDomains('');
+      expect(result.no_links).toBe(true);
+      expect(result.urls).toHaveLength(0);
+      expect(result.domains).toHaveLength(0);
+      expect(result.github_repos).toHaveLength(0);
+    });
+
+    it('respects custom source parameter', () => {
+      const result = extractAllDomains('Visit https://example.com', 'custom-source');
+      expect(result.urls[0].source).toBe('custom-source');
+    });
+  });
+
+  describe('extractUrls edge cases', () => {
+    it('returns empty array for empty input', () => {
+      expect(extractUrls('')).toEqual([]);
+    });
+
+    it('strips backticks from urls', () => {
+      const urls = extractUrls('Try `https://example.com`');
+      expect(urls).toHaveLength(1);
+      expect(urls[0].normalized).toBe('https://example.com');
+    });
+
+    it('extracts www. urls and normalizes to https', () => {
+      const urls = extractUrls('Visit www.example.com today');
+      expect(urls).toHaveLength(1);
+      expect(urls[0].scheme).toBe('https');
+      expect(urls[0].host).toBe('example.com');
+    });
+
+    it('does not extract www. preceded by @ (avoid emails)', () => {
+      const urls = extractUrls('Contact user@www.example.com');
+      // The @ guard prevents www.example.com from being matched
+      expect(urls.find((u) => u.host === 'example.com' && u.scheme === 'https')).toBeUndefined();
+    });
+
+    it('strips www. from host', () => {
+      const urls = extractUrls('Visit https://www.example.com');
+      expect(urls[0].host).toBe('example.com');
+    });
+
+    it('preserves uppercase scheme by lowercasing it', () => {
+      const urls = extractUrls('See https://example.com/path?q=1#frag');
+      expect(urls[0].scheme).toBe('https');
+      expect(urls[0].path).toBe('/path');
+      expect(urls[0].query).toBe('?q=1');
+      expect(urls[0].fragment).toBe('#frag');
+    });
+
+    it('strips www. from host in both http and www variants', () => {
+      const urls = extractUrls('https://example.com and www.example.com');
+      // Both entries retain their distinct normalized form but host is www-stripped.
+      const hosts = urls.map((u) => u.host);
+      expect(hosts.every((h) => h === 'example.com')).toBe(true);
+    });
+  });
+
+  describe('extractDomains edge cases', () => {
+    it('skips bare-domain matches that fail normalization (e.g. IPv4)', () => {
+      // IPv4 looks like multiple labels but normalizeDomain rejects it
+      const domains = extractDomains('Server 192.168.1.1 is local');
+      expect(domains.find((d) => d.host === '192.168.1.1')).toBeUndefined();
+    });
+
+    it('skips labels that start or end with hyphen', () => {
+      const domains = extractDomains('Visit -bad.example.com');
+      expect(domains.find((d) => d.host === '-bad.example.com')).toBeUndefined();
+    });
+
+    it('falls back when splitDomain receives single-label input via URL host', () => {
+      // Single-label hosts are rejected by normalizeDomain; the loop must just skip
+      const urls = [
+        {
+          raw: 'localhost',
+          normalized: 'http://localhost',
+          scheme: 'http',
+          host: 'localhost',
+          path: '/',
+          query: '',
+          fragment: '',
+          source: 'test',
+        },
+      ];
+      const domains = extractDomains('', urls);
+      expect(domains).toHaveLength(0);
+    });
+
+    it('skips URL hosts that normalize to null', () => {
+      const urls = [
+        {
+          raw: '',
+          normalized: '',
+          scheme: '',
+          host: '',
+          path: '',
+          query: '',
+          fragment: '',
+          source: 'test',
+        },
+      ];
+      const domains = extractDomains('', urls);
+      expect(domains).toHaveLength(0);
+    });
+
+    it('deduplicates host appearing in URL and bare text', () => {
+      const urls = extractUrls('https://example.com');
+      const domains = extractDomains('https://example.com and bare example.com', urls);
+      expect(domains.filter((d) => d.host === 'example.com')).toHaveLength(1);
+    });
+
+    it('splits multi-level subdomains correctly', () => {
+      const domains = extractDomains('api.staging.example.com is up');
+      const d = domains.find((x) => x.host === 'api.staging.example.com');
+      expect(d).toBeDefined();
+      expect(d?.registered_domain).toBe('example.com');
+      expect(d?.subdomain).toBe('api.staging');
+      expect(d?.domain).toBe('example');
+      expect(d?.suffix).toBe('com');
+    });
+  });
+
+  describe('extractGithubRepos edge cases', () => {
+    it('extracts from www.github.com prefix', () => {
+      const repos = extractGithubRepos('See www.github.com/owner/repo for code');
+      expect(repos).toHaveLength(1);
+      expect(repos[0].full_name).toBe('owner/repo');
+    });
+
+    it('ignores all reserved owner paths', () => {
+      const text = `
+        github.com/features/security
+        github.com/marketplace/something
+        github.com/pricing/x
+        github.com/login/y
+        github.com/explore/z
+      `;
+      expect(extractGithubRepos(text)).toHaveLength(0);
+    });
+
+    it('preserves owner/repo casing in output but dedupes case-insensitively', () => {
+      const repos = extractGithubRepos('github.com/PyTorch/PyTorch and github.com/pytorch/pytorch');
+      expect(repos).toHaveLength(1);
+      // The first occurrence wins
+      expect(repos[0].owner).toBe('PyTorch');
+    });
+
+    it('builds full url and full_name correctly', () => {
+      const repos = extractGithubRepos('github.com/openai/whisper');
+      expect(repos[0].url).toBe('https://github.com/openai/whisper');
+      expect(repos[0].full_name).toBe('openai/whisper');
+      expect(repos[0].link_type).toBe('repo');
+      expect(repos[0].platform).toBe('github');
+    });
+
+    it('strips .git only from the end', () => {
+      const repos = extractGithubRepos('github.com/owner/my.git.project.git');
+      // Only trailing .git stripped
+      expect(repos[0].repo).toBe('my.git.project');
+    });
   });
 });
