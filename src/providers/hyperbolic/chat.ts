@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { getTokenCostRates } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -217,8 +218,7 @@ export function calculateHyperbolicCost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const { inputCost, outputCost } = getTokenCostRates(config, model.cost);
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * completionTokens;

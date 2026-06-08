@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { MCPConfig } from '../mcp/types';
-import type { OpenAIToolChoice } from '../shared';
+import type { ModelCost, OpenAIToolChoice } from '../shared';
 
 type AnthropicServerToolCaller = 'direct' | 'code_execution_20250825' | 'code_execution_20260120';
 
@@ -90,7 +90,7 @@ export interface AnthropicMessageOptions {
    */
   apiKeyRequired?: boolean;
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
-  cost?: number;
+  cost?: number | ModelCost;
   inputCost?: number;
   outputCost?: number;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // Controls output quality/speed tradeoff

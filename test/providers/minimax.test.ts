@@ -89,6 +89,16 @@ describe('calculateMiniMaxCost', () => {
     expect(cost).toBeCloseTo(3.0);
   });
 
+  it('should use object-shaped input and output cost overrides', () => {
+    const cost = calculateMiniMaxCost(
+      'MiniMax-M2.7',
+      { cost: { input: 1.0 / 1e6, output: 2.0 / 1e6 } },
+      1000000,
+      1000000,
+    );
+    expect(cost).toBeCloseTo(3.0);
+  });
+
   it('should handle unknown model names', () => {
     const cost = calculateMiniMaxCost('unknown-model', {}, 1000000, 1000000);
     expect(cost).toBeUndefined();

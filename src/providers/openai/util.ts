@@ -1,7 +1,12 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
-import { calculateCost } from '../shared';
+import {
+  calculateCost,
+  getFiniteCostValue,
+  getTokenCostOverrides,
+  getTokenCostRates,
+} from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -688,31 +693,40 @@ export function calculateOpenAICost(
   }
 
   const model = OPENAI_BILLING_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  const textRates = model?.cost
+    ? getTokenCostRates(config, model.cost)
+    : getTokenCostOverrides(config);
+  if (textRates.inputCost === undefined || textRates.outputCost === undefined) {
     return undefined;
   }
 
-  let totalCost = 0;
+  const audioInputCost =
+    getFiniteCostValue(config.audioInputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioInput) ??
+    getFiniteCostValue(model?.cost?.audioInput);
+  const audioOutputCost =
+    getFiniteCostValue(config.audioOutputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioOutput) ??
+    getFiniteCostValue(model?.cost?.audioOutput);
 
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  totalCost += inputCost * promptTokens + outputCost * completionTokens;
-
-  if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
-    const modelAudioInputCost: number =
-      'audioInput' in model.cost && typeof model.cost.audioInput === 'number'
-        ? model.cost.audioInput
-        : 0;
-    const modelAudioOutputCost: number =
-      'audioOutput' in model.cost && typeof model.cost.audioOutput === 'number'
-        ? model.cost.audioOutput
-        : 0;
-    const audioInputCost = config.audioInputCost ?? config.audioCost ?? modelAudioInputCost;
-    const audioOutputCost = config.audioOutputCost ?? config.audioCost ?? modelAudioOutputCost;
-    totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
+  if (
+    (audioPromptTokens > 0 && audioInputCost === undefined) ||
+    (audioCompletionTokens > 0 && audioOutputCost === undefined)
+  ) {
+    return undefined;
   }
 
-  return totalCost;
+  const totalCost =
+    textRates.inputCost * promptTokens +
+    textRates.outputCost * completionTokens +
+    (audioInputCost ?? 0) * audioPromptTokens +
+    (audioOutputCost ?? 0) * audioCompletionTokens;
+
+  return Number.isFinite(totalCost) ? totalCost : undefined;
 }
 
 export function failApiCall(err: any) {

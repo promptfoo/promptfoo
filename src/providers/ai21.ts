@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { calculateCost, getRequestTimeoutMs, type ModelCost, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -65,7 +65,7 @@ interface AI21ChatCompletionOptions {
   top_p?: number;
   max_tokens?: number;
   response_format?: { type: 'json_object' | 'text' };
-  cost?: number;
+  cost?: number | ModelCost;
   inputCost?: number;
   outputCost?: number;
 }

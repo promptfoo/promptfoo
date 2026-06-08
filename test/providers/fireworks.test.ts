@@ -262,6 +262,8 @@ describe('Fireworks AI', () => {
     it('requires explicit input and output rates because Fireworks pricing varies by model', () => {
       expect(calculateFireworksCost({ inputCost: 0.001 }, 10, 5)).toBeUndefined();
       expect(calculateFireworksCost({ inputCost: 0.001, outputCost: 0.002 }, 10, 5)).toBe(0.02);
+      expect(calculateFireworksCost({ cost: { input: 0.001, output: 0.002 } }, 10, 5)).toBe(0.02);
+      expect(calculateFireworksCost({ cost: { input: 0.001 } as any }, 10, 5)).toBeUndefined();
       expect(calculateFireworksCost({ cost: 0.003 }, 10, 5, true)).toBe(0);
     });
 

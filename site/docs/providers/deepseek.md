@@ -33,7 +33,7 @@ providers:
 
 - `temperature`
 - `max_tokens`
-- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
+- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates. `cost` can be a shared fallback rate or a structured `{ input, output }` object; `inputCost` and `outputCost` take precedence.
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
 - `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)

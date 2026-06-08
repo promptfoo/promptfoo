@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost } from './shared';
+import { calculateCost, getTokenCostRates } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -70,8 +70,7 @@ export function calculateDeepSeekCost(
   }
 
   const uncachedPromptTokens = cachedTokens ? promptTokens - cachedTokens : promptTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const { inputCost, outputCost } = getTokenCostRates(config, model.cost);
   const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;

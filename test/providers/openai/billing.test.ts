@@ -90,6 +90,49 @@ describe('OpenAI billing helpers', () => {
     expect(cost).toBeCloseTo((600 * 0.25 + 400 * 0.025 + 100 * 2) / 1e6, 10);
   });
 
+  it('supports object-shaped text cost overrides', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5-mini',
+        { cost: { input: 0.001, output: 0.003 } },
+        {
+          prompt_tokens: 1_000,
+          completion_tokens: 500,
+        },
+      ),
+    ).toBeCloseTo(2.5, 10);
+  });
+
+  it('supports complete object-shaped multimodal rates for an unknown model', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'custom-audio-model',
+        { cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 } },
+        {
+          prompt_tokens: 1_200,
+          completion_tokens: 600,
+          prompt_tokens_details: { text_tokens: 1_000, audio_tokens: 200 },
+          completion_tokens_details: { text_tokens: 500, audio_tokens: 100 },
+        },
+      ),
+    ).toBeCloseTo(7.5, 10);
+  });
+
+  it('does not price an unknown model from incomplete object-shaped rates', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'custom-audio-model',
+        { cost: { audioInput: 0.01, audioOutput: 0.03 } as any },
+        {
+          prompt_tokens: 1_200,
+          completion_tokens: 600,
+          prompt_tokens_details: { text_tokens: 1_000, audio_tokens: 200 },
+          completion_tokens_details: { text_tokens: 500, audio_tokens: 100 },
+        },
+      ),
+    ).toBeUndefined();
+  });
+
   it('prices cached input for GPT-5.3 coding models', () => {
     expect(
       calculateOpenAIUsageCost(
@@ -215,6 +258,32 @@ describe('OpenAI billing helpers', () => {
     );
 
     expect(cost).toBeCloseTo((21 * 0.15 + 9 * 10 + 16 * 0.6 + 7 * 20) / 1e6, 10);
+  });
+
+  it('ignores non-finite legacy audio overrides before structured audio rates', () => {
+    const cost = calculateOpenAIUsageCost(
+      'gpt-4o-mini-audio-preview',
+      {
+        audioInputCost: Number.NaN,
+        audioOutputCost: Number.POSITIVE_INFINITY,
+        cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 },
+      },
+      {
+        prompt_tokens: 30,
+        completion_tokens: 23,
+        prompt_tokens_details: {
+          text_tokens: 21,
+          audio_tokens: 9,
+        },
+        completion_tokens_details: {
+          text_tokens: 16,
+          audio_tokens: 7,
+        },
+      },
+      {},
+    );
+
+    expect(cost).toBeCloseTo(0.369, 10);
   });
 
   it('uses current gpt-realtime-mini multimodal and cached rates', () => {

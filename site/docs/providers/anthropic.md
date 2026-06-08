@@ -94,31 +94,31 @@ Claude models are available across multiple platforms. Here's how the model name
 
 ### Supported Parameters
 
-| Config Property | Environment Variable  | Description                                                                         |
-| --------------- | --------------------- | ----------------------------------------------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                         |
-| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session         |
-| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
-| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.    |
-| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
-| cost            | -                     | Legacy per-token override applied to both input and output pricing                  |
-| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                            |
-| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                           |
-| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                   |
-| top_k           | -                     | Only sample from the top K options for each subsequent token                        |
-| stop_sequences  | -                     | Array of strings that will stop generation when encountered                         |
-| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                              |
-| tools           | -                     | An array of tool or function definitions for the model to call                      |
-| tool_choice     | -                     | An object specifying the tool to call                                               |
-| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                     |
-| output_format   | -                     | JSON schema configuration for structured outputs                                    |
-| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
-| showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
-| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                 |
-| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                            |
-| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                  |
-| headers         | -                     | Additional headers to be sent with the API request                                  |
-| extra_body      | -                     | Additional parameters to be included in the API request body                        |
+| Config Property | Environment Variable  | Description                                                                                             |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                                             |
+| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session                             |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                                          |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.                        |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                                                |
+| cost            | -                     | Per-token pricing override. Set a number for both directions, or `{ input, output }` for separate rates |
+| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                                                |
+| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                                               |
+| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                                       |
+| top_k           | -                     | Only sample from the top K options for each subsequent token                                            |
+| stop_sequences  | -                     | Array of strings that will stop generation when encountered                                             |
+| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                                                  |
+| tools           | -                     | An array of tool or function definitions for the model to call                                          |
+| tool_choice     | -                     | An object specifying the tool to call                                                                   |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                         |
+| output_format   | -                     | JSON schema configuration for structured outputs                                                        |
+| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)                     |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true)                                       |
+| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                                     |
+| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                                |
+| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                      |
+| headers         | -                     | Additional headers to be sent with the API request                                                      |
+| extra_body      | -                     | Additional parameters to be included in the API request body                                            |
 
 ### Prompt Template
 

@@ -42,6 +42,12 @@ describe('calculateDeepSeekCost', () => {
     expect(cost).toBeCloseTo(2.0); // (1.0 + 1.0) from config override
   });
 
+  it('should use object custom cost from config', () => {
+    const config = { cost: { input: 1.0 / 1e6, output: 3.0 / 1e6 } };
+    const cost = calculateDeepSeekCost('deepseek-chat', config, 1000000, 1000000);
+    expect(cost).toBeCloseTo(4.0);
+  });
+
   it('should use separate custom input and output costs from config', () => {
     const config = { inputCost: 1.0 / 1e6, outputCost: 3.0 / 1e6 };
     const cost = calculateDeepSeekCost('deepseek-chat', config, 1000000, 1000000);

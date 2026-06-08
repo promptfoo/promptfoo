@@ -25,6 +25,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { getPricingData } from '../../../src/providers/bedrock/pricingFetcher';
 import { mockProcessEnv } from '../../util/utils';
 
 import type {
@@ -103,6 +104,19 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     getCache: vi.fn(),
     isCacheEnabled: vi.fn(),
   };
+});
+
+vi.mock('../../../src/providers/bedrock/pricingFetcher', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getPricingData: vi.fn(),
+  };
+});
+
+const mockGetPricingData = vi.mocked(getPricingData);
+
+afterEach(() => {
+  mockGetPricingData.mockReset();
 });
 
 class TestBedrockProvider extends AwsBedrockGenericProvider {
@@ -224,6 +238,70 @@ describe('AwsBedrockGenericProvider', () => {
     expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
     );
+  });
+
+  it('should attempt pricing with the default credential chain even when API-key auth is configured', async () => {
+    mockGetPricingData.mockResolvedValue(null);
+    const provider = new TestBedrockProvider({ apiKey: 'test-api-key', region: 'us-east-1' });
+
+    await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+
+    expect(mockGetPricingData).toHaveBeenCalledWith(
+      'us-east-1',
+      undefined,
+      expect.objectContaining({ debug: expect.any(Function), warn: expect.any(Function) }),
+    );
+  });
+
+  it('should fall back cleanly when pricing credentials fail to resolve', async () => {
+    const provider = new TestBedrockProvider({ profile: 'missing-profile', region: 'us-east-1' });
+    vi.spyOn(provider, 'getCredentials').mockRejectedValue(new Error('missing credentials'));
+
+    await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
+  it('should share one in-flight pricing lookup while credentials resolve', async () => {
+    let resolveCredentials!: (credentials: undefined) => void;
+    const credentialsPromise = new Promise<undefined>((resolve) => {
+      resolveCredentials = resolve;
+    });
+    const provider = new TestBedrockProvider({ region: 'us-east-1' });
+    vi.spyOn(provider, 'getCredentials').mockReturnValue(credentialsPromise);
+    mockGetPricingData.mockResolvedValue(null);
+
+    const firstLookup = provider.getPricingDataForCost();
+    const secondLookup = provider.getPricingDataForCost();
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+
+    resolveCredentials(undefined);
+    await expect(Promise.all([firstLookup, secondLookup])).resolves.toEqual([null, null]);
+    expect(mockGetPricingData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry pricing after a brief cooldown for a transient failed lookup', async () => {
+    vi.useFakeTimers();
+    const pricingData = {
+      models: new Map([['Nova Micro', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    };
+    const provider = new TestBedrockProvider({ region: 'us-east-1' });
+    mockGetPricingData.mockResolvedValueOnce(null).mockResolvedValueOnce(pricingData);
+
+    try {
+      await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+      await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+      expect(mockGetPricingData).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await expect(provider.getPricingDataForCost()).resolves.toEqual(pricingData);
+      expect(mockGetPricingData).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
@@ -3661,6 +3739,177 @@ describe('AwsBedrockCompletionProvider', () => {
     );
   });
 
+  it('should use a call-level cost override from context.prompt.config', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+          cost: { input: 0.5, output: 0.5 },
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          cost: { input: 0.01, output: 0.02 },
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.5);
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
+  it('should prefer call-level inputCost and outputCost overrides for InvokeModel costs', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+          cost: { input: 0.5, output: 0.5 },
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          inputCost: 0.01,
+          outputCost: 0.02,
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.5);
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
+  it('should combine a partial InvokeModel cost override with fetched regional pricing', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    mockGetPricingData.mockResolvedValueOnce({
+      models: new Map([['Claude 3.7 Sonnet', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          inputCost: 0.01,
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.14);
+    expect(mockGetPricingData).toHaveBeenCalledWith(
+      'us-east-1',
+      undefined,
+      expect.objectContaining({ debug: expect.any(Function), warn: expect.any(Function) }),
+    );
+  });
+
+  it('should ignore non-finite InvokeModel overrides and use fetched regional pricing', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    mockGetPricingData.mockResolvedValueOnce({
+      models: new Map([['Claude 3.7 Sonnet', { input: 0.001, output: 0.002 }]]),
+      region: 'us-east-1',
+      fetchedAt: new Date(),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY },
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.05);
+    expect(mockGetPricingData).toHaveBeenCalledWith(
+      'us-east-1',
+      undefined,
+      expect.objectContaining({ debug: expect.any(Function), warn: expect.any(Function) }),
+    );
+  });
+
+  it.each([
+    ['global.amazon.nova-2-lite-v1:0', {}],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/prod-profile',
+      { inferenceModelType: 'nova2' },
+    ],
+  ])('should not fetch pricing for an unpriceable inference profile: %s', async (modelName, config) => {
+    mockInvokeModel.mockResolvedValueOnce({
+      body: {
+        transformToString: () =>
+          JSON.stringify({
+            output: { message: { content: [{ text: 'test response' }] } },
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          }),
+      },
+    });
+    const provider = new AwsBedrockCompletionProvider(modelName, {
+      config: { region: 'us-east-1', ...config } as any,
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cost).toBeUndefined();
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
   it('should pass merged prompt-level config to model.output (e.g. showThinking)', async () => {
     // Exercise the cached path, which reaches model.output with the effective config.
     mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached' }));
@@ -3748,6 +3997,58 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('should not charge InvokeModel cost for cached responses with explicit overrides', async () => {
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached response' }));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+          cost: { input: 0.01, output: 0.02 },
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+    expect(result.tokenUsage).toEqual({
+      prompt: 10,
+      completion: 20,
+      total: 30,
+      numRequests: 1,
+    });
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
+  it('should not fetch pricing or charge InvokeModel cost for cached responses', async () => {
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached response' }));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 
   it('should hash prompt and secret values in the cache key', async () => {

@@ -1,3 +1,4 @@
+import { getFiniteCostValue, getTokenCostOverrides, getTokenCostRates } from '../shared';
 import { OPENAI_BILLING_MODELS } from './util';
 
 import type { ProviderConfig } from '../shared';
@@ -522,6 +523,44 @@ function getModelRates(
   };
 }
 
+function getExplicitObjectCostRates(
+  config: ProviderConfig,
+  usage: OpenAIBillingUsage,
+): OpenAIModelRates | undefined {
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  if (!objectCost || usage.imageInputTokens > 0 || usage.imageOutputTokens > 0) {
+    return undefined;
+  }
+
+  const { inputCost, outputCost } = getTokenCostOverrides(config);
+  if (inputCost === undefined || outputCost === undefined) {
+    return undefined;
+  }
+
+  const audioInputCost =
+    getFiniteCostValue(config.audioInputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost.audioInput);
+  const audioOutputCost =
+    getFiniteCostValue(config.audioOutputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost.audioOutput);
+  if (
+    (usage.audioInputTokens > 0 && audioInputCost === undefined) ||
+    (usage.audioOutputTokens > 0 && audioOutputCost === undefined)
+  ) {
+    return undefined;
+  }
+
+  return {
+    text: { input: inputCost, output: outputCost },
+    ...(usage.audioInputTokens > 0 || usage.audioOutputTokens > 0
+      ? { audio: { input: audioInputCost, output: audioOutputCost } }
+      : {}),
+  };
+}
+
 function getNumericValue(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -628,9 +667,19 @@ function calculateTextCost(
   cachedTextInputTokens: number,
   config: ProviderConfig,
 ): number {
-  const textInputCost = config.inputCost ?? config.cost ?? rates.input;
-  const cachedInputCost = config.inputCost ?? config.cost ?? rates.cachedInput ?? textInputCost;
-  const outputCost = config.outputCost ?? config.cost ?? rates.output ?? 0;
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  const numericCost = typeof config.cost === 'number' ? config.cost : undefined;
+  const { inputCost: textInputCost, outputCost } = getTokenCostRates(config, {
+    input: rates.input,
+    output: rates.output ?? 0,
+  });
+  const cachedInputCost =
+    getFiniteCostValue(config.inputCost) ??
+    getFiniteCostValue(objectCost?.input) ??
+    getFiniteCostValue(numericCost) ??
+    rates.cachedInput ??
+    textInputCost;
   const uncachedTextInputTokens = Math.max(usage.textInputTokens - cachedTextInputTokens, 0);
 
   return (
@@ -655,9 +704,10 @@ function calculateModalCost(
     return 0;
   }
 
-  const inputCost = overrides.input ?? rates.input ?? 0;
-  const cachedInputCost = overrides.cachedInput ?? rates.cachedInput ?? inputCost;
-  const outputCost = overrides.output ?? rates.output ?? 0;
+  const inputCost = getFiniteCostValue(overrides.input) ?? rates.input ?? 0;
+  const cachedInputCost =
+    getFiniteCostValue(overrides.cachedInput) ?? rates.cachedInput ?? inputCost;
+  const outputCost = getFiniteCostValue(overrides.output) ?? rates.output ?? 0;
   const uncachedInputTokens = Math.max(inputTokens - cachedInputTokens, 0);
 
   return (
@@ -682,7 +732,9 @@ export function calculateOpenAIUsageCost(
 
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const rates = getModelRates(modelName, tier, usage.totalInputTokens);
+  const rates =
+    getModelRates(modelName, tier, usage.totalInputTokens) ??
+    getExplicitObjectCostRates(config, usage);
   if (!rates) {
     return undefined;
   }
@@ -691,6 +743,8 @@ export function calculateOpenAIUsageCost(
     return 0;
   }
 
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
   const { hasOutputBreakdown } = getOpenAIUsageParts(rawUsage);
 
   if (
@@ -717,15 +771,23 @@ export function calculateOpenAIUsageCost(
 
   const cachedInput = splitCachedInputTokens(usage);
   const textCost = calculateTextCost(rates.text, usage, cachedInput.textInputTokens, config);
+  const audioInputCost =
+    getFiniteCostValue(config.audioInputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioInput);
+  const audioOutputCost =
+    getFiniteCostValue(config.audioOutputCost) ??
+    getFiniteCostValue(config.audioCost) ??
+    getFiniteCostValue(objectCost?.audioOutput);
   const audioCost = calculateModalCost(
     rates.audio,
     usage.audioInputTokens,
     cachedInput.audioInputTokens,
     usage.audioOutputTokens,
     {
-      input: config.audioInputCost ?? config.audioCost,
-      cachedInput: config.audioInputCost ?? config.audioCost,
-      output: config.audioOutputCost ?? config.audioCost,
+      input: audioInputCost,
+      cachedInput: audioInputCost,
+      output: audioOutputCost,
     },
   );
   const imageCost = calculateModalCost(
@@ -736,7 +798,8 @@ export function calculateOpenAIUsageCost(
     {},
   );
 
-  return textCost + audioCost + imageCost;
+  const totalCost = textCost + audioCost + imageCost;
+  return Number.isFinite(totalCost) ? totalCost : undefined;
 }
 
 function isReasoningModel(modelName: string): boolean {

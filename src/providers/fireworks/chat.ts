@@ -1,4 +1,5 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { getFiniteCostValue, getTokenCostOverrides } from '../shared';
 import { FireworksEmbeddingProvider } from './embedding';
 import {
   buildFireworksProviderConfig,
@@ -53,8 +54,7 @@ export function calculateFireworksCost(
     return 0;
   }
 
-  const inputCost = config.inputCost ?? config.cost;
-  const outputCost = config.outputCost ?? config.cost;
+  const { inputCost, outputCost } = getTokenCostOverrides(config);
 
   if (
     inputCost === undefined ||
@@ -72,7 +72,7 @@ export function calculateFireworksCost(
   // assuming a discount that doesn't match the model's actual pricing.
   const cacheHitTokens = Math.min(Math.max(cachedInputTokens, 0), promptTokens);
   const uncachedPromptTokens = promptTokens - cacheHitTokens;
-  const cacheReadCost = config.cacheReadInputCost ?? inputCost;
+  const cacheReadCost = getFiniteCostValue(config.cacheReadInputCost) ?? inputCost;
 
   return (
     inputCost * uncachedPromptTokens +

@@ -47,7 +47,7 @@ describe('OpenAI Provider', () => {
       });
 
       const result = await provider.callEmbeddingApi('test text');
-      const expectedCost = 10 * provider.config.cost!;
+      const expectedCost = 10 * configuredEmbeddingCostPerToken;
       expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
       expect(result.tokenUsage).toEqual({
         total: 10,

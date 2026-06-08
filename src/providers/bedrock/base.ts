@@ -10,11 +10,13 @@ import { createHmac } from 'crypto';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { type BedrockPricingData, getPricingData } from './pricingFetcher';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
 import type { EnvOverrides } from '../../types/env';
+import type { ModelCost } from '../shared';
 
 export interface BedrockOptions {
   accessKeyId?: string;
@@ -28,9 +30,16 @@ export interface BedrockOptions {
   trace?: Trace;
   showThinking?: boolean;
   endpoint?: string;
+  /** Custom per-token cost override. */
+  cost?: number | ModelCost;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
 }
 
 const BEDROCK_CACHE_KEY_HMAC_KEY = 'promptfoo:bedrock:cache-key:v1';
+const BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS = 30_000;
 
 function hashBedrockCacheValue(value: unknown) {
   return createHmac('sha256', BEDROCK_CACHE_KEY_HMAC_KEY)
@@ -116,6 +125,9 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  private pricingData?: BedrockPricingData;
+  private pricingDataPromise?: Promise<BedrockPricingData | null>;
+  private pricingRetryAfter = 0;
 
   constructor(
     modelName: string,
@@ -227,5 +239,62 @@ export abstract class AwsBedrockGenericProvider {
       getEnvString('AWS_BEDROCK_REGION') ||
       'us-east-1'
     );
+  }
+
+  /**
+   * Gets pricing data for cost calculation, with lazy loading and caching.
+   * Pricing fetch runs after the model response and reuses cached data when available.
+   * Returns cached data if available, or null if pricing fetch fails.
+   */
+  async getPricingDataForCost(): Promise<BedrockPricingData | null> {
+    if (this.pricingData !== undefined) {
+      return this.pricingData;
+    }
+
+    const pricingRetryDelay = this.pricingRetryAfter - Date.now();
+    if (pricingRetryDelay > 0) {
+      logger.debug('[Bedrock]: Skipping pricing fetch during failure retry delay', {
+        retryInMs: pricingRetryDelay,
+      });
+      return null;
+    }
+
+    if (this.pricingDataPromise !== undefined) {
+      return this.pricingDataPromise;
+    }
+
+    this.pricingDataPromise = (async () => {
+      // Pricing API can still use explicit credentials or the default AWS credential
+      // chain even when Bedrock requests themselves use bearer-token auth.
+      let credentials: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined;
+      try {
+        credentials = await this.getCredentials();
+      } catch (err) {
+        logger.debug('[Bedrock]: Failed to resolve credentials for pricing fetch', {
+          error: String(err),
+        });
+        this.pricingRetryAfter = Date.now() + BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS;
+        return null;
+      }
+
+      try {
+        const data = await getPricingData(this.getRegion(), credentials, logger);
+        if (data) {
+          this.pricingData = data;
+          this.pricingRetryAfter = 0;
+        } else {
+          this.pricingRetryAfter = Date.now() + BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS;
+        }
+        return data;
+      } catch (err) {
+        logger.debug('[Bedrock]: Failed to fetch pricing data', { error: String(err) });
+        this.pricingRetryAfter = Date.now() + BEDROCK_PRICING_FAILURE_RETRY_DELAY_MS;
+        return null;
+      }
+    })().finally(() => {
+      this.pricingDataPromise = undefined;
+    });
+
+    return this.pricingDataPromise;
   }
 }

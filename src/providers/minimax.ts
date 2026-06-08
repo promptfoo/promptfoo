@@ -1,7 +1,7 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost } from './shared';
+import { calculateCost, getFiniteCostValue, getTokenCostRates } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -87,9 +87,11 @@ export function calculateMiniMaxCost(
     ? Math.min(Math.max(cachedTokens!, 0), promptTokens!)
     : 0;
   const uncachedPromptTokens = promptTokens! - billableCachedTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
+  const { inputCost, outputCost } = getTokenCostRates(config, {
+    input: model.cost.input,
+    output: model.cost.output,
+  });
+  const cacheReadCost = getFiniteCostValue(config.cacheReadCost) ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
   const cacheReadCostTotal = cacheReadCost * billableCachedTokens;

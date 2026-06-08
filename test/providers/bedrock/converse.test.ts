@@ -1165,6 +1165,45 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.cost).toBeCloseTo(0.00105, 6);
     });
 
+    it('should prefer explicit cost overrides for Converse models', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { cost: { input: 0.01, output: 0.02 }, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBe(20);
+    });
+
+    it('should prefer prompt-level cost overrides for Converse models', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { cost: { input: 0.001, output: 0.002 }, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test', {
+        vars: {},
+        prompt: {
+          raw: 'Test',
+          label: 'test',
+          config: { inputCost: 0.01, outputCost: 0.02 },
+        },
+      });
+
+      expect(result.cost).toBe(20);
+    });
+
     it('should calculate cost for Claude Opus 4.8 models', async () => {
       // The 'anthropic.claude-opus-4-8' price entry is matched via substring and
       // must win over the broader 'anthropic.claude-opus-4' ($15/$75) entry —
@@ -2115,6 +2154,53 @@ Third line`;
 
       expect(result.cost).toBeUndefined();
     });
+
+    it('should not treat a missing directional price as free for unknown models', async () => {
+      const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
+        config: { inputCost: 0.01, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should not treat non-finite directional prices as free for unknown models', async () => {
+      const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
+        config: {
+          cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY },
+          region: 'us-east-1',
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should calculate cost for unknown models with both directional overrides', async () => {
+      const provider = new AwsBedrockConverseProvider('unknown.model-v1:0', {
+        config: { inputCost: 0.01, outputCost: 0.02, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBe(20);
+    });
   });
 
   describe('caching', () => {
@@ -2199,7 +2285,7 @@ Third line`;
       cacheSpies.push(isCacheEnabledSpy, getCacheSpy);
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: { region: 'us-east-1' },
+        config: { cost: { input: 0.01, output: 0.02 }, region: 'us-east-1' },
       });
 
       const result = await provider.callApi('Test prompt');
@@ -2212,6 +2298,7 @@ Third line`;
         completion: 50,
         total: 150,
       });
+      expect(result.cost).toBeUndefined();
 
       // Verify the mock send was never called (response came from cache)
       expect(mockSend).not.toHaveBeenCalled();
@@ -2882,6 +2969,37 @@ Third line`;
       expect(result.output).toBe('Hello World');
       expect(result.tokenUsage?.prompt).toBe(10);
       expect(result.tokenUsage?.completion).toBe(5);
+    });
+
+    it('should prefer prompt-level cost overrides for streaming Converse models', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          cost: { input: 0.001, output: 0.002 },
+          region: 'us-east-1',
+          streaming: true,
+        },
+      });
+
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { metadata: { usage: { inputTokens: 1000, outputTokens: 500 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('Test', {
+        vars: {},
+        prompt: {
+          raw: 'Test',
+          label: 'test',
+          config: { inputCost: 0.01, outputCost: 0.02 },
+        },
+      });
+
+      expect(result.cost).toBe(20);
     });
 
     it('should handle streaming tool use response', async () => {

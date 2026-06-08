@@ -1169,6 +1169,73 @@ providers:
       tool_choice: auto
 ```
 
+## Cost Tracking
+
+Promptfoo automatically tracks token usage and calculates costs for AWS Bedrock models. Cost data appears in eval outputs and the web UI.
+
+### Real-Time Pricing
+
+For the InvokeModel provider (`bedrock:<model-id>`), Promptfoo automatically fetches current pricing from the AWS Pricing API and caches it. This ensures accurate costs for your region and automatically reflects AWS price changes.
+
+The Converse provider (`bedrock:converse:<model-id>`) currently uses Promptfoo's built-in Converse pricing table plus any explicit `cost`, `inputCost`, or `outputCost` overrides. For a model not represented in the built-in table, configure a complete `cost` object or provide both `inputCost` and `outputCost`; a one-sided override cannot price the unknown token direction.
+
+**How it works:**
+
+1. First eval checks the cache for pricing data
+2. If not cached, fetches from AWS Pricing API; failed lookups are briefly suppressed on that provider before being retried
+3. Caches pricing data
+4. Subsequent evals use cached pricing (0ms overhead)
+5. Does not add an estimated automatic charge when regional pricing cannot be retrieved; use an explicit `cost` override when deterministic offline cost reporting is required
+
+Successful cached pricing is public regional catalog data and may be reused across
+provider instances. On a cache miss, the fetching provider's IAM credential context
+is used; a failed lookup is not shared with independent provider instances.
+
+**Requirements:**
+
+- **IAM credentials** with `pricing:GetProducts` permission
+- Pricing API requires IAM authentication
+- Promptfoo attempts explicit credentials or the AWS default credential chain for pricing lookups, even when Bedrock inference itself uses API-key authentication
+
+No configuration is needed. When IAM pricing credentials are unavailable or AWS does not return standard token pricing for a model, Promptfoo does not add an estimated automatic charge. Evaluation totals may therefore show zero cost for those calls. Configure `cost` when deterministic cost reporting is required without Pricing API access.
+
+InvokeModel automatic pricing can identify direct Bedrock model IDs and regional system-defined inference profile IDs because those identifiers include the underlying model and map to regional standard-token rates. Global and application inference profiles require distinct or opaque pricing selection, so Promptfoo does not infer a charge for them. Add a `cost` override when you need deterministic cost reporting for those calls.
+
+### Model Coverage
+
+Real-time pricing works only when the AWS Pricing API returns regional standard input
+and output text-token prices for the selected model. Models available for Bedrock
+inference are not necessarily represented in that pricing catalog, and catalog
+coverage may change independently of model availability. Configure `cost` for a
+model when automatic cost cannot be computed.
+
+Automatic pricing uses AWS regional standard input/output token prices only. Batch,
+flex, priority-tier, and prompt-cache rates are not substituted for standard request
+pricing.
+
+### Custom Pricing Override
+
+Override pricing for specific use cases:
+
+```yaml
+providers:
+  - id: bedrock:amazon.nova-micro-v1:0
+    config:
+      cost:
+        input: 0.00005 # USD per token (AWS lists prices per 1K tokens - divide by 1000)
+        output: 0.0002 # USD per token (AWS lists prices per 1K tokens - divide by 1000)
+```
+
+Custom pricing takes precedence over real-time pricing. For `bedrock:<model-id>`,
+supplying only `inputCost` or only `outputCost` overrides that token direction
+and uses retrieved regional standard pricing for the other direction. If the
+remaining rate cannot be retrieved, Promptfoo omits the automatic cost rather
+than treating unpriced tokens as free.
+
+**Note:** AWS Bedrock pricing is typically shown per 1,000 tokens on their pricing page. When configuring `cost` overrides, convert to per-token rates by dividing by 1000. For example, if AWS shows $0.05 per 1K input tokens, use `input: 0.00005` (0.05 / 1000).
+
+**Note**: For the latest pricing information, see the [AWS Bedrock Pricing page](https://aws.amazon.com/bedrock/pricing/).
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.

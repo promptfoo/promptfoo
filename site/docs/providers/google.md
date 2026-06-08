@@ -102,7 +102,8 @@ providers:
 
 For promptfoo's built-in cost estimates, Google providers also support `config.cost`,
 `config.inputCost`, and `config.outputCost`. Use `inputCost` and `outputCost` for separate
-prompt and completion pricing. The legacy `cost` option remains the shared fallback.
+prompt and completion pricing. `config.cost` can be either a shared legacy fallback rate
+or a structured `{ input, output }` object.
 
 ## Quick Start
 

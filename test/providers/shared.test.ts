@@ -165,6 +165,17 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
+    it('should use object config cost when provided', () => {
+      const cost = calculateCost(
+        'model1',
+        { cost: { input: 0.003, output: 0.007 } },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBe(6.5);
+    });
+
     it('should use separate config input and output costs when provided', () => {
       const cost = calculateCost(
         'model1',
@@ -179,7 +190,7 @@ describe('Shared Provider Functions', () => {
     it('should prefer separate config costs over config cost', () => {
       const cost = calculateCost(
         'model1',
-        { cost: 0.005, inputCost: 0.003, outputCost: 0.007 },
+        { cost: { input: 0.005, output: 0.008 }, inputCost: 0.003, outputCost: 0.007 },
         1000,
         500,
         models,
@@ -194,6 +205,24 @@ describe('Shared Provider Functions', () => {
       expect(calculateCost('model1', { cost: 0.005, outputCost: 0.007 }, 1000, 500, models)).toBe(
         8.5,
       );
+      expect(
+        calculateCost(
+          'model1',
+          { cost: { input: 0.005, output: 0.008 }, inputCost: 0.003 },
+          1000,
+          500,
+          models,
+        ),
+      ).toBe(7);
+      expect(
+        calculateCost(
+          'model1',
+          { cost: { input: 0.005, output: 0.008 }, outputCost: 0.007 },
+          1000,
+          500,
+          models,
+        ),
+      ).toBe(8.5);
     });
 
     it('should use long-context rates when prompt tokens exceed the model threshold', () => {
@@ -253,6 +282,37 @@ describe('Shared Provider Functions', () => {
     it('should return undefined if model not found', () => {
       const cost = calculateCost('nonexistent', {}, 1000, 500, models);
       expect(cost).toBeUndefined();
+    });
+
+    it('should still use explicit config cost when model is not found', () => {
+      expect(calculateCost('nonexistent', { cost: 0.005 }, 1000, 500, models)).toBe(7.5);
+      expect(
+        calculateCost('nonexistent', { cost: { input: 0.003, output: 0.007 } }, 1000, 500, models),
+      ).toBe(6.5);
+    });
+
+    it('should ignore non-finite override rates when model defaults are available', () => {
+      expect(
+        calculateCost(
+          'model1',
+          { cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY } },
+          1000,
+          500,
+          models,
+        ),
+      ).toBe(2);
+    });
+
+    it('should not calculate unknown-model costs from incomplete explicit rates', () => {
+      expect(
+        calculateCost(
+          'nonexistent',
+          { cost: { input: Number.NaN, output: 0.007 } },
+          1000,
+          500,
+          models,
+        ),
+      ).toBeUndefined();
     });
 
     it('should return undefined if tokens are not finite', () => {

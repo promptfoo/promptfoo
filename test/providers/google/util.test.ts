@@ -2788,6 +2788,12 @@ describe('util', () => {
       expect(cost).toBeCloseTo(1.5, 10);
     });
 
+    it('should respect object custom cost override in config', () => {
+      const config = { cost: { input: 0.001, output: 0.003 } };
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      expect(cost).toBeCloseTo(2.5, 10);
+    });
+
     it('should respect separate custom input and output cost overrides in config', () => {
       const config = { inputCost: 0.001, outputCost: 0.003 };
       const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);

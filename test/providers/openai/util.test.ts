@@ -439,6 +439,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBe(184.5);
   });
 
+  it('should use object custom cost from config when provided', () => {
+    const cost = calculateOpenAICost('gpt-4', { cost: { input: 0.001, output: 0.003 } }, 1000, 500);
+    expect(cost).toBe(2.5);
+  });
+
   it('should use separate custom input and output costs from config when provided', () => {
     const cost = calculateOpenAICost('gpt-4', { inputCost: 0.001, outputCost: 0.003 }, 1000, 500);
     expect(cost).toBe(2.5);
@@ -481,6 +486,57 @@ describe('calculateOpenAICost', () => {
       100,
     );
     expect(cost).toBe(5.0075);
+  });
+
+  it('should use object custom audio input and output costs from config when provided', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 } },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBe(7.5);
+  });
+
+  it('should use complete object custom rates for an unknown audio model', () => {
+    const cost = calculateOpenAICost(
+      'custom-audio-model',
+      { cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 } },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBe(7.5);
+  });
+
+  it('should not report a cost for incomplete unknown-model audio overrides', () => {
+    const cost = calculateOpenAICost(
+      'custom-audio-model',
+      { cost: { audioInput: 0.01, audioOutput: 0.03 } as any },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBeUndefined();
+  });
+
+  it('should prefer custom audioCost over object custom audio costs', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      {
+        audioCost: 0.05,
+        cost: { input: 0.001, output: 0.003, audioInput: 0.01, audioOutput: 0.03 },
+      },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBe(17.5);
   });
 
   it('should prefer separate custom audio costs over custom audioCost', () => {

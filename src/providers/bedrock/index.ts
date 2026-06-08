@@ -4,14 +4,14 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { parseChatPrompt } from '../shared';
+import { getTokenCostOverrides, parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { calculateCostWithFetchedPricing, supportsAutomaticBedrockPricing } from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
@@ -2614,6 +2614,120 @@ export function getHandlerForModel(
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
+  private async toProviderResponse(
+    model: IBedrockModel,
+    output: any,
+    prompt: string,
+    resolvedConfig: BedrockInvokeModelOptions,
+    cached = false,
+  ): Promise<ProviderResponse> {
+    let tokenUsage: Partial<TokenUsage> = {};
+    if (model.tokenUsage) {
+      tokenUsage = model.tokenUsage(output, prompt);
+      logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
+    } else {
+      // Get token counts, converting strings to numbers
+      const promptTokens =
+        output.usage?.inputTokens ??
+        output.usage?.input_tokens ??
+        output.usage?.prompt_tokens ??
+        output.prompt_tokens ??
+        output.prompt_token_count;
+      const completionTokens =
+        output.usage?.outputTokens ??
+        output.usage?.output_tokens ??
+        output.usage?.completion_tokens ??
+        output.completion_tokens ??
+        output.generation_token_count;
+
+      const promptTokensNum = coerceStrToNum(promptTokens);
+      const completionTokensNum = coerceStrToNum(completionTokens);
+
+      // Get total tokens from API or calculate it
+      const totalTokens =
+        coerceStrToNum(
+          output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
+        ) ??
+        (promptTokensNum !== undefined && completionTokensNum !== undefined
+          ? promptTokensNum + completionTokensNum
+          : undefined);
+
+      tokenUsage = {
+        prompt: promptTokensNum,
+        completion: completionTokensNum,
+        total: totalTokens,
+        numRequests: 1,
+      };
+
+      // If we couldn't extract any token counts but have a response, track usage for metrics
+      if (
+        tokenUsage.prompt === undefined &&
+        tokenUsage.completion === undefined &&
+        tokenUsage.total === undefined &&
+        output
+      ) {
+        logger.debug(
+          `No explicit token counts found for ${this.modelName}, tracking request count only`,
+        );
+      } else {
+        logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
+      }
+    }
+
+    if (!tokenUsage.numRequests) {
+      tokenUsage.numRequests = 1;
+    }
+
+    // Cached responses do not incur a new Bedrock charge.
+    let cost: number | undefined;
+    if (!cached && tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
+      const { inputCost, outputCost } = getTokenCostOverrides(resolvedConfig);
+
+      if (inputCost !== undefined && outputCost !== undefined) {
+        const explicitCost = tokenUsage.prompt * inputCost + tokenUsage.completion * outputCost;
+        if (Number.isFinite(explicitCost)) {
+          cost = explicitCost;
+          logger.debug('[Bedrock]: Using custom cost override', {
+            cost,
+            inputCost,
+            outputCost,
+          });
+        }
+      } else if (supportsAutomaticBedrockPricing(this.modelName)) {
+        // Fetch pricing data and calculate cost
+        const pricingData = await this.getPricingDataForCost();
+        cost = calculateCostWithFetchedPricing(
+          this.modelName,
+          pricingData,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+          { input: inputCost, output: outputCost },
+          logger,
+        );
+        if (cost !== undefined) {
+          logger.debug('[Bedrock]: Calculated cost from pricing data', {
+            cost,
+            modelName: this.modelName,
+          });
+        }
+      }
+    }
+
+    return {
+      output: model.output(resolvedConfig, output),
+      tokenUsage,
+      ...(cached ? { cached: true } : {}),
+      ...(cost === undefined ? {} : { cost }),
+      ...(output['amazon-bedrock-guardrailAction']
+        ? {
+            guardrails: {
+              flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+            },
+          }
+        : {}),
+    };
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     let stop: string[];
     try {
@@ -2624,16 +2738,19 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
     // Merge prompt-level config over provider config once so the same effective config
     // drives handler selection, request params, AND output parsing (e.g. showThinking).
-    const mergedConfig = { ...this.config, ...context?.prompt.config };
+    const resolvedConfig = {
+      ...this.config,
+      ...context?.prompt.config,
+    } as BedrockInvokeModelOptions;
 
-    let model = getHandlerForModel(this.modelName, mergedConfig);
+    let model = getHandlerForModel(this.modelName, resolvedConfig);
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = await model.params(mergedConfig, prompt, stop, this.modelName, context?.vars);
+    const params = await model.params(resolvedConfig, prompt, stop, this.modelName, context?.vars);
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2650,11 +2767,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return {
-          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
-          tokenUsage: createEmptyTokenUsage(),
-          cached: true,
-        };
+        return this.toProviderResponse(
+          model,
+          JSON.parse(cachedResponse as string),
+          prompt,
+          resolvedConfig,
+          true,
+        );
       }
     }
 
@@ -2705,74 +2824,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
-      let tokenUsage: Partial<TokenUsage> = {};
-      if (model.tokenUsage) {
-        tokenUsage = model.tokenUsage(output, prompt);
-        logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
-      } else {
-        // Get token counts, converting strings to numbers
-        const promptTokens =
-          output.usage?.inputTokens ??
-          output.usage?.input_tokens ??
-          output.usage?.prompt_tokens ??
-          output.prompt_tokens ??
-          output.prompt_token_count;
-        const completionTokens =
-          output.usage?.outputTokens ??
-          output.usage?.output_tokens ??
-          output.usage?.completion_tokens ??
-          output.completion_tokens ??
-          output.generation_token_count;
-
-        const promptTokensNum = coerceStrToNum(promptTokens);
-        const completionTokensNum = coerceStrToNum(completionTokens);
-
-        // Get total tokens from API or calculate it
-        const totalTokens =
-          coerceStrToNum(
-            output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
-          ) ??
-          (promptTokensNum !== undefined && completionTokensNum !== undefined
-            ? promptTokensNum + completionTokensNum
-            : undefined);
-
-        tokenUsage = {
-          prompt: promptTokensNum,
-          completion: completionTokensNum,
-          total: totalTokens,
-          numRequests: 1,
-        };
-
-        // If we couldn't extract any token counts but have a response, track usage for metrics
-        if (
-          tokenUsage.prompt === undefined &&
-          tokenUsage.completion === undefined &&
-          tokenUsage.total === undefined &&
-          output
-        ) {
-          logger.debug(
-            `No explicit token counts found for ${this.modelName}, tracking request count only`,
-          );
-        } else {
-          logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
-        }
-      }
-
-      if (!tokenUsage.numRequests) {
-        tokenUsage.numRequests = 1;
-      }
-
-      return {
-        output: model.output(mergedConfig, output),
-        tokenUsage,
-        ...(output['amazon-bedrock-guardrailAction']
-          ? {
-              guardrails: {
-                flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-              },
-            }
-          : {}),
-      };
+      return await this.toProviderResponse(model, output, prompt, resolvedConfig);
     } catch (err) {
       logger.error('Bedrock API response error', { error: String(err), response });
       return {

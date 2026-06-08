@@ -169,6 +169,16 @@ describe('calculateHyperbolicCost', () => {
     const cost = calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', config, 1000, 500);
     expect(cost).toBe(0.001 * 1000 + 0.001 * 500);
   });
+
+  it('should use object-shaped custom costs from config if provided', () => {
+    const cost = calculateHyperbolicCost(
+      'deepseek-ai/DeepSeek-R1',
+      { cost: { input: 0.001, output: 0.003 } },
+      1000,
+      500,
+    );
+    expect(cost).toBe(2.5);
+  });
 });
 
 describe('createHyperbolicProvider', () => {
