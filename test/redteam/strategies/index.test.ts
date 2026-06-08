@@ -140,6 +140,29 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
+  it('should load posterior strategy', async () => {
+    const strategy = await loadStrategy('posterior');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('posterior');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call posterior strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('posterior');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { inject: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    const result = await strategy.action(testCases, injectVar, config);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].metadata?.strategyId).toBe('posterior');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Posterior Attack'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
   it('should load mischievous user strategy', async () => {
     const strategy = await loadStrategy('mischievous-user');
     expect(strategy).toBeDefined();

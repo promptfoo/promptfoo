@@ -100,6 +100,19 @@ describe('getEstimatedProbes', () => {
     } as Config;
     expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
   });
+
+  // Regression: every Strategy must have a probe multiplier, or the estimate is NaN.
+  it('returns a finite probe estimate for the posterior strategy', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: ['posterior'], // multiplier 1
+    } as Config;
+    const probes = getEstimatedProbes(config);
+    expect(Number.isNaN(probes)).toBe(false);
+    expect(probes).toBe(10); // (5*1) + (5*1*1)
+  });
 });
 
 describe('isStrategyConfigured', () => {
