@@ -32,6 +32,8 @@ export interface PackageCandidateConfig {
   candidates: PackageCandidateDefinition[];
 }
 
+type PackageExports = Record<string, unknown>;
+
 export interface PackageCandidateReport extends PackageCandidateDefinition {
   files: string[];
   externalDependencies: string[];
@@ -250,6 +252,72 @@ export function getPackageCandidateSpecifier(
   packageName = 'promptfoo',
 ): string | undefined {
   return candidate.packageSubpath ? `${packageName}/${candidate.packageSubpath}` : undefined;
+}
+
+function isPackageExports(value: unknown): value is PackageExports {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function findPackageCandidateExportViolations(
+  packageExports: unknown,
+  candidates: PackageCandidateDefinition[],
+): string[] {
+  const exports = isPackageExports(packageExports) ? packageExports : {};
+  const violations: string[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.packageSubpath || !candidate.artifacts) {
+      continue;
+    }
+
+    const exportName = `./${candidate.packageSubpath}`;
+    const packageExport = exports[exportName];
+    if (!isPackageExports(packageExport)) {
+      violations.push(`${candidate.name}: missing package export "${exportName}"`);
+      continue;
+    }
+
+    const topLevelConditions = Object.keys(packageExport);
+    if (JSON.stringify(topLevelConditions) !== JSON.stringify(['import', 'require'])) {
+      violations.push(
+        `${candidate.name}: package export conditions must be exactly import then require`,
+      );
+    }
+
+    for (const [format, condition] of [
+      ['esm', 'import'],
+      ['cjs', 'require'],
+    ] as const) {
+      const conditionalExport = packageExport[condition];
+      if (!isPackageExports(conditionalExport)) {
+        violations.push(`${candidate.name}/${format}: missing ${condition} export conditions`);
+        continue;
+      }
+
+      const conditions = Object.keys(conditionalExport);
+      if (JSON.stringify(conditions) !== JSON.stringify(['types', 'default'])) {
+        violations.push(
+          `${candidate.name}/${format}: ${condition} conditions must be exactly types then default`,
+        );
+      }
+
+      const typesTarget = conditionalExport.types;
+      if (typeof typesTarget !== 'string' || !typesTarget.startsWith('./')) {
+        violations.push(
+          `${candidate.name}/${format}: ${condition} types target must be package-relative`,
+        );
+      }
+
+      const expectedRuntimeTarget = `./${candidate.artifacts[format]}`;
+      if (conditionalExport.default !== expectedRuntimeTarget) {
+        violations.push(
+          `${candidate.name}/${format}: ${condition} default target must be ${expectedRuntimeTarget}`,
+        );
+      }
+    }
+  }
+
+  return violations;
 }
 
 export function resolvePackageArtifactPath(rootDir: string, artifactPath: string): string {

@@ -7,6 +7,7 @@ import {
   computePackageArtifactClosure,
   computePackageArtifactReadinessReport,
   computePackageReadinessReport,
+  findPackageCandidateExportViolations,
   getPackageCandidateSpecifier,
   readPackageCandidateConfig,
   resolvePackageArtifactPath,
@@ -176,6 +177,41 @@ describe('package artifact readiness', () => {
     ]);
 
     expect(report.violations).toEqual(['fixture: ESM and CommonJS dependency closures differ']);
+  });
+
+  it('rejects conditional exports that bypass the declared artifact budgets', () => {
+    const candidates = [
+      {
+        name: 'fixture',
+        entrypoint: 'src/index.ts',
+        packageSubpath: 'fixture',
+        artifacts: { esm: 'dist/index.js', cjs: 'dist/index.cjs' },
+        allowedExternal: [],
+        allowedBuiltins: [],
+        maxSourceFiles: 1,
+        maxArtifactFiles: 1,
+        maxArtifactBytes: 100,
+      },
+    ];
+
+    expect(
+      findPackageCandidateExportViolations(
+        {
+          './fixture': {
+            import: {
+              types: './dist/index.d.ts',
+              node: './dist/unbudgeted-node.js',
+              default: './dist/index.js',
+            },
+            require: {
+              types: './dist/index.d.cts',
+              default: './dist/index.cjs',
+            },
+          },
+        },
+        candidates,
+      ),
+    ).toEqual(['fixture/esm: import conditions must be exactly types then default']);
   });
 });
 

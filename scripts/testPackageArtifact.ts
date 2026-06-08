@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
   computePackageArtifactReadinessReport,
+  findPackageCandidateExportViolations,
   getPackageCandidateSpecifier,
   readPackageCandidateConfig,
   resolvePackageArtifactPath,
@@ -609,6 +610,15 @@ function main(): void {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    const exportViolations = findPackageCandidateExportViolations(
+      installedPackageJson.exports,
+      candidateConfig.candidates,
+    );
+    assert.deepEqual(
+      exportViolations,
+      [],
+      `Installed package candidate exports failed:\n${exportViolations.join('\n')}`,
+    );
     const artifactReadiness = computePackageArtifactReadinessReport(
       installedPackageDir,
       candidateConfig.candidates,

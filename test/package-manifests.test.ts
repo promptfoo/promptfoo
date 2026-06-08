@@ -5,6 +5,7 @@ import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 import {
+  findPackageCandidateExportViolations,
   getPackageCandidateSpecifier,
   readPackageCandidateConfig,
 } from '../scripts/packageReadiness';
@@ -137,6 +138,8 @@ describe('package manifests', () => {
     }>('package.json');
     const candidates = readPackageCandidateConfig(process.cwd()).candidates;
 
+    expect(findPackageCandidateExportViolations(packageJson.exports, candidates)).toEqual([]);
+
     for (const candidate of candidates) {
       const specifier = getPackageCandidateSpecifier(candidate);
       if (!specifier || !candidate.packageSubpath) {
@@ -144,10 +147,6 @@ describe('package manifests', () => {
       }
       expect(packageJson.exports?.[`./${candidate.packageSubpath}`], specifier).toBeDefined();
       expect(packageJson.typesVersions?.['*']?.[candidate.packageSubpath], specifier).toBeDefined();
-      expect(packageJson.exports?.[`./${candidate.packageSubpath}`], specifier).toMatchObject({
-        import: { default: `./${candidate.artifacts?.esm}` },
-        require: { default: `./${candidate.artifacts?.cjs}` },
-      });
     }
   });
 
