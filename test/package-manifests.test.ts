@@ -4,6 +4,11 @@ import path from 'node:path';
 import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
+import {
+  findPackageCandidateExportViolations,
+  getPackageCandidateSpecifier,
+  readPackageCandidateConfig,
+} from '../scripts/packageReadiness';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -124,6 +129,25 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.['provider-plugin']).toEqual([
       'dist/src/provider-plugin.d.ts',
     ]);
+  });
+
+  it('declares package exports for every public package candidate', () => {
+    const packageJson = readPackageJson<{
+      exports?: Record<string, unknown>;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    }>('package.json');
+    const candidates = readPackageCandidateConfig(process.cwd()).candidates;
+
+    expect(findPackageCandidateExportViolations(packageJson.exports, candidates)).toEqual([]);
+
+    for (const candidate of candidates) {
+      const specifier = getPackageCandidateSpecifier(candidate);
+      if (!specifier || !candidate.packageSubpath) {
+        continue;
+      }
+      expect(packageJson.exports?.[`./${candidate.packageSubpath}`], specifier).toBeDefined();
+      expect(packageJson.typesVersions?.['*']?.[candidate.packageSubpath], specifier).toBeDefined();
+    }
   });
 
   it('keeps the contracts subpath extension-safe for emitted ESM', () => {

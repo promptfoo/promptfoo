@@ -268,6 +268,21 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
   return 'unclassified';
 }
 
+function getLiteralRuntimeCallSpecifier(node: ts.CallExpression): string | undefined {
+  if (node.arguments.length === 0 || !ts.isStringLiteralLike(node.arguments[0])) {
+    return undefined;
+  }
+  const expression = node.expression;
+  const isRuntimeModuleCall =
+    expression.kind === ts.SyntaxKind.ImportKeyword ||
+    (ts.isIdentifier(expression) && expression.text === 'require') ||
+    (ts.isPropertyAccessExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      ((expression.expression.text === 'require' && expression.name.text === 'resolve') ||
+        (expression.expression.text === 'module' && expression.name.text === 'require')));
+  return isRuntimeModuleCall ? node.arguments[0].text : undefined;
+}
+
 export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
   const sourceFile = ts.createSourceFile(
     filePath,
@@ -279,19 +294,9 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
   const specifiers: string[] = [];
 
   function addStaticCallSpecifier(node: ts.CallExpression): void {
-    if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
-      return;
-    }
-
-    if (
-      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-      (ts.isIdentifier(node.expression) && node.expression.text === 'require') ||
-      (ts.isPropertyAccessExpression(node.expression) &&
-        ts.isIdentifier(node.expression.expression) &&
-        node.expression.expression.text === 'require' &&
-        node.expression.name.text === 'resolve')
-    ) {
-      specifiers.push(node.arguments[0].text);
+    const specifier = getLiteralRuntimeCallSpecifier(node);
+    if (specifier) {
+      specifiers.push(specifier);
     }
   }
 
@@ -323,6 +328,95 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
 
     if (ts.isCallExpression(node)) {
       addStaticCallSpecifier(node);
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return specifiers;
+}
+
+/**
+ * Extracts only module specifiers that can affect the emitted runtime graph.
+ * Type-only imports/exports and import() types are intentionally excluded so
+ * package-readiness budgets measure what consumers load, not declaration-only
+ * compatibility dependencies.
+ */
+export function extractRuntimeModuleSpecifiers(sourceText: string, filePath: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const specifiers: string[] = [];
+
+  function addCallSpecifier(node: ts.CallExpression): void {
+    const specifier = getLiteralRuntimeCallSpecifier(node);
+    if (specifier) {
+      specifiers.push(specifier);
+    }
+  }
+
+  function importHasRuntimeValue(node: ts.ImportDeclaration): boolean {
+    const clause = node.importClause;
+    if (!clause) {
+      return true;
+    }
+    if (clause.isTypeOnly) {
+      return false;
+    }
+    if (clause.name) {
+      return true;
+    }
+    if (!clause.namedBindings || ts.isNamespaceImport(clause.namedBindings)) {
+      return true;
+    }
+    return (
+      clause.namedBindings.elements.length === 0 ||
+      clause.namedBindings.elements.some((element) => !element.isTypeOnly)
+    );
+  }
+
+  function exportHasRuntimeValue(node: ts.ExportDeclaration): boolean {
+    if (node.isTypeOnly) {
+      return false;
+    }
+    if (!node.exportClause || ts.isNamespaceExport(node.exportClause)) {
+      return true;
+    }
+    return (
+      node.exportClause.elements.length === 0 ||
+      node.exportClause.elements.some((element) => !element.isTypeOnly)
+    );
+  }
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteralLike(node.moduleSpecifier) &&
+      importHasRuntimeValue(node)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteralLike(node.moduleSpecifier) &&
+      exportHasRuntimeValue(node)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      !node.isTypeOnly &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression &&
+      ts.isStringLiteralLike(node.moduleReference.expression)
+    ) {
+      specifiers.push(node.moduleReference.expression.text);
+    } else if (ts.isCallExpression(node)) {
+      addCallSpecifier(node);
     }
 
     ts.forEachChild(node, visit);
@@ -418,6 +512,12 @@ export function getPackageName(specifier: string): string | undefined {
   return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
 }
 
+/** The normalized Node builtin name a specifier imports, or undefined for npm/internal imports. */
+export function getNodeBuiltinName(specifier: string): string | undefined {
+  const moduleName = getExternalModuleName(specifier);
+  return moduleName && BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+}
+
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
 
 export interface BoundaryViolation {
@@ -442,6 +542,78 @@ export interface ArchitectureModuleReference {
 export interface ArchitectureSourceScan {
   sourceFiles: string[];
   references: ArchitectureModuleReference[];
+}
+
+export interface RuntimeDependencyClosure {
+  entrypoint: string;
+  files: string[];
+  externalDependencies: string[];
+  nodeBuiltins: string[];
+  unresolvedInternalImports: string[];
+}
+
+/**
+ * Computes the transitive runtime source graph for one entrypoint.
+ *
+ * This deliberately follows source modules rather than emitted chunks so the
+ * report is stable before a build and can act as a package-boundary ratchet.
+ */
+export function computeRuntimeDependencyClosure(
+  repoRoot: string,
+  entrypoint: string,
+  aliases: Record<string, string> = {},
+): RuntimeDependencyClosure {
+  const normalizedEntrypoint = normalizePath(entrypoint);
+  const absoluteEntrypoint = path.join(repoRoot, normalizedEntrypoint);
+  if (!fs.existsSync(absoluteEntrypoint) || !fs.statSync(absoluteEntrypoint).isFile()) {
+    throw new Error(`Runtime dependency entrypoint "${entrypoint}" does not exist.`);
+  }
+
+  const pending = [normalizedEntrypoint];
+  const files = new Set<string>();
+  const externalDependencies = new Set<string>();
+  const nodeBuiltins = new Set<string>();
+  const unresolvedInternalImports = new Set<string>();
+
+  while (pending.length > 0) {
+    const importer = pending.pop()!;
+    if (files.has(importer)) {
+      continue;
+    }
+    files.add(importer);
+
+    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
+    for (const specifier of extractRuntimeModuleSpecifiers(sourceText, importer)) {
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, aliases);
+      if (resolvedImport) {
+        if (!files.has(resolvedImport)) {
+          pending.push(resolvedImport);
+        }
+        continue;
+      }
+
+      const builtinName = getNodeBuiltinName(specifier);
+      if (builtinName) {
+        nodeBuiltins.add(builtinName);
+        continue;
+      }
+
+      const packageName = getPackageName(specifier);
+      if (packageName) {
+        externalDependencies.add(packageName);
+      } else {
+        unresolvedInternalImports.add(`${importer}: ${specifier || '<empty>'}`);
+      }
+    }
+  }
+
+  return {
+    entrypoint: normalizedEntrypoint,
+    files: [...files].sort(),
+    externalDependencies: [...externalDependencies].sort(),
+    nodeBuiltins: [...nodeBuiltins].sort(),
+    unresolvedInternalImports: [...unresolvedInternalImports].sort(),
+  };
 }
 
 /**

@@ -1,0 +1,39 @@
+{
+  "candidates": [
+    {
+      "name": "contracts",
+      "entrypoint": "src/contracts.ts",
+      "packageSubpath": "contracts",
+      "artifacts": {
+        "esm": "dist/src/contracts.js",
+        "cjs": "dist/src/contracts.cjs"
+      },
+      "allowedExternal": ["zod"],
+      "allowedBuiltins": [],
+      "maxSourceFiles": 12,
+      "maxArtifactFiles": 5,
+      "maxArtifactBytes": 50000
+    },
+    {
+      "name": "assertions-pure",
+      "entrypoint": "src/assertions/pure.ts",
+      "allowedExternal": [],
+      "allowedBuiltins": [],
+      "maxSourceFiles": 18
+    },
+    {
+      "name": "provider-plugin",
+      "entrypoint": "src/provider-plugin.ts",
+      "packageSubpath": "provider-plugin",
+      "artifacts": {
+        "esm": "dist/src/provider-plugin.js",
+        "cjs": "dist/src/provider-plugin.cjs"
+      },
+      "allowedExternal": [],
+      "allowedBuiltins": [],
+      "maxSourceFiles": 4,
+      "maxArtifactFiles": 3,
+      "maxArtifactBytes": 20000
+    }
+  ]
+}

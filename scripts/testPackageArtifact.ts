@@ -4,6 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import {
+  computePackageArtifactReadinessReport,
+  findPackageCandidateExportViolations,
+  getPackageCandidateSpecifier,
+  readPackageCandidateConfig,
+  resolvePackageArtifactPath,
+} from './packageReadiness';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -144,6 +151,10 @@ function assertPackagedFiles(packResult: PackResult): void {
     packResult.files.every((file) => !file.path.startsWith('dist/src/__mocks__/')),
     'Compiled mocks should be excluded from the package',
   );
+  assert(
+    packResult.files.every((file) => file.path !== 'dist/tsconfig.tsbuildinfo'),
+    'TypeScript incremental build metadata should be excluded from the package',
+  );
 
   for (const executablePath of ['dist/src/entrypoint.js', 'dist/src/main.js']) {
     const executable = packResult.files.find((file) => file.path === executablePath);
@@ -258,7 +269,7 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
-function writeConsumerScripts(consumerDir: string): void {
+function writeConsumerScripts(consumerDir: string, candidateSpecifiers: string[]): void {
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
@@ -445,6 +456,78 @@ function writeConsumerScripts(consumerDir: string): void {
       include: ['require-contracts.cts'],
     }),
   );
+  fs.writeFileSync(
+    path.join(consumerDir, 'candidate-entrypoints.mjs'),
+    [
+      `const specifiers = ${JSON.stringify(candidateSpecifiers)};`,
+      'for (const specifier of specifiers) {',
+      '  const candidate = await import(specifier);',
+      '  if (Object.keys(candidate).length === 0) {',
+      "    throw new Error(`Candidate entrypoint '${specifier}' has no ESM exports`);",
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'candidate-entrypoints.cjs'),
+    [
+      `const specifiers = ${JSON.stringify(candidateSpecifiers)};`,
+      'for (const specifier of specifiers) {',
+      '  const candidate = require(specifier);',
+      '  if (Object.keys(candidate).length === 0) {',
+      "    throw new Error(`Candidate entrypoint '${specifier}' has no CommonJS exports`);",
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'candidate-entrypoints.ts'),
+    [
+      ...candidateSpecifiers.map(
+        (specifier, index) => `import * as candidate${index} from '${specifier}';`,
+      ),
+      '',
+      ...candidateSpecifiers.map((_specifier, index) => `void candidate${index};`),
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'candidate-entrypoints.cts'),
+    [
+      ...candidateSpecifiers.map(
+        (specifier, index) => `import candidate${index} = require('${specifier}');`,
+      ),
+      '',
+      ...candidateSpecifiers.map((_specifier, index) => `void candidate${index};`),
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.candidates.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        noEmit: true,
+        strict: true,
+      },
+      include: ['candidate-entrypoints.ts'],
+    }),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.candidates-cjs.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'Node16',
+        moduleResolution: 'Node16',
+        noEmit: true,
+        strict: true,
+      },
+      include: ['candidate-entrypoints.cts'],
+    }),
+  );
 }
 
 function main(): void {
@@ -453,6 +536,20 @@ function main(): void {
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const tarballArgumentIndex = process.argv.indexOf('--tarball');
+  const explicitTarball =
+    tarballArgumentIndex === -1 ? undefined : process.argv[tarballArgumentIndex + 1];
+  if (tarballArgumentIndex !== -1 && !explicitTarball) {
+    throw new Error('--tarball requires a path to an existing package artifact.');
+  }
+  const explicitTarballPath = explicitTarball
+    ? resolvePackageArtifactPath(ROOT, explicitTarball)
+    : undefined;
+  const candidateConfig = readPackageCandidateConfig(ROOT);
+  const candidateSpecifiers = candidateConfig.candidates.flatMap((candidate) => {
+    const specifier = getPackageCandidateSpecifier(candidate);
+    return specifier ? [specifier] : [];
+  });
 
   try {
     fs.mkdirSync(artifactsDir);
@@ -460,10 +557,9 @@ function main(): void {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = runNpm(
-      ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
-      ROOT,
-    );
+    const packOutput = explicitTarballPath
+      ? runNpm(['pack', '--ignore-scripts', '--dry-run', '--json', explicitTarballPath], ROOT)
+      : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -476,7 +572,7 @@ function main(): void {
     assert.equal(packResult.name, 'promptfoo');
     assertPackagedFiles(packResult);
 
-    const tarballPath = path.join(artifactsDir, packResult.filename);
+    const tarballPath = explicitTarballPath ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(
@@ -514,13 +610,39 @@ function main(): void {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    const exportViolations = findPackageCandidateExportViolations(
+      installedPackageJson.exports,
+      candidateConfig.candidates,
+    );
+    assert.deepEqual(
+      exportViolations,
+      [],
+      `Installed package candidate exports failed:\n${exportViolations.join('\n')}`,
+    );
+    const artifactReadiness = computePackageArtifactReadinessReport(
+      installedPackageDir,
+      candidateConfig.candidates,
+    );
+    assert.deepEqual(
+      artifactReadiness.violations,
+      [],
+      `Installed package candidate budgets failed:\n${artifactReadiness.violations.join('\n')}`,
+    );
 
-    writeConsumerScripts(consumerDir);
+    writeConsumerScripts(consumerDir, candidateSpecifiers);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
     run(process.execPath, ['mixed-provider-plugin.mjs'], consumerDir);
+    run(process.execPath, ['candidate-entrypoints.mjs'], consumerDir);
+    run(process.execPath, ['candidate-entrypoints.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.legacy.json',
+      'tsconfig.node16-cjs.json',
+      'tsconfig.candidates.json',
+      'tsconfig.candidates-cjs.json',
+    ]) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
@@ -532,7 +654,7 @@ function main(): void {
       );
     }
 
-    console.log(`Verified installed package artifact: ${packResult.filename}`);
+    console.log(`Verified installed package artifact: ${path.basename(tarballPath)}`);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

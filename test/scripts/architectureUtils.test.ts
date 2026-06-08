@@ -4,7 +4,9 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  computeRuntimeDependencyClosure,
   extractModuleSpecifiers,
+  extractRuntimeModuleSpecifiers,
   findUnclassifiedFiles,
   findViolations,
   getExternalModuleName,
@@ -21,8 +23,11 @@ describe('extractModuleSpecifiers', () => {
       import imported from 'esm-import';
       export { exported } from 'esm-export';
       import('dynamic-import');
+      import('dynamic-import-with-options', { with: { type: 'json' } });
       const required = require('cjs-require');
       const resolved = require.resolve('cjs-resolve');
+      const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
+      const moduleRequired = module.require('module-require');
       require(nonLiteral);
     `;
 
@@ -30,9 +35,104 @@ describe('extractModuleSpecifiers', () => {
       'esm-import',
       'esm-export',
       'dynamic-import',
+      'dynamic-import-with-options',
       'cjs-require',
       'cjs-resolve',
+      'cjs-resolve-with-paths',
+      'module-require',
     ]);
+  });
+});
+
+describe('extractRuntimeModuleSpecifiers', () => {
+  it('excludes type-only module references from the runtime graph', () => {
+    const source = `
+      import runtimeDefault, { type ImportedType, runtimeValue } from 'runtime-import';
+      import {} from 'side-effect-empty-import';
+      import type { OnlyType } from 'type-import';
+      export { type ExportedType, runtimeExport } from 'runtime-export';
+      export {} from 'side-effect-empty-export';
+      export type { OnlyExportedType } from 'type-export';
+      import('dynamic-import');
+      import('dynamic-import-with-options', { with: { type: 'json' } });
+      const required = require('cjs-require');
+      const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
+      const moduleRequired = module.require('module-require');
+      type Imported = import('import-type').Imported;
+      void runtimeDefault;
+      void runtimeValue;
+      void required;
+      void resolvedWithPaths;
+      void moduleRequired;
+    `;
+
+    expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'runtime-import',
+      'side-effect-empty-import',
+      'runtime-export',
+      'side-effect-empty-export',
+      'dynamic-import',
+      'dynamic-import-with-options',
+      'cjs-require',
+      'cjs-resolve-with-paths',
+      'module-require',
+    ]);
+  });
+});
+
+describe('computeRuntimeDependencyClosure', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-closure-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function write(relativePath: string, contents = ''): void {
+    const absolute = path.join(repoRoot, relativePath);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, contents);
+  }
+
+  it('reports transitive runtime files, npm dependencies, and Node builtins', () => {
+    write(
+      'src/index.ts',
+      `
+        import type { TypeOnly } from './types';
+        import { runtime } from './runtime';
+        export { runtime };
+        void import('./lazy');
+      `,
+    );
+    write(
+      'src/runtime.ts',
+      `
+        import fs from 'node:fs';
+        import value from '@scope/runtime/subpath';
+        export const runtime = [fs, value];
+      `,
+    );
+    write('src/lazy.ts', "export { value } from 'external-runtime';");
+    write('src/types.ts', 'export interface TypeOnly { value: string }');
+
+    expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toEqual({
+      entrypoint: 'src/index.ts',
+      files: ['src/index.ts', 'src/lazy.ts', 'src/runtime.ts'],
+      externalDependencies: ['@scope/runtime', 'external-runtime'],
+      nodeBuiltins: ['fs'],
+      unresolvedInternalImports: [],
+    });
+  });
+
+  it('reports unresolved internal runtime imports', () => {
+    write('src/index.ts', "import './missing.json'; import '';");
+
+    expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toMatchObject({
+      unresolvedInternalImports: ['src/index.ts: ./missing.json', 'src/index.ts: <empty>'],
+    });
   });
 });
 
