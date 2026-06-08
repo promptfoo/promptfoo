@@ -50,7 +50,10 @@ export function addPosteriorAttack(testCases: TestCase[], injectVar: string): Te
       })),
       vars: {
         ...testCase.vars,
-        [injectVar]: POSTERIOR_TEMPLATE.replace(BEHAVIOR_MARKER, originalText),
+        // split/join substitutes the behavior literally. String.replace would
+        // interpret `$&`, `$1`, etc. in the (intent-controlled) replacement,
+        // corrupting the attack and re-leaking BEHAVIOR_MARKER into the prompt.
+        [injectVar]: POSTERIOR_TEMPLATE.split(BEHAVIOR_MARKER).join(originalText),
       },
       metadata: {
         ...testCase.metadata,

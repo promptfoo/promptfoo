@@ -93,6 +93,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'other-encodings': 1,
   emoji: 1,
   piglatin: 1,
+  posterior: 1,
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,
