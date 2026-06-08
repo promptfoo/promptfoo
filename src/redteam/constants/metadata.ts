@@ -752,6 +752,7 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   Brand: [
     'competitors',
+    'domain-hallucination',
     'excessive-agency',
     'goal-misalignment',
     'hallucination',
