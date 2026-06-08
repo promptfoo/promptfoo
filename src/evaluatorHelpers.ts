@@ -651,6 +651,52 @@ export function getExtensionHookName(extension: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Re-attaches the non-serializable `function` callable to prompts returned from a
+ * `beforeAll` extension hook.
+ *
+ * Extension hooks receive the suite as JSON — Python and JavaScript hooks run in a
+ * subprocess, so the context is serialized with `JSON.stringify`. JSON cannot
+ * represent the `function` property that `file://...:fn` prompts carry, so it is
+ * dropped on the round-trip. Without restoring it, the evaluator falls back to
+ * sending the prompt's raw source as text instead of executing the function
+ * (https://github.com/promptfoo/promptfoo/issues/9653).
+ *
+ * A returned prompt is matched to an original by `label` (the stable identifier for
+ * file-based prompts) and the function is only restored when the original carried one
+ * and the `raw` source is unchanged — so a hook that intentionally rewrites a prompt
+ * keeps its new behavior. Labels that appear more than once are treated as ambiguous
+ * and skipped to avoid restoring the wrong function.
+ */
+function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prompt[]): Prompt[] {
+  if (!Array.isArray(returnedPrompts) || !Array.isArray(originalPrompts)) {
+    return returnedPrompts;
+  }
+
+  const originalsByLabel = new Map<string, Prompt | null>();
+  for (const original of originalPrompts) {
+    if (!original || typeof original.function !== 'function' || original.label == null) {
+      continue;
+    }
+    // A null entry marks an ambiguous (duplicated) label that must not be restored.
+    originalsByLabel.set(original.label, originalsByLabel.has(original.label) ? null : original);
+  }
+  if (originalsByLabel.size === 0) {
+    return returnedPrompts;
+  }
+
+  return returnedPrompts.map((returned) => {
+    if (!returned || typeof returned.function === 'function' || returned.label == null) {
+      return returned;
+    }
+    const original = originalsByLabel.get(returned.label);
+    if (original && original.raw === returned.raw) {
+      return { ...returned, function: original.function };
+    }
+    return returned;
+  });
+}
+
 export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
@@ -732,7 +778,10 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
             suite: {
               ...(updatedContext as BeforeAllExtensionHookContext).suite,
               // Mutable properties:
-              prompts: extensionReturnValue.suite.prompts,
+              prompts: restorePromptFunctions(
+                extensionReturnValue.suite.prompts,
+                (updatedContext as BeforeAllExtensionHookContext).suite.prompts,
+              ),
               providerPromptMap: extensionReturnValue.suite.providerPromptMap,
               tests: extensionReturnValue.suite.tests,
               scenarios: extensionReturnValue.suite.scenarios,
