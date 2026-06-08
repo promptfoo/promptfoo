@@ -730,6 +730,68 @@ describe('evaluatorHelpers', () => {
           expect(result.suite.tests).toEqual([{ vars: { newVar: 'newValue' } }]); // Tests updated
           expect(result.suite).not.toHaveProperty('foo'); // Custom property ignored
         });
+
+        it('should restore the prompt function dropped by JSON serialization (issue #9653)', async () => {
+          // A file://...:fn prompt carries a non-serializable `function`. When the
+          // suite round-trips through a Python/JS hook (JSON), `function` is lost.
+          const promptFn = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                {
+                  raw: 'def create_prompt(): ...',
+                  label: 'prompt.py:create_prompt',
+                  function: promptFn,
+                },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          // Simulate the serialized round-trip: the hook returns the same prompt
+          // without its `function`.
+          vi.mocked(transform).mockResolvedValue({
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [{ raw: 'def create_prompt(): ...', label: 'prompt.py:create_prompt' }],
+              tests: fnContext.suite.tests,
+            },
+          });
+
+          const out = await runExtensionHook(['ext1'], hookName, fnContext);
+
+          expect(out.suite.prompts).toHaveLength(1);
+          expect(out.suite.prompts[0].function).toBe(promptFn);
+        });
+
+        it('should not restore a function when the hook rewrites the prompt raw source', async () => {
+          const promptFn = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                { raw: 'original source', label: 'prompt.py:create_prompt', function: promptFn },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          // The hook intentionally replaces the prompt with a new raw string and no
+          // function — its new behavior must be preserved.
+          vi.mocked(transform).mockResolvedValue({
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [{ raw: 'rewritten source', label: 'prompt.py:create_prompt' }],
+              tests: fnContext.suite.tests,
+            },
+          });
+
+          const out = await runExtensionHook(['ext1'], hookName, fnContext);
+
+          expect(out.suite.prompts[0].raw).toBe('rewritten source');
+          expect(out.suite.prompts[0].function).toBeUndefined();
+        });
       });
     });
 
