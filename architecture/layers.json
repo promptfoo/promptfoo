@@ -97,11 +97,12 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"],
+      "forbiddenDependencies": ["cli", "view-server"]
     },
     {
       "name": "providers",
-      "roots": ["src/providers"],
+      "roots": ["src/provider-plugin.ts", "src/providers"],
       "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "redteam"]
     },
     {

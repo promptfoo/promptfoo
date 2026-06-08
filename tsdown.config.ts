@@ -99,6 +99,7 @@ export default defineConfig([
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
+      'provider-plugin': 'src/provider-plugin.ts',
     },
     format: ['esm'],
     target: 'node20',
@@ -124,6 +125,7 @@ export default defineConfig([
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
+      'provider-plugin': 'src/provider-plugin.ts',
     },
     format: ['cjs'],
     target: 'node20',
