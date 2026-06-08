@@ -154,8 +154,9 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')
   ).replace(/\/+$/, '');
 
-  // The global fetch auth-injection only adds the bearer token for the public cloud
-  // origin, so send it explicitly to authenticate against on-prem cloud hosts.
+  // The fetch layer injects the cloud bearer token for the configured cloud origin
+  // (incl. on-prem) and won't override a header we set here, so attaching it
+  // explicitly keeps this request authenticated regardless of fetch-layer changes.
   const apiKey = cloudConfig.isEnabled() ? cloudConfig.getApiKey() : undefined;
 
   try {

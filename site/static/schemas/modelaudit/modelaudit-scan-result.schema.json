@@ -28,6 +28,19 @@
           "description": "Size of the asset in bytes",
           "title": "Size"
         },
+        "is_streamed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether the asset came from an ephemeral streaming scan",
+          "title": "Is Streamed"
+        },
         "tensors": {
           "anyOf": [
             {

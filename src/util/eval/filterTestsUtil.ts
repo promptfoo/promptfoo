@@ -11,6 +11,7 @@ type Tests = NonNullable<TestSuite['tests']>;
  * Predicate function for filtering test results
  */
 type ResultFilterFn = (result: EvaluateResult) => boolean;
+type TestFilterFn = (test: TestCase) => boolean;
 
 /**
  * Merges defaultTest.vars into a test case's vars for comparison purposes.
@@ -36,12 +37,14 @@ function mergeDefaultVars(test: TestCase, defaultTest: TestSuite['defaultTest'])
  * @param testSuite - Test suite to filter
  * @param pathOrId - JSON results file path or eval ID
  * @param filterFn - Predicate to determine which results to include
+ * @param extractedTestFilter - Optional predicate for runtime-generated tests extracted from results
  * @returns Filtered array of tests
  */
 export async function filterTestsByResults(
   testSuite: TestSuite,
   pathOrId: string,
   filterFn: ResultFilterFn,
+  extractedTestFilter?: TestFilterFn,
 ): Promise<Tests> {
   if (!testSuite.tests) {
     logger.debug('[filterTestsByResults] No tests in test suite');
@@ -175,9 +178,11 @@ export async function filterTestsByResults(
   const matchedResultKeys = new Set<string>();
 
   // Track which results matched config tests
+  const matchedTestsWithDefaults = matchedTests.map((test) =>
+    mergeDefaultVars(test, testSuite.defaultTest),
+  );
   for (const result of filteredResults) {
-    for (const test of matchedTests) {
-      const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
+    for (const testWithDefaults of matchedTestsWithDefaults) {
       if (resultIsForTestCase(result, testWithDefaults)) {
         matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
         break;
@@ -197,6 +202,10 @@ export async function filterTestsByResults(
     // Skip if no testCase data available
     if (!result.testCase) {
       logger.debug('[filterTestsByResults] Skipping result without testCase data for extraction');
+      continue;
+    }
+
+    if (extractedTestFilter && !extractedTestFilter(result.testCase)) {
       continue;
     }
 

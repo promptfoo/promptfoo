@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { defaultAssertionRegistry } from '../../src/assertions/defaultRegistry';
 import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { runPureAssertion } from '../../src/assertions/pure';
@@ -9,6 +9,7 @@ import {
 import { AssertionRegistry } from '../../src/assertions/registry';
 import { BaseAssertionTypesSchema } from '../../src/types/index';
 
+import type { PureAssertionType } from '../../src/assertions/pureRegistry';
 import type { AssertionCapabilityPack, AssertionHandler } from '../../src/assertions/registryTypes';
 import type {
   Assertion,
@@ -39,7 +40,6 @@ const passingHandler: AssertionHandler<AssertionParams, GradingResult> = ({ asse
   assertion,
 });
 type TestAssertionPack = AssertionCapabilityPack<AssertionParams, GradingResult>;
-type TestAssertionRegistry = AssertionRegistry<AssertionParams, GradingResult>;
 
 const pureAssertionTypes = [
   'bleu',
@@ -173,6 +173,24 @@ describe('AssertionRegistry', () => {
       narrowPrefixHandler,
     );
   });
+
+  it('continues registering packs after an exact-only pack skips prefix sorting', () => {
+    const prefixHandler: AssertionHandler<AssertionParams, GradingResult> = () => ({
+      pass: true,
+      score: 1,
+      reason: 'prefix',
+    });
+    const registry = new AssertionRegistry<AssertionParams, GradingResult>([
+      { name: 'exact-only', handlers: { equals: passingHandler } },
+      {
+        name: 'prefix',
+        prefixes: [{ prefix: 'custom:', handler: prefixHandler }],
+      },
+    ]);
+
+    expect(registry.resolve('equals')).toBe(passingHandler);
+    expect(registry.resolve('custom:assertion')).toBe(prefixHandler);
+  });
 });
 
 describe('pure assertion registry', () => {
@@ -240,18 +258,8 @@ describe('pure assertion registry', () => {
   });
 
   it('rejects unsupported assertion types at compile time', () => {
-    if (false) {
-      void runPureAssertion({
-        // @ts-expect-error Model-graded assertions are not available to the pure runner.
-        assertion: { type: 'llm-rubric', value: 'quality' },
-        providerResponse: { output: 'response' },
-      });
-      void runPureAssertion({
-        // @ts-expect-error Cost assertions do not implement inverse semantics.
-        assertion: { type: 'not-cost', threshold: 1 },
-        providerResponse: { output: 'response', cost: 0 },
-      });
-    }
+    expectTypeOf<'llm-rubric'>().not.toMatchTypeOf<PureAssertionType>();
+    expectTypeOf<'not-cost'>().not.toMatchTypeOf<PureAssertionType>();
   });
 
   it('rejects unsupported inverse assertion types at runtime', async () => {
@@ -445,17 +453,11 @@ describe('assertion registry injection', () => {
   });
 
   it('rejects incompatible handlers at compile time', () => {
-    if (false) {
-      // @ts-expect-error Assertion handlers must return GradingResult values.
-      const registry: TestAssertionRegistry = new AssertionRegistry([
-        {
-          name: 'invalid',
-          handlers: {
-            equals: () => 'not a grading result',
-          },
-        },
-      ]);
-      void registry;
-    }
+    type IncompatiblePack = {
+      name: 'invalid';
+      handlers: { equals: () => string };
+    };
+
+    expectTypeOf<IncompatiblePack>().not.toMatchTypeOf<TestAssertionPack>();
   });
 });

@@ -738,6 +738,35 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
+    it('posts file-only findings from ordinary scan responses as general fallback comments', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [
+          {
+            file: 'src/file-only.ts',
+            line: null,
+            finding: 'This file configures an unsafe model tool.',
+            severity: 'high',
+          },
+        ],
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(createComment).toHaveBeenCalled();
+      });
+
+      expect(createReview).not.toHaveBeenCalled();
+      expect(createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('**src/file-only.ts**'),
+        }),
+      );
+    });
+
     it('posts line-level mixed-skip findings as fallback comments and writes SARIF', async () => {
       const { createComment, createReview } = mockFallbackPosting();
       mockPromptfooScanResponse({

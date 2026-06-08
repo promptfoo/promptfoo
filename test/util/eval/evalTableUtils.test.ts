@@ -1,5 +1,5 @@
 import { parse as parseCsv } from 'csv-parse/sync';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
   evalTableToCsv,
@@ -18,6 +18,10 @@ import type {
   EvaluateTableRow,
   Prompt,
 } from '../../../src/types/index';
+
+type LegacyCompletedPrompt = Omit<CompletedPrompt, 'metrics'> & {
+  metrics: Omit<NonNullable<CompletedPrompt['metrics']>, 'namedScoresCount'>;
+};
 
 describe('evalTableUtils', () => {
   let mockTable: {
@@ -1182,15 +1186,20 @@ describe('evalTableUtils', () => {
   // Build a CompletedPrompt that mimics legacy/imported persistence: the
   // `metrics` object exists but lacks `namedScoresCount`. The streaming CSV
   // path must fall back to a row-scan discovery pass for these prompts.
+  // `overrides.namedScores` contains aggregate prompt-level metrics; per-row
+  // named scores remain on the individual result rows.
   function createLegacyCompletedPrompt(
     raw: string,
     overrides: { namedScores: Record<string, number> } & Partial<Omit<CompletedPrompt, 'metrics'>>,
-  ): CompletedPrompt {
+  ): LegacyCompletedPrompt {
     const { namedScores, ...rest } = overrides;
     const prompt = createCompletedPrompt(raw, rest);
+    const { namedScoresCount: _namedScoresCount, ...legacyMetrics } = createPromptMetrics({
+      namedScores,
+    });
     return {
       ...prompt,
-      metrics: { ...createPromptMetrics({ namedScores }), namedScoresCount: undefined as never },
+      metrics: legacyMetrics,
     };
   }
 
@@ -1285,7 +1294,7 @@ describe('evalTableUtils', () => {
       isRedteam = false,
     }: {
       vars: string[];
-      prompts: CompletedPrompt[];
+      prompts: Array<CompletedPrompt | LegacyCompletedPrompt>;
       results: unknown[];
       isRedteam?: boolean;
     }): Promise<string> {
@@ -1352,6 +1361,33 @@ describe('evalTableUtils', () => {
       expect(lines[0]).toContain('Metric: relevance');
       expect(lines[1]).toContain('0.70,0.90');
       expect(lines[2]).toContain(',0.50');
+    });
+
+    it('escapes formula-injection payloads when streaming CSV', async () => {
+      const csv = await runStreamEvalCsv({
+        vars: ['name'],
+        prompts: [createCompletedPrompt('Prompt 1', {})],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { name: '=cmd|calc' }, description: 'Test 1' },
+            response: { output: '=1+2' },
+            success: false,
+            score: 0,
+            namedScores: {},
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: null,
+            metadata: {},
+          },
+        ],
+      });
+
+      const dataRow = (parseCsv(csv) as string[][])[1];
+      expect(dataRow).toContain("'=cmd|calc");
+      expect(dataRow).toContain("'=1+2");
+      // No raw formula trigger survives into a streamed cell.
+      expect(dataRow.every((cell) => !/^[=@]/.test(cell))).toBe(true);
     });
 
     it('should omit derived/aggregate-only metric columns when streaming', async () => {
@@ -1808,5 +1844,78 @@ describe('evalTableUtils', () => {
       const bobP2Idx = bobLine!.indexOf('Bob-P2');
       expect(bobP1Idx).toBeLessThan(bobP2Idx);
     });
+  });
+});
+
+describe('evalTableToCsv formula injection (CWE-1236)', () => {
+  const buildFormulaTable = () => ({
+    head: {
+      vars: ['input'],
+      prompts: [createCompletedPrompt('{{input}}', { provider: 'echo', label: 'Prompt 1' })],
+    },
+    body: [
+      {
+        test: { vars: { input: '=cmd|calc' }, description: '=danger' },
+        testIdx: 0,
+        vars: ['=cmd|calc'],
+        outputs: [
+          {
+            pass: false,
+            text: '=HYPERLINK("http://evil.example","click")',
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: { pass: false, reason: '@SUM(A1)', comment: 'plain comment' },
+          } as EvaluateTableOutput,
+        ],
+      },
+    ],
+  });
+
+  it('prefixes attacker-influenced cells so spreadsheets do not execute them', () => {
+    const [headerRow, dataRow] = parseCsv(evalTableToCsv(buildFormulaTable())) as string[][];
+
+    expect(dataRow[0]).toBe("'=danger"); // description
+    expect(dataRow[1]).toBe("'=cmd|calc"); // var
+    expect(dataRow[2]).toBe('\'=HYPERLINK("http://evil.example","click")'); // model output
+
+    const reasonIdx = headerRow.indexOf('Grader Reason');
+    expect(dataRow[reasonIdx]).toBe("'@SUM(A1)");
+
+    // A benign comment is left untouched.
+    const commentIdx = headerRow.indexOf('Comment');
+    expect(dataRow[commentIdx]).toBe('plain comment');
+  });
+
+  it('leaves cells raw when PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING is set', () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING', 'true');
+    try {
+      const [, dataRow] = parseCsv(evalTableToCsv(buildFormulaTable())) as string[][];
+      expect(dataRow[1]).toBe('=cmd|calc');
+      expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('escapes formula triggers in header cells (var name and bare prompt label)', () => {
+    // A var named "=evil" and a provider-less prompt label "=cmd()" both land in the
+    // header row; the csvStringify-boundary escaping must cover headers, not just body.
+    const table = {
+      head: {
+        vars: ['=evilVar'],
+        prompts: [createCompletedPrompt('{{x}}', { provider: '', label: '=cmd()' })],
+      },
+      body: [
+        {
+          test: { vars: { '=evilVar': 'v' }, description: 'd' },
+          testIdx: 0,
+          vars: ['v'],
+          outputs: [{ pass: true, text: 'ok' } as EvaluateTableOutput],
+        },
+      ],
+    };
+
+    const [headerRow] = parseCsv(evalTableToCsv(table)) as string[][];
+    expect(headerRow).toContain("'=evilVar");
+    expect(headerRow).toContain("'=cmd()");
   });
 });
