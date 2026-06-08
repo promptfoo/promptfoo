@@ -303,6 +303,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let response_audio_total = '';
       let response_audio_transcript = '';
       let hasAudioContent = false;
+      const reasoningBlocks: NonNullable<ProviderResponse['reasoning']> = [];
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: unknown = undefined;
       let hasFinalized = false;
@@ -379,6 +380,7 @@ export class GoogleLiveProvider implements ApiProvider {
             statefulApiState,
             ...(thinking && { thinking }),
           },
+          ...(reasoningBlocks.length > 0 && { reasoning: reasoningBlocks }),
           metadata: {},
         };
 
@@ -539,7 +541,17 @@ export class GoogleLiveProvider implements ApiProvider {
             if (serverContent.modelTurn?.parts) {
               for (const part of serverContent.modelTurn.parts) {
                 if (part.text) {
-                  response_text_total += part.text;
+                  if (part.thought === true) {
+                    if (config.showThinking !== false) {
+                      reasoningBlocks.push({
+                        type: 'thought',
+                        thought: part.text,
+                        ...(part.thoughtSignature && { signature: part.thoughtSignature }),
+                      });
+                    }
+                  } else {
+                    response_text_total += part.text;
+                  }
                   clearTimeout(timeout);
                 }
                 if (part.inlineData?.mimeType?.includes('audio')) {

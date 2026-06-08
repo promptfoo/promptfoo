@@ -45,6 +45,8 @@ interface FileData {
 
 export interface Part {
   text?: string;
+  thought?: boolean;
+  thoughtSignature?: string;
   inlineData?: Blob;
   functionCall?: FunctionCall;
   functionResponse?: FunctionResponse;

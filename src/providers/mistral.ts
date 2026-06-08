@@ -5,7 +5,14 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
-import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import {
+  calculateCost,
+  extractReasoningFromOpenAiCompatibleMessage,
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  splitReasoningFromContentParts,
+  stripOpenAiCompatibleReasoningFields,
+} from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -244,6 +251,7 @@ interface MistralChatCompletionOptions {
   prediction?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
   guardrails?: Array<Record<string, unknown>> | null;
+  showThinking?: boolean;
   cost?: number;
   inputCost?: number;
   outputCost?: number;
@@ -610,7 +618,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
-    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
+    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue({
+      params,
+      showThinking: config.showThinking !== false,
+    })}`;
     if (isCacheEnabled()) {
       const cache = getCache();
       if (cache) {
@@ -676,10 +687,19 @@ export class MistralChatCompletionProvider implements ApiProvider {
     }
 
     const message = data.choices[0].message;
-    const normalizedContent = normalizeMistralContent(message.content);
+    const contentResult = splitReasoningFromContentParts(
+      message.content,
+      config.showThinking !== false,
+    );
+    const reasoning = [
+      ...(extractReasoningFromOpenAiCompatibleMessage(message, config.showThinking !== false) ??
+        []),
+      ...(contentResult.reasoning ?? []),
+    ];
+    const normalizedContent = normalizeMistralContent(contentResult.output);
     let output: MistralNormalizedContent;
     if (normalizedContent && message.tool_calls?.length) {
-      output = { ...message, content: normalizedContent };
+      output = stripOpenAiCompatibleReasoningFields({ ...message, content: normalizedContent });
     } else if (message.tool_calls?.length) {
       output = message.tool_calls;
     } else {
@@ -688,6 +708,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const result: ProviderResponse = {
       output,
+      ...(reasoning.length > 0 && { reasoning }),
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateMistralCost(

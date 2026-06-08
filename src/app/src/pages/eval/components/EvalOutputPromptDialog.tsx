@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { reasoningToString } from '@app/utils/reasoning';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -17,7 +18,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { GradingResult, Vars } from '@promptfoo/types';
+import type { GradingResult, ReasoningContent, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
@@ -125,6 +126,7 @@ export interface ReplayEvaluationParams {
  */
 export interface ReplayEvaluationResult {
   output?: string;
+  reasoning?: ReasoningContent[];
   error?: string;
 }
 
@@ -144,6 +146,7 @@ interface EvalOutputPromptDialogProps {
   prompt: string;
   provider?: string;
   output?: string;
+  reasoning?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, unknown>;
   /**
@@ -170,6 +173,7 @@ export default function EvalOutputPromptDialog({
   prompt,
   provider,
   output,
+  reasoning,
   gradingResults,
   metadata,
   providerPrompt,
@@ -194,6 +198,7 @@ export default function EvalOutputPromptDialog({
   const [editedPrompt, setEditedPrompt] = useState(prompt);
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
+  const [replayReasoning, setReplayReasoning] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
 
@@ -203,6 +208,7 @@ export default function EvalOutputPromptDialog({
     setEditMode(false);
     setEditedPrompt(prompt);
     setReplayOutput(null);
+    setReplayReasoning(null);
     setReplayError(null);
     setActiveTab('prompt-output'); // Reset to first tab when dialog opens
   }, [prompt]);
@@ -266,6 +272,7 @@ export default function EvalOutputPromptDialog({
     setReplayLoading(true);
     setReplayError(null);
     setReplayOutput(null);
+    setReplayReasoning(null);
 
     try {
       const result = await onReplay({
@@ -277,10 +284,10 @@ export default function EvalOutputPromptDialog({
 
       if (result.error) {
         setReplayError(result.error);
-      } else if (result.output) {
-        setReplayOutput(result.output);
       } else {
-        setReplayOutput('(No output returned)');
+        const replayReasoningText = reasoningToString(result.reasoning);
+        setReplayReasoning(replayReasoningText || null);
+        setReplayOutput(result.output || '(No output returned)');
       }
     } catch (error) {
       setReplayError(error instanceof Error ? error.message : 'An error occurred');
@@ -321,6 +328,7 @@ export default function EvalOutputPromptDialog({
   const handleCancel = () => {
     setEditedPrompt(prompt);
     setReplayOutput(null);
+    setReplayReasoning(null);
     setReplayError(null);
   };
 
@@ -332,8 +340,9 @@ export default function EvalOutputPromptDialog({
 
   const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
+  const displayedReasoning = replayOutput === null ? reasoning : replayReasoning || undefined;
   const hasOutputContent = Boolean(
-    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || displayedReasoning,
   );
 
   const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
@@ -490,6 +499,7 @@ export default function EvalOutputPromptDialog({
                       ? metadata.redteamFinalPrompt
                       : undefined
                   }
+                  reasoning={displayedReasoning}
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
                   onCopy={copyFieldToClipboard}

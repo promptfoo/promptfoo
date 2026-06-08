@@ -262,7 +262,7 @@ const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
-interface SafetyRating {
+export interface SafetyRating {
   category:
     | 'HARM_CATEGORY_HARASSMENT'
     | 'HARM_CATEGORY_HATE_SPEECH'
@@ -272,7 +272,7 @@ interface SafetyRating {
   blocked: boolean;
 }
 
-interface Candidate {
+export interface Candidate {
   content: Content;
   finishReason?:
     | 'BLOCKLIST'
@@ -291,6 +291,12 @@ interface Candidate {
   safetyRatings: SafetyRating[];
   webSearchQueries?: string[];
 }
+
+type GeminiReasoningContent = {
+  type: 'thought';
+  thought: string;
+  signature?: string;
+};
 
 interface GeminiUsageMetadata {
   promptTokenCount: number;
@@ -357,6 +363,8 @@ export interface Palm2ApiResponse {
 
 const PartSchema = z.object({
   text: z.string().optional(),
+  thought: z.boolean().optional(),
+  thoughtSignature: z.string().optional(),
   inline_data: z
     .object({
       mime_type: z.string(),
@@ -767,9 +775,10 @@ export function formatCandidateContents(candidate: Candidate) {
   }
 
   if (candidate.content?.parts) {
+    const outputParts = candidate.content.parts.filter((part) => part.thought !== true);
     let output = '';
     let is_text = true;
-    for (const part of candidate.content.parts) {
+    for (const part of outputParts) {
       if ('text' in part) {
         output += part.text;
       } else {
@@ -779,11 +788,32 @@ export function formatCandidateContents(candidate: Candidate) {
     if (is_text) {
       return output;
     } else {
-      return candidate.content.parts;
+      return outputParts;
     }
   } else {
     throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }
+}
+
+export function extractGeminiReasoningFromCandidate(
+  candidate: Candidate,
+  showThinking: boolean = true,
+): GeminiReasoningContent[] | undefined {
+  if (!showThinking || !candidate.content?.parts) {
+    return undefined;
+  }
+
+  const reasoning: GeminiReasoningContent[] = [];
+  for (const part of candidate.content.parts) {
+    if (part.thought === true && typeof part.text === 'string' && part.text.trim()) {
+      reasoning.push({
+        type: 'thought',
+        thought: part.text,
+        ...(part.thoughtSignature && { signature: part.thoughtSignature }),
+      });
+    }
+  }
+  return reasoning.length > 0 ? reasoning : undefined;
 }
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {

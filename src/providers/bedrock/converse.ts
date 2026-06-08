@@ -57,7 +57,12 @@ import type {
 import type { DocumentType } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  ReasoningContent,
+} from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
@@ -758,11 +763,49 @@ export function parseConverseMessages(prompt: string): {
 }
 
 /**
- * Extract text output from Converse API response content blocks
+ * Extract reasoning/thinking content from Converse API response content blocks.
+ * Preserves native format as ReasoningContent array.
+ */
+function extractReasoningFromContentBlocks(
+  content: ContentBlock[],
+): ReasoningContent[] | undefined {
+  const reasoningBlocks: ReasoningContent[] = [];
+
+  for (const block of content) {
+    if ('reasoningContent' in block && block.reasoningContent) {
+      const reasoning = block.reasoningContent;
+      if ('reasoningText' in reasoning && reasoning.reasoningText) {
+        const thinkingText = reasoning.reasoningText.text || '';
+        const signature = reasoning.reasoningText.signature;
+        reasoningBlocks.push({
+          type: 'thinking',
+          thinking: thinkingText,
+          ...(signature ? { signature } : {}),
+        });
+      } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
+        // Convert Uint8Array to base64 string
+        const data =
+          reasoning.redactedContent instanceof Uint8Array
+            ? Buffer.from(reasoning.redactedContent).toString('base64')
+            : String(reasoning.redactedContent);
+        reasoningBlocks.push({
+          type: 'redacted_thinking',
+          data,
+        });
+      }
+    }
+  }
+
+  return reasoningBlocks.length > 0 ? reasoningBlocks : undefined;
+}
+
+/**
+ * Extract text output from Converse API response content blocks.
+ * Reasoning content is now handled separately via extractReasoningFromContentBlocks.
  */
 function extractTextFromContentBlocks(
   content: ContentBlock[],
-  showThinking: boolean = true,
+  _showThinking: boolean = true,
 ): string {
   const parts: string[] = [];
 
@@ -770,20 +813,9 @@ function extractTextFromContentBlocks(
     if ('text' in block && block.text) {
       parts.push(block.text);
     } else if ('reasoningContent' in block && block.reasoningContent) {
-      // Handle extended thinking content
-      const reasoning = block.reasoningContent;
-      if (showThinking) {
-        if ('reasoningText' in reasoning && reasoning.reasoningText) {
-          const thinkingText = reasoning.reasoningText.text || '';
-          const signature = reasoning.reasoningText.signature || '';
-          parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
-          if (signature) {
-            parts.push(`Signature: ${signature}`);
-          }
-        } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
-          parts.push('<thinking>[Redacted]</thinking>');
-        }
-      }
+      // Reasoning content is handled ONLY via the reasoning field - never in output.
+      // This prevents double-write where reasoning appears in both output and reasoning fields.
+      // The showThinking parameter is kept for API compatibility but is ignored here.
     } else if ('toolUse' in block && block.toolUse) {
       // Format tool use for output
       parts.push(
@@ -1333,7 +1365,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled);
+        const result = await this.parseResponse(parsed, context, toolsDisabled);
         return { ...result, cached: true };
       }
     }
@@ -1383,7 +1415,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled);
+    return await this.parseResponse(response, context, toolsDisabled);
   }
 
   /**
@@ -1532,12 +1564,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    */
   private async parseResponse(
     response: ConverseCommandOutput,
+    context?: CallApiContextParams,
     toolsDisabled = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
     const content = outputMessage?.content || [];
-    const showThinking = this.config.showThinking !== false;
+    // Merge showThinking from per-call config with provider config (per-call takes priority)
+    const mergedShowThinking = context?.prompt?.config?.showThinking ?? this.config.showThinking;
+    const showThinking = mergedShowThinking !== false;
 
     // Extract token usage
     const usage = response.usage;
@@ -1614,6 +1649,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         'Model produced a malformed tool use request. Check tool configuration and input schema.';
       metadata.isModelError = true;
     }
+    const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
 
     const toolUseBlocks = content.filter(
       (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
@@ -1711,6 +1747,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         ...(guardrails ? { guardrails } : {}),
+        ...(reasoning ? { reasoning } : {}),
         ...(error ? { error } : {}),
       };
     }
@@ -1725,6 +1762,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ...(cost === undefined ? {} : { cost }),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(guardrails ? { guardrails } : {}),
+      ...(reasoning ? { reasoning } : {}),
       ...(malformedError ? { error: malformedError } : {}),
     };
   }
@@ -1798,14 +1836,22 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Collect the full response while also providing a stream
       let output = '';
-      let reasoning = '';
       let stopReason: string | undefined;
       let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
 
       // Track tool use blocks being streamed
       const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
 
-      const showThinking = this.config.showThinking !== false;
+      // Track reasoning content blocks (including signature for multi-turn extended thinking)
+      // Maps blockIndex to accumulated reasoning data
+      const reasoningBlockMap: Map<
+        number,
+        { text: string; signature?: string; isRedacted?: boolean; data?: string }
+      > = new Map();
+
+      // Merge showThinking from per-call config with provider config (per-call takes priority)
+      const mergedShowThinking = context?.prompt?.config?.showThinking ?? this.config.showThinking;
+      const showThinking = mergedShowThinking !== false;
 
       // Process the stream
       if (response.stream) {
@@ -1831,9 +1877,31 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               output += delta.text;
             }
             if ('reasoningContent' in delta && delta.reasoningContent && showThinking) {
-              const rc = delta.reasoningContent as { text?: string };
+              const rc = delta.reasoningContent as {
+                text?: string;
+                signature?: string;
+                redactedContent?: Uint8Array;
+              };
+              // Initialize reasoning block if needed
+              if (!reasoningBlockMap.has(blockIndex)) {
+                reasoningBlockMap.set(blockIndex, { text: '' });
+              }
+              const block = reasoningBlockMap.get(blockIndex)!;
+
               if (rc.text) {
-                reasoning += rc.text;
+                block.text += rc.text;
+              }
+              // Capture signature when it appears (preserved for multi-turn extended thinking)
+              if (rc.signature) {
+                block.signature = rc.signature;
+              }
+              // Handle redacted reasoning content
+              if (rc.redactedContent) {
+                block.isRedacted = true;
+                block.data =
+                  rc.redactedContent instanceof Uint8Array
+                    ? Buffer.from(rc.redactedContent).toString('base64')
+                    : String(rc.redactedContent);
               }
             }
             // Handle streaming tool use input
@@ -1844,6 +1912,20 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               }
             }
           }
+
+          // Handle content block stop - may contain signature for reasoning blocks
+          if ('contentBlockStop' in event && event.contentBlockStop) {
+            const blockIndex = event.contentBlockStop.contentBlockIndex ?? 0;
+            const stop = event.contentBlockStop as {
+              contentBlockIndex?: number;
+              signature?: string;
+            };
+            // Capture signature if present at block stop
+            if (stop.signature && reasoningBlockMap.has(blockIndex)) {
+              reasoningBlockMap.get(blockIndex)!.signature = stop.signature;
+            }
+          }
+
           if ('messageStop' in event && event.messageStop) {
             stopReason = event.messageStop.stopReason;
           }
@@ -1859,11 +1941,27 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         toolsDisabled,
       );
 
-      // Combine reasoning, output, and tool use
-      const parts: string[] = [];
-      if (reasoning) {
-        parts.push(`<thinking>\n${reasoning}\n</thinking>`);
+      // Build reasoning content array from accumulated blocks (with signature preservation)
+      // This ensures multi-turn extended thinking works correctly with streaming
+      let reasoningContent: ReasoningContent[] | undefined;
+      if (reasoningBlockMap.size > 0 && showThinking) {
+        const blocks: ReasoningContent[] = [];
+        for (const block of reasoningBlockMap.values()) {
+          if (block.isRedacted && block.data) {
+            blocks.push({ type: 'redacted_thinking', data: block.data });
+          } else if (block.text) {
+            blocks.push({
+              type: 'thinking',
+              thinking: block.text,
+              ...(block.signature ? { signature: block.signature } : {}),
+            });
+          }
+        }
+        reasoningContent = blocks.length > 0 ? blocks : undefined;
       }
+
+      // Combine output and tool use (reasoning goes ONLY in reasoning field - no double-write)
+      const parts: string[] = [];
       if (output) {
         parts.push(output);
       }
@@ -1911,6 +2009,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        ...(reasoningContent ? { reasoning: reasoningContent } : {}),
         ...(error ? { error } : {}),
       };
     } catch (err: any) {

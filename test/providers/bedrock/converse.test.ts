@@ -387,7 +387,7 @@ describe('AwsBedrockConverseProvider', () => {
       });
     });
 
-    it('should include extended thinking in output when showThinking is true', async () => {
+    it('should return reasoning in separate field when showThinking is true', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
@@ -404,10 +404,13 @@ describe('AwsBedrockConverseProvider', () => {
 
       const result = await provider.callApi('What is the meaning of life?');
 
-      expect(result.output).toContain('<thinking>');
-      expect(result.output).toContain('Let me think about this...');
-      expect(result.output).toContain('</thinking>');
-      expect(result.output).toContain('The answer is 42.');
+      // Thinking content should NOT be in output - it goes to reasoning field only (no double-write)
+      expect(result.output).not.toContain('<thinking>');
+      expect(result.output).toBe('The answer is 42.');
+      // Reasoning should be in separate field
+      expect(result.reasoning).toEqual([
+        { type: 'thinking', thinking: 'Let me think about this...', signature: 'test-signature' },
+      ]);
     });
 
     it('should exclude thinking content when showThinking is false', async () => {
@@ -427,9 +430,11 @@ describe('AwsBedrockConverseProvider', () => {
 
       const result = await provider.callApi('What is the meaning of life?');
 
+      // Thinking should be excluded from both output and reasoning field
       expect(result.output).not.toContain('<thinking>');
       expect(result.output).not.toContain('Let me think about this...');
       expect(result.output).toBe('The answer is 42.');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should handle tool use responses', async () => {
@@ -495,6 +500,43 @@ describe('AwsBedrockConverseProvider', () => {
 
       // The callback should be executed and return the result
       expect(result.output).toBe('Result: 4');
+    });
+
+    it('should preserve reasoning when function callbacks handle tool output', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'calculator',
+              description: 'A calculator',
+              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
+            },
+          ],
+          functionToolCallbacks: {
+            calculator: () => 'Result: 4',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          reasoningContent: 'I should use the calculator.',
+          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.output).toBe('Result: 4');
+      expect(result.reasoning).toEqual([
+        {
+          type: 'thinking',
+          thinking: 'I should use the calculator.',
+          signature: 'test-signature',
+        },
+      ]);
     });
 
     it('should initialize and clean up MCP when configured', async () => {
@@ -3240,10 +3282,11 @@ Third line`;
       const result = await provider.callApiStreaming('What is the meaning of life?');
 
       expect(result.error).toBeUndefined();
-      expect(result.output).toContain('<thinking>');
-      expect(result.output).toContain('Thinking about this...');
-      expect(result.output).toContain('</thinking>');
-      expect(result.output).toContain('The answer is 42.');
+      // Thinking content should NOT be in output - it goes to reasoning field only (no double-write)
+      expect(result.output).not.toContain('<thinking>');
+      expect(result.output).toBe('The answer is 42.');
+      // Reasoning should be in separate field
+      expect(result.reasoning).toEqual([{ type: 'thinking', thinking: 'Thinking about this...' }]);
     });
   });
 });

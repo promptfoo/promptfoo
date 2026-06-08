@@ -9,7 +9,7 @@ export type GroqCompletionOptions = OpenAiCompletionOptions & {
   parallel_tool_calls?: boolean | null;
   /** Controls how reasoning is presented. Options: 'parsed', 'raw', 'hidden'. */
   reasoning_format?: 'parsed' | 'raw' | 'hidden' | null;
-  /** For GPT-OSS models, set to false to hide reasoning output. */
+  /** For GPT-OSS models, set to false to omit reasoning content. */
   include_reasoning?: boolean;
   /** Compound model tool configuration. */
   compound_custom?: {

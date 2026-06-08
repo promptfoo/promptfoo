@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { formatOpenAiError } from '../openai/util';
 
-import type { ProviderResponse, TokenUsage } from '../../types/index';
+import type { ProviderResponse, ReasoningContent, TokenUsage } from '../../types/index';
 import type {
   ProcessedOutput,
   ProcessorConfig,
@@ -119,6 +119,7 @@ export class ResponsesProcessor {
 
       const processedOutput = await this.processOutput(data.output, context);
       const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
+      const showThinking = requestConfig.showThinking !== false;
 
       if (processedOutput.isRefusal) {
         return {
@@ -129,6 +130,9 @@ export class ResponsesProcessor {
           ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
+          ...(processedOutput.reasoning?.length && showThinking
+            ? { reasoning: processedOutput.reasoning }
+            : {}),
         };
       }
 
@@ -153,6 +157,9 @@ export class ResponsesProcessor {
         ...(cost === undefined ? {} : { cost }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
+        ...(processedOutput.reasoning?.length && showThinking
+          ? { reasoning: processedOutput.reasoning }
+          : {}),
       };
 
       // Add annotations if present (for deep research citations)
@@ -183,6 +190,7 @@ export class ResponsesProcessor {
     let refusal = '';
     let isRefusal = false;
     const annotations: any[] = [];
+    const reasoningBlocks: ReasoningContent[] = [];
 
     // Process all output items
     for (const item of output) {
@@ -208,6 +216,11 @@ export class ResponsesProcessor {
       if (processed.annotations) {
         annotations.push(...processed.annotations);
       }
+
+      // Collect reasoning blocks
+      if (processed.reasoning) {
+        reasoningBlocks.push(...processed.reasoning);
+      }
     }
 
     return {
@@ -215,6 +228,7 @@ export class ResponsesProcessor {
       refusal,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
+      reasoning: reasoningBlocks.length > 0 ? reasoningBlocks : undefined,
     };
   }
 
@@ -225,6 +239,7 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
+    reasoning?: ReasoningContent[];
   }> {
     switch (item.type) {
       case 'function_call':
@@ -350,17 +365,33 @@ export class ResponsesProcessor {
     });
   }
 
-  private processReasoning(item: any, context: ProcessorContext): Promise<{ content?: string }> {
+  private processReasoning(
+    item: any,
+    context: ProcessorContext,
+  ): Promise<{ reasoning?: ReasoningContent[] }> {
     if (context.suppressReasoningOutput) {
       return Promise.resolve({});
     }
 
-    if (!item.summary || !item.summary.length) {
-      return Promise.resolve({});
+    const reasoning: ReasoningContent[] = [];
+    if (Array.isArray(item.summary)) {
+      const reasoningText = item.summary
+        .map((summary: { text?: unknown }) =>
+          typeof summary.text === 'string' ? summary.text.trim() : '',
+        )
+        .filter(Boolean)
+        .join('\n');
+
+      if (reasoningText) {
+        reasoning.push({ type: 'reasoning', content: reasoningText });
+      }
     }
 
-    const reasoningText = `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}`;
-    return Promise.resolve({ content: reasoningText });
+    if (typeof item.encrypted_content === 'string' && item.encrypted_content.trim()) {
+      reasoning.push({ type: 'redacted_thinking', data: item.encrypted_content });
+    }
+
+    return Promise.resolve(reasoning.length > 0 ? { reasoning } : {});
   }
 
   private processWebSearch(item: any): Promise<{ content?: string }> {

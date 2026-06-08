@@ -11,6 +11,7 @@ import {
   calculateGoogleCost,
   collectGroundingMetadata,
   createAuthCacheDiscriminator,
+  extractGeminiReasoningFromCandidate,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -30,6 +31,7 @@ import type {
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  ReasoningContent,
 } from '../../types/index';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
@@ -391,6 +393,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
     let output: ReturnType<typeof formatCandidateContents> | undefined;
     let candidate: ReturnType<typeof getCandidate> | undefined;
+    const reasoning: ReasoningContent[] = [];
     try {
       for (const datum of dataWithResponse) {
         if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
@@ -404,6 +407,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
         candidate = candidateForChunk;
         output = mergeParts(output, formatCandidateContents(candidate));
+        const chunkReasoning = extractGeminiReasoningFromCandidate(
+          candidate,
+          config.showThinking !== false,
+        );
+        if (chunkReasoning) {
+          reasoning.push(...chunkReasoning);
+        }
       }
 
       if (output === undefined || candidate === undefined) {
@@ -478,9 +488,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
           );
-
       return {
         output,
+        ...(reasoning.length > 0 && { reasoning }),
         tokenUsage,
         cost,
         raw: data,

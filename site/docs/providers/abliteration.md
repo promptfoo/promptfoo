@@ -62,7 +62,8 @@ sampling options, structured output, and multimodal messages.
 
 Abliteration responses can include `reasoning_content`. Promptfoo hides this
 thinking output by default for this provider. Set `showThinking: true` in the
-provider config if you want it included in eval outputs.
+provider config if you want it returned in the response's `reasoning` field and
+shown in the UI's Reasoning panel.
 
 ## Multimodal Example
 

@@ -849,6 +849,33 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     expect(screen.getByText('Replayed output text')).toBeInTheDocument();
   });
 
+  it('should display replay reasoning when replay returns no visible output', async () => {
+    const customReplay = vi.fn().mockResolvedValue({
+      output: '',
+      reasoning: [{ type: 'reasoning' as const, content: 'Replay reasoning text' }],
+    });
+    const propsWithReplay = {
+      ...defaultProps,
+      reasoning: 'Original reasoning text',
+      onReplay: customReplay,
+    };
+
+    renderWithProviders(<EvalOutputPromptDialog {...propsWithReplay} />);
+
+    await act(async () => {
+      await user.click(screen.getByLabelText('Edit & Replay'));
+    });
+
+    const replayButton = screen.getByRole('button', { name: /replay/i });
+    await act(async () => {
+      await user.click(replayButton);
+    });
+
+    await screen.findByText('Replay reasoning text');
+    expect(screen.getByText('(No output returned)')).toBeInTheDocument();
+    expect(screen.queryByText('Original reasoning text')).not.toBeInTheDocument();
+  });
+
   it('should display error when replay fails', async () => {
     const customReplay = vi.fn().mockResolvedValue({ error: 'Replay failed' });
     const propsWithReplay = {

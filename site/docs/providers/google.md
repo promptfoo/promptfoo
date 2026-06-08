@@ -605,7 +605,7 @@ providers:
           thinkingBudget: 1024 # Controls tokens allocated for thinking process
 ```
 
-The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking.
+The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking. When Gemini returns thought parts, promptfoo separates them into the response `reasoning` field and keeps the main `output` as the final answer. Set `showThinking: false` to omit thought content from results.
 
 **Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
 

@@ -15,6 +15,7 @@ import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import {
   calculateAnthropicCost,
+  extractReasoningFromMessage,
   getTokenUsage,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
@@ -25,6 +26,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
   collectGroundingMetadata,
+  extractGeminiReasoningFromCandidate,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -339,7 +341,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
-    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+    const showThinking =
+      context?.prompt?.config?.showThinking ?? this.config.showThinking ?? isThinkingEnabled;
 
     const cache = await getCache();
     const apiHost = this.getApiHost();
@@ -399,8 +402,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     try {
       const output = outputFromMessage(data as any, showThinking);
+      const reasoning = showThinking ? extractReasoningFromMessage(data as any) : undefined;
 
-      if (!output) {
+      if (!output && !reasoning) {
         return {
           error: `No output found in Claude API response: ${JSON.stringify(data)}`,
         };
@@ -417,6 +421,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const response = {
         cached: false,
         output,
+        ...(reasoning ? { reasoning } : {}),
         tokenUsage,
         cost: calculateAnthropicCost(
           normalizedModelName,
@@ -553,9 +558,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    const showThinking = config.showThinking !== false;
     const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
+    const cacheKey = getVertexBodyCacheKey(
+      `vertex:${this.modelName}:showThinking=${showThinking}`,
+      body,
+      apiHost,
+    );
 
     let response;
     let cachedResponse;
@@ -655,6 +665,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
         const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
+        const reasoningBlocks: NonNullable<ProviderResponse['reasoning']> = [];
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
           if (datum.promptFeedback?.blockReason) {
@@ -700,6 +711,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
 
           const candidate = getCandidate(datum);
+          const reasoning = extractGeminiReasoningFromCandidate(candidate, showThinking);
+          if (reasoning) {
+            reasoningBlocks.push(...reasoning);
+          }
           const safetyFinishReasons = [
             'SAFETY',
             'PROHIBITED_CONTENT',
@@ -786,6 +801,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         response = {
           cached: false,
           output,
+          ...(reasoningBlocks.length > 0 && { reasoning: reasoningBlocks }),
           tokenUsage,
           cost,
           metadata: {},

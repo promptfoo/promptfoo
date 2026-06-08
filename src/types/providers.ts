@@ -23,6 +23,7 @@ export type {
   ProviderModerationResponse,
   ProviderResponse,
   ProviderSimilarityResponse,
+  ReasoningContent,
 } from '../contracts/providers';
 export type { TokenUsage } from './shared';
 export type ProviderId = string;

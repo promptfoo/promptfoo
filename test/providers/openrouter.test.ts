@@ -270,9 +270,17 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Analyze text and provide summary with XML tags');
 
-        // Should include both thinking and content when showThinking is true (default)
-        const expectedOutput = `Thinking: I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.\n\n<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>`;
-        expect(result.output).toBe(expectedOutput);
+        // Reasoning goes to separate field, NOT prepended to output (no double-write)
+        expect(result.output).toBe(
+          '<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>',
+        );
+        expect(result.reasoning).toEqual([
+          {
+            type: 'reasoning',
+            content:
+              'I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.',
+          },
+        ]);
         expect(result.tokenUsage).toEqual({
           total: 50,
           prompt: 20,
@@ -345,8 +353,11 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // Should show reasoning when content is null
-        expect(result.output).toBe('This is the thinking process for the response.');
+        // Output is empty when no content, reasoning goes to separate field only (no double-write)
+        expect(result.output).toBe('');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'This is the thinking process for the response.' },
+        ]);
         expect(result.tokenUsage).toEqual({
           total: 50,
           prompt: 20,
@@ -379,10 +390,11 @@ describe('OpenRouter', () => {
 
         const result = await nonGeminiProvider.callApi('Test prompt');
 
-        // All models now handle reasoning field when present
-        const expectedOutput =
-          'Thinking: Thinking about the best way to respond to this query\n\nRegular response with reasoning';
-        expect(result.output).toBe(expectedOutput);
+        // Reasoning goes to separate field, NOT prepended to output (no double-write)
+        expect(result.output).toBe('Regular response with reasoning');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'Thinking about the best way to respond to this query' },
+        ]);
         expect(result.tokenUsage).toEqual({
           total: 30,
           prompt: 10,
@@ -423,13 +435,13 @@ describe('OpenRouter', () => {
         });
       });
 
-      it('should handle empty reasoning field', async () => {
+      it('should ignore blank reasoning fields', async () => {
         const mockResponse = {
           choices: [
             {
               message: {
                 content: 'Response with empty reasoning',
-                reasoning: '',
+                reasoning: ' \n\t',
               },
             },
           ],
@@ -445,14 +457,125 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // Should not add "Thinking:" prefix for empty reasoning
         expect(result.output).toBe('Response with empty reasoning');
+        expect(result.reasoning).toBeUndefined();
         expect(result.tokenUsage).toEqual({
           total: 30,
           prompt: 10,
           completion: 20,
           numRequests: 1,
         });
+      });
+
+      it('should handle reasoning_details without plaintext reasoning', async () => {
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'Visible answer',
+                reasoning_details: [
+                  {
+                    type: 'reasoning.text',
+                    text: 'Detailed private reasoning.',
+                  },
+                  {
+                    type: 'reasoning.encrypted',
+                    data: 'encrypted-reasoning-payload',
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 35, prompt_tokens: 10, completion_tokens: 25 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Visible answer');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'Detailed private reasoning.' },
+          { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+        ]);
+      });
+
+      it('should prefer signed reasoning_details over the lossy plaintext field', async () => {
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'Visible answer',
+                reasoning: 'Flattened reasoning text.',
+                reasoning_details: [
+                  {
+                    type: 'reasoning.text',
+                    text: 'Detailed private reasoning.',
+                    signature: 'reasoning-signature',
+                  },
+                  {
+                    type: 'reasoning.encrypted',
+                    data: 'encrypted-reasoning-payload',
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 35, prompt_tokens: 10, completion_tokens: 25 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Visible answer');
+        expect(result.reasoning).toEqual([
+          {
+            type: 'thinking',
+            thinking: 'Detailed private reasoning.',
+            signature: 'reasoning-signature',
+          },
+          { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+        ]);
+      });
+
+      it('should suppress reasoning_details when showThinking is false', async () => {
+        const providerWithoutThinking = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: { showThinking: false },
+        });
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'Visible answer',
+                reasoning_details: [{ type: 'reasoning.text', text: 'Private reasoning.' }],
+              },
+            },
+          ],
+          usage: { total_tokens: 35, prompt_tokens: 10, completion_tokens: 25 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithoutThinking.callApi('Test prompt');
+
+        expect(result.output).toBe('Visible answer');
+        expect(result.reasoning).toBeUndefined();
       });
 
       it('should handle tool calls without including reasoning when showThinking is false', async () => {
@@ -1160,10 +1283,14 @@ describe('OpenRouter', () => {
 
         const result = await providerWithJsonSchema.callApi('Generate JSON with reasoning');
 
-        // Should parse JSON after adding reasoning prefix
-        // The output is built as "Thinking: ...\n\n{content}" and then parsed
-        // Since the combined string is not valid JSON, it should return as-is
+        // Should parse JSON content while keeping reasoning separate.
         expect(result.output).toStrictEqual({ result: 'success' });
+        expect(result.reasoning).toEqual([
+          {
+            type: 'reasoning',
+            content: 'I formatted the response as JSON according to the schema',
+          },
+        ]);
         expect(result.tokenUsage).toEqual({
           total: 50,
           prompt: 20,

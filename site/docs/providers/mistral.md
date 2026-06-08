@@ -128,7 +128,10 @@ providers:
     config:
       temperature: 0.7
       top_p: 0.95
-      max_tokens: 40960
+      max_tokens: 40960 # Full context for reasoning
+      prompt_mode: reasoning
+      reasoning_effort: high
+      showThinking: true # Return reasoning chunks in the response reasoning field
 
   # Adjustable reasoning on general-purpose models
   - id: mistral:mistral-medium-3.5
@@ -140,10 +143,10 @@ providers:
           name: answer
           schema:
             type: object
-            properties:
-              answer:
-                type: string
-            required: [answer]
+             properties:
+               answer:
+                 type: string
+             required: [answer]
 
   # Code generation with FIM support
   - id: mistral:codestral-latest
@@ -169,6 +172,8 @@ providers:
             ignore_other_categories: false
             action: block
 ````
+
+For Magistral and other Mistral reasoning responses, promptfoo separates reasoning chunks from the final answer. The final answer stays in `output`; reasoning traces are returned in the response `reasoning` field unless `showThinking: false` is set.
 
 ### Environment Variables Reference
 

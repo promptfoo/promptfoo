@@ -506,6 +506,48 @@ describe('OpenAiResponsesProvider reasoning models', () => {
 
     const result = await provider.callApi('Test prompt');
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('Reasoning: Valid reasoning summary\nFinal answer');
+    expect(result.output).toBe('Final answer');
+    expect(result.reasoning).toEqual([
+      {
+        type: 'reasoning',
+        content: 'Valid reasoning summary',
+      },
+    ]);
+  });
+
+  it('should suppress reasoning items when showThinking is false', async () => {
+    const mockData = {
+      output: [
+        {
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'Hidden reasoning summary' }],
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Final answer' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockData,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        showThinking: false,
+      },
+    });
+
+    const result = await provider.callApi('Test prompt');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Final answer');
+    expect(result.reasoning).toBeUndefined();
   });
 });

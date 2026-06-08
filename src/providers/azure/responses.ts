@@ -96,7 +96,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
-  ): Promise<Record<string, any>> {
+  ): Promise<{ body: Record<string, any>; config: Record<string, any> }> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -209,7 +209,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     };
 
     logger.debug('Azure Responses API request body', { body });
-    return body;
+    return { body, config };
   }
 
   async callApi(
@@ -255,7 +255,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       }
     }
 
-    const body = await this.getAzureResponsesBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getAzureResponsesBody(prompt, context, callApiOptions);
 
     // Calculate timeout for deep research models
     const isDeepResearchModel = this.deploymentName.includes('deep-research');
@@ -309,6 +309,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
-    return this.processor.processResponseOutput(data, body, cached);
+    // Pass merged config (not body) to ensure showThinking is respected
+    return this.processor.processResponseOutput(data, config, cached);
   }
 }

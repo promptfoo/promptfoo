@@ -153,8 +153,37 @@ describe('ResponsesProcessor', () => {
 
       const result = await processor.processResponseOutput(mockData, {}, false);
 
-      expect(result.output).toContain('Reasoning: Step 1: Analyze the problem');
-      expect(result.output).toContain('Step 2: Find the solution');
+      // Reasoning should be stored separately, not in output
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content: 'Step 1: Analyze the problem\nStep 2: Find the solution',
+        },
+      ]);
+      // Output should be empty since there's no message content
+      expect(result.output).toBe('');
+    });
+
+    it('should ignore empty reasoning summary items', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'reasoning',
+            summary: [{ text: '  ' }, {}, { text: 'Useful summary' }],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 20 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content: 'Useful summary',
+        },
+      ]);
+      expect(result.output).toBe('');
     });
 
     it('should suppress reasoning output when requested', async () => {
@@ -253,6 +282,10 @@ describe('ResponsesProcessor', () => {
         model: 'gpt-4.1',
         output: [
           {
+            type: 'reasoning',
+            summary: [{ text: 'The request should be refused.' }],
+          },
+          {
             type: 'message',
             role: 'assistant',
             content: [
@@ -270,10 +303,101 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toBe('I cannot help with that request.');
       expect(result.isRefusal).toBe(true);
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'The request should be refused.' },
+      ]);
       expect(result.metadata).toEqual({
         responseId: 'resp_refusal456',
         model: 'gpt-4.1',
       });
+    });
+
+    it('should suppress reasoning on refusals when showThinking is false', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'reasoning', summary: [{ text: 'Private refusal reasoning' }] },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'refusal', refusal: 'Request refused.' }],
+            },
+          ],
+        },
+        { showThinking: false },
+        false,
+      );
+
+      expect(result.output).toBe('Request refused.');
+      expect(result.reasoning).toBeUndefined();
+    });
+
+    it('should preserve encrypted reasoning without a summary', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'reasoning', encrypted_content: 'encrypted-reasoning-payload' },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Visible answer.' }],
+            },
+          ],
+        },
+        {},
+        false,
+      );
+
+      expect(result.output).toBe('Visible answer.');
+      expect(result.reasoning).toEqual([
+        { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+      ]);
+    });
+
+    it('should preserve summary and encrypted reasoning in response order', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            {
+              type: 'reasoning',
+              summary: [{ text: 'Reasoning summary.' }],
+              encrypted_content: 'encrypted-reasoning-payload',
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Visible answer.' }],
+            },
+          ],
+        },
+        {},
+        false,
+      );
+
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Reasoning summary.' },
+        { type: 'redacted_thinking', data: 'encrypted-reasoning-payload' },
+      ]);
+    });
+
+    it('should suppress encrypted reasoning when showThinking is false', async () => {
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'reasoning', encrypted_content: 'encrypted-reasoning-payload' },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Visible answer.' }],
+            },
+          ],
+        },
+        { showThinking: false },
+        false,
+      );
+
+      expect(result.output).toBe('Visible answer.');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should handle mixed response types', async () => {
@@ -302,7 +426,14 @@ describe('ResponsesProcessor', () => {
 
       const result = await processor.processResponseOutput(mockData, {}, false);
 
-      expect(result.output).toContain('Reasoning: Let me think about this');
+      // Reasoning should be stored separately
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content: 'Let me think about this...',
+        },
+      ]);
+      // Output should contain only the non-reasoning content
       expect(result.output).toContain('Function result');
       expect(result.output).toContain('Here is the result');
     });

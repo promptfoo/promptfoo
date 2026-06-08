@@ -28,6 +28,14 @@ export interface GuardrailResponse {
   reason?: string;
 }
 
+/** Native reasoning/thinking content returned separately from visible model output. */
+export type ReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thought: string; signature?: string }
+  | { type: 'think'; content: string };
+
 export interface ImageOutput {
   data?: string; // data URI or base64
   blobRef?: BlobRef;
@@ -80,6 +88,8 @@ export interface ProviderResponse {
   prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
+  /** Provider-native reasoning content, omitted when thinking display is disabled. */
+  reasoning?: ReasoningContent[];
   /**
    * Input materialization metadata returned by a remote Promptfoo server.
    */

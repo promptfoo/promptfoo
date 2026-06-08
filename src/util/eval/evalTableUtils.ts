@@ -2,6 +2,7 @@ import { stringify as csvStringify } from 'csv-stringify/sync';
 import { escapeCsvFormula } from '../../csv';
 import { getEnvBool } from '../../envars';
 import { ResultFailureReason } from '../../types/index';
+import { reasoningToString } from '../reasoning';
 
 import type Eval from '../../models/eval';
 import type {
@@ -10,6 +11,7 @@ import type {
   EvalTableDTO,
   EvaluateTableRow,
   Prompt,
+  ReasoningContent,
 } from '../../types/index';
 
 /**
@@ -263,6 +265,7 @@ type StreamRow = {
     failureReason?: ResultFailureReason;
     gradingResult?: { reason?: string; comment?: string } | null;
     metadata?: Record<string, unknown>;
+    response?: { reasoning?: ReasoningContent[] };
   } | null>;
   test: { description?: string };
 };
@@ -278,7 +281,7 @@ function batchToStreamRows(
     testIdx: number;
     promptIdx: number;
     testCase?: { vars?: Record<string, unknown>; description?: string };
-    response?: { output?: string };
+    response?: { output?: string; reasoning?: ReasoningContent[] };
     success: boolean;
     score?: number;
     namedScores?: Record<string, number>;
@@ -312,6 +315,7 @@ function batchToStreamRows(
       failureReason: result.failureReason,
       gradingResult: result.gradingResult,
       metadata: result.metadata,
+      response: result.response?.reasoning ? { reasoning: result.response.reasoning } : undefined,
     };
   }
   return Array.from(rowsByTestIdx.values());
@@ -349,6 +353,7 @@ export function buildCsvHeaders(
       );
       return [
         label,
+        'Reasoning',
         'Status',
         'Score',
         'Named Scores',
@@ -388,18 +393,20 @@ export function tableRowToCsvValues(
     ...row.outputs.flatMap((output, outputIndex) => {
       const namedScoreNames = options.namedScoreNamesByPrompt?.[outputIndex] || [];
       if (!output) {
-        return ['', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
+        return ['', '', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
       }
 
       const status = getOutputStatus(output);
       const score = output.score?.toFixed(2) ?? '';
       const namedScores = formatNamedScores(output.namedScores);
+      const reasoning = reasoningToString(output.response?.reasoning) || '';
       const namedScoreValues = namedScoreNames.map((name) =>
         formatNamedScoreValue(output.namedScores?.[name]),
       );
 
       return [
         output.text || '',
+        reasoning,
         status,
         score,
         namedScores,
@@ -460,6 +467,7 @@ function escapeCsvRowsForFormulaInjection(
  *
  * Column structure per prompt:
  * - Output: Pure LLM output text (no pass/fail prefix)
+ * - Reasoning: Native reasoning/thinking content, with redacted blocks shown as [Redacted]
  * - Status: PASS | FAIL | ERROR
  * - Score: Numeric score (e.g., "1.00")
  * - Named Scores: JSON object with per-assertion scores (e.g., {"clarity": 0.90, "accuracy": 0.85})

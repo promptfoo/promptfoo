@@ -2,7 +2,7 @@ import { parseDataUrl } from '../../util/dataUrl';
 import { calculateCost as calculateCostBase } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { TokenUsage } from '../../types/index';
+import type { ReasoningContent, TokenUsage } from '../../types/index';
 import type {
   AnthropicToolConfig,
   WebFetchToolConfig,
@@ -185,7 +185,39 @@ export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean 
   return isClaudeOpus47Model(modelId) || isClaudeOpus48Model(modelId);
 }
 
-export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
+/**
+ * Extract reasoning/thinking blocks from an Anthropic message.
+ *
+ * Signatures are preserved so multi-turn extended-thinking conversations can
+ * send them back to Anthropic unchanged.
+ */
+export function extractReasoningFromMessage(
+  message: Anthropic.Messages.Message,
+): ReasoningContent[] | undefined {
+  const reasoningBlocks: ReasoningContent[] = [];
+
+  for (const block of message.content) {
+    if (block.type === 'thinking') {
+      reasoningBlocks.push({
+        type: 'thinking',
+        thinking: block.thinking,
+        signature: block.signature,
+      });
+    } else if (block.type === 'redacted_thinking') {
+      reasoningBlocks.push({
+        type: 'redacted_thinking',
+        data: block.data,
+      });
+    }
+  }
+
+  return reasoningBlocks.length > 0 ? reasoningBlocks : undefined;
+}
+
+export function outputFromMessage(
+  message: Anthropic.Messages.Message,
+  _showThinking: boolean = true,
+) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
     (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
@@ -196,10 +228,6 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
         } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
           return JSON.stringify(block);
         }

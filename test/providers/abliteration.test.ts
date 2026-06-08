@@ -295,7 +295,8 @@ describe('AbliterationProvider', () => {
     });
     const result = await provider.callApi('Test prompt');
 
-    expect(result.output).toBe('Thinking: Private reasoning\n\nFinal answer');
+    expect(result.output).toBe('Final answer');
+    expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Private reasoning' }]);
   });
 
   it('surfaces client errors', async () => {

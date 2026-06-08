@@ -36,7 +36,7 @@ providers:
 - `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
+- `showThinking` - Control whether reasoning content is included in the response's `reasoning` field (default: `true`, applies to deepseek-reasoner model)
 
 ## Available Models
 
@@ -89,7 +89,7 @@ providers:
   - id: deepseek:deepseek-reasoner
     config:
       max_tokens: 8000
-      showThinking: true # Include reasoning content in output (default)
+      showThinking: true # Include reasoning content in response.reasoning (default)
   - id: openai:o-1
     config:
       temperature: 0.0
@@ -112,18 +112,12 @@ using the `showThinking` parameter:
 providers:
   - id: deepseek:deepseek-reasoner
     config:
-      showThinking: false # Hide reasoning content from output
+      showThinking: false # Hide reasoning content from response
 ```
 
-When `showThinking` is set to `true` (default), the output includes both reasoning and the final answer in a standardized format:
+When `showThinking` is set to `true` (default), reasoning content is returned in the response's `reasoning` field and displayed in the UI's Reasoning panel separately from the main output.
 
-```
-Thinking: <reasoning content>
-
-<final answer>
-```
-
-When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
+When set to `false`, reasoning content is not included in the response. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
 
 See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 

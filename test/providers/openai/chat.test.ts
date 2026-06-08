@@ -359,7 +359,10 @@ describe('OpenAI Provider', () => {
         data: {
           choices: [
             {
-              message: { refusal: 'Content policy violation' },
+              message: {
+                refusal: 'Content policy violation',
+                reasoning_content: 'Reasoning before refusal',
+              },
               finish_reason: 'stop',
             },
           ],
@@ -380,6 +383,9 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Content policy violation');
       expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0, numRequests: 1 });
       expect(result.isRefusal).toBe(true);
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Reasoning before refusal' },
+      ]);
       expect(result.guardrails).toEqual({ flagged: true });
     });
 
@@ -431,7 +437,7 @@ describe('OpenAI Provider', () => {
         data: {
           choices: [
             {
-              message: { content: null },
+              message: { content: null, reasoning: 'Reasoning before filtering' },
               finish_reason: 'content_filter',
             },
           ],
@@ -452,6 +458,9 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Content filtered by provider');
       expect(result.isRefusal).toBe(true);
       expect(result.finishReason).toBe('content_filter');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Reasoning before filtering' },
+      ]);
       // OpenAI doesn't specify if it's input or output filtering, so we only set flagged
       expect(result.guardrails).toEqual({
         flagged: true,
@@ -536,8 +545,16 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      const expectedOutput = `Thinking: First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.\n\nThe answer is 9.11 is greater than 9.8.`;
-      expect(result.output).toBe(expectedOutput);
+      // Output should NOT include the reasoning content
+      expect(result.output).toBe('The answer is 9.11 is greater than 9.8.');
+      // Reasoning should be stored separately
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.',
+        },
+      ]);
       expect(result.tokenUsage).toEqual({ total: 25, prompt: 12, completion: 13, numRequests: 1 });
     });
 
@@ -569,6 +586,8 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 42.');
+      // With showThinking: false, reasoning should not be captured
+      expect(result.reasoning).toBeUndefined();
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
@@ -598,11 +617,154 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      const expectedOutput = `Thinking: Let me compare 9.11 and 9.8:
-9.11 > 9.8 because 11 > 8 in the decimal places.
-Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
-      expect(result.output).toBe(expectedOutput);
+      // Output should NOT include the reasoning content
+      expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      // Reasoning should be stored separately
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+        },
+      ]);
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
+    });
+
+    it('should strip reasoning fields from raw tool-call message output', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'I will call a tool.',
+                reasoning_content: 'Private tool selection reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual({
+        content: 'I will call a tool.',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"weather"}' },
+          },
+        ],
+      });
+      expect(JSON.stringify(result.output)).not.toContain('Private tool selection reasoning');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Private tool selection reasoning.' },
+      ]);
+    });
+
+    it('should preserve raw tool-call message output when the provider uses reasoning', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'I will call a tool.',
+                reasoning: 'Private tool selection reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual({
+        content: 'I will call a tool.',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"weather"}' },
+          },
+        ],
+      });
+      expect(JSON.stringify(result.output)).not.toContain('Private tool selection reasoning');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Private tool selection reasoning.' },
+      ]);
+    });
+
+    it('should preserve tool calls when reasoning responses have null content', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                reasoning: 'Private tool selection reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual([
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'lookup', arguments: '{"query":"weather"}' },
+        },
+      ]);
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Private tool selection reasoning.' },
+      ]);
     });
 
     it('should hide reasoning content when showThinking is false', async () => {
@@ -634,6 +796,8 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      // With showThinking: false, reasoning should not be captured
+      expect(result.reasoning).toBeUndefined();
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
@@ -685,10 +849,16 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
         JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
       );
 
-      const expectedOutput1 = `Thinking: Let me compare 9.11 and 9.8:
-9.11 > 9.8 because 11 > 8 in the decimal places.
-Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
-      expect(result1.output).toBe(expectedOutput1);
+      // Output should NOT include the reasoning content
+      expect(result1.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      // Reasoning should be stored separately
+      expect(result1.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+        },
+      ]);
 
       // Second round (with conversation history excluding reasoning_content)
       const result2 = await provider.callApi(
@@ -699,11 +869,16 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
         ]),
       );
 
-      const expectedOutput2 = `Thinking: Let me count the occurrences of the letter "r" in "strawberry":
-The word is spelled s-t-r-a-w-b-e-r-r-y.
-I can see that the letter "r" appears twice: once in "str" and once in "rry".
-Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere are 2 "r"s in the word "strawberry".`;
-      expect(result2.output).toBe(expectedOutput2);
+      // Output should NOT include the reasoning content
+      expect(result2.output).toBe('There are 2 "r"s in the word "strawberry".');
+      // Reasoning should be stored separately
+      expect(result2.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content:
+            'Let me count the occurrences of the letter "r" in "strawberry":\nThe word is spelled s-t-r-a-w-b-e-r-r-y.\nI can see that the letter "r" appears twice: once in "str" and once in "rry".\nTherefore, there are 2 occurrences of the letter "r" in "strawberry".',
+        },
+      ]);
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 

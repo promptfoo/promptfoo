@@ -769,6 +769,7 @@ These properties can be set under the provider `config` key:
 | max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                         |
 | max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                   |
 | reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`.         |
+| showThinking          | Whether to return provider reasoning content in the response `reasoning` field. Set to `false` to omit it.                                      |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
 | top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |

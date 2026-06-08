@@ -699,11 +699,90 @@ describe('VertexChatProvider.callGeminiApi', () => {
     provider = new VertexChatProvider('gemini-2.0-flash-001');
     await provider.callGeminiApi('test prompt');
 
-    expectHashedBodyCacheKeys(/^vertex:gemini-2\.0-flash-001:[a-f0-9]{64}$/, ['test prompt']);
+    expectHashedBodyCacheKeys(/^vertex:gemini-2\.0-flash-001:showThinking=true:[a-f0-9]{64}$/, [
+      'test prompt',
+    ]);
     expect(mockCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('vertex:gemini-2.0-flash-001:'),
+      expect.stringContaining('vertex:gemini-2.0-flash-001:showThinking=true:'),
       expect.any(String),
     );
+  });
+
+  it('should separate cached Gemini responses by effective showThinking', async () => {
+    const cachedResponses = new Map<string, string>();
+    mockCacheGet.mockImplementation((key: string) =>
+      Promise.resolve(cachedResponses.get(key) ?? null),
+    );
+    mockCacheSet.mockImplementation((key: string, value: string) => {
+      cachedResponses.set(key, value);
+      return Promise.resolve();
+    });
+
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [
+                { thought: true, text: 'internal reasoning', thoughtSignature: 'sig-cache' },
+                { text: 'visible answer' },
+              ],
+            },
+          },
+        ],
+        usageMetadata: {
+          totalTokenCount: 10,
+          promptTokenCount: 4,
+          candidatesTokenCount: 6,
+        },
+      },
+    ]);
+
+    const providerWithThinking = new VertexChatProvider('gemini-2.5-flash', {
+      config: { showThinking: true },
+    });
+    const withThinking = await providerWithThinking.callGeminiApi('same prompt');
+
+    const providerWithoutThinking = new VertexChatProvider('gemini-2.5-flash', {
+      config: { showThinking: false },
+    });
+    const withoutThinking = await providerWithoutThinking.callGeminiApi('same prompt');
+
+    expect(withThinking.cached).toBe(false);
+    expect(withThinking.output).toBe('visible answer');
+    expect(withThinking.reasoning).toEqual([
+      { type: 'thought', thought: 'internal reasoning', signature: 'sig-cache' },
+    ]);
+
+    expect(withoutThinking.cached).toBe(false);
+    expect(withoutThinking.output).toBe('visible answer');
+    expect(withoutThinking.reasoning).toBeUndefined();
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+
+    const [withThinkingKey, withoutThinkingKey] = mockCacheGet.mock.calls.map(
+      ([key]) => key as string,
+    );
+    expect(withThinkingKey).toMatch(/^vertex:gemini-2\.5-flash:showThinking=true:[a-f0-9]{64}$/);
+    expect(withoutThinkingKey).toMatch(
+      /^vertex:gemini-2\.5-flash:showThinking=false:[a-f0-9]{64}$/,
+    );
+    expect(withThinkingKey).not.toBe(withoutThinkingKey);
+
+    cachedResponses.clear();
+    mockRequest.mockClear();
+    mockCacheGet.mockClear();
+    mockCacheSet.mockClear();
+
+    const withoutThinkingFirst = await providerWithoutThinking.callGeminiApi('same prompt');
+    const withThinkingSecond = await providerWithThinking.callGeminiApi('same prompt');
+
+    expect(withoutThinkingFirst.cached).toBe(false);
+    expect(withoutThinkingFirst.reasoning).toBeUndefined();
+    expect(withThinkingSecond.cached).toBe(false);
+    expect(withThinkingSecond.reasoning).toEqual([
+      { type: 'thought', thought: 'internal reasoning', signature: 'sig-cache' },
+    ]);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
   });
 
   it('should not reuse cached responses across effective API hosts', async () => {
@@ -1140,6 +1219,49 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   describe('thinking token tracking', () => {
+    it('should separate Gemini thought parts into the reasoning field', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: 'Private Gemini thought.', thought: true, thoughtSignature: 'sig123' },
+                    { text: 'Public answer.' },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 4,
+              totalTokenCount: 25,
+              thoughtsTokenCount: 11,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.output).toBe('Public answer.');
+      expect(response.reasoning).toEqual([
+        { type: 'thought', thought: 'Private Gemini thought.', signature: 'sig123' },
+      ]);
+    });
+
     it('should track thinking tokens when present in response', async () => {
       const provider = new VertexChatProvider('gemini-2.5-flash', {
         config: {
@@ -2983,7 +3105,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(getRequestData().max_tokens).toBe(512);
     });
 
-    it('should include thinking output in response when thinking is enabled', async () => {
+    it('should include thinking in the reasoning field when thinking is enabled', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
         config: { thinking: { type: 'enabled', budget_tokens: 5000 } },
       });
@@ -3013,8 +3135,46 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
       const result = await provider.callClaudeApi('Think about this');
 
-      expect(result.output).toContain('Thinking: Let me think...');
-      expect(result.output).toContain('The answer is 42');
+      expect(result.output).toBe('The answer is 42');
+      expect(result.reasoning).toEqual([
+        { type: 'thinking', thinking: 'Let me think...', signature: 'sig123' },
+      ]);
+    });
+
+    it('should honor prompt-level showThinking overrides for Claude reasoning', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, showThinking: true },
+      });
+      setupClaudeMocks();
+
+      mockRequest.mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-3-5-sonnet-v2@20241022',
+          content: [
+            { type: 'thinking', thinking: 'Let me think...', signature: 'sig123' },
+            { type: 'text', text: 'The answer is 42' },
+          ],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 20,
+            output_tokens: 50,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+
+      const result = await provider.callClaudeApi('Think about this', {
+        prompt: { raw: 'Think about this', label: 'test', config: { showThinking: false } },
+        vars: {},
+      });
+
+      expect(result.output).toBe('The answer is 42');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should return cost for Vertex Claude model names', async () => {

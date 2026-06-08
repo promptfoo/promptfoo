@@ -113,7 +113,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                     |
 | output_format   | -                     | JSON schema configuration for structured outputs                                    |
 | thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
-| showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
+| showThinking    | -                     | Whether to include thinking content in `response.reasoning` (default: true)         |
 | cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                 |
 | metadata        | -                     | Request metadata such as `user_id` for tracking purposes                            |
 | service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                  |
@@ -630,7 +630,7 @@ Example response with thinking enabled:
 
 #### Controlling Thinking Output
 
-By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
+By default, thinking content is included in the response's `reasoning` field and displayed in the UI's Reasoning panel separately from the main output. You can control this behavior using the `showThinking` parameter:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -639,10 +639,10 @@ providers:
       thinking:
         type: 'enabled'
         budget_tokens: 16000
-      showThinking: false # Exclude thinking content from the output
+      showThinking: false # Exclude thinking content from the response
 ```
 
-When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
+When `showThinking` is set to `false`, the thinking content will not be included in the response. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 #### Redacted Thinking
 

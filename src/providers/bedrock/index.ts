@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
+  extractReasoningFromMessage,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
@@ -20,6 +21,7 @@ import type {
   CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  ReasoningContent,
 } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 
@@ -619,6 +621,16 @@ export interface LumaRayInvocationResponse {
   };
 }
 
+/**
+ * Return type for model output handlers that support reasoning content.
+ * Models can return either a simple output value or an object with separate
+ * output and reasoning fields (for models with extended thinking/reasoning).
+ */
+export interface BedrockModelOutputResult {
+  output: any;
+  reasoning?: ReasoningContent[];
+}
+
 export interface IBedrockModel {
   params: (
     config: BedrockOptions,
@@ -627,7 +639,12 @@ export interface IBedrockModel {
     modelName?: string,
     vars?: Record<string, VarValue>,
   ) => Promise<any>;
-  output: (config: BedrockOptions, responseJson: any) => any;
+  /**
+   * Extract output from model response.
+   * Can return either a simple value (backwards compatible) or an object
+   * with { output, reasoning } for models that support extended thinking.
+   */
+  output: (config: BedrockOptions, responseJson: any) => any | BedrockModelOutputResult;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
 
@@ -639,6 +656,178 @@ export function parseValue(value: string | number, defaultValue: any) {
     return value;
   }
   return value;
+}
+
+/**
+ * Parse <think>...</think> blocks from model output.
+ * Used by DeepSeek and Qwen models that wrap reasoning in think tags.
+ * Returns output with think blocks removed and reasoning content separately.
+ */
+function parseThinkBlocks(
+  content: string,
+  showThinking: boolean,
+  allowSeededClosingTag: boolean = false,
+): BedrockModelOutputResult {
+  let output = content;
+  const thinkingContents: string[] = [];
+
+  // DeepSeek prompts are seeded with an opening <think> tag, so some responses
+  // continue directly with "reasoning</think>final" instead of repeating the
+  // opening tag in the returned text.
+  const firstCloseTagIndex = output.indexOf('</think>');
+  const firstOpenTagIndex = output.indexOf('<think>');
+  if (
+    allowSeededClosingTag &&
+    firstCloseTagIndex !== -1 &&
+    (firstOpenTagIndex === -1 || firstCloseTagIndex < firstOpenTagIndex)
+  ) {
+    const seededThinking = output.slice(0, firstCloseTagIndex).trim();
+    if (seededThinking) {
+      thinkingContents.push(seededThinking);
+    }
+    output = output.slice(firstCloseTagIndex + '</think>'.length);
+  }
+
+  thinkingContents.push(
+    ...[...output.matchAll(/<think>([\s\S]*?)<\/think>/g)]
+      .map((match) => match[1].trim())
+      .filter(Boolean),
+  );
+
+  const outputWithoutClosedBlocks = output.replace(/<think>[\s\S]*?<\/think>/g, '');
+  const unmatchedOpenTagIndex = outputWithoutClosedBlocks.indexOf('<think>');
+  if (unmatchedOpenTagIndex !== -1) {
+    const truncatedThinking = outputWithoutClosedBlocks
+      .slice(unmatchedOpenTagIndex + '<think>'.length)
+      .trim();
+    if (truncatedThinking) {
+      thinkingContents.push(truncatedThinking);
+    }
+    output = outputWithoutClosedBlocks.slice(0, unmatchedOpenTagIndex).trim();
+  }
+
+  if (thinkingContents.length > 0) {
+    output = output.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return {
+      output,
+      reasoning: showThinking
+        ? thinkingContents.map((thinkingContent) => ({
+            type: 'think' as const,
+            content: thinkingContent,
+          }))
+        : undefined,
+    };
+  }
+  return { output };
+}
+
+function isBedrockModelOutputResult(modelOutput: any): modelOutput is BedrockModelOutputResult {
+  return Boolean(modelOutput && typeof modelOutput === 'object' && 'output' in modelOutput);
+}
+
+function getBedrockStopSequences(): string[] {
+  const stop = getEnvString('AWS_BEDROCK_STOP');
+  if (!stop) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(stop);
+  } catch (err) {
+    throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
+  }
+}
+
+function toBedrockProviderResponse(
+  modelOutput: any,
+  tokenUsage: Partial<TokenUsage>,
+  extra: Omit<ProviderResponse, 'output' | 'reasoning' | 'tokenUsage'> = {},
+): ProviderResponse {
+  if (isBedrockModelOutputResult(modelOutput)) {
+    return {
+      output: modelOutput.output,
+      reasoning: modelOutput.reasoning,
+      tokenUsage,
+      ...extra,
+    };
+  }
+
+  return {
+    output: modelOutput,
+    tokenUsage,
+    ...extra,
+  };
+}
+
+function getBedrockTokenUsage(
+  model: IBedrockModel,
+  output: any,
+  prompt: string,
+  modelName: string,
+): Partial<TokenUsage> {
+  let tokenUsage: Partial<TokenUsage>;
+  if (model.tokenUsage) {
+    tokenUsage = model.tokenUsage(output, prompt);
+    logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
+  } else {
+    const promptTokens =
+      output.usage?.inputTokens ??
+      output.usage?.input_tokens ??
+      output.usage?.prompt_tokens ??
+      output.prompt_tokens ??
+      output.prompt_token_count;
+    const completionTokens =
+      output.usage?.outputTokens ??
+      output.usage?.output_tokens ??
+      output.usage?.completion_tokens ??
+      output.completion_tokens ??
+      output.generation_token_count;
+
+    const promptTokensNum = coerceStrToNum(promptTokens);
+    const completionTokensNum = coerceStrToNum(completionTokens);
+
+    const totalTokens =
+      coerceStrToNum(
+        output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
+      ) ??
+      (promptTokensNum !== undefined && completionTokensNum !== undefined
+        ? promptTokensNum + completionTokensNum
+        : undefined);
+
+    tokenUsage = {
+      prompt: promptTokensNum,
+      completion: completionTokensNum,
+      total: totalTokens,
+      numRequests: 1,
+    };
+
+    if (
+      tokenUsage.prompt === undefined &&
+      tokenUsage.completion === undefined &&
+      tokenUsage.total === undefined &&
+      output
+    ) {
+      logger.debug(`No explicit token counts found for ${modelName}, tracking request count only`);
+    } else {
+      logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
+    }
+  }
+
+  if (!tokenUsage.numRequests) {
+    tokenUsage.numRequests = 1;
+  }
+
+  return tokenUsage;
+}
+
+function getBedrockGuardrailsInfo(output: any): Pick<ProviderResponse, 'guardrails'> {
+  return output['amazon-bedrock-guardrailAction']
+    ? {
+        guardrails: {
+          flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+        },
+      }
+    : {};
 }
 
 export function addConfigParam(
@@ -1457,16 +1646,43 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (config: BedrockAmazonNova2GenerationOptions, responseJson: any) => {
+    output: (
+      config: BedrockAmazonNova2GenerationOptions,
+      responseJson: any,
+    ): BedrockModelOutputResult | string | undefined => {
       // Handle reasoningContent blocks in Nova 2 responses
       const content = responseJson.output?.message?.content;
       if (!content || !Array.isArray(content)) {
-        return novaOutputFromMessage(responseJson);
+        // novaOutputFromMessage can return undefined, wrap it for consistency
+        const output = novaOutputFromMessage(responseJson);
+        return output === undefined ? undefined : { output };
       }
 
+      // Process content blocks, separating text from reasoningContent
+      // Reasoning goes ONLY in reasoning field - no double-write to output
+      const textParts: string[] = [];
+      const reasoningBlocks: ReasoningContent[] = [];
+      const showThinking = config.showThinking !== false;
+
+      for (const block of content) {
+        if (block.reasoningContent) {
+          // Extract reasoning content from Nova 2 extended thinking
+          const reasoningText = block.reasoningContent?.reasoningText?.text;
+          if (reasoningText && showThinking) {
+            reasoningBlocks.push({
+              type: 'thinking' as const,
+              thinking: reasoningText,
+            });
+          }
+        } else if (block.text) {
+          textParts.push(block.text);
+        }
+      }
+
+      const reasoning = reasoningBlocks.length > 0 ? reasoningBlocks : undefined;
       const hasToolUse = content.some((block: any) => block.toolUse?.toolUseId);
       if (hasToolUse) {
-        return content
+        const output = content
           .map((block: any) => {
             if (block.text) {
               return null; // Filter out text blocks when tool use is present
@@ -1475,25 +1691,14 @@ export const BEDROCK_MODEL = {
           })
           .filter((block: any) => block)
           .join('\n\n');
+        return { output, reasoning };
       }
 
-      // Process content blocks, handling both text and reasoningContent
-      const parts: string[] = [];
-      const showThinking = config.showThinking !== false;
-
-      for (const block of content) {
-        if (block.reasoningContent && showThinking) {
-          // Handle reasoning content from Nova 2 extended thinking
-          const reasoningText = block.reasoningContent?.reasoningText?.text;
-          if (reasoningText) {
-            parts.push(`<thinking>\n${reasoningText}\n</thinking>`);
-          }
-        } else if (block.text) {
-          parts.push(block.text);
-        }
-      }
-
-      return parts.join('\n\n');
+      const output = textParts.join('\n\n');
+      return {
+        output,
+        reasoning,
+      };
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       const usage = responseJson?.usage;
@@ -1682,8 +1887,15 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
-      return outputFromMessage(responseJson, config?.showThinking ?? true);
+    output: (
+      config: BedrockClaudeMessagesCompletionOptions,
+      responseJson: any,
+    ): BedrockModelOutputResult => {
+      return {
+        output: outputFromMessage(responseJson),
+        reasoning:
+          config?.showThinking === false ? undefined : extractReasoningFromMessage(responseJson),
+      };
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
@@ -1936,23 +2148,15 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any): BedrockModelOutputResult | undefined => {
       if (responseJson.error) {
         throw new Error(`DeepSeek API error: ${responseJson.error}`);
       }
 
       if (responseJson.choices && Array.isArray(responseJson.choices)) {
         const choice = responseJson.choices[0];
-        if (choice && choice.text) {
-          const fullResponse = choice.text;
-          const [thinking, finalResponse] = fullResponse.split('</think>');
-          if (!thinking || !finalResponse) {
-            return fullResponse;
-          }
-          if (config.showThinking !== false) {
-            return fullResponse;
-          }
-          return finalResponse.trim();
+        if (choice?.text) {
+          return parseThinkBlocks(choice.text, config.showThinking !== false, true);
         }
       }
 
@@ -2221,14 +2425,14 @@ ${prompt}
 
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any): BedrockModelOutputResult | string => {
       if (responseJson.error) {
         throw new Error(`Qwen API error: ${responseJson.error}`);
       }
 
-      // Handle thinking mode output similar to DeepSeek
       if (responseJson.choices && Array.isArray(responseJson.choices)) {
         const choice = responseJson.choices[0];
+        const showThinking = config.showThinking !== false;
 
         // Handle tool calls
         if (choice?.message?.tool_calls && Array.isArray(choice.message.tool_calls)) {
@@ -2238,30 +2442,27 @@ ${prompt}
             })
             .join('\n');
 
-          // If there's also content, combine them
+          // If there's also content, strip any think blocks before combining it
+          // with tool-call details so hidden reasoning never leaks through output.
           if (choice.message.content) {
-            return `${choice.message.content}\n\n${toolCalls}`;
+            const parsedContent = parseThinkBlocks(choice.message.content, showThinking);
+            const textOutput =
+              typeof parsedContent.output === 'string' ? parsedContent.output.trim() : '';
+
+            return {
+              output: textOutput ? `${textOutput}\n\n${toolCalls}` : toolCalls,
+              reasoning: parsedContent.reasoning,
+            };
           }
           return toolCalls;
         }
 
         if (choice?.message?.content) {
-          const content = choice.message.content;
-
-          // Check if response contains thinking content
-          if (content.includes('<think>') && content.includes('</think>')) {
-            if (config.showThinking === false) {
-              // Extract only the final response after thinking
-              const parts = content.split('</think>');
-              return parts.length > 1 ? parts[1].trim() : content;
-            }
-          }
-
-          return content;
+          return parseThinkBlocks(choice.message.content, showThinking);
         }
       }
 
-      return responseJson.choices?.[0]?.message?.content;
+      return responseJson.choices?.[0]?.message?.content || '';
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
@@ -2615,17 +2816,8 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    let stop: string[];
-    try {
-      stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
-    } catch (err) {
-      throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
-    }
-
-    // Merge prompt-level config over provider config once so the same effective config
-    // drives handler selection, request params, AND output parsing (e.g. showThinking).
+    const stop = getBedrockStopSequences();
     const mergedConfig = { ...this.config, ...context?.prompt.config };
-
     let model = getHandlerForModel(this.modelName, mergedConfig);
     if (!model) {
       logger.warn(
@@ -2650,11 +2842,8 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return {
-          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
-          tokenUsage: createEmptyTokenUsage(),
-          cached: true,
-        };
+        const modelOutput = model.output(mergedConfig, JSON.parse(cachedResponse as string));
+        return toBedrockProviderResponse(modelOutput, createEmptyTokenUsage(), { cached: true });
       }
     }
 
@@ -2704,75 +2893,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
+      const tokenUsage = getBedrockTokenUsage(model, output, prompt, this.modelName);
+      const modelOutput = model.output(mergedConfig, output);
+      const guardrailsInfo = getBedrockGuardrailsInfo(output);
 
-      let tokenUsage: Partial<TokenUsage> = {};
-      if (model.tokenUsage) {
-        tokenUsage = model.tokenUsage(output, prompt);
-        logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
-      } else {
-        // Get token counts, converting strings to numbers
-        const promptTokens =
-          output.usage?.inputTokens ??
-          output.usage?.input_tokens ??
-          output.usage?.prompt_tokens ??
-          output.prompt_tokens ??
-          output.prompt_token_count;
-        const completionTokens =
-          output.usage?.outputTokens ??
-          output.usage?.output_tokens ??
-          output.usage?.completion_tokens ??
-          output.completion_tokens ??
-          output.generation_token_count;
-
-        const promptTokensNum = coerceStrToNum(promptTokens);
-        const completionTokensNum = coerceStrToNum(completionTokens);
-
-        // Get total tokens from API or calculate it
-        const totalTokens =
-          coerceStrToNum(
-            output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
-          ) ??
-          (promptTokensNum !== undefined && completionTokensNum !== undefined
-            ? promptTokensNum + completionTokensNum
-            : undefined);
-
-        tokenUsage = {
-          prompt: promptTokensNum,
-          completion: completionTokensNum,
-          total: totalTokens,
-          numRequests: 1,
-        };
-
-        // If we couldn't extract any token counts but have a response, track usage for metrics
-        if (
-          tokenUsage.prompt === undefined &&
-          tokenUsage.completion === undefined &&
-          tokenUsage.total === undefined &&
-          output
-        ) {
-          logger.debug(
-            `No explicit token counts found for ${this.modelName}, tracking request count only`,
-          );
-        } else {
-          logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
-        }
-      }
-
-      if (!tokenUsage.numRequests) {
-        tokenUsage.numRequests = 1;
-      }
-
-      return {
-        output: model.output(mergedConfig, output),
-        tokenUsage,
-        ...(output['amazon-bedrock-guardrailAction']
-          ? {
-              guardrails: {
-                flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-              },
-            }
-          : {}),
-      };
+      return toBedrockProviderResponse(modelOutput, tokenUsage, guardrailsInfo);
     } catch (err) {
       logger.error('Bedrock API response error', { error: String(err), response });
       return {

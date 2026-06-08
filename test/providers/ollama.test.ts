@@ -63,6 +63,64 @@ describe('OllamaCompletionProvider', () => {
     });
   });
 
+  it('should separate native thinking from generate output', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"thinking":"I should reason.","response":"","done":false}\n{"thinking":" Then answer.","response":"final answer","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:thinking');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('final answer');
+    expect(result.reasoning).toEqual([
+      { type: 'reasoning', content: 'I should reason. Then answer.' },
+    ]);
+  });
+
+  it('should suppress native generate thinking when showThinking is false', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"thinking":"private","response":"final answer","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:thinking', {
+      config: { showThinking: false },
+    });
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('final answer');
+    expect(result.reasoning).toBeUndefined();
+  });
+
+  it('should honor prompt-level showThinking overrides for native generate thinking', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"thinking":"private","response":"final answer","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:thinking', {
+      config: { showThinking: true },
+    });
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test prompt', label: 'test', config: { showThinking: false } },
+      vars: {},
+    };
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.output).toBe('final answer');
+    expect(result.reasoning).toBeUndefined();
+  });
+
   it('should handle API errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
@@ -240,6 +298,46 @@ describe('OllamaChatProvider', () => {
     expect(result).toEqual({
       output: 'test response',
     });
+  });
+
+  it('should separate native thinking from chat output', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","thinking":"I should reason.","content":"","images":null},"done":false}\n{"message":{"role":"assistant","thinking":" Then answer.","content":"final answer","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:thinking');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('final answer');
+    expect(result.reasoning).toEqual([
+      { type: 'reasoning', content: 'I should reason. Then answer.' },
+    ]);
+  });
+
+  it('should honor prompt-level showThinking overrides for native chat thinking', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","thinking":"private","content":"final answer","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:thinking', {
+      config: { showThinking: true },
+    });
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test prompt', label: 'test', config: { showThinking: false } },
+      vars: {},
+    };
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.output).toBe('final answer');
+    expect(result.reasoning).toBeUndefined();
   });
 
   it('should handle multiple chat response chunks', async () => {

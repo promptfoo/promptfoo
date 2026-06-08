@@ -171,7 +171,7 @@ providers:
       thinking:
         type: enabled
         budget_tokens: 16000
-      showThinking: true # Include thinking content in output
+      showThinking: true # Include thinking content in response
 ```
 
 The `thinking` configuration controls Claude's reasoning behavior:
@@ -180,7 +180,7 @@ The `thinking` configuration controls Claude's reasoning behavior:
 - `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
 - For Claude Opus 4.7 and 4.8, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
 
-Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
+Use `showThinking: true` to include the model's reasoning in the response's `reasoning` field (displayed in the UI's Reasoning panel), or `false` to exclude it.
 
 :::warning
 Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
@@ -196,7 +196,7 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 | `stopSequences`       | Array of stop sequences                         |
 | `thinking`            | Extended thinking configuration (Claude models) |
 | `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
-| `showThinking`        | Include thinking in output (default: true)      |
+| `showThinking`        | Include thinking in response (default: true)    |
 | `performanceConfig`   | Performance settings (`latency: optimized`)     |
 | `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
 | `guardrailIdentifier` | Guardrail ID for content filtering              |
@@ -616,7 +616,7 @@ providers:
 - `type`: Set to `enabled` to activate extended thinking, or `disabled` for fast responses (default)
 - `maxReasoningEffort`: Controls thinking depth - `low`, `medium`, or `high`
 
-When extended thinking is enabled, the model's reasoning process is captured in the response output with `<thinking>` tags, similar to other reasoning models.
+When extended thinking is enabled, the model's reasoning process is captured in the response's `reasoning` field and displayed in the UI's Reasoning panel.
 
 :::warning
 
@@ -821,7 +821,7 @@ config:
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
   thinking: { ... } # Optional: Enable Claude's extended thinking capability
-  showThinking: true # Optional: Control whether thinking content is included in output
+  showThinking: true # Optional: Control whether thinking content is included in response
 ```
 
 When using Claude's extended thinking capability, you can configure it like this:
@@ -832,15 +832,15 @@ config:
   thinking:
     type: 'enabled'
     budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
-  showThinking: true # Whether to include thinking content in the output (default: true)
+  showThinking: true # Whether to include thinking content in the response (default: true)
 ```
 
 :::tip
 
-The `showThinking` parameter controls whether thinking content is included in the response output:
+The `showThinking` parameter controls whether thinking content is included in the response's `reasoning` field:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+- When set to `true` (default), thinking content is included in the `reasoning` field and displayed in the UI's Reasoning panel
+- When set to `false`, thinking content is not included in the response
 
 This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
@@ -966,13 +966,13 @@ config:
   top_p: 0.9
 
   # Promptfoo control params
-  showThinking: true # Optional: Control whether thinking content is included in output
+  showThinking: true # Optional: Control whether thinking content is included in response
 ```
 
-`deepseek.r1-v1:0` supports extended thinking output. The `showThinking` parameter controls whether R1 thinking content is included in the response output:
+`deepseek.r1-v1:0` supports extended thinking output. The `showThinking` parameter controls whether R1 thinking content is included in the response's `reasoning` field:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+- When set to `true` (default), thinking content is included in the `reasoning` field and displayed in the UI's Reasoning panel
+- When set to `false`, thinking content is not included in the response
 
 `deepseek.v3-v1:0` and `deepseek.v3.2` use chat-completion style `messages`
 requests and return the final assistant message directly.
@@ -1098,17 +1098,17 @@ config:
   frequency_penalty: 0.1 # Reduces repetition of frequent tokens
   presence_penalty: 0.1 # Reduces repetition of any tokens
   stop: ['END', 'STOP'] # Stop sequences
-  showThinking: true # Control whether thinking content is included in output
+  showThinking: true # Control whether thinking content is included in response.reasoning
   tools: [...] # Tool calling configuration (optional)
   tool_choice: 'auto' # Tool selection strategy (optional)
 ```
 
 #### Hybrid Thinking Modes
 
-Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response output:
+Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response's `reasoning` field:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+- When set to `true` (default), thinking content is included in the `reasoning` field and displayed in the UI's Reasoning panel
+- When set to `false`, thinking content is not included in the response
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 

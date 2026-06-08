@@ -810,6 +810,7 @@ interface ProviderResponse {
   cost?: number; // required for cost assertion (see /docs/configuration/expected-outputs/deterministic#cost)
   error?: string;
   output?: any;
+  reasoning?: ReasoningContent[]; // reasoning/thinking content from models with extended reasoning
   raw?: any;
   prompt?: string | ChatMessage[]; // actual prompt sent, if different from rendered prompt
   metadata?: {
@@ -848,6 +849,25 @@ interface ProviderResponse {
   images?: ImageOutput[];
 }
 ```
+
+### ReasoningContent
+
+ReasoningContent represents reasoning/thinking content from models that support extended reasoning (e.g., Claude with extended thinking, OpenAI o1, DeepSeek-R1). The content is stored separately from the main output and displayed in the UI's Reasoning panel.
+
+```typescript
+type ReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thought: string; signature?: string }
+  | { type: 'think'; content: string };
+```
+
+- `thinking` - Claude extended thinking blocks with cryptographic signature
+- `redacted_thinking` - Encrypted thinking content flagged by safety systems
+- `reasoning` - Generic reasoning content (OpenAI, OpenAI-compatible providers, OpenRouter, xAI)
+- `thought` - Google Gemini thinking mode content, optionally with an opaque thought signature
+- `think` - Thinking extracted from `<think>` tags
 
 ### ProviderEmbeddingResponse
 

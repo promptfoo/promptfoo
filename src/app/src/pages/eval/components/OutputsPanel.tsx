@@ -22,6 +22,7 @@ interface OutputsPanelProps {
   replayOutput?: string | null;
   providerPrompt?: string;
   redteamFinalPrompt?: string;
+  reasoning?: string;
   copiedFields: Record<string, boolean>;
   hoveredElement: string | null;
   onCopy: (key: string, content: string) => void;
@@ -36,6 +37,7 @@ export function OutputsPanel({
   replayOutput,
   providerPrompt,
   redteamFinalPrompt,
+  reasoning,
   copiedFields,
   hoveredElement,
   onCopy,
@@ -71,6 +73,17 @@ export function OutputsPanel({
           onMouseEnter={() => onMouseEnter('replayOutput')}
           onMouseLeave={onMouseLeave}
           showCopyButton={hoveredElement === 'replayOutput' || copiedFields['replayOutput']}
+        />
+      )}
+      {reasoning && (
+        <CodeDisplay
+          content={reasoning}
+          title="Reasoning"
+          onCopy={() => onCopy('reasoning', reasoning)}
+          copied={copiedFields['reasoning'] || false}
+          onMouseEnter={() => onMouseEnter('reasoning')}
+          onMouseLeave={onMouseLeave}
+          showCopyButton={hoveredElement === 'reasoning' || copiedFields['reasoning']}
         />
       )}
       {output && (

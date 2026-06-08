@@ -12,6 +12,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { reasoningToString } from '@app/utils/reasoning';
 import {
   type EvaluateTableOutput,
   type GradingResult,
@@ -1218,6 +1219,7 @@ function renderOutputActions({
               provider={output.provider}
               gradingResults={getDialogGradingResults(output)}
               output={text}
+              reasoning={reasoningToString(output.response?.reasoning)}
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}

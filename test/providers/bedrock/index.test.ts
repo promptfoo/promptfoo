@@ -513,6 +513,28 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params).not.toHaveProperty('tool_choice');
     });
 
+    it('should expose Claude thinking separately when enabled and suppress it when disabled', () => {
+      const responseJson = {
+        content: [
+          { type: 'thinking', thinking: 'Private reasoning', signature: 'signature-1' },
+          { type: 'text', text: 'Visible answer' },
+        ],
+      };
+
+      expect(
+        modelHandler.output({ region: 'us-east-1', showThinking: true }, responseJson),
+      ).toEqual({
+        output: 'Visible answer',
+        reasoning: [{ type: 'thinking', thinking: 'Private reasoning', signature: 'signature-1' }],
+      });
+      expect(
+        modelHandler.output({ region: 'us-east-1', showThinking: false }, responseJson),
+      ).toEqual({
+        output: 'Visible answer',
+        reasoning: undefined,
+      });
+    });
+
     it('should include specific tool_choice when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -1918,6 +1940,67 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
   });
 });
 
+describe('BEDROCK_MODEL AMAZON_NOVA_2', () => {
+  const modelHandler = BEDROCK_MODEL.AMAZON_NOVA_2;
+
+  it('should preserve reasoning when tool use is present', () => {
+    const responseJson = {
+      output: {
+        message: {
+          content: [
+            {
+              reasoningContent: {
+                reasoningText: { text: 'I need to call the weather tool.' },
+              },
+            },
+            { text: 'Calling the tool now.' },
+            {
+              toolUse: {
+                toolUseId: 'tool-1',
+                name: 'get_weather',
+                input: { location: 'San Francisco' },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(modelHandler.output({ showThinking: true }, responseJson)).toEqual({
+      output: '{"toolUseId":"tool-1","name":"get_weather","input":{"location":"San Francisco"}}',
+      reasoning: [{ type: 'thinking', thinking: 'I need to call the weather tool.' }],
+    });
+  });
+
+  it('should suppress reasoning when tool use is present and showThinking is false', () => {
+    const responseJson = {
+      output: {
+        message: {
+          content: [
+            {
+              reasoningContent: {
+                reasoningText: { text: 'Private tool planning.' },
+              },
+            },
+            {
+              toolUse: {
+                toolUseId: 'tool-1',
+                name: 'get_weather',
+                input: { location: 'San Francisco' },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(modelHandler.output({ showThinking: false }, responseJson)).toEqual({
+      output: '{"toolUseId":"tool-1","name":"get_weather","input":{"location":"San Francisco"}}',
+      reasoning: undefined,
+    });
+  });
+});
+
 describe('BEDROCK_MODEL MISTRAL', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL;
 
@@ -2693,7 +2776,50 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
       const result = modelHandler.output(config, mockResponse);
 
-      expect(result).toBe('<think>Let me think about this problem...</think>\nThe answer is 42.');
+      expect(result).toEqual({
+        output: 'The answer is 42.',
+        reasoning: [{ type: 'think', content: 'Let me think about this problem...' }],
+      });
+    });
+
+    it('should extract seeded DeepSeek thinking that closes without a repeated opening tag', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: 'Let me think about this problem...</think>\nThe answer is 42.',
+          },
+        ],
+      };
+
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toEqual({
+        output: 'The answer is 42.',
+        reasoning: [{ type: 'think', content: 'Let me think about this problem...' }],
+      });
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toEqual({
+        output: 'The answer is 42.',
+        reasoning: undefined,
+      });
+    });
+
+    it('should extract multiple thinking blocks from DeepSeek responses', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>First thought</think>\nIntermediate answer\n<think>Second thought</think>\nFinal answer',
+          },
+        ],
+      };
+      const config = { showThinking: true };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toEqual({
+        output: 'Intermediate answer\n\nFinal answer',
+        reasoning: [
+          { type: 'think', content: 'First thought' },
+          { type: 'think', content: 'Second thought' },
+        ],
+      });
     });
 
     it('should hide thinking when showThinking is false', async () => {
@@ -2708,7 +2834,25 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
       const result = modelHandler.output(config, mockResponse);
 
-      expect(result).toBe('The answer is 42.');
+      expect(result).toEqual({
+        output: 'The answer is 42.',
+        reasoning: undefined,
+      });
+    });
+
+    it('should strip truncated thinking when showThinking is false', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>Let me think about this problem...',
+          },
+        ],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toEqual({
+        output: '',
+        reasoning: undefined,
+      });
     });
 
     it('should return full response when no thinking tags present', async () => {
@@ -2723,7 +2867,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
       const result = modelHandler.output(config, mockResponse);
 
-      expect(result).toBe('Direct response without thinking');
+      expect(result).toEqual({
+        output: 'Direct response without thinking',
+      });
     });
 
     it('should handle error in response', async () => {
@@ -3691,7 +3837,7 @@ describe('AwsBedrockCompletionProvider', () => {
     ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: true }), expect.anything());
   });
 
-  it('should pass merged prompt-level config to model.output on the live (non-cached) path', async () => {
+  it('should pass a suppressing prompt-level config to model.output on the live path', async () => {
     // Default beforeEach has caching disabled, so this exercises the live InvokeModel path.
     // The live path both logs via body.transformToString() and decodes via TextDecoder, so the
     // mock body must be a real byte view that also carries transformToString().
@@ -3702,7 +3848,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: { region: 'us-east-1', showThinking: false } as any,
+          config: { region: 'us-east-1', showThinking: true } as any,
         });
       }
     })();
@@ -3711,7 +3857,7 @@ describe('AwsBedrockCompletionProvider', () => {
       prompt: {
         raw: 'test prompt',
         label: 'test',
-        config: { showThinking: true } as any,
+        config: { showThinking: false } as any,
       },
       vars: {},
     };
@@ -3720,7 +3866,7 @@ describe('AwsBedrockCompletionProvider', () => {
 
     expect(
       AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
-    ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: true }), expect.anything());
+    ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: false }), expect.anything());
   });
 
   it('should set cached flag when returning cached response', async () => {
@@ -3748,6 +3894,47 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('should pass merged config to model.output for cached responses', async () => {
+    const mockCachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponseData));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            showThinking: true,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          showThinking: false,
+        },
+      },
+      vars: {},
+    });
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1',
+        showThinking: false,
+      }),
+      mockCachedResponseData,
+    );
   });
 
   it('should hash prompt and secret values in the cache key', async () => {
@@ -4135,9 +4322,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe(
-        'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
-      );
+      expect(result).toEqual({
+        output:
+          'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+      });
     });
 
     it('should handle tool call response', async () => {
@@ -4167,6 +4355,39 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result).toContain('15 * 8 + 42');
     });
 
+    it('should strip think blocks before returning tool call content', async () => {
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: '<think>Private tool planning</think>I will call the calculator.',
+              tool_calls: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'calculate',
+                    arguments: '{"expression": "15 * 8 + 42"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      expect(qwenHandler.output({ showThinking: false }, responseJson)).toEqual({
+        output:
+          'I will call the calculator.\n\nCalled function calculate with arguments: {"expression": "15 * 8 + 42"}',
+        reasoning: undefined,
+      });
+
+      expect(qwenHandler.output({ showThinking: true }, responseJson)).toEqual({
+        output:
+          'I will call the calculator.\n\nCalled function calculate with arguments: {"expression": "15 * 8 + 42"}',
+        reasoning: [{ type: 'think', content: 'Private tool planning' }],
+      });
+    });
+
     it('should handle thinking mode response', async () => {
       const config = { showThinking: true };
       const responseJson = {
@@ -4181,7 +4402,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe('<think>Let me think about this step by step...</think>The answer is 42');
+      expect(result).toEqual({
+        output: 'The answer is 42',
+        reasoning: [{ type: 'think', content: 'Let me think about this step by step...' }],
+      });
     });
 
     it('should hide thinking when showThinking is false', async () => {
@@ -4198,8 +4422,43 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe('The answer is 42');
-      expect(result).not.toContain('think>');
+      expect(result).toEqual({
+        output: 'The answer is 42',
+        reasoning: undefined,
+      });
+    });
+
+    it('should strip truncated thinking when showThinking is false', () => {
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: 'Visible answer.<think>Private unfinished planning',
+            },
+          },
+        ],
+      };
+
+      expect(qwenHandler.output({ showThinking: false }, responseJson)).toEqual({
+        output: 'Visible answer.',
+        reasoning: undefined,
+      });
+    });
+
+    it('should preserve literal unmatched closing think tags in Qwen output', () => {
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: 'Document the literal </think> closing tag in this XML example.',
+            },
+          },
+        ],
+      };
+
+      expect(qwenHandler.output({ showThinking: false }, responseJson)).toEqual({
+        output: 'Document the literal </think> closing tag in this XML example.',
+      });
     });
 
     it('should handle error response', async () => {

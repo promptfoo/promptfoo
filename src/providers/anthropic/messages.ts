@@ -26,6 +26,7 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  extractReasoningFromMessage,
   getRefusalDetails,
   getTokenUsage,
   isSamplingParamsDeprecatedClaudeModel,
@@ -807,6 +808,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
           let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
+          const reasoning =
+            config.showThinking === false
+              ? undefined
+              : extractReasoningFromMessage(parsedCachedResponse);
 
           // Handle structured JSON output parsing
           if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -826,6 +831,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             ...(cachedRefusalDetails && {
               guardrails: { flagged: true, reason: cachedRefusalDetails },
             }),
+            ...(reasoning && { reasoning }),
             cost: getAnthropicCostFromMessage(this.modelName, config, parsedCachedResponse),
             cached: true,
           };
@@ -889,6 +895,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
       let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
+      const reasoning =
+        config.showThinking === false ? undefined : extractReasoningFromMessage(resolvedMessage);
 
       // Handle structured JSON output parsing
       if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -909,6 +917,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         tokenUsage: getTokenUsage(resolvedMessage, false),
         ...(finishReason && { finishReason }),
         ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
+        ...(reasoning && { reasoning }),
         cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
       };
     } catch (err) {

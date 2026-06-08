@@ -13,7 +13,136 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  ReasoningContent,
 } from '../types/providers';
+
+interface OpenAIErrorResponse {
+  error: {
+    message: string;
+    type?: string;
+    code?: string;
+  };
+}
+
+type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+function extractOpenRouterReasoning(
+  message: any,
+  showThinking: boolean,
+): ReasoningContent[] | undefined {
+  if (!showThinking) {
+    return undefined;
+  }
+
+  const details = message?.reasoning_details;
+  const detailBlocks = Array.isArray(details)
+    ? details.map((detail) => normalizeOpenRouterReasoningDetail(detail))
+    : [normalizeOpenRouterReasoningDetail(details)];
+  const reasoningBlocks = detailBlocks.filter((block): block is ReasoningContent => Boolean(block));
+  if (reasoningBlocks.length > 0) {
+    return reasoningBlocks;
+  }
+
+  const reasoning = message?.reasoning;
+  return typeof reasoning === 'string' && reasoning.trim()
+    ? [{ type: 'reasoning', content: reasoning }]
+    : undefined;
+}
+
+function firstNonBlankString(...values: unknown[]): string | undefined {
+  return values.find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+}
+
+function extractOpenRouterSummaryText(summary: unknown): string | undefined {
+  if (typeof summary === 'string' && summary.trim()) {
+    return summary;
+  }
+  if (!Array.isArray(summary)) {
+    return undefined;
+  }
+  const text = summary
+    .map((item) =>
+      typeof item === 'string' ? item : firstNonBlankString(item?.text, item?.content),
+    )
+    .filter((item): item is string => Boolean(item))
+    .join('\n');
+  return text.trim() ? text : undefined;
+}
+
+function normalizeOpenRouterReasoningDetail(detail: any): ReasoningContent | undefined {
+  if (typeof detail === 'string') {
+    return detail.trim() ? { type: 'reasoning', content: detail } : undefined;
+  }
+  if (!detail || typeof detail !== 'object') {
+    return undefined;
+  }
+
+  const detailType = typeof detail.type === 'string' ? detail.type.toLowerCase() : '';
+  const redactedData = firstNonBlankString(
+    detail.data,
+    detail.encrypted,
+    detail.encrypted_content,
+    detail.redacted,
+  );
+
+  if ((detailType.includes('redacted') || detailType.includes('encrypted')) && redactedData) {
+    return { type: 'redacted_thinking', data: redactedData };
+  }
+
+  const text = firstNonBlankString(
+    detail.text,
+    detail.reasoning,
+    detail.content,
+    extractOpenRouterSummaryText(detail.summary),
+  );
+  if (text) {
+    const signature = firstNonBlankString(detail.signature);
+    if (signature) {
+      return { type: 'thinking', thinking: text, signature };
+    }
+    return { type: 'reasoning', content: text };
+  }
+
+  return redactedData ? { type: 'redacted_thinking', data: redactedData } : undefined;
+}
+
+function getOpenRouterOutput(message: any): string | object {
+  const hasFunctionCall = Boolean(message.function_call?.name);
+  const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+
+  if (hasFunctionCall || hasToolCalls) {
+    return hasFunctionCall ? message.function_call : message.tool_calls;
+  }
+
+  return typeof message.content === 'string' && message.content.trim() ? message.content : '';
+}
+
+function parseOpenRouterJsonSchemaOutput(message: any, output: string | object): string | object {
+  const jsonCandidate =
+    typeof message?.content === 'string'
+      ? message.content
+      : typeof output === 'string'
+        ? output
+        : null;
+
+  if (!jsonCandidate) {
+    return output;
+  }
+
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch (error) {
+    logger.warn('Failed to parse JSON output for json_schema', { error });
+    return output;
+  }
+}
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
@@ -21,7 +150,7 @@ import type {
  *
  * For Gemini models, the base OpenAI provider incorrectly prioritizes the reasoning
  * field over content. This provider ensures content is the primary output with
- * reasoning shown as thinking content when showThinking is enabled.
+ * reasoning stored separately in the reasoning field (never duplicated in output).
  */
 export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
@@ -120,24 +249,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
 
-    // OpenAI SDK has APIError class for exceptions, but not a type for error responses
-    // in the JSON body. This interface represents the structure when the API returns
-    // an error object in the response body (not as an exception).
-    interface OpenAIErrorResponse {
-      error: {
-        message: string;
-        type?: string;
-        code?: string;
-      };
-    }
-
-    type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
-      error?: {
-        code?: string;
-        message?: string;
-      };
-    };
-
     let data: OpenRouterChatCompletionResponse;
     let status: number;
     let statusText: string;
@@ -184,41 +295,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
-    // Prioritize tool calls over content and reasoning
-    let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-    if (hasFunctionCall || hasToolCalls) {
-      // Tool calls always take priority and never include thinking
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
-      output = message.content;
-      // Add reasoning as thinking content if present and showThinking is enabled
-      if (message.reasoning && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${message.reasoning}\n\n${output}`;
-      }
-    } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content and showThinking is enabled
-      output = message.reasoning;
-    }
-    // Handle structured output
+    // Prioritize tool calls over content
+    // Reasoning content goes ONLY to the reasoning field - no double-write to output
+    let output = getOpenRouterOutput(message);
     if (config.response_format?.type === 'json_schema') {
-      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
-      const jsonCandidate =
-        typeof message?.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
-          logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
-        }
-      }
+      output = parseOpenRouterJsonSchemaOutput(message, output);
     }
+    const reasoning = extractOpenRouterReasoning(message, config.showThinking !== false);
 
     return {
       output,
@@ -231,6 +314,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         data.usage?.completion_tokens,
       ),
       ...(finishReason && { finishReason }),
+      ...(reasoning && { reasoning }),
     };
   }
 }

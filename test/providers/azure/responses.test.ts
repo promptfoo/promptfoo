@@ -117,7 +117,7 @@ describe('AzureResponsesProvider', () => {
   describe('getAzureResponsesBody', () => {
     it('should create correct request body for basic prompt', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).toMatchObject({
         model: 'gpt-4.1-test',
@@ -147,7 +147,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledWith(
         'file://test-schema.json',
@@ -185,7 +185,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
@@ -204,7 +204,7 @@ describe('AzureResponsesProvider', () => {
         config: { temperature: 0.7 },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).not.toHaveProperty('temperature');
     });
@@ -214,7 +214,7 @@ describe('AzureResponsesProvider', () => {
         config: { temperature: 0.7 },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
     });
@@ -225,7 +225,7 @@ describe('AzureResponsesProvider', () => {
         config: { temperature: 0 },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       // temperature: 0 should be present in the request body
       expect(body.temperature).toBe(0);
@@ -237,7 +237,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBeUndefined();
       expect('temperature' in body).toBe(false);
@@ -253,7 +253,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.5);
       expect('temperature' in body).toBe(true);
@@ -269,7 +269,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBe(4096);
       expect('max_output_tokens' in body).toBe(true);
@@ -282,7 +282,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBe(2048);
       expect('max_output_tokens' in body).toBe(true);
@@ -293,7 +293,7 @@ describe('AzureResponsesProvider', () => {
 
       const provider = new AzureResponsesProvider('o1-preview');
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBe(2048);
       expect('max_output_tokens' in body).toBe(true);
@@ -302,7 +302,7 @@ describe('AzureResponsesProvider', () => {
     it('should not apply a hardcoded max_output_tokens default for reasoning models when omitDefaults is false', async () => {
       const provider = new AzureResponsesProvider('o1-preview');
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBeUndefined();
       expect('max_output_tokens' in body).toBe(false);
@@ -313,7 +313,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBeUndefined();
       expect('max_output_tokens' in body).toBe(false);
@@ -326,7 +326,7 @@ describe('AzureResponsesProvider', () => {
         config: { max_output_tokens: 0 } as any,
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       // max_output_tokens: 0 should be present in the request body
       expect(body.max_output_tokens).toBe(0);
@@ -338,7 +338,7 @@ describe('AzureResponsesProvider', () => {
         config: { verbosity: 'high' },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text).toMatchObject({
         format: { type: 'text' },
@@ -351,7 +351,7 @@ describe('AzureResponsesProvider', () => {
         config: { isReasoningModel: true, verbosity: 'medium' },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text).toMatchObject({
         format: { type: 'text' },
@@ -364,12 +364,39 @@ describe('AzureResponsesProvider', () => {
         config: { verbosity: 'high' },
       });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+      const { body } = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text).toMatchObject({
         format: { type: 'text' },
       });
       expect(body.text.verbosity).toBeUndefined();
+    });
+
+    it('should include showThinking in config for per-call overrides', async () => {
+      const provider = new AzureResponsesProvider('o1-preview', {
+        config: { showThinking: true },
+      });
+
+      const { config } = await provider.getAzureResponsesBody('Hello world');
+
+      expect(config.showThinking).toBe(true);
+    });
+
+    it('should merge per-call showThinking config', async () => {
+      const provider = new AzureResponsesProvider('o1-preview', {
+        config: { showThinking: true },
+      });
+
+      const context = {
+        prompt: {
+          config: { showThinking: false },
+        },
+      };
+
+      const { config } = await provider.getAzureResponsesBody('Hello world', context as any);
+
+      // Per-call config should override provider config
+      expect(config.showThinking).toBe(false);
     });
   });
 
