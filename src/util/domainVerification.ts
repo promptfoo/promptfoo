@@ -10,6 +10,24 @@ export interface VerificationResult {
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
+/**
+ * Classify an HTTP status code as exists / does-not-exist / inconclusive.
+ *
+ * - 2xx and 3xx: the resource resolved successfully (true).
+ * - 404 / 410: the resource is gone (false).
+ * - Everything else (401/403/405/429/5xx, etc.) is inconclusive (null).
+ *   Hosts that block HEAD or rate-limit should not falsely count as "exists".
+ */
+function classifyExistence(status: number): boolean | null {
+  if (status >= 200 && status < 400) {
+    return true;
+  }
+  if (status === 404 || status === 410) {
+    return false;
+  }
+  return null;
+}
+
 function createAbortController(timeoutMs: number): {
   controller: AbortController;
   timerId: ReturnType<typeof setTimeout>;
@@ -43,7 +61,7 @@ export async function verifyGithubRepo(
     return {
       url,
       status: response.status,
-      exists: response.status !== 404,
+      exists: classifyExistence(response.status),
       duration: Date.now() - startTime,
     };
   } catch (error) {
@@ -98,7 +116,7 @@ export async function verifyHttpUrl(
     return {
       url,
       status: response.status,
-      exists: response.status !== 404,
+      exists: classifyExistence(response.status),
       duration: Date.now() - startTime,
     };
   } catch (error) {

@@ -2,8 +2,10 @@ const URL_PATTERN = /https?:\/\/[^\s<>()\[\]{}"']+/gi;
 const WWW_PATTERN = /(?<![@\w-])www\.[^\s<>()\[\]{}"']+/gi;
 const DOMAIN_PATTERN =
   /(?<![@\w-/])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?![\w-])/gi;
+// Lookbehind `(?<![\w.-])` ensures the match is anchored on a real `github.com`
+// host, not a subdomain like `docs.github.com` or `gist.github.com`.
 const GITHUB_PATTERN =
-  /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/gi;
+  /(?<![\w.-])(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/gi;
 
 const GITHUB_RESERVED_PATHS = new Set([
   'features',

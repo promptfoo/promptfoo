@@ -1,5 +1,8 @@
 ---
+title: Domain Hallucination Plugin
+description: Detect fabricated GitHub repositories, URLs, and domains in LLM responses by verifying every external reference against live HTTP and GitHub APIs.
 sidebar_label: Domain Hallucination
+sidebar_position: 50
 ---
 
 # Domain Hallucination Plugin

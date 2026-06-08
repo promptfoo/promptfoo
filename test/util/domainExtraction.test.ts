@@ -100,6 +100,22 @@ describe('domainExtraction', () => {
       expect(repos).toHaveLength(0);
     });
 
+    it('does not match docs.github.com paths as repos', () => {
+      const repos = extractGithubRepos('See https://docs.github.com/en/rest for the API');
+      expect(repos.find((r) => r.full_name === 'en/rest')).toBeUndefined();
+    });
+
+    it('does not match gist.github.com paths as repos', () => {
+      const repos = extractGithubRepos('Gist: https://gist.github.com/octocat/abc123def');
+      expect(repos.find((r) => r.owner === 'octocat')).toBeUndefined();
+    });
+
+    it('does not match arbitrary subdomain.github.com hosts', () => {
+      const repos = extractGithubRepos('See https://api.github.com/repos/foo/bar');
+      // api.github.com is an API host, not a user-facing repo page.
+      expect(repos.find((r) => r.full_name === 'foo/bar')).toBeUndefined();
+    });
+
     it('deduplicates repos', () => {
       const text = 'github.com/owner/repo mentioned twice github.com/owner/repo';
       const repos = extractGithubRepos(text);

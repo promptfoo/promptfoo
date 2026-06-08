@@ -59,6 +59,14 @@ describe('domainVerification', () => {
       expect(result.exists).toBeNull();
       expect(result.error).toBeDefined();
     });
+
+    it('treats 403 (rate-limited) as inconclusive, not as existing', async () => {
+      mockedFetch.mockResolvedValue(new Response(null, { status: 403 }));
+
+      const result = await verifyGithubRepo('owner', 'repo');
+      expect(result.status).toBe(403);
+      expect(result.exists).toBeNull();
+    });
   });
 
   describe('verifyHttpUrl', () => {
@@ -83,6 +91,24 @@ describe('domainVerification', () => {
 
       const result = await verifyHttpUrl('https://example.com');
       expect(result.exists).toBe(true);
+    });
+
+    it('treats 410 Gone as exists=false', async () => {
+      mockedFetch.mockResolvedValue(new Response(null, { status: 410 }));
+
+      const result = await verifyHttpUrl('https://example.com/removed');
+      expect(result.status).toBe(410);
+      expect(result.exists).toBe(false);
+    });
+
+    it.each([
+      401, 403, 405, 429, 500, 502, 503,
+    ])('treats %i as inconclusive (exists=null)', async (status) => {
+      mockedFetch.mockResolvedValue(new Response(null, { status }));
+
+      const result = await verifyHttpUrl('https://example.com');
+      expect(result.status).toBe(status);
+      expect(result.exists).toBeNull();
     });
 
     it('times out after specified milliseconds', async () => {
