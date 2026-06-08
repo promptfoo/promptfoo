@@ -350,6 +350,7 @@ export const ADDITIONAL_PLUGINS = [
   'data-exfil',
   'debug-access',
   'divergent-repetition',
+  'domain-hallucination',
   'donotanswer',
   'ferpa',
   'harmbench',
