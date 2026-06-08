@@ -58,7 +58,12 @@ export class AssertionRegistry<TParams, TResult> {
       this.handlers.set(type, { handler, packName: pack.name });
     }
 
-    for (const prefix of pack.prefixes ?? []) {
+    const prefixes = pack.prefixes ?? [];
+    if (prefixes.length === 0) {
+      return;
+    }
+
+    for (const prefix of prefixes) {
       const existing = this.prefixes.find((candidate) => candidate.prefix === prefix.prefix);
       if (existing) {
         throw new Error(

@@ -65,6 +65,25 @@ describe('prepareComments', () => {
     ]);
   });
 
+  it.each([
+    null,
+    0,
+    -1,
+    1.5,
+  ])('should route findings with a non-inlineable line (%s) to general comments', (line) => {
+    const comment: Comment = {
+      file: 'src/example.ts',
+      line,
+      severity: CodeScanSeverity.HIGH,
+      finding: 'File-scoped issue',
+    };
+
+    const result = prepareComments([comment], 'Review', 'low');
+
+    expect(result.lineComments).toEqual([]);
+    expect(result.generalComments).toEqual([comment]);
+  });
+
   it('should filter out severity=none from general comments', () => {
     const comments: Comment[] = [
       {

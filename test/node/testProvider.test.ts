@@ -99,7 +99,7 @@ vi.mock('../../src/validators/util', () => ({
   validateSessionConfig: vi.fn(),
 }));
 
-import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 
 beforeEach(() => {
   // Reset call history but keep implementations from vi.hoisted
@@ -134,7 +134,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 function createMockProvider(overrides?: Record<string, unknown>): ApiProvider {
