@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import {
+  AssertionOrSetSchema,
+  AssertionSchema,
+  EvalResultsFilterMode,
+  EvaluateOptionsSchema,
+  TestSuiteConfigSchema,
+} from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -286,6 +292,101 @@ export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
+// POST /api/eval/:evalId/assertions
+
+export const EvalAssertionsParamsSchema = z.object({
+  evalId: z.string().min(1),
+});
+
+export const PosthocResultsFilterSchema = z.object({
+  type: z.string().min(1).max(64),
+  operator: z.string().min(1).max(64),
+  value: z.string().max(10000).optional(),
+  field: z.string().max(256).optional(),
+  logicOperator: z.enum(['and', 'or']).optional(),
+});
+
+export const PosthocAssertionsScopeSchema = z.object({
+  type: z.enum(['results', 'tests', 'filtered']),
+  resultIds: z.array(z.string().min(1).max(256)).max(10000).optional(),
+  testIndices: z.array(z.number().int().nonnegative()).max(10000).optional(),
+  filters: z.array(PosthocResultsFilterSchema).max(100).optional(),
+  filterMode: EvalResultsFilterMode.optional(),
+  searchText: z.string().max(10000).optional(),
+});
+
+export const AddEvalAssertionsRequestSchema = z.object({
+  assertions: z.array(AssertionOrSetSchema).min(1).max(100),
+  scope: PosthocAssertionsScopeSchema,
+});
+
+const AssertionJobErrorSchema = z.object({
+  resultId: z.string(),
+  error: z.string(),
+});
+
+export const AddEvalAssertionsResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    jobId: z.string().uuid().nullable(),
+    total: z.number().int().nonnegative().optional(),
+    matchedTestCount: z.number().int().nonnegative().optional(),
+    updatedResults: z.number().int().nonnegative().optional(),
+    skippedResults: z.number().int().nonnegative().optional(),
+    skippedAssertions: z.number().int().nonnegative().optional(),
+    errors: z.array(AssertionJobErrorSchema).optional(),
+  }),
+});
+
+export const EvalAssertionJobParamsSchema = EvalAssertionsParamsSchema.extend({
+  jobId: z.string().min(1),
+});
+
+export const EvalAssertionJobResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    status: z.enum(['in-progress', 'complete', 'error']),
+    progress: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    passCount: z.number().int().nonnegative(),
+    failCount: z.number().int().nonnegative(),
+    updatedResults: z.number().int().nonnegative(),
+    skippedResults: z.number().int().nonnegative(),
+    skippedAssertions: z.number().int().nonnegative(),
+    errors: z.array(AssertionJobErrorSchema),
+    matchedTestCount: z.number().int().nonnegative().optional(),
+  }),
+});
+
+export const GenerateEvalAssertionsRequestSchema = z.object({
+  type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
+  numAssertions: z.number().int().min(1).max(20).default(5),
+  instructions: z.string().max(4000).optional(),
+  provider: z.string().min(1).max(512).optional(),
+  testIndices: z.array(z.number().int().nonnegative()).max(10000).optional(),
+  resultIds: z.array(z.string().min(1).max(256)).max(10000).optional(),
+});
+
+export const GenerateEvalAssertionsResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    assertions: z.array(AssertionSchema),
+    context: z.object({
+      numPromptsAnalyzed: z.number().int().nonnegative(),
+      numOutputsAnalyzed: z.number().int().nonnegative(),
+      existingAssertionCount: z.number().int().nonnegative(),
+    }),
+  }),
+});
+
+export type EvalAssertionsParams = z.infer<typeof EvalAssertionsParamsSchema>;
+export type AddEvalAssertionsRequest = z.infer<typeof AddEvalAssertionsRequestSchema>;
+export type AddEvalAssertionsResponse = z.infer<typeof AddEvalAssertionsResponseSchema>;
+export type EvalAssertionJobParams = z.infer<typeof EvalAssertionJobParamsSchema>;
+export type EvalAssertionJobResponse = z.infer<typeof EvalAssertionJobResponseSchema>;
+export type GenerateEvalAssertionsRequest = z.infer<typeof GenerateEvalAssertionsRequestSchema>;
+export type GenerateEvalAssertionsResponse = z.infer<typeof GenerateEvalAssertionsResponseSchema>;
+
 // POST /api/eval (save eval to database)
 
 export const SaveEvalRequestSchema = z
@@ -384,6 +485,20 @@ export const EvalSchemas = {
     Params: SubmitRatingParamsSchema,
     Request: SubmitRatingRequestSchema,
     Response: SubmitRatingResponseSchema,
+  },
+  AddAssertions: {
+    Params: EvalAssertionsParamsSchema,
+    Request: AddEvalAssertionsRequestSchema,
+    Response: AddEvalAssertionsResponseSchema,
+  },
+  AssertionJob: {
+    Params: EvalAssertionJobParamsSchema,
+    Response: EvalAssertionJobResponseSchema,
+  },
+  GenerateAssertions: {
+    Params: EvalAssertionsParamsSchema,
+    Request: GenerateEvalAssertionsRequestSchema,
+    Response: GenerateEvalAssertionsResponseSchema,
   },
   Save: {
     Request: SaveEvalRequestSchema,

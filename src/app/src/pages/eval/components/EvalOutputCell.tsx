@@ -1,9 +1,18 @@
 import React, { useCallback, useId, useMemo } from 'react';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -22,9 +31,14 @@ import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
   ClipboardCopy,
+  FileCode,
   Hash,
   Link,
+  Loader2,
+  MoreHorizontal,
   Pencil,
+  Play,
+  Plus,
   Search,
   Star,
   ThumbsDown,
@@ -32,6 +46,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
+import AddAssertionsDialog from './AddAssertionsDialog';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
@@ -1035,9 +1050,15 @@ function renderOutputActions({
   output,
   text,
   rowIndex,
+  testIdx,
   promptIndex,
   evaluationId,
   testCaseId,
+  promptCount,
+  mutationsDisabled,
+  openAssertions,
+  copiedAssertion,
+  isReplaying,
   cloudConfig,
   addFilter,
   resetFilters,
@@ -1051,6 +1072,10 @@ function renderOutputActions({
   handleCommentOpen,
   handlePromptOpen,
   handlePromptClose,
+  handleRerun,
+  handleCopyAsAssertion,
+  setOpenAssertions,
+  onAssertionsApplied,
   setActionsHovered,
 }: {
   showExtraActions: boolean;
@@ -1062,9 +1087,15 @@ function renderOutputActions({
   output: EvaluateTableOutput;
   text: string;
   rowIndex: number;
+  testIdx?: number;
   promptIndex: number;
   evaluationId?: string;
   testCaseId?: string;
+  promptCount?: number;
+  mutationsDisabled: boolean;
+  openAssertions: boolean;
+  copiedAssertion: boolean;
+  isReplaying: boolean;
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
@@ -1078,6 +1109,10 @@ function renderOutputActions({
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
   handlePromptClose: () => void;
+  handleRerun: () => void;
+  handleCopyAsAssertion: () => void;
+  setOpenAssertions: (open: boolean) => void;
+  onAssertionsApplied: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
   return (
@@ -1133,6 +1168,52 @@ function renderOutputActions({
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                aria-label="More actions"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onClick={handleRerun}
+                disabled={
+                  mutationsDisabled ||
+                  isReplaying ||
+                  !evaluationId ||
+                  !output.prompt ||
+                  testIdx == null
+                }
+              >
+                {isReplaying ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+                {isReplaying ? 'Re-running...' : 'Re-run cell'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setOpenAssertions(true)}
+                disabled={mutationsDisabled || !evaluationId}
+              >
+                <Plus className="size-4" />
+                Add assertion
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopy}>
+                <ClipboardCopy className="size-4" />
+                {copied ? 'Copied!' : 'Copy output'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCopyAsAssertion}>
+                <FileCode className="size-4" />
+                {copiedAssertion ? 'Copied!' : 'Copy as assertion'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       )}
       <Tooltip disableHoverableContent>
@@ -1222,8 +1303,9 @@ function renderOutputActions({
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
+              testIndex={testIdx ?? rowIndex}
               promptIndex={promptIndex}
+              resultId={output.id}
               variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
@@ -1234,6 +1316,19 @@ function renderOutputActions({
           )}
         </>
       )}
+      {openAssertions && (
+        <AddAssertionsDialog
+          open={openAssertions}
+          onClose={() => setOpenAssertions(false)}
+          evalId={evaluationId}
+          availableScopes={testIdx == null ? ['results'] : ['results', 'tests']}
+          defaultScope="results"
+          resultId={output.id}
+          testIndex={testIdx}
+          promptCount={promptCount}
+          onApplied={onAssertionsApplied}
+        />
+      )}
     </div>
   );
 }
@@ -1242,12 +1337,14 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  testIdx?: number;
   rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
+  mutationsDisabled?: boolean;
 }
 
 /**
@@ -1272,6 +1369,7 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  testIdx,
   rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
@@ -1281,6 +1379,7 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
+  mutationsDisabled = false,
 }: EvalOutputCellProps & {
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
@@ -1298,11 +1397,15 @@ function EvalOutputCell({
     maxImageHeight,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable, table } =
+    useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
+  const { showToast } = useToast();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const [openAssertions, setOpenAssertions] = React.useState(false);
+  const [isReplaying, setIsReplaying] = React.useState(false);
   const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
@@ -1373,6 +1476,13 @@ function EvalOutputCell({
   const [commentDraftText, setCommentDraftText] = React.useState(
     output.gradingResult?.comment || '',
   );
+  const originalText = stringifyOutputText(output.text);
+  const outputIdentity = `${output.id ?? ''}:${originalText}`;
+  const [replayState, setReplayState] = React.useState<{
+    outputIdentity: string;
+    text: string | null;
+  }>(() => ({ outputIdentity, text: null }));
+  const replayedText = replayState.outputIdentity === outputIdentity ? replayState.text : null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset local draft state when switching outputs that share the same stored comment value.
   React.useEffect(() => {
@@ -1410,7 +1520,7 @@ function EvalOutputCell({
     setCommentDraftText(newCommentText);
   };
 
-  const text = stringifyOutputText(output.text);
+  const text = replayedText ?? originalText;
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -1463,9 +1573,13 @@ function EvalOutputCell({
 
   const [linked, setLinked] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [copiedAssertion, setCopiedAssertion] = React.useState(false);
   const isMountedRef = React.useRef(true);
   const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const copiedAssertionResetTimeoutRef = React.useRef<ReturnType<
+    typeof globalThis.setTimeout
+  > | null>(null);
 
   const clearLinkedResetTimeout = useCallback(() => {
     if (linkedResetTimeoutRef.current !== null) {
@@ -1481,6 +1595,13 @@ function EvalOutputCell({
     }
   }, []);
 
+  const clearCopiedAssertionResetTimeout = useCallback(() => {
+    if (copiedAssertionResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(copiedAssertionResetTimeoutRef.current);
+      copiedAssertionResetTimeoutRef.current = null;
+    }
+  }, []);
+
   React.useEffect(() => {
     isMountedRef.current = true;
 
@@ -1488,8 +1609,9 @@ function EvalOutputCell({
       isMountedRef.current = false;
       clearLinkedResetTimeout();
       clearCopiedResetTimeout();
+      clearCopiedAssertionResetTimeout();
     };
-  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
+  }, [clearLinkedResetTimeout, clearCopiedResetTimeout, clearCopiedAssertionResetTimeout]);
 
   const scheduleLinkedReset = useCallback(() => {
     clearLinkedResetTimeout();
@@ -1510,6 +1632,16 @@ function EvalOutputCell({
       }
     }, 3000);
   }, [clearCopiedResetTimeout]);
+
+  const scheduleCopiedAssertionReset = useCallback(() => {
+    clearCopiedAssertionResetTimeout();
+    copiedAssertionResetTimeoutRef.current = globalThis.setTimeout(() => {
+      copiedAssertionResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setCopiedAssertion(false);
+      }
+    }, 3000);
+  }, [clearCopiedAssertionResetTimeout]);
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
@@ -1553,6 +1685,58 @@ function EvalOutputCell({
       });
   };
 
+  const handleCopyAsAssertion = () => {
+    const assertion = `- type: equals\n  value: ${JSON.stringify(text)}`;
+    navigator.clipboard
+      .writeText(assertion)
+      .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
+        setCopiedAssertion(true);
+        scheduleCopiedAssertionReset();
+      })
+      .catch((error) => {
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy assertion to clipboard', { error: getErrorMessage(error) });
+      });
+  };
+
+  const handleRerun = async () => {
+    if (!evaluationId || !output.prompt || testIdx == null) {
+      return;
+    }
+
+    setIsReplaying(true);
+    showToast('Re-running cell...', 'info');
+
+    try {
+      const result = await replayEvaluation({
+        evaluationId,
+        testIndex: testIdx,
+        prompt: typeof output.prompt === 'string' ? output.prompt : JSON.stringify(output.prompt),
+        variables: output.metadata?.inputVars || output.testCase?.vars,
+      });
+
+      if (result.error) {
+        showToast(`Re-run failed: ${result.error}`, 'error');
+      } else {
+        setReplayState({ outputIdentity, text: result.output ?? '' });
+        showToast('Cell re-run complete. Showing the new output in this cell.', 'success');
+        refreshTable();
+      }
+    } catch (error) {
+      showToast(
+        `Re-run failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsReplaying(false);
+    }
+  };
+
   const latencyDisplay = getLatencyDisplay(output);
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage.
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
@@ -1582,7 +1766,19 @@ function EvalOutputCell({
   const showExtraActions = shiftKeyPressed || actionsHovered;
 
   return (
-    <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
+    <div
+      id={`eval-output-cell-${outputCellId}`}
+      className={cn('cell', isReplaying && 'relative')}
+      style={cellStyle}
+    >
+      {isReplaying && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] z-10 flex items-center justify-center rounded">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>Re-running...</span>
+          </div>
+        </div>
+      )}
       {renderStatusBlock({
         showPassFail,
         statusClass,
@@ -1632,9 +1828,15 @@ function EvalOutputCell({
         output,
         text,
         rowIndex,
+        testIdx,
         promptIndex,
         evaluationId,
         testCaseId,
+        promptCount: table?.head.prompts.length,
+        mutationsDisabled,
+        openAssertions,
+        copiedAssertion,
+        isReplaying,
         cloudConfig,
         addFilter,
         resetFilters,
@@ -1648,6 +1850,10 @@ function EvalOutputCell({
         handleCommentOpen,
         handlePromptOpen,
         handlePromptClose,
+        handleRerun,
+        handleCopyAsAssertion,
+        setOpenAssertions,
+        onAssertionsApplied: refreshTable,
         setActionsHovered,
       })}
       {lightboxOpen && lightboxImage && (

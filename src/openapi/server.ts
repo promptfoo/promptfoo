@@ -70,7 +70,29 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+const OpenApiPosthocAssertionSchema = z
+  .object({
+    type: z.string().min(1),
+  })
+  .passthrough();
+
+const OpenApiPosthocAssertionsRequestSchema = EvalSchemas.AddAssertions.Request.extend({
+  assertions: z.array(OpenApiPosthocAssertionSchema).min(1).max(100),
+});
+
+const OpenApiGenerateAssertionsResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    assertions: z.array(OpenApiPosthocAssertionSchema),
+    context: z.object({
+      numPromptsAnalyzed: z.number().int().nonnegative(),
+      numOutputsAnalyzed: z.number().int().nonnegative(),
+      existingAssertionCount: z.number().int().nonnegative(),
+    }),
+  }),
+});
+
+export const SERVER_OPENAPI_ROUTE_COUNT = 70;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -608,6 +630,59 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
+      409: errorResponse('Evaluation update already in progress'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{evalId}/assertions',
+    operationId: 'addEvalAssertions',
+    tags: ['Eval'],
+    summary: 'Add assertions to evaluation results',
+    request: {
+      params: params('EvalAssertionsParams', EvalSchemas.AddAssertions.Params),
+      body: jsonBody('PosthocAssertionsRequest', OpenApiPosthocAssertionsRequestSchema),
+    },
+    responses: {
+      200: jsonResponse('PosthocAssertionsResponse', EvalSchemas.AddAssertions.Response),
+      400: validationError(),
+      404: notFound('Evaluation or result not found'),
+      409: errorResponse('Evaluation update already in progress'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{evalId}/assertions/job/{jobId}',
+    operationId: 'getEvalAssertionJob',
+    tags: ['Eval'],
+    summary: 'Get post-hoc assertion job status',
+    request: {
+      params: params('EvalAssertionJobParams', EvalSchemas.AssertionJob.Params),
+    },
+    responses: {
+      200: jsonResponse('AssertionJobStatusResponse', EvalSchemas.AssertionJob.Response),
+      400: validationError(),
+      404: notFound('Assertion job not found'),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{evalId}/assertions/generate',
+    operationId: 'generateEvalAssertions',
+    tags: ['Eval'],
+    summary: 'Generate assertion suggestions for an evaluation',
+    request: {
+      params: params('GenerateEvalAssertionsParams', EvalSchemas.GenerateAssertions.Params),
+      body: jsonBody('GenerateEvalAssertionsRequest', EvalSchemas.GenerateAssertions.Request),
+    },
+    responses: {
+      200: jsonResponse('GenerateEvalAssertionsResponse', OpenApiGenerateAssertionsResponseSchema),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
       500: serverError(),
     },
   });

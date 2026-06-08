@@ -800,6 +800,7 @@ describe('ResultsView', () => {
       'flex-1',
       'min-h-0',
     );
+    expect(screen.getByRole('button', { name: 'Add assertions' })).toBeDisabled();
   });
 });
 describe('ResultsView Plugin Filter - Not Equals', () => {

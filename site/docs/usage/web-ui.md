@@ -59,8 +59,20 @@ Hover to reveal actions. Hold `Shift` for more:
 | ⭐  | Highlight | Mark for review (`Shift`)                       |
 | 📋  | Copy      | Copy to clipboard (`Shift`)                     |
 | 🔗  | Share     | Link to this output (`Shift`)                   |
+| ⋯   | More      | Re-run a cell or add assertions (`Shift`)       |
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
+
+## Add assertions after a run
+
+Use **More → Add assertion** on a cell to score an existing output, or the table toolbar
+after applying filters or search to apply assertions to selected test cases. Post-hoc
+assertions update saved results without rerunning the target model.
+
+Model-based assertions can make a new grading request for every selected output. When
+applying them to test cases, the viewer shows a minimum request estimate because a test
+case can contain outputs from multiple prompts or providers. Only one post-hoc update can
+run for an eval at a time; wait for it to finish before starting another.
 
 ## Eval Actions
 

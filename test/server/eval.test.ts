@@ -1,11 +1,18 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../../src/assertions';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { activeEvalMutationsByEval, assertionJobs } from '../../src/server/routes/eval';
 import { createApp } from '../../src/server/server';
+import { TraceStore } from '../../src/tracing/store';
+import { ResultFailureReason } from '../../src/types/index';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -22,6 +29,52 @@ describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
   const testEvalIds = new Set<string>();
+
+  async function waitForAssertionJob(
+    evalId: string,
+    jobId: string,
+    maxWaitMs = 10000,
+  ): Promise<{
+    passCount: number;
+    failCount: number;
+    updatedResults: number;
+    skippedResults: number;
+    skippedAssertions: number;
+    errors: Array<{ resultId: string; error: string }>;
+  }> {
+    return vi.waitFor(
+      async () => {
+        const statusRes = await api.get(`/api/eval/${evalId}/assertions/job/${jobId}`);
+        expect(statusRes.status).toBe(200);
+
+        const {
+          status,
+          passCount,
+          failCount,
+          updatedResults,
+          skippedResults,
+          skippedAssertions,
+          errors,
+        } = statusRes.body.data;
+        if (status === 'error') {
+          throw new Error('Assertion job failed');
+        }
+        if (status !== 'complete') {
+          throw new Error(`Assertion job still ${status}`);
+        }
+
+        return {
+          passCount,
+          failCount,
+          updatedResults,
+          skippedResults,
+          skippedAssertions,
+          errors,
+        };
+      },
+      { interval: 50, timeout: maxWaitMs },
+    );
+  }
 
   beforeAll(async () => {
     await runDbMigrations();
@@ -44,6 +97,8 @@ describe('eval routes', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    assertionJobs.clear();
+    activeEvalMutationsByEval.clear();
 
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
@@ -185,6 +240,47 @@ describe('eval routes', () => {
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Failed to submit rating' });
       expect(findByIdSpy).toHaveBeenCalledWith('result-1');
+    });
+
+    it('rejects post-hoc assertions while a manual rating is being persisted', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      let signalSaveStarted!: () => void;
+      const saveStarted = new Promise<void>((resolve) => {
+        signalSaveStarted = resolve;
+      });
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const originalSave = Eval.prototype.save;
+      vi.spyOn(Eval.prototype, 'save').mockImplementationOnce(async function (this: Eval) {
+        signalSaveStarted();
+        await saveGate;
+        return originalSave.call(this);
+      });
+
+      const ratingPromise = api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, false))
+        .then((response) => response);
+      await saveStarted;
+
+      const assertionRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(assertionRes.status).toBe(409);
+      expect(assertionRes.body.error).toContain('already running');
+
+      releaseSave();
+      expect((await ratingPromise).status).toBe(200);
+      expect(activeEvalMutationsByEval.has(eval_.id)).toBe(false);
     });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
@@ -499,6 +595,535 @@ describe('eval routes', () => {
       expect(res.status).toBe(413);
       expect(res.body).toEqual({
         error: 'Eval too large to display. Try reducing the page size.',
+      });
+    });
+  });
+
+  describe('post("/:evalId/assertions")', () => {
+    it('does not expose internal assertion setup errors', async () => {
+      vi.spyOn(Eval, 'findById').mockRejectedValueOnce(new Error('sensitive setup failure'));
+
+      const res = await api.post('/api/eval/eval-1/assertions').send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'filtered', filters: [] },
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to add assertions' });
+      expect(res.text).not.toContain('sensitive setup failure');
+    });
+
+    it('adds assertions to a single result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(1);
+      expect(jobResult).toMatchObject({ passCount: 1, failCount: 0 });
+      expect(jobResult).not.toHaveProperty('completedResults');
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.testCase.assert).toHaveLength(2);
+      expect(updatedResult?.gradingResult?.componentResults).toHaveLength(2);
+      expect(updatedResult?.success).toBe(true);
+    });
+
+    it('uses persisted row cost when adding cost assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'cost', threshold: 0.001 }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult).toMatchObject({ updatedResults: 1, errors: [] });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'cost' }),
+            pass: false,
+            reason: expect.stringContaining('0.007'),
+          }),
+        ]),
+      );
+    });
+
+    it('processes duplicate explicit result IDs only once', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id, result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.total).toBe(1);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(await waitForAssertionJob(eval_.id, res.body.data.jobId)).toMatchObject({
+        updatedResults: 1,
+        errors: [],
+      });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toHaveLength(2);
+    });
+
+    it('skips duplicate assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const firstRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+      invariant(firstRes.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, firstRes.body.data.jobId);
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(0);
+      expect(jobResult.skippedResults).toBe(1);
+      expect(jobResult.skippedAssertions).toBe(1);
+    });
+
+    it('rejects overlapping assertion mutations for the same evaluation', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      let signalSaveStarted!: () => void;
+      const saveStarted = new Promise<void>((resolve) => {
+        signalSaveStarted = resolve;
+      });
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const originalSave = EvalResult.prototype.save;
+      vi.spyOn(EvalResult.prototype, 'save').mockImplementationOnce(async function (
+        this: EvalResult,
+      ) {
+        signalSaveStarted();
+        await saveGate;
+        return originalSave.call(this);
+      });
+
+      const firstRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+      expect(firstRes.status).toBe(200);
+      invariant(firstRes.body.data.jobId, 'Job ID is required');
+      await saveStarted;
+
+      const secondRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'colorado' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(secondRes.status).toBe(409);
+      expect(secondRes.body.error).toContain('already running');
+
+      const ratingRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(ratingRes.status).toBe(409);
+      expect(ratingRes.body.error).toContain('already running');
+
+      releaseSave();
+      await waitForAssertionJob(eval_.id, firstRes.body.data.jobId);
+      expect(activeEvalMutationsByEval.has(eval_.id)).toBe(false);
+    });
+
+    it('skips ERROR results', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'anything' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(0);
+      expect(jobResult.skippedResults).toBe(1);
+      expect(jobResult.skippedAssertions).toBe(0);
+    });
+
+    it('applies assertions to filtered results using search text', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: {
+          type: 'filtered',
+          searchText: 'denver',
+          filterMode: 'all',
+          filters: [],
+        },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(res.body.data.matchedTestCount).toBe(1);
+
+      const jobResult = await waitForAssertionJob(eval_.id, res.body.data.jobId);
+      expect(jobResult.updatedResults).toBe(1);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.testCase.assert).toHaveLength(2);
+    });
+
+    it('keeps existing assert-set scores when recomputing post-hoc results', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const persistedResult = await EvalResult.findById(result.id);
+      invariant(persistedResult, 'Persisted result is required');
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        weight: 3,
+        assert: [{ type: 'contains' as const, value: 'denver' }],
+      };
+      persistedResult.testCase = {
+        ...persistedResult.testCase,
+        assert: [assertionSet],
+      };
+      persistedResult.gradingResult = await runAssertions({
+        prompt: 'What is the capital of colorado?',
+        providerResponse: persistedResult.response!,
+        test: persistedResult.testCase,
+      });
+      persistedResult.success = persistedResult.gradingResult.pass;
+      persistedResult.score = persistedResult.gradingResult.score;
+      await persistedResult.save();
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'missing' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(false);
+      expect(updatedResult?.score).toBeCloseTo(0.75, 5);
+    });
+
+    it('preserves an existing manual override when adding post-hoc assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+
+      const ratingRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(ratingRes.status).toBe(200);
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'missing' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(true);
+      expect(updatedResult?.score).toBe(1);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.NONE);
+      expect(updatedResult?.gradingResult?.reason).toBe(
+        'Manual result (overrides all other grading results)',
+      );
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ assertion: { type: 'human' }, pass: true, score: 1 }),
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'contains', value: 'missing' }),
+            pass: false,
+          }),
+        ]),
+      );
+    });
+
+    it('preserves persisted extension named scores when adding post-hoc assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const persistedResult = await EvalResult.findById(result.id);
+      invariant(persistedResult, 'Persisted result is required');
+      persistedResult.namedScores = { extensionMetric: 0.91 };
+      await persistedResult.save();
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      invariant(res.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.namedScores.extensionMetric).toBe(0.91);
+    });
+
+    it('loads the persisted provider for provider-dependent post-hoc assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const persistedResult = await EvalResult.findById(result.id);
+      invariant(persistedResult, 'Persisted result is required');
+      persistedResult.provider = {
+        id: 'openai:chat:gpt-4o-mini',
+        config: {
+          functions: [
+            {
+              name: 'add',
+              parameters: {
+                type: 'object',
+                properties: { x: { type: 'number' }, y: { type: 'number' } },
+                required: ['x', 'y'],
+              },
+            },
+          ],
+        },
+      };
+      persistedResult.response = { output: { arguments: '{"x": 10, "y": 20}', name: 'add' } };
+      await persistedResult.save();
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'is-valid-openai-function-call' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(await waitForAssertionJob(eval_.id, res.body.data.jobId)).toMatchObject({
+        updatedResults: 1,
+        errors: [],
+      });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'is-valid-openai-function-call' }),
+            pass: true,
+          }),
+        ]),
+      );
+    });
+
+    it('resolves stored trace context for post-hoc trace assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: `posthoc-trace-${eval_.id}`,
+        evaluationId: eval_.id,
+        testCaseId: `${result.testIdx}-${result.promptIdx}`,
+      });
+      await traceStore.addSpans(`posthoc-trace-${eval_.id}`, [
+        { spanId: 'llm-span', name: 'llm.call', startTime: 1, endTime: 2 },
+      ]);
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'trace-span-count', value: { pattern: '*llm*', min: 1 } }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      invariant(res.body.data.jobId, 'Job ID is required');
+      expect(await waitForAssertionJob(eval_.id, res.body.data.jobId)).toMatchObject({
+        updatedResults: 1,
+        errors: [],
+      });
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'trace-span-count' }),
+            pass: true,
+          }),
+        ]),
+      );
+    });
+
+    it('applies custom assertion scoring when recomputing post-hoc results', async () => {
+      const scoringDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-scoring-'));
+      const scoringFile = path.join(scoringDir, 'score.mjs');
+
+      try {
+        await writeFile(
+          scoringFile,
+          [
+            'export function score(_namedScores, context) {',
+            '  return {',
+            '    pass: true,',
+            '    score: 0.42,',
+            '    reason: `custom scorer saw ${context.componentResults.length} components`,',
+            '  };',
+            '}',
+          ].join('\n'),
+        );
+
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+
+        const results = await eval_.getResults();
+        const result = results[0];
+        invariant(result.id, 'Result ID is required');
+        const persistedResult = await EvalResult.findById(result.id);
+        invariant(persistedResult, 'Persisted result is required');
+        persistedResult.testCase = {
+          ...persistedResult.testCase,
+          assertScoringFunction: `file://${scoringFile}:score`,
+        };
+        await persistedResult.save();
+
+        const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+          assertions: [{ type: 'contains', value: 'missing' }],
+          scope: { type: 'results', resultIds: [result.id] },
+        });
+
+        expect(res.status).toBe(200);
+        invariant(res.body.data.jobId, 'Job ID is required');
+        await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+        const updatedResult = await EvalResult.findById(result.id);
+        expect(updatedResult?.success).toBe(true);
+        expect(updatedResult?.score).toBe(0.42);
+        expect(updatedResult?.gradingResult?.reason).toBe('custom scorer saw 2 components');
+      } finally {
+        await rm(scoringDir, { recursive: true, force: true });
+      }
+    });
+
+    it('schedules completed assertion job cleanup without waiting for a terminal poll', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      await vi.waitFor(() => {
+        expect(assertionJobs.get(res.body.data.jobId)?.status).toBe('complete');
+      });
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5 * 60 * 1000);
+    });
+  });
+
+  describe('post("/:evalId/assertions/generate")', () => {
+    it('does not expose internal generation errors', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      vi.spyOn(EvalResult, 'findManyByEvalId').mockRejectedValueOnce(
+        new Error('sensitive assertion generation failure'),
+      );
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions/generate`).send({});
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to generate assertions' });
+      expect(res.text).not.toContain('sensitive assertion generation failure');
+    });
+
+    it('rejects generation result ids from another eval', async () => {
+      const evalA = await EvalFactory.create();
+      const evalB = await EvalFactory.create();
+      testEvalIds.add(evalA.id);
+      testEvalIds.add(evalB.id);
+
+      const resultsB = await evalB.getResults();
+      const resultB = resultsB[0];
+      invariant(resultB.id, 'Result ID is required');
+
+      const res = await api
+        .post(`/api/eval/${evalA.id}/assertions/generate`)
+        .send({ resultIds: [resultB.id] });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({
+        error: `Result not found in eval: ${resultB.id}`,
       });
     });
   });

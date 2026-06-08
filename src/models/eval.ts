@@ -145,7 +145,7 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    return logicOperator.toUpperCase() === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
@@ -1190,6 +1190,50 @@ export default class Eval {
 
     // Get all test indices from the rows
     const testIndices = rows.map((row) => row.test_idx);
+
+    return { testIndices, filteredCount };
+  }
+
+  /**
+   * Get all test indices that match the provided filter options.
+   * Uses the same filter logic as table pagination to ensure consistency.
+   */
+  async getFilteredTestIndices(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+    batchSize?: number;
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const batchSize = opts.batchSize ?? 500;
+    let offset = 0;
+    let filteredCount = 0;
+    const testIndices: number[] = [];
+
+    while (true) {
+      const { testIndices: batch, filteredCount: batchCount } = await this.queryTestIndices({
+        offset,
+        limit: batchSize,
+        filterMode: opts.filterMode,
+        searchQuery: opts.searchQuery,
+        filters: opts.filters,
+      });
+
+      if (offset === 0) {
+        filteredCount = batchCount;
+      }
+
+      if (batch.length === 0) {
+        break;
+      }
+
+      testIndices.push(...batch);
+
+      if (batch.length < batchSize || testIndices.length >= filteredCount) {
+        break;
+      }
+
+      offset += batchSize;
+    }
 
     return { testIndices, filteredCount };
   }

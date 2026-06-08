@@ -508,6 +508,26 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/eval/{evalId}/assertions',
+    path: '/api/eval/eval-1/assertions',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/eval/{evalId}/assertions/job/{jobId}',
+    path: '/api/eval/eval-1/assertions/job/job-1',
+    expectedStatus: 404,
+  },
+  {
+    method: 'post',
+    openApiPath: '/api/eval/{evalId}/assertions/generate',
+    path: '/api/eval/eval-1/assertions/generate',
+    body: { numAssertions: 0 },
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/eval',
     path: '/api/eval',
     body: {},

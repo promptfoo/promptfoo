@@ -7,7 +7,15 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { cn } from '@app/lib/utils';
-import { Check, ChevronDown, CircleCheck, CircleX, Copy, CornerDownRight } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleCheck,
+  CircleX,
+  Copy,
+  CornerDownRight,
+} from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 import type { Assertion, GradingResult } from '@promptfoo/types';
 
@@ -259,6 +267,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   const [expandedValues, setExpandedValues] = useState<{ [key: string]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
+  const [focusedAssertion, setFocusedAssertion] = useState<string | null>(null);
 
   if (!gradingResults) {
     return null;
@@ -271,7 +280,14 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
     setExpandedValues((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
   };
 
-  const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
+  const isCopyVisible = (key: string) =>
+    hoveredAssertion === key || focusedAssertion === key || copiedAssertions[key];
+
+  const copyAssertionToClipboard = async (
+    key: string,
+    text: string,
+    e: React.MouseEvent | React.KeyboardEvent,
+  ) => {
     e.stopPropagation();
     await navigator.clipboard.writeText(text);
     setCopiedAssertions((prev) => ({ ...prev, [key]: true }));
@@ -304,6 +320,9 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               ? ellipsize(templateValue, ASSERTION_TEMPLATE_PREVIEW_LENGTH)
               : undefined;
             const isExpanded = expandedValues[rowId] || false;
+            const isTruncated =
+              value.length > ASSERTION_VALUE_PREVIEW_LENGTH ||
+              Boolean(templateValue && templateValue.length > ASSERTION_TEMPLATE_PREVIEW_LENGTH);
             const valueKey = `value-${rowId}`;
             const reasonKey = `reason-${rowId}`;
             const hasChildren = getChildResults(result).length > 0;
@@ -345,15 +364,50 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   </div>
                 </td>
                 <td
-                  className="relative px-4 py-3 whitespace-pre-wrap cursor-pointer max-w-md"
-                  onClick={() => toggleExpand(rowId)}
+                  className={cn(
+                    'relative px-4 py-3 whitespace-pre-wrap max-w-md',
+                    isTruncated && 'cursor-pointer hover:bg-muted/50',
+                  )}
+                  onClick={() => isTruncated && toggleExpand(rowId)}
                   onMouseEnter={() => setHoveredAssertion(valueKey)}
                   onMouseLeave={() => setHoveredAssertion(null)}
+                  role={isTruncated ? 'button' : undefined}
+                  tabIndex={isTruncated ? 0 : undefined}
+                  onKeyDown={(e) => {
+                    if (isTruncated && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      toggleExpand(rowId);
+                    }
+                  }}
+                  aria-expanded={isTruncated ? isExpanded : undefined}
                 >
                   <div className="flex items-start gap-2" style={indentationStyle}>
                     {depth > 0 && <span className="mt-2 h-px w-4 shrink-0 bg-border" />}
                     <div className="min-w-0">
                       <span className="break-words">{isExpanded ? value : truncatedValue}</span>
+                      {isTruncated && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(rowId);
+                          }}
+                          className="ml-1 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground"
+                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="size-3" />
+                              <span>less</span>
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="size-3" />
+                              <span>more</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                       {templateValue && (
                         <div className="mt-1 text-xs text-muted-foreground">
                           <span className="font-medium">Template:</span>{' '}
@@ -364,21 +418,24 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                       )}
                     </div>
                   </div>
-                  {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
-                      className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
-                      aria-label={`Copy assertion value ${rowId}`}
-                    >
-                      {copiedAssertions[valueKey] ? (
-                        <Check className="size-3.5" />
-                      ) : (
-                        <Copy className="size-3.5" />
-                      )}
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
+                    onFocus={() => setFocusedAssertion(valueKey)}
+                    onBlur={() => setFocusedAssertion(null)}
+                    className={cn(
+                      'absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow transition-opacity',
+                      isCopyVisible(valueKey) ? 'opacity-100' : 'opacity-0 focus:opacity-100',
+                    )}
+                    aria-label={`Copy assertion value ${rowId}`}
+                  >
+                    {copiedAssertions[valueKey] ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                  </Button>
                 </td>
                 <td
                   className="relative px-4 py-3 whitespace-pre-wrap max-w-md"
@@ -399,25 +456,29 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                       </div>
                     ))}
                   </div>
-                  {result.reason &&
-                    (hoveredAssertion === reasonKey || copiedAssertions[reasonKey]) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyAssertionToClipboard(reasonKey, result.reason || '', e);
-                        }}
-                        className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
-                        aria-label={`Copy assertion reason ${rowId}`}
-                      >
-                        {copiedAssertions[reasonKey] ? (
-                          <Check className="size-3.5" />
-                        ) : (
-                          <Copy className="size-3.5" />
-                        )}
-                      </Button>
-                    )}
+                  {result.reason && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyAssertionToClipboard(reasonKey, result.reason || '', e);
+                      }}
+                      onFocus={() => setFocusedAssertion(reasonKey)}
+                      onBlur={() => setFocusedAssertion(null)}
+                      className={cn(
+                        'absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow transition-opacity',
+                        isCopyVisible(reasonKey) ? 'opacity-100' : 'opacity-0 focus:opacity-100',
+                      )}
+                      aria-label={`Copy assertion reason ${rowId}`}
+                    >
+                      {copiedAssertions[reasonKey] ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </Button>
+                  )}
                 </td>
               </tr>
             );

@@ -4,6 +4,7 @@ import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types'
 import { screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
+import { ToastProvider } from '../../../contexts/ToastContext';
 import EvalOutputCell from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
@@ -14,7 +15,11 @@ vi.mock('./EvalOutputPromptDialog', () => ({
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {
-  return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
+  return baseRender(
+    <ToastProvider>
+      <ShiftKeyProvider>{ui}</ShiftKeyProvider>
+    </ToastProvider>,
+  );
 };
 
 vi.mock('./store', () => ({

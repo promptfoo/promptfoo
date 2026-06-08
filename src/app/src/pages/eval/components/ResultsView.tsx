@@ -23,9 +23,10 @@ import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import { BarChart, Copy, Edit, Eye, Play, Plus, Settings, Share, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
+import AddAssertionsDialog from './AddAssertionsDialog';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
@@ -257,13 +258,16 @@ export default function ResultsView({
     totalResultsCount,
     highlightedResultsCount,
     userRatedResultsCount,
+    filteredResultsCount,
     filters,
     removeFilter,
+    refreshTable,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
 
   const {
+    inComparisonMode,
     setInComparisonMode,
     columnStates,
     setColumnState,
@@ -475,6 +479,7 @@ export default function ResultsView({
   const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [addAssertionsDialogOpen, setAddAssertionsDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -766,7 +771,25 @@ export default function ResultsView({
   }, [config, hasMeaningfulUniformScore, hasVariedScores, resultsChartsScores.length, table]);
 
   const canRenderResultsCharts = resultsChartsUnavailableReasons.length === 0;
-  const appliedFilters = React.useMemo(() => Object.values(filters.values), [filters.values]);
+  const appliedFilters = React.useMemo(() => {
+    return Object.values(filters.values).filter((filter) => {
+      if (filter.type === 'metadata' && filter.operator === 'exists') {
+        return Boolean(filter.field);
+      }
+      if (filter.type === 'metadata') {
+        return Boolean(filter.value && filter.field);
+      }
+      if (filter.type === 'metric' && filter.operator === 'is_defined') {
+        return Boolean(filter.field);
+      }
+      if (filter.type === 'metric') {
+        return Boolean(filter.value && filter.field);
+      }
+      return Boolean(filter.value);
+    });
+  }, [filters.values]);
+  const hasScopedResultSelection =
+    appliedFilters.length > 0 || debouncedSearchText.trim().length > 0 || filterMode !== 'all';
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
@@ -870,6 +893,33 @@ export default function ResultsView({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>Edit table view settings</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAddAssertionsDialogOpen(true)}
+                          disabled={
+                            inComparisonMode ||
+                            !evalId ||
+                            !hasScopedResultSelection ||
+                            filteredResultsCount === 0
+                          }
+                        >
+                          <Plus className="size-4 mr-2" />
+                          Add assertions
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {inComparisonMode
+                          ? 'Assertions cannot be added while comparing evaluations'
+                          : hasScopedResultSelection
+                            ? filteredResultsCount === 0
+                              ? 'No test cases match the current selection'
+                              : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`
+                            : 'Apply filters or search to select test cases'}
+                      </TooltipContent>
                     </Tooltip>
                     {chartsToggleButton}
                   </div>
@@ -1008,6 +1058,19 @@ export default function ResultsView({
         onClose={() => setViewSettingsModalOpen(false)}
         resultsTableZoom={resultsTableZoom}
         onResultsTableZoomChange={setResultsTableZoom}
+      />
+      <AddAssertionsDialog
+        open={addAssertionsDialogOpen && !inComparisonMode}
+        onClose={() => setAddAssertionsDialogOpen(false)}
+        evalId={evalId || undefined}
+        availableScopes={['filtered']}
+        defaultScope="filtered"
+        filters={appliedFilters}
+        filterMode={filterMode}
+        searchText={debouncedSearchText}
+        filteredCount={filteredResultsCount}
+        promptCount={table?.head.prompts.length}
+        onApplied={refreshTable}
       />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}

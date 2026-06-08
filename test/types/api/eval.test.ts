@@ -86,4 +86,38 @@ describe('Eval API schemas', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('validates post-hoc assertion response envelopes', () => {
+    expect(
+      EvalSchemas.AddAssertions.Response.parse({
+        success: true,
+        data: { jobId: null, updatedResults: 0, skippedResults: 0, skippedAssertions: 0 },
+      }),
+    ).toMatchObject({ success: true, data: { jobId: null } });
+    expect(
+      EvalSchemas.AssertionJob.Response.safeParse({
+        success: true,
+        data: {
+          status: 'complete',
+          progress: 1,
+          total: 1,
+          passCount: 1,
+          failCount: 0,
+          updatedResults: 1,
+          skippedResults: 0,
+          skippedAssertions: 0,
+          errors: [],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects malformed post-hoc assertion request items', () => {
+    expect(
+      EvalSchemas.AddAssertions.Request.safeParse({
+        assertions: [{}],
+        scope: { type: 'filtered', filters: [] },
+      }).success,
+    ).toBe(false);
+  });
 });

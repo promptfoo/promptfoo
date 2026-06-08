@@ -1608,6 +1608,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    tableRefreshToken,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -1959,6 +1960,7 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
+    tableRefreshToken,
     appliedFiltersString, // Use the stable string representation instead of filters.values
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
@@ -2165,6 +2167,7 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
+                    testIdx={info.row.original.testIdx}
                     rowIndex={
                       info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
                     }
@@ -2183,6 +2186,7 @@ function ResultsTable({
                     searchText={debouncedSearchText}
                     showStats={showStats}
                     evaluationId={evalId || undefined}
+                    mutationsDisabled={inComparisonMode}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
                 </ErrorBoundary>

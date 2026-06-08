@@ -14,6 +14,35 @@ import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCe
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
+const mockReplayEvaluation = vi.hoisted(() => vi.fn());
+const mockFetchTraces = vi.hoisted(() => vi.fn());
+const mockShowToast = vi.hoisted(() => vi.fn());
+
+vi.mock('@app/hooks/useEvalOperations', () => ({
+  useEvalOperations: () => ({
+    replayEvaluation: mockReplayEvaluation,
+    fetchTraces: mockFetchTraces,
+  }),
+}));
+
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: mockShowToast,
+  }),
+}));
+
+vi.mock('./AddAssertionsDialog', () => ({
+  default: vi.fn(({ open, resultId, testIndex }) =>
+    open ? (
+      <div
+        data-testid="add-assertions-dialog"
+        data-result-id={resultId}
+        data-test-index={testIndex}
+      />
+    ) : null,
+  ),
+}));
+
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(({ gradingResults, metadata, onClose }) => (
@@ -51,6 +80,9 @@ const defaultResultsViewSettings = {
 
 const defaultTableStoreState = {
   shouldHighlightSearchText: false,
+  addFilter: vi.fn(),
+  resetFilters: vi.fn(),
+  refreshTable: vi.fn(),
 };
 
 const mockResultsViewSettings = {
@@ -67,6 +99,8 @@ const resetMockStoreState = () => {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  mockReplayEvaluation.mockResolvedValue({ output: 'Updated output' });
   resetMockStoreState();
   window.history.replaceState({}, '', '/');
 });
@@ -2302,6 +2336,74 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     expect(actionsArea).toHaveAttribute('class', 'cell-actions');
   });
 
+  it('opens the add assertions dialog from the more actions menu', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-123" testIdx={7} />);
+
+    await user.click(screen.getByRole('button', { name: /more actions/i }));
+    await user.click(screen.getByText('Add assertion'));
+
+    const dialog = screen.getByTestId('add-assertions-dialog');
+    expect(dialog).toHaveAttribute('data-result-id', 'test-id');
+    expect(dialog).toHaveAttribute('data-test-index', '7');
+  });
+
+  it('disables mutating more-menu actions for comparison outputs', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EvalOutputCell {...defaultProps} evaluationId="eval-123" testIdx={7} mutationsDisabled />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /more actions/i }));
+
+    expect(screen.getByRole('menuitem', { name: 'Re-run cell' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitem', { name: 'Add assertion' })).toHaveAttribute(
+      'data-disabled',
+    );
+  });
+
+  it('copies the output as an assertion from the more actions menu', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: /more actions/i }));
+    await user.click(screen.getByRole('menuitem', { name: /copy as assertion/i }));
+
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(
+        '- type: equals\n  value: "Test output text"',
+      );
+    });
+  });
+
+  it('re-runs the cell using the stable test index and refreshes the table', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EvalOutputCell {...defaultProps} evaluationId="eval-123" rowIndex={1} testIdx={7} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /more actions/i }));
+    await user.click(screen.getByText('Re-run cell'));
+
+    await waitFor(() => {
+      expect(mockReplayEvaluation).toHaveBeenCalledWith({
+        evaluationId: 'eval-123',
+        testIndex: 7,
+        prompt: 'Test prompt',
+        variables: defaultProps.output.testCase?.vars,
+      });
+    });
+    await waitFor(() => {
+      expect(mockTableStoreState.refreshTable).toHaveBeenCalled();
+    });
+    expect(await screen.findByText('Updated output')).toBeInTheDocument();
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'Cell re-run complete. Showing the new output in this cell.',
+      'success',
+    );
+  });
+
   it('shows extra actions when shift key is pressed (mocked as true)', () => {
     // With useShiftKey mocked to return true, extra actions should be visible
     const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -2313,6 +2415,7 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy link to output')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy output to clipboard')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /more actions/i })).toBeInTheDocument();
   });
 
   it('keeps utility and review actions in a stable, grouped order', () => {
@@ -2329,6 +2432,7 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'Copy output to clipboard',
       'Copy link to output',
       'Toggle test highlight',
+      'More actions',
       'Mark test passed',
       'Mark test failed',
       'Set test score',
