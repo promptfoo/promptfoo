@@ -23,6 +23,7 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
+import { addPosteriorAttack } from './posterior';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -291,6 +292,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding jailbreak templates to ${testCases.length} test cases`);
       const newTestCases = await addInjections(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} jailbreak template test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'posterior',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Posterior Attack to ${testCases.length} test cases`);
+      const newTestCases = addPosteriorAttack(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Posterior Attack test cases`);
       return newTestCases;
     },
   },

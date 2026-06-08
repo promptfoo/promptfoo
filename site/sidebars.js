@@ -177,6 +177,7 @@ const redTeamSidebar = [
           'red-team/strategies/likert',
           'red-team/strategies/math-prompt',
           'red-team/strategies/other-encodings',
+          'red-team/strategies/posterior',
           'red-team/strategies/rot13',
         ],
       },
