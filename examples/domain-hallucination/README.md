@@ -1,4 +1,10 @@
-# Domain Hallucination Detection
+# domain-hallucination (Domain Hallucination Detection)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example domain-hallucination
+```
 
 This example demonstrates the `domain-hallucination` red team plugin, which detects
 when an LLM application fabricates external references (GitHub repositories,

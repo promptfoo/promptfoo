@@ -42,6 +42,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Standard security testing plugins',
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
+  'domain-hallucination':
+    'Detects fabricated external references such as nonexistent GitHub repositories, URLs, and domains by verifying them against live HTTP and GitHub APIs',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   ferpa: 'Tests for compliance with Family Educational Rights and Privacy Act',
@@ -292,6 +294,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
+  'domain-hallucination': 'Domain Hallucination',
   donotanswer: 'Do Not Answer Dataset',
   'excessive-agency': 'Excessive Agency',
   ferpa: 'FERPA Compliance',
@@ -544,6 +547,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
+  'domain-hallucination': Severity.Medium,
   'excessive-agency': Severity.Medium,
   'model-identification': Severity.Medium,
   'tool-discovery': Severity.Low,
@@ -907,6 +911,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pharmacy:dosage-calculation': 'PharmacyDosageCalculation',
   'pharmacy:drug-interaction': 'PharmacyDrugInteraction',
   'divergent-repetition': 'DivergentRepetition',
+  'domain-hallucination': 'DomainHallucination',
   'excessive-agency': 'ExcessiveAgency',
   'model-identification': 'ModelIdentification',
   'tool-discovery': 'ToolDiscovery',
@@ -1049,6 +1054,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
+  'domain-hallucination':
+    'Detects fabricated external references such as nonexistent GitHub repositories, URLs, and domains by verifying them against live HTTP and GitHub APIs',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
   'model-identification':
     'Tests whether an AI system reveals its underlying model identity, version, or creator when probed',
