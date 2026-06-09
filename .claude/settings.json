@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx block-no-verify"
+            "command": "npm exec -- block-no-verify"
           }
         ]
       }
