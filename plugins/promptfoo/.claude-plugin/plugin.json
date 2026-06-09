@@ -1,6 +1,12 @@
 {
   "name": "promptfoo",
+  "version": "0.1.0",
   "description": "Teaches AI coding agents to connect providers and targets, write promptfoo eval suites, and set up or run red team scans",
+  "author": {
+    "name": "Promptfoo",
+    "email": "support@promptfoo.dev",
+    "url": "https://www.promptfoo.dev"
+  },
   "homepage": "https://www.promptfoo.dev/docs/integrations/agent-skill",
   "repository": "https://github.com/promptfoo/promptfoo",
   "license": "MIT",

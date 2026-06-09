@@ -2020,9 +2020,11 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       readText(path.join(pluginRoot, '.claude-plugin', 'plugin.json')),
     );
 
-    // One plugin identity across both marketplaces.
+    // One plugin identity across both marketplaces: same name, version, and author.
     expect(codexManifest.name).toBe('promptfoo');
     expect(claudeManifest.name).toBe('promptfoo');
+    expect(claudeManifest.version).toBe(codexManifest.version);
+    expect(claudeManifest.author.name).toBe('Promptfoo');
     expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
 
     // The standalone single-skill Claude bundle has been retired in favor of this shared bundle.
