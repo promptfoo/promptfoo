@@ -208,7 +208,7 @@ jobs:
           fi
 
       - name: Test Package Artifact
-        if: matrix.node == '20.20'
+        if: matrix.node == '20.20' || matrix.node == '26.x'
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact
