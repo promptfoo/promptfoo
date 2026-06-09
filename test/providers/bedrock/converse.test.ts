@@ -417,6 +417,26 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.output).toContain('The answer is 42.');
     });
 
+    it('should exclude empty thinking blocks returned by omitted-display adaptive thinking', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1', showThinking: true },
+      });
+
+      const response = createMockConverseResponse('QA OK');
+      response.output!.message!.content!.unshift({
+        reasoningContent: {
+          reasoningText: { text: '', signature: 'sig-abc123' },
+        },
+      });
+      mockSend.mockResolvedValueOnce(response);
+
+      const result = await provider.callApi('Test');
+
+      expect(result.output).toBe('QA OK');
+      expect(result.output).not.toContain('<thinking>');
+      expect(result.output).not.toContain('Signature:');
+    });
+
     it('should exclude thinking content when showThinking is false', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {

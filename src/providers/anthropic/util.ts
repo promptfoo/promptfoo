@@ -214,6 +214,53 @@ export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean 
   );
 }
 
+/**
+ * Normalize a Claude thinking config for models that deprecate manual
+ * budget-based thinking: an `enabled` budget converts to adaptive thinking
+ * (preserving `display`), and `disabled` is omitted on always-on adaptive
+ * thinking models (Fable 5 / Mythos 5), which reject it. The Anthropic,
+ * Bedrock InvokeModel/Converse, and Vertex paths all share this transform;
+ * user-facing warnings stay at the call sites that surface them.
+ */
+export function normalizeClaudeThinkingConfig<
+  T extends { type: string; display?: 'summarized' | 'omitted' | null },
+>(
+  modelId: string,
+  thinking: T | undefined,
+): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
+  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+    return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
+  }
+  if (thinking?.type === 'disabled' && isAlwaysOnAdaptiveThinkingClaudeModel(modelId)) {
+    return undefined;
+  }
+  return thinking;
+}
+
+// Bedrock and Vertex bill Claude 5 regional/geo endpoints at this premium over
+// the global endpoint.
+export const CLAUDE_5_REGIONAL_PREMIUM = 1.1;
+
+/**
+ * Fill premium-multiplied Claude 5 list rates into a cost config, unless the
+ * user supplied a `cost` override. Callers decide whether the request is
+ * regional; this helper owns the rates so they stay derived from
+ * ANTHROPIC_MODELS.
+ */
+export function applyClaude5RegionalPremium(modelName: string, config: any): any {
+  const modelInfo = ANTHROPIC_MODELS.find(
+    (model) => model.id === normalizeAnthropicModelName(modelName),
+  );
+  if (!isClaudeFableOrMythos5Model(modelName) || !modelInfo || config.cost != null) {
+    return config;
+  }
+  return {
+    ...config,
+    inputCost: config.inputCost ?? modelInfo.cost.input * CLAUDE_5_REGIONAL_PREMIUM,
+    outputCost: config.outputCost ?? modelInfo.cost.output * CLAUDE_5_REGIONAL_PREMIUM,
+  };
+}
+
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
@@ -358,7 +405,7 @@ export function parseMessages(messages: string): {
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
  * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
  */
-function calculateCacheInputCost(
+export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
@@ -381,19 +428,14 @@ export function calculateAnthropicCost(
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
   const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
-  // Bare and geo-prefixed Bedrock IDs bill at the 10% regional premium; only
-  // the `global.` endpoint bills at base rate. Keep the geo set in sync with
-  // normalizeAnthropicModelName so every prefix it can price gets the premium.
+  // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
+  // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
+  // only the `global.` endpoint bills at base rate.
   const usesRegionalBedrockPricing =
-    isClaudeFableOrMythos5Model(modelName) && /^(?:(?:us|eu|jp|au)\.)?anthropic\./.test(modelName);
-  const effectiveConfig =
-    usesRegionalBedrockPricing && modelInfo && config.cost == null
-      ? {
-          ...config,
-          inputCost: config.inputCost ?? modelInfo.cost.input * 1.1,
-          outputCost: config.outputCost ?? modelInfo.cost.output * 1.1,
-        }
-      : config;
+    pricingModelName !== modelName && !modelName.startsWith('global.');
+  const effectiveConfig = usesRegionalBedrockPricing
+    ? applyClaude5RegionalPremium(modelName, config)
+    : config;
 
   if (
     effectiveConfig.cost != null &&

@@ -27,8 +27,12 @@ import {
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
+  CLAUDE_5_REGIONAL_PREMIUM,
+  calculateCacheInputCost,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
 } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
@@ -249,14 +253,15 @@ function calculateBedrockConverseCost(
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const pricingMultiplier =
-    isAlwaysOnAdaptiveThinkingClaudeModel(normalizedModelId) && !isGlobalEndpoint ? 1.1 : 1;
+    isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
+      ? CLAUDE_5_REGIONAL_PREMIUM
+      : 1;
   for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
     if (normalizedModelId.includes(modelPrefix)) {
       const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
-      const cacheInputCost = normalizedModelId.includes('anthropic.claude')
-        ? cacheReadTokens * inputRate * 0.1 + cacheWriteTokens * inputRate * 1.25
-        : 0;
-      const inputCost = promptTokens * inputRate + cacheInputCost;
+      const inputCost = normalizedModelId.includes('anthropic.claude')
+        ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
+        : promptTokens * inputRate;
       const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
       return inputCost + outputCost;
     }
@@ -795,9 +800,14 @@ function extractTextFromContentBlocks(
         if ('reasoningText' in reasoning && reasoning.reasoningText) {
           const thinkingText = reasoning.reasoningText.text || '';
           const signature = reasoning.reasoningText.signature || '';
-          parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
-          if (signature) {
-            parts.push(`Signature: ${signature}`);
+          // Adaptive thinking with the default display "omitted" (Claude 5)
+          // returns an empty thinking block carrying only a signature —
+          // exclude it, matching outputFromMessage on the Anthropic paths.
+          if (thinkingText.trim() !== '') {
+            parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
+            if (signature) {
+              parts.push(`Signature: ${signature}`);
+            }
           }
         } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
           parts.push('<thinking>[Redacted]</thinking>');
@@ -1209,29 +1219,24 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       delete fields.top_p;
       delete fields.top_k;
       const additionalThinking = fields.thinking as
-        | { type?: string; display?: 'summarized' | 'omitted' }
+        | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
-      if (additionalThinking?.type === 'enabled') {
-        fields.thinking = {
-          type: 'adaptive',
-          ...(additionalThinking.display ? { display: additionalThinking.display } : {}),
-        };
-      } else if (additionalThinking?.type === 'disabled') {
+      const normalizedThinking = normalizeClaudeThinkingConfig(this.modelName, additionalThinking);
+      if (normalizedThinking === undefined) {
         delete fields.thinking;
+      } else {
+        fields.thinking = normalizedThinking;
       }
     }
 
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
-      if (!(alwaysOnAdaptiveThinking && this.config.thinking.type === 'disabled')) {
-        fields.thinking =
-          isSamplingParamsDeprecatedClaudeModel(this.modelName) &&
-          this.config.thinking.type === 'enabled'
-            ? {
-                type: 'adaptive',
-                ...(this.config.thinking.display ? { display: this.config.thinking.display } : {}),
-              }
-            : this.config.thinking;
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        this.config.thinking,
+      );
+      if (normalizedThinking !== undefined) {
+        fields.thinking = normalizedThinking;
       }
     }
 
@@ -1926,9 +1931,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         toolsDisabled,
       );
 
-      // Combine reasoning, output, and tool use
+      // Combine reasoning, output, and tool use. Skip whitespace-only
+      // reasoning — omitted-display adaptive thinking streams empty deltas.
       const parts: string[] = [];
-      if (reasoning) {
+      if (reasoning.trim()) {
         parts.push(`<thinking>\n${reasoning}\n</thinking>`);
       }
       if (output) {
