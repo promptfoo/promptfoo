@@ -16,8 +16,8 @@ both platforms auto-discover skills from `skills/`. The Codex-only
 `agents/openai.yaml` files are ignored by Claude Code. Keep both manifests'
 `name` fields equal (`promptfoo`) so the install identity matches across tools.
 Keep both manifests' `version` fields equal, and bump them together whenever the
-published bundle content changes. Claude Code only delivers updates for plugins
-with explicit versions after the version is bumped.
+published bundle content changes. When a plugin declares an explicit version,
+Claude Code only delivers changed plugin content after that version changes.
 
 Keep the public surface to the four focused skills unless the product decision
 changes:
