@@ -81,11 +81,9 @@ generated probes.
 
 ### Manual install
 
-You can also copy individual skill directories straight into your project.
-Download them from the
-[bundle's skill directory](https://github.com/promptfoo/promptfoo/tree/main/plugins/promptfoo/skills)
-and copy the ones you want to the correct location for your tool. For example,
-to add just the eval skill:
+For an eval-only setup, copy the self-contained
+[`promptfoo-evals` skill](https://github.com/promptfoo/promptfoo/tree/main/.claude/skills/promptfoo-evals)
+into your project:
 
 **Claude Code** (project-level, recommended for teams):
 
@@ -104,6 +102,11 @@ cp -r promptfoo-evals ~/.claude/skills/
 ```bash
 cp -r promptfoo-evals your-project/.agents/skills/
 ```
+
+To add provider setup or red teaming as well, install the full bundle from the
+marketplace (above) so the skills can hand off to each other, or copy the whole
+[`plugins/promptfoo/skills`](https://github.com/promptfoo/promptfoo/tree/main/plugins/promptfoo/skills)
+directory so the referenced sibling skills resolve.
 
 :::note
 Commit skills to `.claude/skills/` or `.agents/skills/` so every developer's
