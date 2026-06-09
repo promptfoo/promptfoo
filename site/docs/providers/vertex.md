@@ -45,6 +45,9 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
+Regional and multi-region Vertex endpoints carry a 10% price premium over the
+global endpoint for Claude 5 models; promptfoo includes that premium in cost
+calculations unless `config.region` is `global`.
 Mythos 5 is limited availability; contact your Google Cloud account team for access
 and the model ID because Google does not publish one in its public model catalog.
 
