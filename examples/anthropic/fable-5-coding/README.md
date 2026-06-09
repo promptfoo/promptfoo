@@ -46,7 +46,7 @@ Fable 5 is also reachable through:
 - Google Vertex — `vertex:claude-fable-5`
 - Azure AI Foundry — point `anthropic:messages:claude-fable-5` at `https://<resource>.services.ai.azure.com/anthropic` via `apiBaseUrl`
 
-Across all providers, promptfoo automatically omits the unsupported sampling parameters and normalizes unsupported thinking configs for Fable 5. Note that Bedrock's regional and geo endpoints (everything except `global.`) carry a 10% price premium, which promptfoo includes in cost calculations.
+Across all providers, promptfoo automatically omits the unsupported sampling parameters and normalizes unsupported thinking configs for Fable 5. Note that Bedrock's regional and geo endpoints and Vertex's regional/multi-region endpoints (everything except `global`) carry a 10% price premium, which promptfoo includes in cost calculations.
 
 ## Learn More
 

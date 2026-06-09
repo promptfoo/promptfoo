@@ -929,7 +929,7 @@ Azure AI Foundry exposes Claude through two endpoint families. Pick the one that
 
 ### Option 1 (recommended): Anthropic Messages endpoint
 
-Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic sampling-parameter suppression for Fable 5 and Opus 4.7/4.8 (`temperature`/`top_p`/`top_k`), and consistent pricing across Anthropic/Bedrock/Vertex:
+Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic sampling-parameter suppression for Fable 5 and Opus 4.7/4.8 (`temperature`/`top_p`/`top_k`), and Anthropic list pricing (note that Bedrock regional/geo endpoints and non-global Vertex regions carry a 10% premium for Claude 5 models):
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -955,7 +955,7 @@ providers:
       max_tokens: 4096
 ```
 
-Opus 4.7 and 4.8 deployments whose names contain the model identifier automatically omit `temperature` and `top_p` from the request body on this path too. If your Azure deployment uses a custom alias, set `isClaudeOpus47OrLater: true`:
+Fable 5 and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit `temperature` and `top_p` from the request body on this path too. If your Azure deployment uses a custom alias, set `isClaudeOpus47OrLater: true`:
 
 ```yaml
 providers:

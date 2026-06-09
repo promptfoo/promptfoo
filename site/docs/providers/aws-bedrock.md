@@ -836,9 +836,11 @@ providers:
 ```
 
 AWS requires provider data sharing to be enabled for Fable 5 and Mythos 5. Both use
-always-on adaptive thinking, so promptfoo omits sampling controls and unsupported
-manual or disabled thinking settings. Regional and geo endpoints cost 10% more than
-the global endpoint; Promptfoo applies that premium when calculating costs.
+always-on adaptive thinking, so promptfoo omits sampling controls, converts manual
+thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`) to adaptive
+thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo endpoints cost
+10% more than the global endpoint; Promptfoo applies that premium when calculating
+costs.
 
 ```yaml
 config:
