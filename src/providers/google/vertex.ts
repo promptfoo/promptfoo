@@ -423,9 +423,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Regional and multi-region Vertex endpoints bill Claude 5 at a premium
       // over the global endpoint.
       const pricingConfig =
-        this.getRegion() !== 'global'
-          ? applyClaude5RegionalPremium(normalizedModelName, this.config)
-          : this.config;
+        this.getRegion() === 'global'
+          ? this.config
+          : applyClaude5RegionalPremium(normalizedModelName, this.config);
       const response = {
         cached: false,
         output,
