@@ -12,7 +12,6 @@ const execFileAsync = promisify(execFile);
 
 const repoRoot = path.resolve(__dirname, '../..');
 const pluginRoot = path.join(repoRoot, 'plugins', 'promptfoo');
-const existingClaudePluginRoot = path.join(repoRoot, 'plugins', 'promptfoo-evals');
 const repoClaudeSkillsRoot = path.join(repoRoot, '.claude', 'skills');
 const repoCodexSkillsRoot = path.join(repoRoot, '.agents', 'skills');
 const evalsSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-evals');
@@ -1846,7 +1845,10 @@ describe('promptfoo Codex plugin package', () => {
     expect(
       fs.existsSync(path.join(repoRoot, entry.source.path, '.codex-plugin', 'plugin.json')),
     ).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, entry.source.path, '.claude-plugin'))).toBe(false);
+    // The same bundle also ships a Claude Code manifest; see the shared-bundle test below.
+    expect(
+      fs.existsSync(path.join(repoRoot, entry.source.path, '.claude-plugin', 'plugin.json')),
+    ).toBe(true);
   });
 
   it('keeps the published surface to four focused skills without a meta selector', () => {
@@ -1861,12 +1863,13 @@ describe('promptfoo Codex plugin package', () => {
     expect(skillDirs).not.toContain('promptfoo-meta');
   });
 
-  it('keeps the Codex plugin bundle file inventory intentionally small', () => {
+  it('keeps the shared plugin bundle file inventory intentionally small', () => {
     const packagedFiles = listFiles(pluginRoot, () => true)
       .map((filePath) => toPosixPath(path.relative(pluginRoot, filePath)))
       .sort();
 
     expect(packagedFiles).toEqual([
+      '.claude-plugin/plugin.json',
       '.codex-plugin/plugin.json',
       'assets/promptfoo-panda.svg',
       'skills/promptfoo-evals/SKILL.md',
@@ -1992,12 +1995,12 @@ describe('promptfoo Codex plugin package', () => {
     }
   });
 
-  it('documents the Codex plugin bundle beside the published single eval skill', () => {
+  it('documents the shared plugin bundle on both marketplaces', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
 
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
-    expect(docs).toContain('preferred Codex');
+    expect(docs).toContain('/plugin install promptfoo@promptfoo');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
@@ -2005,43 +2008,52 @@ describe('promptfoo Codex plugin package', () => {
     expect(docs).toContain('local graders');
     expect(docs).toContain('PROMPTFOO_PYTHON');
     expect(docs).toContain('copy `plugins/promptfoo`');
-    expect(docs).toContain('portable single');
     expect(docs).toContain('plugins/promptfoo');
     expect(docs).toContain('.agents/plugins/marketplace.json');
+    expect(docs).toContain('.claude-plugin/marketplace.json');
     for (const skillDir of expectedSkillDirs) {
       expect(docs).toContain(skillDir);
     }
   });
 
-  it('keeps the existing Claude eval plugin separate from the Codex bundle', () => {
+  it('serves one bundle to both the Codex and Claude marketplaces', () => {
     const codexManifest = JSON.parse(
       readText(path.join(pluginRoot, '.codex-plugin', 'plugin.json')),
     );
     const claudeManifest = JSON.parse(
-      readText(path.join(existingClaudePluginRoot, '.claude-plugin', 'plugin.json')),
+      readText(path.join(pluginRoot, '.claude-plugin', 'plugin.json')),
     );
 
     expect(codexManifest.name).toBe('promptfoo');
-    expect(claudeManifest.name).toBe('promptfoo-evals');
-    expect(fs.existsSync(path.join(pluginRoot, '.claude-plugin'))).toBe(false);
-    expect(fs.existsSync(path.join(existingClaudePluginRoot, '.codex-plugin'))).toBe(false);
-    expect(fs.existsSync(path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals'))).toBe(
-      true,
+    expect(claudeManifest.name).toBe('promptfoo');
+    // Claude Code auto-discovers skills from skills/; no explicit pointer needed.
+    expect(claudeManifest.skills).toBeUndefined();
+    expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
+
+    // The standalone single-skill Claude bundle has been retired in favor of this shared bundle.
+    expect(fs.existsSync(path.join(repoRoot, 'plugins', 'promptfoo-evals'))).toBe(false);
+
+    const marketplace = JSON.parse(
+      readText(path.join(repoRoot, '.claude-plugin', 'marketplace.json')),
     );
+    expect(marketplace.name).toBe('promptfoo');
+    expect(marketplace.plugins).toHaveLength(1);
+    const entry = marketplace.plugins[0];
+    expect(entry.name).toBe('promptfoo');
+    expect(entry.source).toBe('./plugins/promptfoo');
+
+    // Claude Code exposes the same four skills as Codex from the shared bundle.
+    const claudeSkillDirs = fs
+      .readdirSync(path.join(repoRoot, entry.source, 'skills'), { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name)
+      .sort();
+    expect(claudeSkillDirs).toEqual(expectedSkillDirs);
   });
 
-  it('keeps Codex eval guidance compatible with the published Claude eval skill', () => {
-    const claudeSkill = readText(
-      path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', 'SKILL.md'),
-    );
-    const codexSkill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-    const codexReference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
-
-    expect(claudeSkill).toContain('deterministic');
-    expect(claudeSkill).toContain('model-graded');
-    expect(claudeSkill).toContain('tests: file://tests/*.yaml');
-    expect(claudeSkill).toContain("apiKey: '{{env.OPENAI_API_KEY}}'");
-    expect(claudeSkill).toContain('options.transform');
+  it('keeps the eval skill guidance complete and provider-aware', () => {
+    const evalsSkill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
+    const evalsReference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
 
     for (const phrase of [
       'deterministic',
@@ -2053,20 +2065,18 @@ describe('promptfoo Codex plugin package', () => {
       'anthropic:messages:claude-sonnet-4-6',
       'echo',
     ]) {
-      expect(`${codexSkill}\n${codexReference}`).toContain(phrase);
+      expect(`${evalsSkill}\n${evalsReference}`).toContain(phrase);
     }
-    expect(codexSkill).toContain('If the provider does not work yet, switch to');
-    expect(codexReference).toContain('promptfoo-provider-setup');
+    expect(evalsSkill).toContain('If the provider does not work yet, switch to');
+    expect(evalsReference).toContain('promptfoo-provider-setup');
   });
 
-  it('keeps the repo-local and published portable eval skill copies byte-for-byte aligned', () => {
-    for (const relativePath of ['SKILL.md', path.join('references', 'cheatsheet.md')]) {
+  it('keeps the repo-local contributor copy aligned with the published eval skill', () => {
+    for (const relativePath of ['SKILL.md', path.join('references', 'eval-patterns.md')]) {
       const repoLocalFile = readText(
         path.join(repoClaudeSkillsRoot, 'promptfoo-evals', relativePath),
       );
-      const publishedFile = readText(
-        path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', relativePath),
-      );
+      const publishedFile = readText(path.join(evalsSkillRoot, relativePath));
 
       expect(repoLocalFile).toBe(publishedFile);
     }

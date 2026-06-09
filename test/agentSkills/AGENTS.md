@@ -1,16 +1,19 @@
 # Agent Skill Tests
 
 `test/agentSkills/promptfooPlugin.test.ts` is the contract suite for the
-Promptfoo Codex plugin bundle.
+Promptfoo plugin bundle (shared across Codex and Claude Code).
 
 ## What To Protect
 
-- The Codex bundle has exactly four skills: evals, provider setup, redteam
-  setup, and redteam run.
-- The existing Claude `promptfoo-evals` plugin stays separate from the Codex
-  bundle.
+- The shared `plugins/promptfoo` bundle has exactly four skills: evals, provider
+  setup, redteam setup, and redteam run.
+- The bundle ships both a `.codex-plugin/plugin.json` and a
+  `.claude-plugin/plugin.json`, and is exposed by both
+  `.agents/plugins/marketplace.json` (Codex) and the repo-root
+  `.claude-plugin/marketplace.json` (Claude Code) with matching plugin name
+  `promptfoo`.
 - The repo-local Claude copy of `promptfoo-evals` stays byte-for-byte aligned
-  with the published Claude plugin copy.
+  with the shared bundle's `promptfoo-evals` skill.
 - Every repo-local Claude skill uses canonical `SKILL.md` casing so discovery
   stays predictable.
 - Shared repo-local contributor skills stay aligned between `.claude/skills/`

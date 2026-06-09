@@ -1,0 +1,8 @@
+{
+  "name": "promptfoo",
+  "description": "Teaches AI coding agents to connect providers and targets, write promptfoo eval suites, and set up or run red team scans",
+  "homepage": "https://www.promptfoo.dev/docs/integrations/agent-skill",
+  "repository": "https://github.com/promptfoo/promptfoo",
+  "license": "MIT",
+  "keywords": ["eval", "redteam", "provider", "testing", "llm", "promptfoo"]
+}
