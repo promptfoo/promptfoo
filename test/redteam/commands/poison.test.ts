@@ -10,6 +10,7 @@ import {
   poisonDocument,
 } from '../../../src/redteam/commands/poison';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
 const mockFsExistsSync = vi.hoisted(() => vi.fn());
@@ -122,6 +123,28 @@ describe('poison command', () => {
   });
 
   describe('generatePoisonedDocument', () => {
+    it.each([
+      'PROMPTFOO_DISABLE_REMOTE_GENERATION',
+      'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+    ])('should not send document contents when %s is enabled', async (flag) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+        [flag]: 'true',
+      });
+      const fetchSpy = vi.spyOn(global, 'fetch');
+
+      try {
+        await expect(generatePoisonedDocument('sensitive document')).rejects.toThrow(
+          'RAG poisoning requires remote generation, which has been explicitly disabled',
+        );
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
     it('should call remote API and return response', async () => {
       const mockResponse = {
         ok: true,

@@ -4,6 +4,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
+import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -372,6 +373,29 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+async function prepareChunkForShare(
+  chunk: EvalResult[],
+  evalId: string,
+  inlineCache: ReturnType<typeof createBlobInlineCache> | null,
+  remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+): Promise<EvalResult[]> {
+  const chunkToSend = inlineCache ? await inlineBlobRefsForShare(chunk, inlineCache) : chunk;
+
+  if (remoteBlobUploadCache) {
+    await Promise.all(
+      chunk.map((result) =>
+        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
+          evalId,
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+        }),
+      ),
+    );
+  }
+
+  return chunkToSend;
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -386,6 +410,8 @@ async function sendChunkedResults(
   const inlineBlobs =
     isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
+  const remoteBlobUploadCache =
+    cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
@@ -472,10 +498,12 @@ async function sendChunkedResults(
           chunkNumber++;
           logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-          const chunkToSend =
-            inlineBlobs && inlineCache
-              ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-              : currentChunk;
+          const chunkToSend = await prepareChunkForShare(
+            currentChunk,
+            evalRecord.id,
+            inlineCache,
+            remoteBlobUploadCache,
+          );
 
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
@@ -488,10 +516,12 @@ async function sendChunkedResults(
       chunkNumber++;
       logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-      const chunkToSend =
-        inlineBlobs && inlineCache
-          ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-          : currentChunk;
+      const chunkToSend = await prepareChunkForShare(
+        currentChunk,
+        evalRecord.id,
+        inlineCache,
+        remoteBlobUploadCache,
+      );
 
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../src/blobs/shareUpload';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
@@ -72,6 +73,10 @@ vi.mock('../src/globalConfig/cloud', () => {
 
   return { cloudConfig };
 });
+vi.mock('../src/blobs/shareUpload', () => ({
+  createRemoteBlobUploadCache: vi.fn(),
+  uploadBlobRefsForShare: vi.fn(),
+}));
 vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: vi.fn((...args) => mockFetch(...args)),
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
@@ -386,9 +391,21 @@ describe('createShareableUrl', () => {
     vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
     vi.mocked(constants.getShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
+    vi.mocked(createRemoteBlobUploadCache).mockReturnValue(new Map());
+    vi.mocked(uploadBlobRefsForShare).mockResolvedValue(undefined);
     mockFetch.mockReset();
     // Mock process.stdout.isTTY
     process.stdout.isTTY = false;
+  });
+
+  it('does not initialize remote blob uploads when sharing is globally disabled', async () => {
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+
+    await expect(createShareableUrl(buildMockEval() as Eval)).resolves.toBeNull();
+
+    expect(createRemoteBlobUploadCache).not.toHaveBeenCalled();
+    expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('creates correct URL for cloud config and updates author', async () => {
@@ -602,6 +619,76 @@ describe('createShareableUrl', () => {
       );
     });
 
+    it('uploads local blob refs before manually sharing a previously unshared eval', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      const hash = 'a'.repeat(64);
+      const result = {
+        id: 'result-1',
+        promptIdx: 2,
+        response: { output: `promptfoo://blob/${hash}` },
+        testIdx: 1,
+      } as EvalResult;
+      mockEval.config = { sharing: false };
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(() => {
+        const iterator = {
+          called: false,
+          next: async () => {
+            if (!iterator.called) {
+              iterator.called = true;
+              return { done: false, value: [result] };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+        return iterator;
+      });
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+
+      let releaseUpload: (() => void) | undefined;
+      const uploadGate = new Promise<void>((resolve) => {
+        releaseUpload = resolve;
+      });
+      let markUploadStarted: (() => void) | undefined;
+      const uploadStarted = new Promise<void>((resolve) => {
+        markUploadStarted = resolve;
+      });
+      vi.mocked(uploadBlobRefsForShare).mockImplementation(async () => {
+        markUploadStarted?.();
+        await uploadGate;
+      });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'manual-share-id' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      const sharePromise = createShareableUrl(mockEval as Eval);
+      await uploadStarted;
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      releaseUpload?.();
+
+      await expect(sharePromise).resolves.toBe('https://app.example.com/eval/manual-share-id');
+      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(result, expect.any(Map), {
+        evalId: mockEval.id,
+        promptIdx: 2,
+        testIdx: 1,
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
     it('sends chunked eval when open source self hosted', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
@@ -631,6 +718,7 @@ describe('createShareableUrl', () => {
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
         }),
       );
+      expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
     });
 

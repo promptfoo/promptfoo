@@ -9,7 +9,12 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { setupEnv } from '../../util/index';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 import type { Command } from 'commander';
 
 interface PoisonOptions {
@@ -59,6 +64,10 @@ export async function generatePoisonedDocument(
   document: string,
   goal?: PoisonOptions['goal'],
 ): Promise<PoisonResponse> {
+  if (neverGenerateRemote()) {
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('RAG poisoning'));
+  }
+
   const response = await fetchWithProxy(getRemoteGenerationUrl(), {
     method: 'POST',
     headers: getRemoteGenerationHeaders(),
