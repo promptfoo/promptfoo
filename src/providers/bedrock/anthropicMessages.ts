@@ -44,12 +44,12 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   constructor(modelName: string, options: ProviderOptions & { id?: string } = {}) {
     super(modelName, options);
 
-    // Bedrock API keys use Authorization: Bearer rather than Anthropic's
-    // x-api-key header. Keep the Anthropic SDK for request/response parity,
-    // but rebuild its client with the Bedrock key as an auth token.
+    // Bedrock's Anthropic-compatible endpoint accepts API keys via x-api-key.
+    // Keep the Anthropic SDK for request/response parity and use its API-key
+    // authentication mode so it emits the expected header.
     this.anthropic = new Anthropic({
-      apiKey: null,
-      authToken: this.apiKey ?? null,
+      apiKey: this.apiKey ?? null,
+      authToken: null,
       baseURL: this.getApiBaseUrl(),
     });
   }

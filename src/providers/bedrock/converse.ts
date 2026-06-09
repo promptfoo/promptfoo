@@ -234,6 +234,8 @@ function calculateBedrockConverseCost(
   modelId: string,
   promptTokens?: number,
   completionTokens?: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
@@ -248,7 +250,11 @@ function calculateBedrockConverseCost(
       : 1;
   for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
     if (normalizedModelId.includes(modelPrefix)) {
-      const inputCost = (promptTokens / 1_000_000) * pricing.input * pricingMultiplier;
+      const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
+      const cacheInputCost = normalizedModelId.includes('anthropic.claude')
+        ? cacheReadTokens * inputRate * 0.1 + cacheWriteTokens * inputRate * 1.25
+        : 0;
+      const inputCost = promptTokens * inputRate + cacheInputCost;
       const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
       return inputCost + outputCost;
     }
@@ -1596,7 +1602,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Calculate cost
-    const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
+    const cost = calculateBedrockConverseCost(
+      this.modelName,
+      promptTokens,
+      completionTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+    );
 
     // Build metadata
     const metadata: Record<string, unknown> = {};
@@ -1841,7 +1853,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let output = '';
       let reasoning = '';
       let stopReason: string | undefined;
-      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+      let usage: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+        cacheReadInputTokens?: number;
+        cacheWriteInputTokens?: number;
+      } = {};
 
       // Track tool use blocks being streamed
       const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
@@ -1940,6 +1958,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         this.modelName,
         usage.inputTokens,
         usage.outputTokens,
+        usage.cacheReadInputTokens,
+        usage.cacheWriteInputTokens,
       );
 
       // Surface MCP failures via the response `error` field. If the model also

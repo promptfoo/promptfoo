@@ -57,7 +57,7 @@ describe('Bedrock Anthropic Messages provider', () => {
     ).toThrow(/only in us-east-1 and eu-north-1/);
   });
 
-  it('uses promptfoo env overrides for the key and region', () => {
+  it('uses promptfoo env overrides for the key and region', async () => {
     restoreEnv = mockProcessEnv({
       AWS_BEARER_TOKEN_BEDROCK: undefined,
       AWS_BEDROCK_REGION: undefined,
@@ -70,9 +70,25 @@ describe('Bedrock Anthropic Messages provider', () => {
 
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
     expect(provider.apiKey).toBe('override-key');
-    expect(provider.anthropic.apiKey).toBeNull();
-    expect(provider.anthropic.authToken).toBe('override-key');
+    expect(provider.anthropic.apiKey).toBe('override-key');
+    expect(provider.anthropic.authToken).toBeNull();
     expect(provider.getApiBaseUrl()).toBe('https://bedrock-mantle.eu-north-1.api.aws/anthropic');
+
+    const { req } = await (
+      provider.anthropic as unknown as {
+        buildRequest(options: {
+          method: string;
+          path: string;
+          body: Record<string, unknown>;
+        }): Promise<{ req: Request }>;
+      }
+    ).buildRequest({
+      method: 'post',
+      path: '/v1/messages',
+      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
+    });
+    expect(req.headers.get('x-api-key')).toBe('override-key');
+    expect(req.headers.get('authorization')).toBeNull();
   });
 
   it.each([

@@ -175,7 +175,13 @@ function createMockConverseResponse(
   options: {
     reasoningContent?: string;
     toolUse?: { id: string; name: string; input: Record<string, unknown> };
-    usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      cacheReadInputTokens?: number;
+      cacheWriteInputTokens?: number;
+    };
     stopReason?: StopReason;
     latencyMs?: number;
   } = {},
@@ -1201,6 +1207,29 @@ describe('AwsBedrockConverseProvider', () => {
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
       const globalResult = await globalProvider.callApi('Test');
       expect(globalResult.cost).toBeCloseTo(0.0035, 6);
+    });
+
+    it('should include prompt cache reads and writes in Claude Fable 5 cost', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-fable-5', {
+        config: { region: 'us-east-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 750,
+            cacheReadInputTokens: 500,
+            cacheWriteInputTokens: 100,
+          },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // Regional rates: uncached input $11, cache read $1.10,
+      // cache write $13.75, and output $55 per million tokens.
+      expect(result.cost).toBeCloseTo(0.005775, 8);
     });
   });
 
@@ -3037,6 +3066,32 @@ Third line`;
       expect(result.output).toBe('Hello World');
       expect(result.tokenUsage?.prompt).toBe(10);
       expect(result.tokenUsage?.completion).toBe(5);
+    });
+
+    it('should include prompt cache reads and writes in streaming cost', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-fable-5', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        {
+          metadata: {
+            usage: {
+              inputTokens: 10,
+              outputTokens: 5,
+              totalTokens: 45,
+              cacheReadInputTokens: 20,
+              cacheWriteInputTokens: 10,
+            },
+          },
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
+
+      const result = await provider.callApiStreaming('Test');
+
+      expect(result.cost).toBeCloseTo(0.0005445, 8);
     });
 
     it('should handle streaming tool use response', async () => {
