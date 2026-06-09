@@ -63,7 +63,7 @@ Use `--no-cache` with `--repeat` when you want every run to make fresh LLM calls
 
 Use `promptfoo cache clear` command to clear the cache.
 
-## Node package
+## Node.js API
 
 Set `EvaluateOptions.cache` to false to disable cache:
 
@@ -72,6 +72,11 @@ promptfoo.evaluate(testSuite, {
   cache: false,
 });
 ```
+
+For custom providers and other programmatic integrations, the
+[Node.js API guide](/docs/usage/node-package) covers the supported package
+surface, and the [cache reference](/docs/api/node/reference/promptfoo/namespaces/cache/)
+lists the exported cache helpers.
 
 ## Tests
 

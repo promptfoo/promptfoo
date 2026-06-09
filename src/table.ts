@@ -4,6 +4,28 @@ import { TERMINAL_MAX_WIDTH } from './constants';
 import { type EvaluateTable, ResultFailureReason } from './types/index';
 import { ellipsize } from './util/text';
 
+/**
+ * Render eval table data as terminal-friendly text.
+ *
+ * Usually pass the table from a completed eval record returned by `evaluate()`.
+ *
+ * @param evaluateTable - Table data returned on the completed eval record. Pass
+ * the value resolved from `await evalRecord.getTable()`.
+ * @param tableCellMaxLength - Maximum visible width for each rendered cell.
+ * @param maxRows - Maximum number of body rows to render.
+ * @returns ANSI-colored terminal text for the table.
+ *
+ * @example
+ * ```ts
+ * import { evaluate, generateTable } from 'promptfoo';
+ *
+ * const evalRecord = await evaluate(testSuite);
+ * const table = await evalRecord.getTable();
+ * console.log(generateTable(table));
+ * ```
+ *
+ * @public
+ */
 export function generateTable(
   evaluateTable: EvaluateTable,
   tableCellMaxLength = 250,

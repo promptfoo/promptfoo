@@ -78,6 +78,26 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
+/**
+ * Load one provider by id or config-file reference.
+ *
+ * Use this when you need to construct a provider before passing it into another
+ * public API. For ordinary evals, passing provider refs directly to `evaluate()`
+ * is usually simpler.
+ *
+ * @param providerPath - Provider id or supported provider config file reference.
+ * @param context - Optional base path, environment overrides, and provider
+ * options.
+ * @returns A resolved provider instance.
+ *
+ * @example
+ * ```ts
+ * const provider = await loadApiProvider('openai:chat:gpt-5.5');
+ * const response = await provider.callApi('Hello');
+ * ```
+ *
+ * @public
+ */
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
 // (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
@@ -345,15 +365,35 @@ export function resolveProviderConfigs(
 }
 
 /**
+ * Shared options for loading one or more providers.
+ *
+ * Pass these when provider configs need a caller-controlled resolution base or
+ * scoped environment values without mutating `process.env`.
+ *
+ * @example
+ * ```ts
+ * const options: LoadApiProvidersOptions = {
+ *   basePath: process.cwd(),
+ *   env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY },
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface LoadApiProvidersOptions {
+  /** Base path used to resolve relative `file://` provider config references. */
+  basePath?: string;
+  /** Environment overrides available while providers are loaded. */
+  env?: EnvOverrides;
+}
+
+/**
  * Helper function to load providers from a file path.
  * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
 async function loadProvidersFromFile(
   filePath: string,
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: LoadApiProvidersOptions = {},
 ): Promise<ApiProvider[]> {
   const { basePath, env } = options;
   const configs = loadProviderConfigsFromFile(filePath, basePath);
@@ -367,12 +407,32 @@ async function loadProvidersFromFile(
   );
 }
 
+/**
+ * Load one or more providers from provider config input.
+ *
+ * Accepts the same provider forms supported by `evaluate()`: provider ids,
+ * provider functions, provider objects, `file://` config references, or arrays
+ * that mix those forms. The returned array preserves the input order after any
+ * file-backed provider lists are expanded.
+ *
+ * @param providerPaths - Provider config input to normalize into provider instances.
+ * @param options - Optional base path and environment overrides used while
+ * loading providers.
+ * @returns Resolved provider instances ready for direct calls or reuse in an eval.
+ *
+ * @example
+ * ```ts
+ * const providers = await loadApiProviders([
+ *   'openai:chat:gpt-5.5',
+ *   async (prompt) => ({ output: `Echo: ${prompt}` }),
+ * ]);
+ * ```
+ *
+ * @public
+ */
 export async function loadApiProviders(
   providerPaths: ProvidersConfig,
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: LoadApiProvidersOptions = {},
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
 

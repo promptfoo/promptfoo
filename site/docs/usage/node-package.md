@@ -1,335 +1,276 @@
 ---
 sidebar_position: 20
-sidebar_label: Node package
-description: Integrate LLM testing into Node.js apps with promptfoo's evaluate() function. Configure providers, run test suites, and analyze results using TypeScript/JavaScript APIs.
+sidebar_label: Node.js API
+title: Node.js API
+description: Use promptfoo programmatically from Node.js with supported APIs for evals, providers, assertions, caching, and advanced TypeScript workflows.
 ---
 
-# Using the node package
+import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
 
-## Installation
+# Using the Node.js API
 
-promptfoo is available as a node package [on npm](https://www.npmjs.com/package/promptfoo):
+<LegacyHeadingAnchors page="package" />
+
+The Node.js API is for cases where a static YAML config is not enough: generating
+tests from code, composing providers dynamically, reusing promptfoo assertions in
+another test runner, or integrating evals into an existing TypeScript
+application.
+
+If you only need a declarative eval config, start with the
+[configuration guide](/docs/configuration/guide). If you need programmatic
+control, import from the root `promptfoo` package. The root package entrypoint is
+the supported public boundary; do not import deep files from `dist/` or `src/`.
+
+## Choose the right surface
+
+| If you want to...                                   | Start with                                                |
+| --------------------------------------------------- | --------------------------------------------------------- |
+| Run evals inside an application or script           | `evaluate()`                                              |
+| Compare several providers from code                 | `evaluate()` or `loadApiProviders()`                      |
+| Plug promptfoo grading into an existing test runner | `assertions.*`                                            |
+| Build custom prompts, providers, or transforms      | `PromptFunction`, `ProviderFunction`, `TransformFunction` |
+| Reuse package services                              | `cache.*`                                                 |
+
+## Install
 
 ```sh
 npm install promptfoo
 ```
 
-For deeper programmatic usage, see the [Node API reference](/docs/usage/node-api-reference),
-[examples](/docs/usage/node-api-examples), and
-[quick reference](/docs/usage/node-api-quick-reference).
-
-## Usage
-
-Use `promptfoo` as a library in your project by importing the `evaluate` function and other utilities:
+## Quickstart
 
 ```ts
-import promptfoo from 'promptfoo';
+import { evaluate } from 'promptfoo';
 
-const evalRecord = await promptfoo.evaluate(testSuite, options);
-const results = await evalRecord.toEvaluateSummary();
+const evalRecord = await evaluate({
+  prompts: ['Answer briefly: {{question}}'],
+  providers: ['openai:chat:gpt-5.5'],
+  tests: [{ vars: { question: 'What is 2 + 2?' } }],
+  writeLatestResults: true,
+});
+
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.stats);
 ```
 
-The evaluate function takes the following parameters:
+`evaluate()` accepts the same core concepts as a YAML config, with additional
+support for function-valued prompts, providers, assertions, and transforms. It
+returns the completed eval record; use helper methods such as
+`toEvaluateSummary()` and `getTable()` to read results. With
+`writeLatestResults: true`, promptfoo also persists the eval for the local web UI.
 
-- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration).
-
-- `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
-
-The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
-
-### Provider functions
-
-A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
-
-You can load providers using the `loadApiProvider` function:
+For TypeScript projects, import the contract types alongside the runtime APIs:
 
 ```ts
-import { loadApiProvider } from 'promptfoo';
+import {
+  evaluate,
+  type EvaluateOptions,
+  type EvaluateTestSuite,
+  type ProviderFunction,
+} from 'promptfoo';
+```
 
-// Load a provider with default options
-const provider = await loadApiProvider('openai:o3-mini');
+## Runtime options
 
-// Load a provider with custom options
-const providerWithOptions = await loadApiProvider('azure:chat:test', {
-  options: {
-    apiHost: 'test-host',
-    apiKey: 'test-key',
-  },
+Pass runtime-only options as the second argument to `evaluate()`:
+
+```ts
+await evaluate(testSuite, {
+  cache: false,
+  maxConcurrency: 2,
 });
 ```
 
-### Assertion functions
+See [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions) for
+the supported options. `progressCallback` receives the current row context and
+aggregate prompt metrics; see
+[`RunEvalOptions`](/docs/configuration/reference#runevaloptions) and
+[`PromptMetrics`](/docs/configuration/reference#promptmetrics).
 
-An `Assertion` can take an `AssertionValueFunction` as its `value`. The function receives:
+## Public API map
 
-- `output`: the LLM output string
-- `context`: execution context, including `prompt`, `vars`, `test`, `logProbs`, `config`, `provider`, `providerResponse`, and optional `trace` data for debugging
+The generated [Node.js API reference](/docs/api/node/) documents the curated
+public Node.js surface. Use the broader [configuration reference](/docs/configuration/reference)
+for the full config schema. The main Node-facing surfaces are:
 
-<details>
-<summary>Type definition</summary>
-```typescript
-type AssertionValueFunction = (
-  output: string,
-  context: AssertionValueFunctionContext,
-) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
+| API                                                        | Stability | Use it for                                            |
+| ---------------------------------------------------------- | --------- | ----------------------------------------------------- |
+| `evaluate()`                                               | Stable    | Running an eval programmatically                      |
+| `loadApiProvider()` / `loadApiProviders()`                 | Stable    | Building one or many provider instances from code     |
+| `assertions.runAssertion()` / `assertions.runAssertions()` | Stable    | Reusing promptfoo assertion logic outside a full eval |
+| `assertions.matches*()` helpers                            | Stable    | Building Jest, Vitest, or Mocha matchers              |
+| `cache.*`                                                  | Stable    | Shared caching, cache isolation, and cached fetches   |
+| `generateTable()`                                          | Stable    | Rendering eval tables in terminal-friendly text       |
+| `isTransformFunction()`                                    | Stable    | Narrowing inline transform values at runtime          |
 
-interface AssertionValueFunctionContext {
-prompt: string | undefined;
-vars: Record<string, unknown>;
-test: AtomicTestCase;
-logProbs: number[] | undefined;
-config?: Record<string, any>;
-provider: ApiProvider | undefined;
-providerResponse: ProviderResponse | undefined;
-trace?: TraceData;
-}
+Functions that are not exported from the root `promptfoo` package are not part of
+the supported Node.js API, even if they exist in the repository source.
 
-type AssertionValueFunctionResult = boolean | number | GradingResult;
+## Providers
 
-interface GradingResult {
-// Whether the test passed or failed
-pass: boolean;
-
-// Test score, typically between 0 and 1
-score: number;
-
-// Plain text reason for the result
-reason: string;
-
-// Map of labeled metrics to values
-namedScores?: Record<string, number>;
-
-// Weighted denominator for namedScores when assertion weights are used
-namedScoreWeights?: Record<string, number>;
-
-// Record of tokens usage for this assertion
-tokensUsed?: Partial<{
-total: number;
-prompt: number;
-completion: number;
-cached?: number;
-}>;
-
-// Additional matcher/provider metadata
-metadata?: Record<string, unknown>;
-
-// List of results for each component of the assertion
-componentResults?: GradingResult[];
-
-// The assertion that was evaluated
-assertion?: Assertion;
-}
-
-````
-</details>
-
-For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
-
-### Transform functions
-
-When using the node package, you can pass JavaScript functions directly as `transform`, `transformVars`, or `contextTransform` values — instead of string expressions or `file://` references.
-
-This enables better IDE support, type checking, and debugging:
+Provider functions let you call any model or service directly from code:
 
 ```ts
-import promptfoo from 'promptfoo';
+import { evaluate, loadApiProvider } from 'promptfoo';
 
-const evalRecord = await promptfoo.evaluate({
-  prompts: ['What tools did you use to answer: {{question}}'],
-  providers: ['openai:gpt-5-mini'],
+const openai = await loadApiProvider('openai:chat:gpt-5.5');
+
+const evalRecord = await evaluate({
+  prompts: ['Summarize: {{body}}'],
+  providers: [
+    openai,
+    async (prompt, context) => {
+      console.log('vars', context?.vars);
+      return { output: `Custom response for: ${prompt}` };
+    },
+  ],
+  tests: [{ vars: { body: 'hello world' } }],
+});
+```
+
+See the [provider function type](/docs/configuration/reference#providerfunction)
+and the [custom provider guide](/docs/providers/custom-api) for the full provider
+shape.
+
+Use [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)
+when you need promptfoo to normalize a mixed list of provider ids, provider
+objects, inline functions, or `file://` provider config references before you
+call them or pass them into another workflow.
+
+## Assertions
+
+For inline custom logic, use an assertion value function:
+
+```ts
+import { evaluate } from 'promptfoo';
+
+await evaluate({
+  prompts: ['Say hello to {{name}}'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [
     {
-      vars: { question: 'What is 2+2?' },
-      options: {
-        // Transform the output before assertions
-        transform: (output, context) => {
-          return output.toUpperCase();
+      vars: { name: 'Ada' },
+      assert: [
+        {
+          type: 'javascript',
+          value: (output) => ({
+            pass: output.includes('Ada'),
+            score: output.includes('Ada') ? 1 : 0,
+            reason: output.includes('Ada') ? 'Name present' : 'Name missing',
+          }),
         },
+      ],
+    },
+  ],
+});
+```
+
+For lower-level reuse, `assertions.runAssertion()` and
+`assertions.runAssertions()` let you run promptfoo grading logic against a
+provider response you already have:
+
+```ts
+import { assertions } from 'promptfoo';
+
+const result = await assertions.runAssertion({
+  assertion: { type: 'contains', value: 'Ada' },
+  test: { vars: {} },
+  providerResponse: { output: 'Hello Ada' },
+});
+
+console.log(result.pass);
+```
+
+See the
+[generated assertion reference](/docs/api/node/reference/variables/assertions)
+and [assertions documentation](/docs/configuration/expected-outputs/).
+
+## Transforms {#transform-functions}
+
+When using the Node.js API, you can pass JavaScript functions directly as
+`transform`, `transformVars`, or `contextTransform` values instead of string
+expressions or `file://` references:
+
+```ts
+import { evaluate } from 'promptfoo';
+
+await evaluate({
+  prompts: ['What tools did you use to answer: {{question}}'],
+  providers: ['openai:chat:gpt-5.5'],
+  tests: [
+    {
+      vars: { question: 'What is 2 + 2?' },
+      options: {
+        transform: (output) => output.toUpperCase(),
       },
       assert: [
         {
           type: 'contains',
           value: 'calculator',
-          // Transform just for this assertion
           transform: (output, context) => {
             const tools = context.metadata?.toolCalls ?? [];
-            return tools.map((t) => t.name).join(', ');
+            return tools.map((tool) => tool.name).join(', ');
           },
         },
       ],
     },
   ],
 });
-const results = await evalRecord.toEvaluateSummary();
 ```
-
-Transform functions receive:
-
-- `output`: the LLM output (string or object)
-- `context`: an object containing `vars`, `prompt`, and optionally `metadata` from the provider response
 
 :::note
 
-Function transforms are not serializable. If you use `writeLatestResults: true`, function transforms will not be persisted in the stored config. Use string expressions or `file://` references if you need results to be fully reproducible from the stored eval.
+Function-valued transforms are not serializable. If you use
+`writeLatestResults: true`, promptfoo replaces them with inline-function markers
+in the persisted config. Use string expressions or `file://` references when you
+need a stored eval to be fully reproducible later.
 
 :::
 
-For more on transforms, see [Transforming Outputs](/docs/configuration/guide#transforming-outputs).
+## Caching and persistence
 
-## Example
+Disable response caching per eval with runtime options:
 
-`promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
+```ts
+import { evaluate } from 'promptfoo';
 
-```js
-import promptfoo from 'promptfoo';
-
-const evalRecord = await promptfoo.evaluate(
-  {
-    prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-    providers: ['openai:gpt-5-mini'],
-    tests: [
-      {
-        vars: {
-          body: 'Hello world',
-        },
-      },
-      {
-        vars: {
-          body: "I'm hungry",
-        },
-      },
-    ],
-    writeLatestResults: true, // write results to disk so they can be viewed in web viewer
-  },
-  {
-    maxConcurrency: 2,
-  },
-);
-const results = await evalRecord.toEvaluateSummary();
-
-console.log(results);
-````
-
-This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
-
-You can also supply functions as `prompts`, `providers`, or `asserts`:
-
-```js
-import promptfoo from 'promptfoo';
-
-(async () => {
-  const evalRecord = await promptfoo.evaluate({
-    prompts: [
-      'Rephrase this in French: {{body}}',
-      (vars) => {
-        return `Rephrase this like a pirate: ${vars.body}`;
-      },
-    ],
-    providers: [
-      'openai:gpt-5-mini',
-      (prompt, context) => {
-        // Call LLM here...
-        console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
-        return {
-          output: '<LLM output>',
-        };
-      },
-    ],
-    tests: [
-      {
-        vars: {
-          body: 'Hello world',
-        },
-      },
-      {
-        vars: {
-          body: "I'm hungry",
-        },
-        assert: [
-          {
-            type: 'javascript',
-            value: (output) => {
-              const pass = output.includes("J'ai faim");
-              return {
-                pass,
-                score: pass ? 1.0 : 0.0,
-                reason: pass ? 'Output contained substring' : 'Output did not contain substring',
-              };
-            },
-          },
-        ],
-      },
-    ],
-  });
-  const results = await evalRecord.toEvaluateSummary();
-  console.log('RESULTS:');
-  console.log(results);
-})();
+await evaluate(testSuite, { cache: false });
 ```
 
-There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package).
+For custom providers and advanced integrations, use the documented cache helpers
+from `promptfoo.cache`, including `fetchWithCache()` and `withCacheNamespace()`.
+See [caching](/docs/configuration/caching) and the
+[cache reference](/docs/api/node/reference/promptfoo/namespaces/cache/).
 
-Here's the example output in JSON format:
+Persist evals for the local web UI with `writeLatestResults: true`, or write an
+output file with `outputPath` in the eval config:
 
-```json
-{
-  "version": 3,
-  "timestamp": "2026-05-02T12:43:10.000Z",
-  "prompts": [
-    {
-      "raw": "Rephrase this in French: {{body}}",
-      "label": "Rephrase this in French: {{body}}"
-    }
-  ],
-  "results": [
-    {
-      "prompt": {
-        "raw": "Rephrase this in French: Hello world",
-        "label": "Rephrase this in French: {{body}}"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Bonjour le monde",
-        "tokenUsage": {
-          "total": 19,
-          "prompt": 16,
-          "completion": 3
-        }
-      },
-      "success": true,
-      "score": 1
-    }
-  ],
-  "stats": {
-    "successes": 1,
-    "failures": 0,
-    "errors": 0,
-    "tokenUsage": {
-      "total": 19,
-      "prompt": 16,
-      "completion": 3
-    }
-  }
-}
-```
-
-## Sharing Results
-
-To get a shareable URL, set `sharing: true` along with `writeLatestResults: true`:
-
-```js
-const evalRecord = await promptfoo.evaluate({
+```ts
+await evaluate({
   prompts: ['Your prompt here'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [{ vars: { input: 'test' } }],
   writeLatestResults: true,
-  sharing: true,
+  outputPath: 'results.json',
 });
-const results = await evalRecord.toEvaluateSummary();
-
-console.log(results.shareableUrl); // https://app.promptfoo.dev/eval/abc123
 ```
 
-Requires a [Promptfoo Cloud](/docs/enterprise) account or self-hosted server. For self-hosted, pass `sharing: { apiBaseUrl, appBaseUrl }` instead of `true`.
+To create a shareable URL, combine `writeLatestResults: true` with
+`sharing: true`. See [sharing results](/docs/usage/sharing).
+
+## Examples
+
+- [JavaScript example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package)
+- [TypeScript example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package-typescript)
+- [Jest and Vitest integration](/docs/integrations/jest)
+- [Mocha and Chai integration](/docs/integrations/mocha-chai)
+
+## Next steps
+
+- Read the [Node API guide](/docs/usage/node-api-reference)
+- Browse the [Node API examples](/docs/usage/node-api-examples)
+- Keep the [Node API quick reference](/docs/usage/node-api-quick-reference) nearby
+- Browse the [Node.js API reference](/docs/api/node/)
+- Read [Assertions & metrics](/docs/configuration/expected-outputs/)
+- Learn how to build [custom providers](/docs/providers/custom-api)
+- Review [caching behavior](/docs/configuration/caching)

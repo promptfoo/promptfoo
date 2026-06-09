@@ -160,6 +160,17 @@ async function calculateProviderSimilarity(
   );
 }
 
+/**
+ * Compare two texts with an embedding or similarity provider.
+ *
+ * @param expected - Reference text.
+ * @param output - Candidate text to compare.
+ * @param threshold - Minimum similarity required to pass, or maximum distance for Euclidean mode.
+ * @param inverse - Invert the pass condition for `not-similar` style checks.
+ * @param grading - Optional provider override for the matcher.
+ * @param metric - Similarity metric to apply.
+ * @returns Similarity grading result without the surrounding assertion payload.
+ */
 export async function matchesSimilarity(
   expected: string,
   output: string,

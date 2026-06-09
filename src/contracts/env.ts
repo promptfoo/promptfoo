@@ -140,10 +140,29 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-// The runtime schema silently strips unknown keys at parse time (zod's default
-// `z.object` mode). The type widens with `Record<string, string | undefined>`
-// so downstream code can read arbitrary template variables (e.g.,
-// `{{ env.MY_CUSTOM_VAR }}`) without a cast; callers that need to preserve
-// unknown keys must read them off the unparsed source object.
+/**
+ * Environment-variable overrides accepted by provider-loading APIs.
+ *
+ * Every value is a string override or `undefined`. Built-in provider keys such
+ * as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are accepted, and arbitrary custom
+ * keys are also allowed for template rendering (for example,
+ * `{{ env.MY_CUSTOM_VAR }}`).
+ *
+ * The runtime schema silently strips unknown keys at parse time (zod's default
+ * `z.object` mode). The type widens with `Record<string, string | undefined>`
+ * so downstream code can read arbitrary template variables without a cast;
+ * callers that need to preserve unknown keys must read them off the unparsed
+ * source object.
+ *
+ * @example
+ * ```ts
+ * const env: EnvOverrides = {
+ *   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+ *   MY_CUSTOM_VAR: 'preview',
+ * };
+ * ```
+ *
+ * @public
+ */
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
   Record<string, string | undefined>;

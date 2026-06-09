@@ -1,15 +1,56 @@
 import { z } from 'zod';
 
-// for reasoning models
+/**
+ * Detailed completion-token breakdown reported by reasoning-capable models.
+ *
+ * @example
+ * ```ts
+ * const details: CompletionTokenDetails = {
+ *   reasoning: 32,
+ *   cacheReadInputTokens: 128,
+ * };
+ * ```
+ *
+ * @public
+ */
 export const CompletionTokenDetailsSchema = z.object({
+  /** Tokens spent on hidden model reasoning when the provider reports them. */
   reasoning: z.number().optional(),
+  /** Prediction tokens accepted by speculative decoding, when reported. */
   acceptedPrediction: z.number().optional(),
+  /** Prediction tokens rejected by speculative decoding, when reported. */
   rejectedPrediction: z.number().optional(),
+  /** Input tokens read from a provider cache. */
   cacheReadInputTokens: z.number().optional(),
+  /** Input tokens written into a provider cache. */
   cacheCreationInputTokens: z.number().optional(),
 });
 
-export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema>;
+/**
+ * Detailed completion-token breakdown reported by reasoning-capable models.
+ *
+ * @example
+ * ```ts
+ * const details: CompletionTokenDetails = {
+ *   reasoning: 32,
+ *   cacheReadInputTokens: 128,
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface CompletionTokenDetails {
+  /** Tokens spent on hidden model reasoning when the provider reports them. */
+  reasoning?: number;
+  /** Prediction tokens accepted by speculative decoding, when reported. */
+  acceptedPrediction?: number;
+  /** Prediction tokens rejected by speculative decoding, when reported. */
+  rejectedPrediction?: number;
+  /** Input tokens read from a provider cache. */
+  cacheReadInputTokens?: number;
+  /** Input tokens written into a provider cache. */
+  cacheCreationInputTokens?: number;
+}
 
 const TokenUsageCoreSchema = z.object({
   prompt: z.number().optional(),
@@ -20,12 +61,95 @@ const TokenUsageCoreSchema = z.object({
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
 
-/** Token usage statistics. The optional `assertions` mirrors the top-level fields for model-graded assertion accounting. */
+/**
+ * Token accounting reported by providers and graders.
+ *
+ * @example
+ * ```ts
+ * const usage: TokenUsage = {
+ *   prompt: 12,
+ *   completion: 8,
+ *   total: 20,
+ * };
+ * ```
+ *
+ * @public
+ */
 export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
   assertions: TokenUsageCoreSchema.optional(),
 });
 
-export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
+/**
+ * Token accounting attributed to model-graded assertions.
+ *
+ * @example
+ * ```ts
+ * const usage: AssertionTokenUsage = {
+ *   prompt: 14,
+ *   completion: 6,
+ *   total: 20,
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface AssertionTokenUsage {
+  /** Total assertion tokens. */
+  total?: number;
+  /** Assertion prompt/input tokens. */
+  prompt?: number;
+  /** Assertion completion/output tokens. */
+  completion?: number;
+  /** Assertion tokens served from cache. */
+  cached?: number;
+  /** Number of assertion model requests represented here. */
+  numRequests?: number;
+  /** Detailed completion-token breakdown for assertion grading. */
+  completionDetails?: CompletionTokenDetails;
+}
+
+/**
+ * Token accounting reported by providers and graders.
+ *
+ * @example
+ * ```ts
+ * const usage: TokenUsage = {
+ *   prompt: 12,
+ *   completion: 8,
+ *   total: 20,
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface TokenUsage {
+  /** Prompt/input tokens consumed by the provider call. */
+  prompt?: number;
+  /** Completion/output tokens produced by the provider call. */
+  completion?: number;
+  /** Tokens served from a provider cache, when reported. */
+  cached?: number;
+  /** Total tokens reported for the provider call. */
+  total?: number;
+  /** Number of underlying requests represented by this usage object. */
+  numRequests?: number;
+  /** Provider-specific completion-token breakdown. */
+  completionDetails?: CompletionTokenDetails;
+  /** Token usage accumulated by model-graded assertions. */
+  assertions?: AssertionTokenUsage;
+}
+
+export type BaseTokenUsage = TokenUsage;
+
+type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
+type Assert<_T extends true> = true;
+
+type _AssertCompletionTokenDetailsSchema = Assert<
+  AssertEqual<CompletionTokenDetails, z.infer<typeof CompletionTokenDetailsSchema>>
+>;
+type _AssertTokenUsageSchema = Assert<
+  AssertEqual<TokenUsage, z.infer<typeof BaseTokenUsageSchema>>
+>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 

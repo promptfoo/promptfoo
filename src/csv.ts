@@ -284,7 +284,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     const indexConfig = assertionConfigs[i];
     if (indexConfig) {
       for (const [configKey, configValue] of Object.entries(indexConfig)) {
-        (assert as Record<string, unknown>)[configKey] = configValue;
+        (assert as unknown as Record<string, unknown>)[configKey] = configValue;
         // Include each key/value on the metadata object
         metadata[configKey] = configValue;
       }

@@ -66,6 +66,9 @@
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
+    "docs:api": "typedoc --options typedoc.json && tsx scripts/nodeApiReferencePostprocess.ts && prettier --write 'site/docs/api/node/reference/**/*.md'",
+    "docs:api:check": "npm run docs:api && npm run docs:api:validate && git diff --exit-code -- site/docs/api/node/reference && test -z \"$(git ls-files --others --exclude-standard -- site/docs/api/node/reference)\"",
+    "docs:api:validate": "tsx scripts/checkNodeApiDocs.ts",
     "openapi:generate": "tsx scripts/generateOpenApi.ts",
     "openapi:check": "tsx scripts/generateOpenApi.ts --check",
     "modelAuditSchema:generate": "python3 scripts/generate_modelaudit_schema.py && npx @biomejs/biome format --write site/static/schemas/modelaudit site/static/examples/modelaudit",
@@ -107,7 +110,7 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium,typedoc-plugin-markdown\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -245,6 +248,8 @@
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
     "tsdown": "0.21.9",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0"

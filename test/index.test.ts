@@ -221,6 +221,24 @@ describe('index.ts exports', () => {
     });
   });
 
+  it('should retain distinct conversation message contracts', () => {
+    const redteamMessage: index.ConversationMessage = { role: 'user', content: 'hello' };
+    const relevanceMessage: index.ConversationRelevanceMessage = {
+      input: 'hello',
+      output: 'hi',
+    };
+
+    expect(redteamMessage).toEqual({ role: 'user', content: 'hello' });
+    expect(relevanceMessage).toEqual({ input: 'hello', output: 'hi' });
+  });
+
+  it('should preserve permissive prompt function contracts', async () => {
+    const promptContent: index.PromptContent = 42;
+    const promptFunction: index.PromptFunction = async ({ vars }) => vars.value;
+
+    await expect(promptFunction({ vars: { value: promptContent } })).resolves.toBe(42);
+  });
+
   it('should export cache with correct methods', () => {
     expect(cache).toHaveProperty('getCache');
     expect(cache).toHaveProperty('fetchWithCache');
@@ -1219,6 +1237,14 @@ describe('redteam package wrapper', () => {
 
   afterEach(() => {
     vi.mocked(doRedteamRun).mockReset();
+  });
+
+  it('should accept omitted options for package callers', async () => {
+    await index.redteam.run();
+
+    expect(doRedteamRun).toHaveBeenCalledWith({
+      eventSource: 'library',
+    });
   });
 
   it('should pin package callers to library semantics', async () => {

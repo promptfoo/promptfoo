@@ -1,0 +1,17 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["scripts/nodeApiReference.ts"],
+  "plugin": ["typedoc-plugin-markdown"],
+  "out": "site/docs/api/node/reference",
+  "gitRevision": "main",
+  "readme": "none",
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "validation": {
+    "notExported": false,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}

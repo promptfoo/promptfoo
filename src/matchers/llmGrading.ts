@@ -161,6 +161,18 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
   return llmOutput;
 }
 
+/**
+ * Grade an output against a free-form LLM rubric.
+ *
+ * @param rubric - Rubric text or structured rubric payload.
+ * @param llmOutput - Model output to grade.
+ * @param grading - Provider and rubric-prompt overrides for the grader.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param assertion - Assertion metadata to attach to the result, when present.
+ * @param options - Error-handling and remote-grading preferences.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Grading result for the rubric check.
+ */
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -168,7 +180,9 @@ export async function matchesLlmRubric(
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
+    /** Rethrow provider failures instead of converting them into a failed grading result. */
     throwOnError?: boolean;
+    /** Prefer remote grading when no explicit provider override is supplied. */
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
   },
@@ -297,6 +311,17 @@ export async function matchesPiScore(
   };
 }
 
+/**
+ * Grade whether an answer is factually consistent with a reference answer.
+ *
+ * @param input - Original prompt or question.
+ * @param expected - Reference answer used as the factual baseline.
+ * @param output - Model answer to grade.
+ * @param grading - Provider and rubric-prompt overrides for the grader.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Factuality grading result without the surrounding assertion payload.
+ */
 export async function matchesFactuality(
   input: string,
   expected: string,
@@ -356,6 +381,17 @@ export async function matchesFactuality(
   }
 }
 
+/**
+ * Grade whether an answer satisfies a closed-QA criterion.
+ *
+ * @param input - Original prompt or question.
+ * @param expected - Criterion or expected answer the output should satisfy.
+ * @param output - Model answer to grade.
+ * @param grading - Provider and rubric-prompt overrides for the grader.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Closed-QA grading result without the surrounding assertion payload.
+ */
 export async function matchesClosedQa(
   input: string,
   expected: string,

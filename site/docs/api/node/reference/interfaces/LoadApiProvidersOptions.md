@@ -1,0 +1,47 @@
+---
+title: 'Interface: LoadApiProvidersOptions'
+description: 'Shared options for loading one or more providers.'
+sidebar_position: 27
+---
+
+## Import
+
+```ts
+import type { LoadApiProvidersOptions } from 'promptfoo';
+```
+
+Defined in: [providers/index.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L383)
+
+Shared options for loading one or more providers.
+
+Pass these when provider configs need a caller-controlled resolution base or
+scoped environment values without mutating `process.env`.
+
+## Example
+
+```ts
+const options: LoadApiProvidersOptions = {
+  basePath: process.cwd(),
+  env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY },
+};
+```
+
+## Properties
+
+### basePath?
+
+> `optional` **basePath?**: `string`
+
+Defined in: [providers/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L385)
+
+Base path used to resolve relative `file://` provider config references.
+
+---
+
+### env?
+
+> `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
+
+Defined in: [providers/index.ts:387](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L387)
+
+Environment overrides available while providers are loaded.
