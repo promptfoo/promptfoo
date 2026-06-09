@@ -25,6 +25,32 @@ type LegacyCompletedPrompt = Omit<CompletedPrompt, 'metrics'> & {
   metrics: Omit<NonNullable<CompletedPrompt['metrics']>, 'namedScoresCount'>;
 };
 
+const parseCSVLine = (line: string): string[] => {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"' && nextChar === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current);
+  return result;
+};
+
 describe('evalTableUtils', () => {
   let mockTable: {
     head: { prompts: CompletedPrompt[]; vars: string[] };
@@ -589,32 +615,6 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithMultipleOutputs); // No isRedteam flag
         const lines = csv.split('\n').filter((line: string) => line.trim());
 
-        // Parse CSV to count columns
-        const parseCSVLine = (line: string): string[] => {
-          const result: string[] = [];
-          let current = '';
-          let inQuotes = false;
-
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if (char === '"' && nextChar === '"') {
-              current += '"';
-              i++;
-            } else if (char === '"') {
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-              result.push(current);
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          result.push(current);
-          return result;
-        };
-
         const headerCols = parseCSVLine(lines[0]);
         const dataCols = parseCSVLine(lines[1]);
 
@@ -685,36 +685,6 @@ describe('evalTableUtils', () => {
 
         const csv = evalTableToCsv(tableWithMultipleOutputs, { isRedteam: true });
         const lines = csv.split('\n').filter((line: string) => line.trim());
-
-        // Parse CSV using a simple comma count approach for validation
-        // Count actual CSV fields by splitting on commas not inside quotes
-        const parseCSVLine = (line: string): string[] => {
-          const result: string[] = [];
-          let current = '';
-          let inQuotes = false;
-
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if (char === '"' && nextChar === '"') {
-              // Escaped quote
-              current += '"';
-              i++; // Skip next char
-            } else if (char === '"') {
-              // Toggle quote state
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-              // Field separator
-              result.push(current);
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          result.push(current); // Add last field
-          return result;
-        };
 
         const headerCols = parseCSVLine(lines[0]);
         const dataCols = parseCSVLine(lines[1]);
