@@ -42,6 +42,13 @@ This installs all four skills. Ask the agent to create an eval, connect a
 target, or run a red team and it routes to the right skill, or invoke one
 directly with a namespaced slash command such as `/promptfoo:promptfoo-evals`.
 
+:::note
+This plugin was previously published as `promptfoo-evals` (eval skill only). If
+you installed it under that name, reinstall with
+`/plugin install promptfoo@promptfoo` to get the full four-skill bundle and
+future updates.
+:::
+
 ### Via Codex plugin bundle
 
 For Codex, the same `plugins/promptfoo` bundle is exposed by
