@@ -3188,6 +3188,18 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).not.toHaveProperty('top_p');
       expect(params).not.toHaveProperty('top_k');
       expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Using unknown'));
+      // The per-call thinking-incompatibility warnings ("temperature/top_k is
+      // incompatible with extended thinking...") must not fire when sampling
+      // params are deprecated at the model level — the deduped model-level
+      // warning below covers the omission instead.
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('incompatible with extended thinking'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5',
+        ),
+      );
     });
 
     it('omits unsupported disabled thinking and treats adaptive thinking as always on', async () => {

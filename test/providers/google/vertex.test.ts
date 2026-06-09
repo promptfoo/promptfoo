@@ -2625,6 +2625,85 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     expect(result.cost).toBeCloseTo(0.00011, 8);
   });
 
+  it('uses base Claude 5 pricing for Fable on the global Vertex region', async () => {
+    const model = 'claude-fable-5';
+    provider = new VertexChatProvider(model, {
+      config: { region: 'global', max_tokens: 32 },
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    const request = mockRequest.mock.calls[0][0];
+    expect(request.url).toContain('/locations/global/');
+    // Global region bills at the base Claude 5 rate (no 10% regional premium):
+    // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
+    expect(result.cost).toBeCloseTo(0.0001, 8);
+  });
+
+  it('does not stack the Vertex regional premium on a user-provided cost override for Fable', async () => {
+    const model = 'claude-fable-5';
+    provider = new VertexChatProvider(model, {
+      config: { max_tokens: 32, cost: 20 / 1e6 },
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    // The user-supplied cost applies to both input and output tokens and the
+    // 10% regional premium must NOT stack on top of it:
+    // (5 + 1) tokens * $20/MTok = $0.00012
+    expect(result.cost).toBeCloseTo(0.00012, 8);
+  });
+
   it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
     provider = new VertexChatProvider('claude-opus-4-6', {
       config: { max_tokens: 32, temperature: 0 },
@@ -3004,6 +3083,18 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(requestData.thinking).toBeUndefined();
       expect(requestData.max_tokens).toBe(2048);
       expect(requestData.temperature).toBeUndefined();
+    });
+
+    it('should preserve thinking display when converting enabled thinking to adaptive for Fable 5', async () => {
+      provider = new VertexChatProvider('claude-fable-5', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000, display: 'summarized' } },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      // The enabled→adaptive conversion drops budget_tokens but must keep display
+      expect(getRequestData().thinking).toEqual({ type: 'adaptive', display: 'summarized' });
     });
 
     it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { BedrockAnthropicMessagesProvider } from '../../../src/providers/bedrock/anthropicMessages';
+import { AwsBedrockConverseProvider } from '../../../src/providers/bedrock/converse';
 import { AwsBedrockCompletionProvider } from '../../../src/providers/bedrock/index';
 import { awsProviderFactories } from '../../../src/providers/families/aws';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
@@ -71,6 +72,15 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
   });
 
+  it('supports the explicit messages form for Bedrock Mythos', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:messages:anthropic.claude-mythos-5',
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+  });
+
   it.each([
     'converse',
     'completion',
@@ -82,6 +92,17 @@ describe('aws bedrock provider factory routing', () => {
         ctx,
       ),
     ).rejects.toThrow(/Anthropic Messages API/);
+  });
+
+  it('routes the converse: form of Bedrock Fable to the Converse provider', async () => {
+    // Unlike Mythos, Fable does not require the Anthropic Messages endpoint, so the
+    // explicit converse: form keeps resolving to the native Converse provider.
+    const provider = await bedrockFactory.create(
+      'bedrock:converse:anthropic.claude-fable-5',
+      { config: { region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
   });
 
   it.each([
