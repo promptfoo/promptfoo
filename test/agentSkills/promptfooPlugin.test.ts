@@ -2071,17 +2071,6 @@ describe('promptfoo Codex plugin package', () => {
     expect(evalsReference).toContain('promptfoo-provider-setup');
   });
 
-  it('keeps the repo-local contributor copy aligned with the published eval skill', () => {
-    for (const relativePath of ['SKILL.md', path.join('references', 'eval-patterns.md')]) {
-      const repoLocalFile = readText(
-        path.join(repoClaudeSkillsRoot, 'promptfoo-evals', relativePath),
-      );
-      const publishedFile = readText(path.join(evalsSkillRoot, relativePath));
-
-      expect(repoLocalFile).toBe(publishedFile);
-    }
-  });
-
   it('keeps every repo-local Claude skill discoverable through canonical SKILL.md casing', () => {
     const repoLocalSkillDirs = fs
       .readdirSync(repoClaudeSkillsRoot, { withFileTypes: true })

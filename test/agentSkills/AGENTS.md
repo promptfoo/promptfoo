@@ -12,8 +12,10 @@ Promptfoo plugin bundle (shared across Codex and Claude Code).
   `.agents/plugins/marketplace.json` (Codex) and the repo-root
   `.claude-plugin/marketplace.json` (Claude Code) with matching plugin name
   `promptfoo`.
-- The repo-local Claude copy of `promptfoo-evals` stays byte-for-byte aligned
-  with the shared bundle's `promptfoo-evals` skill.
+- The repo-local `.claude/skills/promptfoo-evals` is a self-contained
+  contributor copy (no cross-skill routing) and is intentionally independent of
+  the published bundle's eval skill, since the sibling skills are not present in
+  `.claude/skills/`.
 - Every repo-local Claude skill uses canonical `SKILL.md` casing so discovery
   stays predictable.
 - Shared repo-local contributor skills stay aligned between `.claude/skills/`

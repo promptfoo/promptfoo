@@ -1,55 +1,37 @@
 ---
 name: promptfoo-evals
 description: >
-  Write, refine, run, and QA non-redteam promptfoo eval suites after the target
-  or provider already works: prompts, vars, test cases, assertions,
-  model-graded rubrics, transforms, datasets, output exports, filters, and CI
-  gates. Use for regression tests and eval-suite authoring. Do not use for
-  connecting a new target/provider, mapping HTTP requests or auth, smoke-testing
-  an endpoint, or redteam plugin/strategy setup; use `promptfoo-provider-setup`
-  for connection work instead.
+  Write, refine, run, and QA promptfoo evaluation suites:
+  promptfooconfig.yaml, prompts, providers, vars, tests, assertions, model-graded
+  rubrics, transforms, datasets, exports, and CI gates. Use for non-redteam eval
+  coverage, regression tests, or new eval matrices. Do not use for adversarial
+  redteam plugin or strategy setup.
 ---
 
-# Promptfoo Evals
+# Writing Promptfoo Evals
 
-Build a small eval that answers one product question clearly, run it with fresh
-results, then inspect the exported artifact before expanding.
+You produce maintainable promptfoo eval suites: clear test cases, deterministic
+assertions where possible, model-graded only when needed.
 
-Read `references/eval-patterns.md` when you need concrete YAML patterns,
-assertion examples, or CI snippets.
-For deep promptfoo feature questions that are not covered here, consult
-`https://www.promptfoo.dev/llms-full.txt`.
+See `references/cheatsheet.md` for the full assertion and provider reference.
+For deep questions about promptfoo features, consult https://www.promptfoo.dev/llms-full.txt
 
-## Inputs
+## Inputs (infer from repo context if not provided)
 
-Infer these from the repo or user prompt:
+- What is being evaluated (prompt, agent, endpoint, RAG pipeline)?
+- What are the inputs and outputs (text, JSON, multi-turn chat, tool calls)?
+- What does "good" look like (acceptance criteria, failure modes)?
 
-- Behavior being evaluated and what "good" means.
-- Target/provider already configured, or whether `promptfoo-provider-setup` is
-  needed first.
-- Prompt shape and variables.
-- Test data source: inline cases, CSV/JSON, generated data, production examples,
-  or hand-picked regressions.
-- Assertion style: deterministic checks, structured output validation,
-  JavaScript assertions, model-graded rubrics, or a mix.
-- Output needs: JSON export, comparison, CI gate, or human triage.
-
-If the provider does not work yet, switch to `promptfoo-provider-setup`. If the
-task is adversarial security scanning, switch to `promptfoo-redteam-setup` or
-`promptfoo-redteam-run`.
+If context is insufficient, scaffold with TODO markers and starter tests.
 
 ## Workflow
 
-### 1. State the eval question
+### 1. Find or create the eval suite
 
-Search for existing configs first: `promptfooconfig.yaml`,
-`promptfooconfig.yml`, or repo `evals`/`promptfoo` directories. Extend an
-existing suite when possible.
+Search for existing configs: `promptfooconfig.yaml`, `promptfooconfig.yml`,
+or any `promptfoo`/`evals` folder. Extend existing suites when possible.
 
-Write one sentence for the behavior under test, then choose 3-10 starter cases.
-Include both ordinary success cases and edge cases that have broken before.
-
-For new suites, prefer this layout unless the repo already has a convention:
+For new suites, use this layout (unless the repo uses another convention):
 
 ```text
 evals/<suite-name>/
@@ -58,122 +40,183 @@ evals/<suite-name>/
   tests/
 ```
 
-### 2. Choose assertions
+Always add `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json`
+at the top of config files.
 
-Prefer deterministic assertions first:
+### 2. Write prompts
 
-- Exact or substring behavior: `equals`, `contains`, `icontains`, `regex`
-- Structured output: `is-json`, `contains-json`, `javascript`
-- Numeric or score-like outputs: `javascript` returning a boolean or score
-- Semantic quality: `llm-rubric` with an explicit grader provider when possible
+- Put prompts in `prompts/*.txt` (plain) or `prompts/*.json` (chat format)
+- Reference via `file://prompts/main.txt`
+- Use `{{variable}}` for test inputs
+- If the app builds prompts dynamically, use a JS/Python provider instead of
+  duplicating logic
 
-Use model-graded assertions sparingly for qualities that deterministic checks
-cannot capture. Configure a local or explicit grader for reproducible QA.
+### 3. Choose providers
 
-### 3. Write the config
+Pick the simplest option that matches the real system:
 
-Include:
+| Scenario         | Provider pattern                                                      |
+| ---------------- | --------------------------------------------------------------------- |
+| Compare models   | `openai:chat:gpt-4.1-mini`, `anthropic:messages:claude-sonnet-4-6`    |
+| Test an HTTP API | `id: https` with `config.url`, `config.body`, and `transformResponse` |
+| Test local code  | `file://provider.py` or `file://provider.js`                          |
+| Echo/passthrough | `echo` (returns prompt as-is, useful for testing assertions)          |
 
-- `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json`
-- A short `description`
-- Field order: `description`, `env`, `prompts`, `providers`, `defaultTest`,
-  `scenarios`, `tests`
-- `prompts` via `file://prompts/*.txt` or `file://prompts/*.json` when prompts
-  are more than a one-line smoke test
-- `tests: file://tests/*.yaml` for suites that will grow beyond a few cases
-- `defaultTest` only for shared assertions/options
-- `options.transform` when parsing JSON once makes assertions cleaner
-- Stable metric names only when they help compare dashboards over time
+Keep provider count small: 1 for regression, 2 for comparison.
 
-Keep secrets as `{{env.VAR}}`; do not commit `.env` values.
-When checking faithfulness or hallucination with `llm-rubric`, inline the source
-material in the rubric via `{{variable}}` so the grader can actually compare.
+For JSON output, add `response_format` to the provider config:
 
-### 4. Validate and run
+```yaml
+config:
+  temperature: 0
+  response_format:
+    type: json_object
+```
 
-From the promptfoo repo:
+### 4. Write tests
+
+Use file-based tests so they scale: `tests: file://tests/*.yaml`
+
+For larger suites, use dataset-backed tests:
+
+```yaml
+tests: file://tests.csv
+# or
+tests: file://generate_tests.py:create_tests
+```
+
+Every test should have:
+
+- `description` - short, specific
+- `vars` - the inputs
+- `assert` - validations (when automatable)
+
+Cover: happy paths, edge cases, known regressions, safety/refusal checks,
+output format compliance.
+
+### 5. Add assertions
+
+**Deterministic first** (fast, reliable, free):
+`equals`, `contains`, `icontains`, `regex`, `is-json`, `contains-json`,
+`starts-with`, `cost`, `latency`, `javascript`, `python`
+
+**Model-graded sparingly** (slow, costs money, non-deterministic):
+`llm-rubric`, `factuality`, `answer-relevance`, `context-faithfulness`
+
+Assertions support optional `weight` (for scoring relative importance) and
+`metric` (named score in reports). `threshold` is assertion-specific: for
+graded assertions it is usually a minimum score (0-1), while for assertions
+like `cost`/`latency` it is a maximum allowed value.
+
+For model-graded assertions, explicitly set the grader provider so grading is
+stable across runs:
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-5-mini
+
+tests:
+  - description: 'Model-graded quality check'
+    assert:
+      - type: llm-rubric
+        value: 'Accurate and concise'
+        # Optional per-assertion override:
+        # provider: anthropic:messages:claude-sonnet-4-6
+```
+
+**Hallucination / faithfulness pattern:**
+When checking that output is grounded in source material, include the source in
+the rubric so the grader can compare. Use `context-faithfulness` when you have
+a context var, or inline the source in the `llm-rubric` value:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: |
+      The summary only states facts from this source article:
+      "{{article}}"
+      It does not add, infer, or fabricate any claims.
+```
+
+**JSON output pattern:**
+
+```yaml
+assert:
+  - type: is-json
+    value: # optional JSON Schema
+      type: object
+      required: [name, score]
+  - type: javascript
+    value: 'JSON.parse(output).score >= 0.8'
+```
+
+**Transform pattern** (preprocess output before assertions):
+When models wrap JSON in markdown fences or add preamble text, use
+`options.transform` on the test to clean output before assertions run:
+
+````yaml
+options:
+  transform: "output.replace(/```json\\n?|```/g, '').trim()"
+````
+
+Use `defaultTest` for assertions shared across all tests (cost limits, format
+checks, etc.).
+
+### 6. Validate and run
+
+Before finishing, validate and provide run commands. Always use `--no-cache`
+during development to avoid stale results. Only run eval if credentials are
+available and safe to call.
+
+```bash
+npx promptfoo@latest validate config -c <config>
+npx promptfoo@latest eval -c <config> -o output.json --no-cache --no-share
+```
+
+For CI/non-UI workflows, prefer the `-o output.json` command and inspect
+`success`, `score`, and `error` fields.
+
+If working in the promptfoo repo itself, prefer the local build:
 
 ```bash
 source ~/.nvm/nvm.sh && nvm use
-npm run local -- validate config -c path/to/promptfooconfig.yaml
-npm run local -- eval -c path/to/promptfooconfig.yaml -o /tmp/eval-results.json --no-cache --no-share
+npm run local -- validate config -c <config>
+npm run local -- eval -c <config> -o output.json --no-cache --no-share
 ```
 
-Outside the repo:
+Add `--env-file .env` only when the eval needs local credentials and that file
+exists.
 
-```bash
-npx promptfoo@latest validate config -c path/to/promptfooconfig.yaml
-npx promptfoo@latest eval -c path/to/promptfooconfig.yaml -o /tmp/eval-results.json --no-cache --no-share
-```
+Do not run `npm run local -- view` unless explicitly asked.
 
-Inspect the output JSON for `results.stats`, `response.output`, `score`,
-`gradingResult.reason`, and `error`.
-
-### 5. Iterate deliberately
-
-- Add cases when a failure represents real expected behavior.
-- Tighten assertions when false positives pass.
-- Use `--filter-pattern`, `--filter-metadata`, or `--filter-failing` for focused
-  reruns.
-- Keep `--no-cache` while developing so you are not validating stale outputs.
-- Use `--no-share` unless the user asks for a shareable URL.
-
-## Common Mistakes
+## Common mistakes
 
 ```yaml
-# WRONG: vague rubric with no examples or grader control
+# ❌ WRONG — shell-style env vars don't work in YAML configs
+apiKey: $OPENAI_API_KEY
+
+# ✅ CORRECT — use Nunjucks syntax with quotes
+apiKey: '{{env.OPENAI_API_KEY}}'
+```
+
+```yaml
+# ❌ WRONG — rubric references "the article" but grader can't see it
 - type: llm-rubric
-  value: Is this good?
+  value: 'Only contains info from the original article'
 
-# BETTER: concrete success criteria
+# ✅ CORRECT — inline the source so the grader can compare
 - type: llm-rubric
-  value: >-
-    The answer must cite the requested invoice id, state approved/denied, and
-    avoid inventing fields not present in the tool result.
+  value: |
+    Only states facts from: "{{article}}"
 ```
 
-```yaml
-# WRONG: unquoted JS expression that starts with [ or { is parsed as YAML flow
-- type: javascript
-  value: ['billing', 'technical'].includes(output.category)
-
-# BETTER: quote any assertion value that begins with [, {, *, &, or !
-- type: javascript
-  value: "['billing', 'technical'].includes(output.category)"
-```
-
-```yaml
-# WRONG: inline prompts that contain JSON-like braces are misread as file paths
-prompts:
-  - 'Classify: {{text}}. Return {"category": "..."} JSON.'
-
-# BETTER: move non-trivial prompts (JSON examples, multi-line, quotes) to a file
-prompts:
-  - file://./prompts/classify.txt
-```
-
-```yaml
-# WRONG: reparsing JSON in every assertion
-assert:
-  - type: javascript
-    value: JSON.parse(output).status === 'approved'
-
-# BETTER: parse once for the test
-options:
-  transform: JSON.parse(output)
-assert:
-  - type: javascript
-    value: output.status === 'approved'
-```
-
-## Output Contract
+## Output contract
 
 When done, state:
 
-- Eval question and target/provider used
-- Files created or changed
-- Assertion strategy and why
-- Validation/eval commands run
-- Result stats and any failures/errors
-- Required environment variables
-- Follow-up cases or assertions to add next
+- What the suite evaluates (1-3 bullets)
+- Files created/modified (paths)
+- How to run (copy-pastable commands)
+- Required env vars
+- TODOs left behind (only if unavoidable)

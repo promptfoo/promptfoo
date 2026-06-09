@@ -1,6 +1,6 @@
 ---
 title: Agent Skills for Evals and Red Teaming
-description: Install Promptfoo agent skills for eval writing, provider setup, and red-team workflows in Claude Code and OpenAI Codex, including focused security configs and scan result triage.
+description: Install Promptfoo agent skills for eval writing, provider setup, and red-team workflows in Claude Code and OpenAI Codex, with security configs and scan triage.
 sidebar_label: Agent Skills
 sidebar_position: 99
 ---
@@ -262,7 +262,3 @@ The skill is just markdown files. Edit them to match your team's conventions:
 - [Red Team Coding Agents](/docs/red-team/coding-agents/): security evals for agentic systems
 - [Coding Agent Plugins](/docs/red-team/plugins/coding-agent/): repository, sandbox, secret, and verifier-boundary checks
 - [MCP Server](/docs/integrations/mcp-server): expose promptfoo to AI agents via MCP
-
-```
-
-```
