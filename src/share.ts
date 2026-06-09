@@ -375,7 +375,8 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 
 async function prepareChunkForShare(
   chunk: EvalResult[],
-  evalId: string,
+  localEvalId: string,
+  remoteEvalId: string,
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
 ): Promise<EvalResult[]> {
@@ -385,7 +386,8 @@ async function prepareChunkForShare(
     await Promise.all(
       chunk.map((result) =>
         uploadBlobRefsForShare(result, remoteBlobUploadCache, {
-          evalId,
+          localEvalId,
+          remoteEvalId,
           promptIdx: result.promptIdx,
           testIdx: result.testIdx,
         }),
@@ -501,6 +503,7 @@ async function sendChunkedResults(
           const chunkToSend = await prepareChunkForShare(
             currentChunk,
             evalRecord.id,
+            evalId,
             inlineCache,
             remoteBlobUploadCache,
           );
@@ -519,6 +522,7 @@ async function sendChunkedResults(
       const chunkToSend = await prepareChunkForShare(
         currentChunk,
         evalRecord.id,
+        evalId,
         inlineCache,
         remoteBlobUploadCache,
       );

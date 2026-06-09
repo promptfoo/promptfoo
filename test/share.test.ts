@@ -682,8 +682,9 @@ describe('createShareableUrl', () => {
 
       await expect(sharePromise).resolves.toBe('https://app.example.com/eval/manual-share-id');
       expect(uploadBlobRefsForShare).toHaveBeenCalledWith(result, expect.any(Map), {
-        evalId: mockEval.id,
+        localEvalId: mockEval.id,
         promptIdx: 2,
+        remoteEvalId: 'manual-share-id',
         testIdx: 1,
       });
       expect(mockFetch).toHaveBeenCalledTimes(2);

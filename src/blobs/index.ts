@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
@@ -106,6 +106,25 @@ export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   return provider.getByHash(hash);
 }
 
+export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
+  const db = await getDb();
+  // Result text may contain copied blob URIs, so only independently classified or imported refs
+  // authorize reading local bytes during a share.
+  const reference = await db
+    .select({ id: blobReferencesTable.id })
+    .from(blobReferencesTable)
+    .where(
+      and(
+        eq(blobReferencesTable.blobHash, hash),
+        eq(blobReferencesTable.evalId, evalId),
+        or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
+      ),
+    )
+    .get();
+
+  return Boolean(reference);
+}
+
 export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
   const provider = getBlobStorageProvider();
   return provider.getUrl(hash, expiresInSeconds);
@@ -138,7 +157,11 @@ export async function recordBlobReference(
 
   const db = await getDb();
   const existing = await db
-    .select({ id: blobReferencesTable.id })
+    .select({
+      id: blobReferencesTable.id,
+      kind: blobReferencesTable.kind,
+      location: blobReferencesTable.location,
+    })
     .from(blobReferencesTable)
     .where(
       and(
@@ -149,6 +172,20 @@ export async function recordBlobReference(
     .get();
 
   if (existing) {
+    const strongerReference: { kind?: string; location?: string } = {};
+    if (refContext.kind && !existing.kind) {
+      strongerReference.kind = refContext.kind;
+    }
+    if (refContext.location === 'import' && existing.location !== 'import') {
+      strongerReference.location = 'import';
+    }
+    if (Object.keys(strongerReference).length > 0) {
+      await db
+        .update(blobReferencesTable)
+        .set(strongerReference)
+        .where(eq(blobReferencesTable.id, existing.id))
+        .run();
+    }
     return;
   }
 

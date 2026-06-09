@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBlobByHash } from '../../src/blobs';
+import { getBlobByHash, isBlobAllowedForShare } from '../../src/blobs';
 import { uploadBlobRemote } from '../../src/blobs/remoteUpload';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../../src/blobs/shareUpload';
 import logger from '../../src/logger';
 
 vi.mock('../../src/blobs', () => ({
   getBlobByHash: vi.fn(),
+  isBlobAllowedForShare: vi.fn(),
 }));
 
 vi.mock('../../src/blobs/remoteUpload', () => ({
@@ -21,6 +22,7 @@ vi.mock('../../src/logger', () => ({
 describe('share-time blob upload', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(isBlobAllowedForShare).mockResolvedValue(true);
     vi.mocked(getBlobByHash).mockResolvedValue({
       data: Buffer.from('image-bytes'),
       metadata: {
@@ -53,10 +55,11 @@ describe('share-time blob upload', () => {
         images: [{ blobRef: { hash, uri: `promptfoo://blob/${hash}` } }],
       },
       cache,
-      { evalId: 'eval-123', promptIdx: 2, testIdx: 1 },
+      { localEvalId: 'local-eval-123', remoteEvalId: 'remote-eval-123', promptIdx: 2, testIdx: 1 },
     );
     await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
-      evalId: 'eval-123',
+      localEvalId: 'local-eval-123',
+      remoteEvalId: 'remote-eval-123',
       promptIdx: 4,
       testIdx: 3,
     });
@@ -65,12 +68,30 @@ describe('share-time blob upload', () => {
     expect(getBlobByHash).toHaveBeenCalledWith(hash);
     expect(uploadBlobRemote).toHaveBeenCalledOnce();
     expect(uploadBlobRemote).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'eval-123',
+      evalId: 'remote-eval-123',
       kind: 'image',
       location: 'share',
       promptIdx: 2,
       testIdx: 1,
     });
+  });
+
+  it('does not upload a copied blob URI that is not share-authorized for the eval', async () => {
+    const hash = 'd'.repeat(64);
+    vi.mocked(isBlobAllowedForShare).mockResolvedValue(false);
+
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, createRemoteBlobUploadCache(), {
+      localEvalId: 'local-eval-unauthorized',
+      remoteEvalId: 'remote-eval-unauthorized',
+    });
+
+    expect(isBlobAllowedForShare).toHaveBeenCalledWith(hash, 'local-eval-unauthorized');
+    expect(getBlobByHash).not.toHaveBeenCalled();
+    expect(uploadBlobRemote).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[Share] Skipping blob reference that is not authorized for this eval',
+      { evalId: 'local-eval-unauthorized', hash },
+    );
   });
 
   it('logs upload failures without failing the share', async () => {
@@ -79,7 +100,8 @@ describe('share-time blob upload', () => {
 
     await expect(
       uploadBlobRefsForShare(`promptfoo://blob/${hash}`, createRemoteBlobUploadCache(), {
-        evalId: 'eval-456',
+        localEvalId: 'local-eval-456',
+        remoteEvalId: 'remote-eval-456',
       }),
     ).resolves.toBeUndefined();
 
@@ -87,7 +109,7 @@ describe('share-time blob upload', () => {
       '[Share] Failed to upload referenced blob; shared media may be unavailable',
       expect.objectContaining({
         error: 'network unavailable',
-        evalId: 'eval-456',
+        evalId: 'remote-eval-456',
         hash,
       }),
     );
@@ -99,14 +121,15 @@ describe('share-time blob upload', () => {
 
     await expect(
       uploadBlobRefsForShare(`promptfoo://blob/${hash}`, createRemoteBlobUploadCache(), {
-        evalId: 'eval-789',
+        localEvalId: 'local-eval-789',
+        remoteEvalId: 'remote-eval-789',
       }),
     ).resolves.toBeUndefined();
 
     expect(logger.warn).toHaveBeenCalledWith(
       '[Share] Failed to upload referenced blob; shared media may be unavailable',
       {
-        evalId: 'eval-789',
+        evalId: 'remote-eval-789',
         hash,
       },
     );

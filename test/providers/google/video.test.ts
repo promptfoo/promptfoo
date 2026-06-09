@@ -10,6 +10,8 @@ import {
 } from '../../../src/providers/google/video';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { CallApiContextParams } from '../../../src/types/providers';
+
 // Mock the Google client
 const mockRequest = vi.fn();
 const mockFetchWithTimeout = vi.fn();
@@ -372,7 +374,11 @@ describe('GoogleVideoProvider', () => {
         },
       });
 
-      const result = await provider.callApi('A cat playing piano');
+      const result = await provider.callApi('A cat playing piano', {
+        evaluationId: 'eval-google-video',
+        promptIdx: 4,
+        testIdx: 3,
+      } as unknown as CallApiContextParams);
 
       expect(result.error).toBeUndefined();
       expect(result.cached).toBe(false);
@@ -391,7 +397,12 @@ describe('GoogleVideoProvider', () => {
       expect(mockStoreBlob).toHaveBeenCalledWith(
         expect.any(Buffer),
         'video/mp4',
-        expect.objectContaining({ kind: 'video' }),
+        expect.objectContaining({
+          evalId: 'eval-google-video',
+          kind: 'video',
+          promptIdx: 4,
+          testIdx: 3,
+        }),
       );
     });
 
