@@ -193,7 +193,6 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.157",
-    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -297,6 +296,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.100.1",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",

@@ -80,6 +80,8 @@ npm run db:studio          # Open Drizzle studio
 
 # Other
 npm run jsonSchema:generate  # Generate JSON schema for config
+npm run openapi:generate     # Generate local server OpenAPI spec for docs
+npm run openapi:check        # Verify checked-in OpenAPI spec is current
 npm run citation:generate    # Generate citation file
 ```
 

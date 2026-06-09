@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
-import { EmailSchema, MessageResponseSchema } from './common';
+import { EmailSchema } from './common';
+import { EvalResponseSchemas } from './responses.js';
 
 /** Eval ID parameter schema. */
 export const EvalIdParamSchema = z.object({
@@ -22,7 +23,7 @@ export const UpdateEvalAuthorRequestSchema = z.object({
   author: EmailSchema,
 });
 
-export const UpdateEvalAuthorResponseSchema = MessageResponseSchema;
+export const UpdateEvalAuthorResponseSchema = EvalResponseSchemas.UpdateAuthor.Response;
 
 export type UpdateEvalAuthorParams = z.infer<typeof UpdateEvalAuthorParamsSchema>;
 export type UpdateEvalAuthorRequest = z.infer<typeof UpdateEvalAuthorRequestSchema>;
@@ -39,9 +40,7 @@ export const GetMetadataKeysQuerySchema = z.object({
     .prefault([]),
 });
 
-export const GetMetadataKeysResponseSchema = z.object({
-  keys: z.array(z.string()),
-});
+export const GetMetadataKeysResponseSchema = EvalResponseSchemas.MetadataKeys.Response;
 
 export type GetMetadataKeysParams = z.infer<typeof GetMetadataKeysParamsSchema>;
 export type GetMetadataKeysQuery = z.infer<typeof GetMetadataKeysQuerySchema>;
@@ -55,9 +54,7 @@ export const GetMetadataValuesQuerySchema = z.object({
   key: z.string().min(1),
 });
 
-export const GetMetadataValuesResponseSchema = z.object({
-  values: z.array(z.string()),
-});
+export const GetMetadataValuesResponseSchema = EvalResponseSchemas.MetadataValues.Response;
 
 export type GetMetadataValuesParams = z.infer<typeof GetMetadataValuesParamsSchema>;
 export type GetMetadataValuesQuery = z.infer<typeof GetMetadataValuesQuerySchema>;
@@ -71,10 +68,7 @@ export const CopyEvalRequestSchema = z.object({
   description: z.string().optional(),
 });
 
-export const CopyEvalResponseSchema = z.object({
-  id: z.string(),
-  distinctTestCount: z.number(),
-});
+export const CopyEvalResponseSchema = EvalResponseSchemas.Copy.Response;
 
 export type CopyEvalParams = z.infer<typeof CopyEvalParamsSchema>;
 export type CopyEvalRequest = z.infer<typeof CopyEvalRequestSchema>;
@@ -109,28 +103,7 @@ export const EvalTableQuerySchema = z
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
-const ShallowEvaluateTableSchema = z
-  .object({
-    head: z
-      .unknown()
-      .refine((value) => value !== null && typeof value === 'object', 'Expected table head object'),
-    body: z.unknown().refine(Array.isArray, 'Expected table body array'),
-  })
-  .passthrough();
-
-export const EvalTableResponseSchema = z
-  .object({
-    table: ShallowEvaluateTableSchema,
-    totalCount: z.number(),
-    filteredCount: z.number(),
-    filteredMetrics: z.array(z.unknown()).nullable(),
-    config: z.record(z.string(), z.unknown()),
-    author: z.string().nullable(),
-    version: z.number(),
-    id: z.string(),
-    stats: z.unknown(),
-  })
-  .passthrough();
+export const EvalTableResponseSchema = EvalResponseSchemas.Table.Response;
 
 export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
@@ -149,9 +122,7 @@ export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
   sourceEvalId: z.string().min(1).optional(),
 }).passthrough();
 
-export const CreateJobResponseSchema = z.object({
-  id: z.string().uuid(),
-});
+export const CreateJobResponseSchema = EvalResponseSchemas.CreateJob.Response;
 
 export type CreateJobRequest = z.infer<typeof CreateJobRequestSchema>;
 export type CreateJobResponse = z.infer<typeof CreateJobResponseSchema>;
@@ -162,24 +133,7 @@ export const GetJobParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
-export const GetJobResponseSchema = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('in-progress'),
-    progress: z.number(),
-    total: z.number(),
-    logs: z.array(z.string()),
-  }),
-  z.object({
-    status: z.literal('complete'),
-    result: z.record(z.string(), z.unknown()).nullable(),
-    evalId: z.string().nullable(),
-    logs: z.array(z.string()),
-  }),
-  z.object({
-    status: z.literal('error'),
-    logs: z.array(z.string()),
-  }),
-]);
+export const GetJobResponseSchema = EvalResponseSchemas.GetJob.Response;
 
 export type GetJobParams = z.infer<typeof GetJobParamsSchema>;
 export type GetJobResponse = z.infer<typeof GetJobResponseSchema>;
@@ -204,7 +158,7 @@ export const UpdateEvalRequestSchema = z.object({
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const UpdateEvalResponseSchema = MessageResponseSchema;
+export const UpdateEvalResponseSchema = EvalResponseSchemas.Update.Response;
 
 export type UpdateEvalParams = z.infer<typeof UpdateEvalParamsSchema>;
 export type UpdateEvalRequest = z.infer<typeof UpdateEvalRequestSchema>;
@@ -214,9 +168,10 @@ export type UpdateEvalResponse = z.infer<typeof UpdateEvalResponseSchema>;
 
 export const AddResultsParamsSchema = EvalIdParamSchema;
 
-/** Schema for eval results with minimal required fields.
- * EvaluateResult has many optional fields, but these core fields are required
- * for the result to be usable. Using passthrough to preserve all extra fields.
+/**
+ * Older clients send only the core score coordinates, while sharing uploads
+ * include the richer serialized EvalResult row. Keep the richer fields bounded
+ * when present without rejecting the legacy public request shape.
  */
 export const AddResultsRequestSchema = z.array(
   z
@@ -225,6 +180,25 @@ export const AddResultsRequestSchema = z.array(
       testIdx: z.number().int().nonnegative(),
       success: z.boolean(),
       score: z.number(),
+      id: z.string().min(1).optional(),
+      testCase: z.object({}).passthrough().optional(),
+      prompt: z
+        .object({
+          raw: z.string(),
+          label: z.string(),
+        })
+        .passthrough()
+        .optional(),
+      provider: z
+        .union([
+          z.string(),
+          z
+            .object({
+              id: z.string().min(1),
+            })
+            .passthrough(),
+        ])
+        .optional(),
     })
     .passthrough(),
 );
@@ -241,14 +215,7 @@ export const ReplayRequestSchema = z.object({
   variables: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const ReplayResponseSchema = z.object({
-  // Server serializes non-string outputs to JSON for UI compatibility
-  output: z.string(),
-  // Providers can emit null, string, or undefined for errors
-  error: z.string().nullable().optional(),
-  // Full response object preserved for debugging (may contain structured output)
-  response: z.record(z.string(), z.unknown()).optional(),
-});
+export const ReplayResponseSchema = EvalResponseSchemas.Replay.Response;
 
 export type ReplayRequest = z.infer<typeof ReplayRequestSchema>;
 export type ReplayResponse = z.infer<typeof ReplayResponseSchema>;
@@ -274,13 +241,7 @@ export const SubmitRatingRequestSchema = z
  * fetch. The shape is permissive because EvalResult does not have a Zod
  * schema — only the most commonly-read fields are validated.
  */
-export const SubmitRatingResponseSchema = z
-  .object({
-    id: z.string(),
-    success: z.boolean(),
-    score: z.number(),
-  })
-  .passthrough();
+export const SubmitRatingResponseSchema = EvalResponseSchemas.SubmitRating.Response;
 
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
@@ -308,9 +269,7 @@ export const SaveEvalRequestSchema = z
   })
   .passthrough();
 
-export const SaveEvalResponseSchema = z.object({
-  id: z.string(),
-});
+export const SaveEvalResponseSchema = EvalResponseSchemas.Save.Response;
 
 export type SaveEvalRequest = z.infer<typeof SaveEvalRequestSchema>;
 export type SaveEvalResponse = z.infer<typeof SaveEvalResponseSchema>;
@@ -318,7 +277,7 @@ export type SaveEvalResponse = z.infer<typeof SaveEvalResponseSchema>;
 // DELETE /api/eval/:id
 
 export const DeleteEvalParamsSchema = EvalIdParamSchema;
-export const DeleteEvalResponseSchema = MessageResponseSchema;
+export const DeleteEvalResponseSchema = EvalResponseSchemas.Delete.Response;
 
 export type DeleteEvalParams = z.infer<typeof DeleteEvalParamsSchema>;
 export type DeleteEvalResponse = z.infer<typeof DeleteEvalResponseSchema>;

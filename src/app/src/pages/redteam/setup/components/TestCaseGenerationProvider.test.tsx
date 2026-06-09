@@ -35,8 +35,31 @@ const MOCK_CONFIG = {
   entities: [],
 };
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
+  callApiJson: vi.fn(
+    async (
+      route: { clientPath: string },
+      _schema: unknown,
+      options: {
+        params?: Record<string, string | number>;
+        query?: URLSearchParams;
+      } & RequestInit = {},
+    ) => {
+      let path = route.clientPath;
+      for (const [name, value] of Object.entries(options.params ?? {})) {
+        path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+      }
+      const query = options.query?.toString();
+      const response = await vi.mocked(callApi)(query ? `${path}?${query}` : path, options);
+      if (!response.ok) {
+        const body = await response.json();
+        throw new Error(body.error ?? 'Request failed');
+      }
+      return response.json();
+    },
+  ),
 }));
 
 const callApiMock = vi.mocked(callApi);

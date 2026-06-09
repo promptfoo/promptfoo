@@ -19,7 +19,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, EvalResponseSchemas, ServerResponseSchemas } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
@@ -45,7 +45,6 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
-import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
 
 import type { ActiveView } from './EvalHeader';
@@ -401,17 +400,20 @@ export default function ResultsView({
         return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
       }
 
-      const response = await callApi('/results/share', {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
+      const { url } = await callApiJson(
+        ApiRoutes.Results.Share,
+        ServerResponseSchemas.Share.Response,
+        {
+          method: 'POST',
+          body: JSON.stringify({ id }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
         },
-      });
-      if (!response.ok) {
+      );
+      if (!url) {
         throw new Error('Failed to generate share URL');
       }
-      const { url } = await response.json();
       return url;
     } catch (error) {
       console.error('Failed to generate share URL:', error);
@@ -586,17 +588,14 @@ export default function ResultsView({
         invariant(config, 'Config must be loaded before updating its description');
         const newConfig = { ...config, description: newName };
 
-        const response = await callApi(`/eval/${evalId}`, {
+        await callApiJson(ApiRoutes.Eval.Update, EvalResponseSchemas.Update.Response, {
+          params: { id: evalId as string },
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ config: newConfig }),
         });
-
-        if (!response.ok) {
-          throw new Error('Failed to update eval name');
-        }
 
         setConfig(newConfig);
       } catch (error) {
@@ -616,19 +615,18 @@ export default function ResultsView({
       try {
         invariant(evalId, 'Eval ID must be set before copying');
 
-        const response = await callApi(`/eval/${evalId}/copy`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const { id: newEvalId, distinctTestCount } = await callApiJson(
+          ApiRoutes.Eval.Copy,
+          EvalResponseSchemas.Copy.Response,
+          {
+            params: { id: evalId },
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ description }),
           },
-          body: JSON.stringify({ description }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to copy evaluation');
-        }
-
-        const { id: newEvalId, distinctTestCount }: CopyEvalResponse = await response.json();
+        );
 
         // Open in new tab (Google Docs pattern)
         window.open(EVAL_ROUTES.DETAIL(newEvalId), '_blank');
@@ -693,14 +691,10 @@ export default function ResultsView({
     setIsDeleting(true);
 
     try {
-      const response = await callApi(`/eval/${evalId}`, {
+      await callApiJson(ApiRoutes.Eval.Delete, EvalResponseSchemas.Delete.Response, {
+        params: { id: evalId },
         method: 'DELETE',
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete eval');
-      }
 
       showToast('Eval deleted', 'success');
 

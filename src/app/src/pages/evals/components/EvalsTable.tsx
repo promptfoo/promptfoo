@@ -15,7 +15,7 @@ import { DeleteIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiEmpty, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
@@ -58,14 +58,18 @@ export default function EvalsTable({
         setIsLoading(true);
         const query =
           filterByDatasetId && focusedDatasetId
-            ? `?datasetId=${encodeURIComponent(focusedDatasetId)}`
-            : '';
-        const response = await callApi(`/results${query}`, { cache: 'no-store', signal });
-        if (!response.ok) {
-          throw new Error('Failed to fetch evals');
-        }
-        const body = (await response.json()) as { data: EvalSummary[] };
-        setEvals(body.data);
+            ? new URLSearchParams({ datasetId: focusedDatasetId })
+            : undefined;
+        const body = await callApiJson(
+          ApiRoutes.Results.List,
+          ServerResponseSchemas.ResultList.Response,
+          {
+            cache: 'no-store',
+            signal,
+            query,
+          },
+        );
+        setEvals(body.data as unknown as EvalSummary[]);
         setError(null);
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
@@ -125,17 +129,13 @@ export default function EvalsTable({
   const handleConfirmDelete = async () => {
     try {
       setIsLoading(true);
-      const res = await callApi('/eval', {
+      await callApiEmpty(ApiRoutes.Eval.BulkDelete, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ids: selectedEvalIds }),
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to delete evals');
-      }
 
       setEvals((prev) => prev.filter((e) => !selectedEvalIds.includes(e.evalId)));
       setRowSelection({});

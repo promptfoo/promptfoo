@@ -239,6 +239,7 @@ describe('API schema red-team coverage', () => {
         reason: 'remote disabled',
         details: { request1: { prompt: 'one' } },
       });
+      expect(ProviderSchemas.TestSession.Response.safeParse({ success: true }).success).toBe(false);
     });
 
     it('keeps generator and discovery schemas from accepting empty or non-object envelopes', () => {
@@ -628,12 +629,50 @@ describe('API schema red-team coverage', () => {
       expect(EvalSchemas.GetJob.Params.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
-          { promptIdx: 0, testIdx: 0, success: true, score: 1, provider: { id: 'echo' } },
+          { promptIdx: 0, testIdx: 0, success: true, score: 1 },
+        ]).success,
+      ).toBe(true);
+      expect(EvalSchemas.AddResults.Request.safeParse([]).success).toBe(true);
+      expect(
+        EvalSchemas.AddResults.Request.safeParse([
+          {
+            id: 'result-1',
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: { id: 'echo' },
+          },
         ]).success,
       ).toBe(true);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
-          { promptIdx: -1, testIdx: 0, success: true, score: 1 },
+          {
+            id: 'legacy-result-1',
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: 'echo',
+          },
+        ]).success,
+      ).toBe(true);
+      expect(
+        EvalSchemas.AddResults.Request.safeParse([
+          {
+            id: 'result-1',
+            promptIdx: -1,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: { id: 'echo' },
+          },
         ]).success,
       ).toBe(false);
       expect(

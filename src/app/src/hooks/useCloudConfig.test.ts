@@ -1,33 +1,30 @@
-import {
-  createMockResponse,
-  getCallApiMock,
-  mockCallApiResponse,
-  mockCallApiResponseOnce,
-  rejectCallApi,
-  rejectCallApiOnce,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, UserSchemas } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useCloudConfig from './useCloudConfig';
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
+  callApiJson: vi.fn(),
 }));
 
 describe('useCloudConfig', () => {
+  const mockCallApiJson = vi.mocked(callApiJson);
+  const expectCloudConfigCall = () => {
+    expect(mockCallApiJson).toHaveBeenCalledWith(
+      ApiRoutes.User.CloudConfig,
+      UserSchemas.CloudConfig.Response,
+    );
+  };
+
   beforeEach(() => {
-    resetCallApiMock();
+    mockCallApiJson.mockReset();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
     // Only use fake timers in specific tests that need timer control
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
-    mockCallApiResponse({ appUrl: 'https://app.promptfoo.com', isEnabled: true });
+    mockCallApiJson.mockResolvedValue({ appUrl: 'https://app.promptfoo.com', isEnabled: true });
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -42,7 +39,7 @@ describe('useCloudConfig', () => {
       isEnabled: true,
     };
 
-    mockCallApiResponse(mockCloudConfig);
+    mockCallApiJson.mockResolvedValue(mockCloudConfig);
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -52,12 +49,12 @@ describe('useCloudConfig', () => {
 
     expect(result.current.data).toEqual(mockCloudConfig);
     expect(result.current.error).toBeNull();
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
+    expectCloudConfigCall();
   });
 
   it('should set error and isLoading=false when API returns ok=false', async () => {
-    mockCallApiResponse({}, { ok: false });
+    mockCallApiJson.mockRejectedValue(new Error('Failed to fetch cloud config'));
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -67,13 +64,13 @@ describe('useCloudConfig', () => {
 
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Failed to fetch cloud config');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
+    expectCloudConfigCall();
   });
 
   it('should handle network errors gracefully', async () => {
     const networkError = new Error('Network error');
-    rejectCallApi(networkError);
+    mockCallApiJson.mockRejectedValue(networkError);
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -83,12 +80,12 @@ describe('useCloudConfig', () => {
 
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
+    expectCloudConfigCall();
   });
 
   it('should handle non-Error exceptions', async () => {
-    rejectCallApi('String error');
+    mockCallApiJson.mockRejectedValue('String error');
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -98,7 +95,7 @@ describe('useCloudConfig', () => {
 
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Unknown error');
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
   });
 
   it('should fetch cloud config on mount', async () => {
@@ -107,15 +104,15 @@ describe('useCloudConfig', () => {
       isEnabled: false,
     };
 
-    mockCallApiResponse(mockCloudConfig);
+    mockCallApiJson.mockResolvedValue(mockCloudConfig);
 
     renderHook(() => useCloudConfig());
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(mockCallApiJson).toHaveBeenCalledTimes(1);
     });
 
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expectCloudConfigCall();
   });
 
   describe('refetch', () => {
@@ -130,7 +127,7 @@ describe('useCloudConfig', () => {
         isEnabled: false,
       };
 
-      mockCallApiResponseOnce(initialConfig);
+      mockCallApiJson.mockResolvedValueOnce(initialConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -139,10 +136,10 @@ describe('useCloudConfig', () => {
       });
 
       expect(result.current.data).toEqual(initialConfig);
-      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(mockCallApiJson).toHaveBeenCalledTimes(1);
 
       // Setup mock for refetch
-      mockCallApiResponseOnce(updatedConfig);
+      mockCallApiJson.mockResolvedValueOnce(updatedConfig);
 
       // Call refetch
       await act(async () => {
@@ -154,8 +151,8 @@ describe('useCloudConfig', () => {
       });
 
       expect(result.current.error).toBeNull();
-      expect(callApi).toHaveBeenCalledTimes(2);
-      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud-config');
+      expect(mockCallApiJson).toHaveBeenCalledTimes(2);
+      expectCloudConfigCall();
     });
 
     it('should set isLoading=true during refetch and back to false after completion', async () => {
@@ -164,13 +161,13 @@ describe('useCloudConfig', () => {
         isEnabled: true,
       };
 
-      let resolveFetch!: (response: Response) => void;
-      const delayedPromise = new Promise<Response>((resolve) => {
+      let resolveFetch!: (response: typeof mockCloudConfig) => void;
+      const delayedPromise = new Promise<typeof mockCloudConfig>((resolve) => {
         resolveFetch = resolve;
       });
 
       // First call resolves immediately
-      mockCallApiResponseOnce(mockCloudConfig);
+      mockCallApiJson.mockResolvedValueOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -180,7 +177,7 @@ describe('useCloudConfig', () => {
       });
 
       // Second call will be delayed so we can check loading state
-      getCallApiMock().mockImplementationOnce(() => delayedPromise);
+      mockCallApiJson.mockImplementationOnce(() => delayedPromise);
 
       // Start refetch
       act(() => {
@@ -191,7 +188,7 @@ describe('useCloudConfig', () => {
       expect(result.current.isLoading).toBe(true);
 
       // Resolve the delayed promise
-      resolveFetch(createMockResponse(mockCloudConfig));
+      resolveFetch(mockCloudConfig);
 
       // Wait for loading to become false
       await waitFor(() => {
@@ -206,7 +203,7 @@ describe('useCloudConfig', () => {
       };
 
       // Initial successful fetch
-      mockCallApiResponseOnce(mockCloudConfig);
+      mockCallApiJson.mockResolvedValueOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -218,7 +215,7 @@ describe('useCloudConfig', () => {
       expect(result.current.error).toBeNull();
 
       // Setup error for refetch
-      rejectCallApiOnce(new Error('Refetch failed'));
+      mockCallApiJson.mockRejectedValueOnce(new Error('Refetch failed'));
 
       // Call refetch
       await act(async () => {
@@ -232,12 +229,12 @@ describe('useCloudConfig', () => {
       // Data should remain unchanged when refetch fails
       expect(result.current.data).toEqual(mockCloudConfig);
       expect(result.current.error).toBe('Refetch failed');
-      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     });
 
     it('should clear previous error on successful refetch', async () => {
       // Initial failed fetch
-      rejectCallApiOnce(new Error('Initial fetch failed'));
+      mockCallApiJson.mockRejectedValueOnce(new Error('Initial fetch failed'));
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -254,7 +251,7 @@ describe('useCloudConfig', () => {
       };
 
       // Setup successful refetch
-      mockCallApiResponseOnce(mockCloudConfig);
+      mockCallApiJson.mockResolvedValueOnce(mockCloudConfig);
 
       // Call refetch
       await act(async () => {
@@ -267,7 +264,7 @@ describe('useCloudConfig', () => {
 
       expect(result.current.data).toEqual(mockCloudConfig);
       expect(result.current.error).toBeNull();
-      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(mockCallApiJson).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -277,7 +274,7 @@ describe('useCloudConfig', () => {
       isEnabled: true,
     };
 
-    mockCallApiResponseOnce(mockCloudConfig);
+    mockCallApiJson.mockResolvedValueOnce(mockCloudConfig);
 
     const { result, rerender } = renderHook(() => useCloudConfig());
 
@@ -285,7 +282,7 @@ describe('useCloudConfig', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
 
     // Rerender the hook
     rerender();
@@ -293,6 +290,6 @@ describe('useCloudConfig', () => {
     // Wait a short time to ensure no additional calls are made
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
   });
 });

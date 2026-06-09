@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tab
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, ProviderResponseSchemas } from '@app/utils/api';
 import yaml from 'js-yaml';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -102,12 +102,12 @@ const EvaluateTestSuiteCreator = () => {
 
     const fetchConfigStatus = async () => {
       try {
-        const response = await callApi('/providers/config-status');
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) {
-            setHasCustomConfig(data.hasCustomConfig || false);
-          }
+        const data = await callApiJson(
+          ApiRoutes.Providers.ConfigStatus,
+          ProviderResponseSchemas.ConfigStatus.Response,
+        );
+        if (isMounted) {
+          setHasCustomConfig(data.success === true ? data.data.hasCustomConfig : false);
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);

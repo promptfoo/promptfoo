@@ -35,7 +35,8 @@ vi.mock('@app/stores/userStore', () => ({
 }));
 
 const callApiMock = vi.fn();
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: (...args: any[]) => callApiMock(...args),
 }));
 

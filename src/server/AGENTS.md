@@ -100,3 +100,20 @@ res.json(EvalSchemas.Update.Response.parse({ message: 'Success' }));
 - Use `sendError()` for 500 errors — never expose internal details
 - Handle errors with try-catch
 - Never add rate limiters or request throttling middleware to local server routes. If code scanning flags `js/missing-rate-limiting`, keep the route unthrottled, document the route-specific rationale in code, and resolve the alert as an intentional local-server exception.
+
+## OpenAPI Generation
+
+The local server exposes the installed-version OpenAPI document at `/api/openapi.json`.
+The docs site publishes a latest snapshot from the same registry at
+`site/static/openapi.json`.
+
+```bash
+npm run openapi:generate
+npm run openapi:check
+```
+
+Define new or changed route metadata once in `src/contracts/api/routes.ts`, use
+the shared `ApiRoutes` contract in Express and `src/openapi/server.ts`, and keep
+the checked-in docs asset current. CI regenerates the site snapshot in the
+`Generate Assets` job and fails if it drifts. See `docs/agents/openapi.md` for
+concrete JSON body, params/query, binary, redirect, and `204` examples.

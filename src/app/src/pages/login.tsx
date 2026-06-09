@@ -16,7 +16,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiResult, UserSchemas } from '@app/utils/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LoginState {
@@ -35,7 +35,7 @@ async function loginAction(_prevState: LoginState, formData: FormData): Promise<
   }
 
   try {
-    const response = await callApi('/user/login', {
+    const response = await callApiResult(ApiRoutes.User.Login, UserSchemas.Login.Response, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -47,14 +47,12 @@ async function loginAction(_prevState: LoginState, formData: FormData): Promise<
     });
 
     if (response.ok) {
-      const data = await response.json();
-      return { success: true, email: data.user.email };
+      return { success: true, email: response.data.user.email };
     }
 
-    const errorData = await response.json().catch(() => ({}));
     return {
       success: false,
-      error: errorData.error || 'Authentication failed. Please check your API key.',
+      error: response.error.message || 'Authentication failed. Please check your API key.',
     };
   } catch {
     return { success: false, error: 'Network error. Please check your connection and try again.' };

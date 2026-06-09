@@ -4,7 +4,7 @@ import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { Link } from 'react-router-dom';
@@ -43,15 +43,16 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
   const fetchReports = useCallback(async (signal: AbortSignal) => {
     try {
       setIsLoading(true);
-      const response = await callApi('/results?type=redteam&includeProviders=true', {
-        cache: 'no-store',
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
-      }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setReports(body.data);
+      const body = await callApiJson(
+        ApiRoutes.Results.List,
+        ServerResponseSchemas.ResultList.Response,
+        {
+          query: new URLSearchParams({ type: 'redteam', includeProviders: 'true' }),
+          cache: 'no-store',
+          signal,
+        },
+      );
+      setReports(body.data as unknown as EvalSummary[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {

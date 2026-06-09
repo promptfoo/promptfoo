@@ -3,7 +3,7 @@ import React from 'react';
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
 import Prism from '@app/lib/prism';
-import { callApi } from '@app/utils/api';
+import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
 import dedent from 'dedent';
 import { Play } from 'lucide-react';
 import TransformTestDialog from '../TransformTestDialog';
@@ -51,32 +51,29 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   // Test handler function
   const handleTest = async (transformCode: string, testInput: string) => {
-    const response = await callApi('/providers/test-request-transform', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await callApiResult(
+      ApiRoutes.Providers.TestRequestTransform,
+      ProviderResponseSchemas.TestRequestTransform.Response,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transformCode,
+          prompt: testInput,
+        }),
       },
-      body: JSON.stringify({
-        transformCode,
-        prompt: testInput,
-      }),
-    });
+    );
 
     if (!response.ok) {
-      let errorMessage = 'Failed to test transform';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch {
-        errorMessage = `Server error: ${response.status} ${response.statusText}`;
-      }
       return {
         success: false,
-        error: errorMessage,
+        error: response.error.message || 'Failed to test transform',
       };
     }
 
-    const data = await response.json();
+    const data = response.data;
 
     if (data.success) {
       return {

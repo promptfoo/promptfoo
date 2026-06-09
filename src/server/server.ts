@@ -29,6 +29,7 @@ import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import { ApiMounts, ApiRoutes } from '../types/api/routes';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
@@ -51,7 +52,7 @@ import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
-import { replyValidationError, sendError } from './utils/errors';
+import { replyError, replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
 import type { Prompt, TestCase, TestSuite } from '../types/index';
@@ -77,6 +78,26 @@ export function setJavaScriptMimeType(
     res.setHeader('Content-Type', 'application/javascript');
   }
   next();
+}
+
+function handleApiBodyParserError(
+  error: unknown,
+  req: Request,
+  res: Response,
+  next: express.NextFunction,
+): void {
+  if (
+    req.path.startsWith('/api/') &&
+    typeof error === 'object' &&
+    error !== null &&
+    'type' in error &&
+    error.type === 'entity.parse.failed'
+  ) {
+    replyError(res, 400, 'Invalid JSON request body');
+    return;
+  }
+
+  next(error);
 }
 
 import { ServerError, type ServerErrorPhase } from './errors';
@@ -129,33 +150,56 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
-  app.get('/health', (_req, res) => {
+  app.use(handleApiBodyParserError);
+  app.get(ApiRoutes.Health.expressPath, (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
-    const apiUrl = getRemoteHealthUrl();
-
-    if (apiUrl === null) {
-      res.json(
-        ServerSchemas.RemoteHealth.Response.parse({
-          status: 'DISABLED',
-          message: 'remote generation and grading are disabled',
+  // Serve the OpenAPI document directly from the live registry so consumers
+  // (frontend, CLI, plugins, curl) can fetch the spec without needing the
+  // statically-generated `site/static/openapi.json` artifact.
+  //
+  // Load and generate it only on first use. Caching the promise also prevents
+  // concurrent first requests from building the same fixed document twice.
+  let cachedOpenApiDocument: Promise<unknown> | undefined;
+  app.get(ApiRoutes.OpenApi.expressPath, async (_req: Request, res: Response): Promise<void> => {
+    cachedOpenApiDocument ??= import('../openapi/server').then(({ createServerOpenApiDocument }) =>
+      ServerSchemas.OpenApi.Response.parse(
+        createServerOpenApiDocument({
+          serverDescription: 'Current local Promptfoo server',
+          serverUrl: '/',
         }),
-      );
-      return;
-    }
-
-    const result = await checkRemoteHealth(apiUrl);
-    res.json(ServerSchemas.RemoteHealth.Response.parse(result));
+      ),
+    );
+    res.json(await cachedOpenApiDocument);
   });
+
+  app.get(
+    ApiRoutes.RemoteHealth.expressPath,
+    async (_req: Request, res: Response): Promise<void> => {
+      const apiUrl = getRemoteHealthUrl();
+
+      if (apiUrl === null) {
+        res.json(
+          ServerSchemas.RemoteHealth.Response.parse({
+            status: 'DISABLED',
+            message: 'remote generation and grading are disabled',
+          }),
+        );
+        return;
+      }
+
+      const result = await checkRemoteHealth(apiUrl);
+      res.json(ServerSchemas.RemoteHealth.Response.parse(result));
+    },
+  );
 
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
    */
   app.get(
-    '/api/results',
+    ApiRoutes.Results.List.expressPath,
     async (
       req: Request<
         {},
@@ -179,7 +223,7 @@ export function createApp() {
     },
   );
 
-  app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
+  app.get(ApiRoutes.Results.Get.expressPath, async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ServerSchemas.Result.Params.safeParse(req.params);
     if (!paramsResult.success) {
       replyValidationError(res, paramsResult.error);
@@ -188,7 +232,7 @@ export function createApp() {
     const { id } = paramsResult.data;
     const file = await readResult(id);
     if (!file) {
-      res.status(404).json({ error: 'Result not found' });
+      replyError(res, 404, 'Result not found');
       return;
     }
     res.json(
@@ -201,11 +245,14 @@ export function createApp() {
     );
   });
 
-  app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
-    res.json(ServerSchemas.Prompts.Response.parse({ data: await promptCacheService.getAll() }));
-  });
+  app.get(
+    ApiRoutes.Prompts.List.expressPath,
+    async (_req: Request, res: Response): Promise<void> => {
+      res.json(ServerSchemas.Prompts.Response.parse({ data: await promptCacheService.getAll() }));
+    },
+  );
 
-  app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
+  app.get(ApiRoutes.History.expressPath, async (req: Request, res: Response): Promise<void> => {
     const queryResult = ServerSchemas.History.Query.safeParse(req.query);
     if (!queryResult.success) {
       replyValidationError(res, queryResult.error);
@@ -220,7 +267,7 @@ export function createApp() {
     res.json(ServerSchemas.History.Response.parse({ data: results }));
   });
 
-  app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
+  app.get(ApiRoutes.Prompts.Get.expressPath, async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ServerSchemas.Prompt.Params.safeParse(req.params);
     if (!paramsResult.success) {
       replyValidationError(res, paramsResult.error);
@@ -231,7 +278,7 @@ export function createApp() {
     res.json(ServerSchemas.Prompt.Response.parse({ data: prompts }));
   });
 
-  app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
+  app.get(ApiRoutes.Datasets.expressPath, async (_req: Request, res: Response): Promise<void> => {
     res.json(
       ServerSchemas.Datasets.Response.parse({
         data: redactAzureBlobSasTokens(await getTestCases()),
@@ -239,105 +286,114 @@ export function createApp() {
     );
   });
 
-  app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
-    const queryResult = ServerSchemas.ShareCheckDomain.Query.safeParse(req.query);
-    if (!queryResult.success) {
-      logger.warn('Missing or invalid id parameter on share check-domain', {
-        method: req.method,
-        path: req.path,
-      });
-      replyValidationError(res, queryResult.error);
-      return;
-    }
-    const { id } = queryResult.data;
+  app.get(
+    ApiRoutes.Results.ShareCheckDomain.expressPath,
+    async (req: Request, res: Response): Promise<void> => {
+      const queryResult = ServerSchemas.ShareCheckDomain.Query.safeParse(req.query);
+      if (!queryResult.success) {
+        logger.warn('Missing or invalid id parameter on share check-domain', {
+          method: req.method,
+          path: req.path,
+        });
+        replyValidationError(res, queryResult.error);
+        return;
+      }
+      const { id } = queryResult.data;
 
-    const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      logger.warn('Eval not found for share check-domain', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
+      const eval_ = await Eval.findById(id);
+      if (!eval_) {
+        logger.warn('Eval not found for share check-domain', { id });
+        replyError(res, 404, 'Eval not found');
+        return;
+      }
 
-    const { domain } = determineShareDomain(eval_);
-    const isCloudEnabled = cloudConfig.isEnabled();
-    res.json(ServerSchemas.ShareCheckDomain.Response.parse({ domain, isCloudEnabled }));
-  });
+      const { domain } = determineShareDomain(eval_);
+      const isCloudEnabled = cloudConfig.isEnabled();
+      res.json(ServerSchemas.ShareCheckDomain.Response.parse({ domain, isCloudEnabled }));
+    },
+  );
 
   // Share URL creation is intentionally unthrottled for local-server workflows. UI and CLI
   // actions can legitimately burst through this route, and a per-IP limiter would block the
   // operator without changing the local trust boundary. See src/server/AGENTS.md for the
   // codified policy; CodeQL js/missing-rate-limiting is an accepted exception here.
-  app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
-    const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
-    if (!bodyResult.success) {
-      replyValidationError(res, bodyResult.error);
-      return;
-    }
-    const { id } = bodyResult.data;
-    logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
-
-    // `Eval.findById` returns `undefined` only for a missing row and otherwise
-    // throws on real DB errors (lock contention, schema drift, etc.). Branch
-    // on the throw to distinguish 500 from 404 — `readResult` cannot serve
-    // that role because it catches its own exceptions and also returns
-    // `undefined` (`src/util/database.ts`), which would silently classify
-    // every load failure as "not found". A separate preflight via
-    // `readResult` would also double the per-request DB load.
-    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
-    try {
-      eval_ = await Eval.findById(id);
-    } catch (error) {
-      sendError(res, 500, 'Failed to load eval for share', error);
-      return;
-    }
-    if (!eval_) {
-      logger.warn('Eval not found for share request', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-
-    try {
-      const url = await createShareableUrl(eval_, { showAuth: true });
-      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
-      res.json(ServerSchemas.Share.Response.parse({ url }));
-    } catch (error) {
-      sendError(res, 500, 'Failed to generate share URL', error);
-    }
-  });
-
-  app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
-    const bodyResult = ServerSchemas.DatasetGenerate.Request.safeParse(req.body);
-    if (!bodyResult.success) {
-      replyValidationError(res, bodyResult.error);
-      return;
-    }
-    const prompts = bodyResult.data.prompts.map((prompt): Prompt => {
-      if (typeof prompt === 'string') {
-        return { raw: prompt, label: prompt };
+  app.post(
+    ApiRoutes.Results.Share.expressPath,
+    async (req: Request, res: Response): Promise<void> => {
+      const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
+      if (!bodyResult.success) {
+        replyValidationError(res, bodyResult.error);
+        return;
       }
-      return { ...prompt, label: prompt.label ?? prompt.raw };
-    });
-    const testSuite: TestSuite = {
-      prompts,
-      tests: bodyResult.data.tests as TestCase[],
-      providers: [],
-    };
-    const results = await synthesizeFromTestSuite(testSuite, {});
-    res.json(ServerSchemas.DatasetGenerate.Response.parse({ results }));
-  });
+      const { id } = bodyResult.data;
+      logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
-  app.use('/api/eval', evalRouter);
-  app.use('/api/media', mediaRouter);
-  app.use('/api/blobs', blobsRouter);
-  app.use('/api/providers', providersRouter);
-  app.use('/api/redteam', redteamRouter);
-  app.use('/api/user', userRouter);
-  app.use('/api/configs', configsRouter);
-  app.use('/api/model-audit', modelAuditRouter);
-  app.use('/api/traces', tracesRouter);
-  app.use('/api/version', versionRouter);
+      // `Eval.findById` returns `undefined` only for a missing row and otherwise
+      // throws on real DB errors (lock contention, schema drift, etc.). Branch
+      // on the throw to distinguish 500 from 404 — `readResult` cannot serve
+      // that role because it catches its own exceptions and also returns
+      // `undefined` (`src/util/database.ts`), which would silently classify
+      // every load failure as "not found". A separate preflight via
+      // `readResult` would also double the per-request DB load.
+      let eval_: Awaited<ReturnType<typeof Eval.findById>>;
+      try {
+        eval_ = await Eval.findById(id);
+      } catch (error) {
+        sendError(res, 500, 'Failed to load eval for share', error);
+        return;
+      }
+      if (!eval_) {
+        logger.warn('Eval not found for share request', { id });
+        replyError(res, 404, 'Eval not found');
+        return;
+      }
 
-  app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
+      try {
+        const url = await createShareableUrl(eval_, { showAuth: true });
+        logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
+        res.json(ServerSchemas.Share.Response.parse({ url }));
+      } catch (error) {
+        sendError(res, 500, 'Failed to generate share URL', error);
+      }
+    },
+  );
+
+  app.post(
+    ApiRoutes.DatasetGenerate.expressPath,
+    async (req: Request, res: Response): Promise<void> => {
+      const bodyResult = ServerSchemas.DatasetGenerate.Request.safeParse(req.body);
+      if (!bodyResult.success) {
+        replyValidationError(res, bodyResult.error);
+        return;
+      }
+      const prompts = bodyResult.data.prompts.map((prompt): Prompt => {
+        if (typeof prompt === 'string') {
+          return { raw: prompt, label: prompt };
+        }
+        return { ...prompt, label: prompt.label ?? prompt.raw };
+      });
+      const testSuite: TestSuite = {
+        prompts,
+        tests: bodyResult.data.tests as TestCase[],
+        providers: [],
+      };
+      const results = await synthesizeFromTestSuite(testSuite, {});
+      res.json(ServerSchemas.DatasetGenerate.Response.parse({ results }));
+    },
+  );
+
+  app.use(ApiMounts.Eval, evalRouter);
+  app.use(ApiMounts.Media, mediaRouter);
+  app.use(ApiMounts.Blobs, blobsRouter);
+  app.use(ApiMounts.Providers, providersRouter);
+  app.use(ApiMounts.Redteam, redteamRouter);
+  app.use(ApiMounts.User, userRouter);
+  app.use(ApiMounts.Configs, configsRouter);
+  app.use(ApiMounts.ModelAudit, modelAuditRouter);
+  app.use(ApiMounts.Traces, tracesRouter);
+  app.use(ApiMounts.Version, versionRouter);
+
+  app.post(ApiRoutes.Telemetry.expressPath, async (req: Request, res: Response): Promise<void> => {
     const result = ServerSchemas.Telemetry.Request.safeParse(req.body);
 
     if (!result.success) {
