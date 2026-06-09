@@ -672,6 +672,54 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.thinking).toEqual({ type: 'adaptive' });
     });
 
+    it('normalizes unsupported controls for Claude Fable 5 on Bedrock invokeModel', async () => {
+      const enabledParams = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          temperature: 0.5,
+          thinking: { type: 'enabled', budget_tokens: 5000, display: 'summarized' },
+        },
+        'hi',
+        undefined,
+        'anthropic.claude-fable-5',
+      );
+      expect(enabledParams.temperature).toBeUndefined();
+      expect(enabledParams.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+
+      const disabledParams = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'anthropic.claude-fable-5',
+      );
+      expect(disabledParams.thinking).toBeUndefined();
+    });
+
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+    ])('omits forced tool choice for Claude Fable 5: %j', async (tool_choice) => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'get_weather',
+              description: 'Get the weather',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice,
+        },
+        'hi',
+        undefined,
+        'anthropic.claude-fable-5',
+      );
+
+      expect(params.tools).toHaveLength(1);
+      expect(params.tool_choice).toBeUndefined();
+    });
+
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -3209,6 +3257,21 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
+  it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-fable-5']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-mythos-5']).toBeUndefined();
+    expect(getHandlerForModel('anthropic.claude-fable-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(() => getHandlerForModel('anthropic.claude-mythos-5')).toThrow(/Anthropic Messages API/);
+    expect(() => getHandlerForModel('us.anthropic.claude-mythos-5')).toThrow(
+      /Anthropic Messages API/,
+    );
+  });
+
   it('should have the correct model mappings', async () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -3546,6 +3609,27 @@ describe('AwsBedrockCompletionProvider', () => {
 
   afterEach(() => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
+  });
+
+  it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 100, output_tokens: 50 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body,
+    });
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-fable-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00385, 6);
   });
 
   it('should pass base config to model.params when context is not provided', async () => {

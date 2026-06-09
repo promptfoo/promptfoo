@@ -28,7 +28,10 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  normalizeAnthropicModelName,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -262,10 +265,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   private initializationPromise: Promise<void> | null = null;
   private samplingParamsDeprecationWarned = false;
   private manualThinkingConversionWarned = false;
+  private disabledThinkingRemovalWarned = false;
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
-  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = true;
+  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH: boolean = true;
 
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
@@ -275,7 +279,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
-    if (!AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(modelName)) {
+    if (
+      !AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(
+        normalizeAnthropicModelName(modelName),
+      )
+    ) {
       logger.warn(`Using unknown Anthropic model: ${modelName}`);
     }
     super(modelName, options);
@@ -576,25 +584,43 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
-    // Opus 4.7/4.8 are adaptive-only — manual budget-based thinking
+    // Newer Claude models are adaptive-only — manual budget-based thinking
     // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
     // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
     // controls reasoning depth on these models.
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
-    if (samplingParamsDeprecated && resolvedThinking?.type === 'enabled') {
-      if (!this.manualThinkingConversionWarned) {
-        logger.warn(
-          'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
-        );
-        this.manualThinkingConversionWarned = true;
-      }
-      resolvedThinking = { type: 'adaptive' };
+    if (
+      samplingParamsDeprecated &&
+      resolvedThinking?.type === 'enabled' &&
+      !this.manualThinkingConversionWarned
+    ) {
+      logger.warn(
+        alwaysOnAdaptiveThinking
+          ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+          : 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
+      );
+      this.manualThinkingConversionWarned = true;
     }
-    const thinkingEnabled = isThinkingEnabled(resolvedThinking);
+    if (
+      alwaysOnAdaptiveThinking &&
+      resolvedThinking?.type === 'disabled' &&
+      !this.disabledThinkingRemovalWarned
+    ) {
+      logger.warn(
+        'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+      );
+      this.disabledThinkingRemovalWarned = true;
+    }
+    resolvedThinking = normalizeClaudeThinkingConfig(this.modelName, resolvedThinking);
+    const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolvedThinking);
 
-    // Validate and warn about thinking-incompatible params
-    if (thinkingEnabled) {
+    // Validate and warn about thinking-incompatible params. Skip when the model
+    // deprecates sampling params entirely — the deduped model-level warning
+    // below already covers the omission, and the "disable thinking" advice is
+    // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
+    if (thinkingEnabled && !samplingParamsDeprecated) {
       if (config.top_k != null) {
         logger.warn(
           'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
@@ -652,7 +678,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Opus 4.7 and 4.8 deprecate manual sampling controls at the model level —
+    // Newer Claude models deprecate manual sampling controls at the model level —
     // `temperature`, `top_p`, and `top_k` are adaptive, and pinning any of them
     // returns 400 `invalid_request_error` (including promptfoo's built-in
     // `temperature` default of 0). Suppress all three and warn once per provider
@@ -671,13 +697,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       !this.samplingParamsDeprecationWarned
     ) {
       logger.warn(
-        'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+        alwaysOnAdaptiveThinking
+          ? 'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5 and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
+          : 'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
       );
       this.samplingParamsDeprecationWarned = true;
     }
 
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
-    // and on Opus 4.7/4.8 (sampling controls deprecated at the model level).
+    // and on adaptive-sampling Claude models.
     // Collapse those cases into one predicate so the params spread stays readable.
     const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
 
@@ -710,7 +738,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }),
       ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
       // Anthropic docs: top_k is incompatible with extended thinking, and Opus
-      // 4.7/4.8 reject it entirely along with the other sampling controls.
+      // adaptive-sampling models reject it along with the other sampling controls.
       ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
         ? {}
         : { top_k: config.top_k }),
