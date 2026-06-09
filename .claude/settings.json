@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./node_modules/.bin/block-no-verify"
+            "command": "npm exec --offline -- block-no-verify"
           }
         ]
       }
