@@ -2507,9 +2507,12 @@ export function getHandlerForModel(
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
   if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
+    // Mythos has no geo/global inference profiles, so always point at the bare
+    // canonical ID — suggesting a prefixed `bedrock:${modelName}` would only
+    // bounce the user into the factory's prefixed-Mythos rejection.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
-        `InvokeModel. Load it as "bedrock:${modelName}" instead.`,
+        `InvokeModel. Load it as "bedrock:anthropic.claude-mythos-5" instead.`,
     );
   }
 
