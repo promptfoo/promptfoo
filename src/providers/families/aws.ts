@@ -14,29 +14,39 @@ export const awsProviderFactories: ProviderFactory[] = [
       // Mythos is only available through Bedrock's Anthropic-compatible
       // Messages endpoint. Fable also supports that endpoint when explicitly
       // selected, while its bare form continues through Bedrock Runtime below.
-      const candidateAnthropicModel =
-        modelType === 'messages' ? modelName : splits.length === 2 ? splits[1] : undefined;
-      const requestedAnthropicModel =
-        candidateAnthropicModel ??
-        (modelType === 'converse' || modelType === 'completion' ? modelName : undefined);
-      if (/^[^.]+\.anthropic\.claude-mythos-5$/.test(requestedAnthropicModel ?? '')) {
+      const isLegacyType = modelType === 'converse' || modelType === 'completion';
+      const anthropicModel =
+        modelType === 'messages'
+          ? modelName
+          : splits.length === 2
+            ? splits[1]
+            : isLegacyType
+              ? modelName
+              : undefined;
+      if (/^[^.]+\.anthropic\.claude-mythos-5$/.test(anthropicModel ?? '')) {
         throw new Error(
-          `Amazon Bedrock model "${requestedAnthropicModel}" is not a valid Mythos model ID. ` +
+          `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
             `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
         );
       }
-      if (candidateAnthropicModel?.startsWith('anthropic.claude-')) {
+      if (anthropicModel?.startsWith('anthropic.claude-')) {
         const {
           createBedrockAnthropicMessagesProvider,
           isBedrockAnthropicMessagesModel,
           requiresBedrockAnthropicMessagesModel,
         } = await import('../bedrock/anthropicMessages');
+        if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
+          throw new Error(
+            `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +
+              `${modelType === 'converse' ? 'Converse' : 'InvokeModel'}. Use ` +
+              `"bedrock:${anthropicModel}" or "bedrock:messages:${anthropicModel}".`,
+          );
+        }
         if (
-          isBedrockAnthropicMessagesModel(candidateAnthropicModel) &&
-          (modelType === 'messages' ||
-            requiresBedrockAnthropicMessagesModel(candidateAnthropicModel))
+          isBedrockAnthropicMessagesModel(anthropicModel) &&
+          (modelType === 'messages' || requiresBedrockAnthropicMessagesModel(anthropicModel))
         ) {
-          return createBedrockAnthropicMessagesProvider(candidateAnthropicModel, {
+          return createBedrockAnthropicMessagesProvider(anthropicModel, {
             ...providerOptions,
             id: providerOptions.id ?? providerPath,
           });
@@ -47,22 +57,6 @@ export const awsProviderFactories: ProviderFactory[] = [
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
             `provider. Supported models: anthropic.claude-fable-5 and anthropic.claude-mythos-5.`,
         );
-      }
-
-      if (
-        (modelType === 'converse' || modelType === 'completion') &&
-        modelName.startsWith('anthropic.claude-')
-      ) {
-        const { requiresBedrockAnthropicMessagesModel } = await import(
-          '../bedrock/anthropicMessages'
-        );
-        if (requiresBedrockAnthropicMessagesModel(modelName)) {
-          throw new Error(
-            `Amazon Bedrock model "${modelName}" uses the Anthropic Messages API, not ` +
-              `${modelType === 'converse' ? 'Converse' : 'InvokeModel'}. Use ` +
-              `"bedrock:${modelName}" or "bedrock:messages:${modelName}".`,
-          );
-        }
       }
 
       // OpenAI frontier models (gpt-5.x) are served only through Bedrock's OpenAI-compatible

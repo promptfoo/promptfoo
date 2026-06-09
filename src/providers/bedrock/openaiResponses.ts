@@ -1,8 +1,10 @@
-import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
-import { getBedrockMantleOrigin } from './mantle';
+import {
+  getBedrockMantleOrigin,
+  resolveBedrockMantleApiKey,
+  resolveBedrockMantleRegion,
+} from './mantle';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
 
 /**
@@ -49,34 +51,6 @@ export function getBedrockMantleBaseUrl(region: string): string {
   return `${getBedrockMantleOrigin(region)}/openai/v1`;
 }
 
-// Region precedence for the frontier provider. This intentionally extends
-// AwsBedrockGenericProvider.getRegion() (src/providers/bedrock/base.ts): the same
-// config.region → AWS_BEDROCK_REGION head, plus AWS_REGION/AWS_DEFAULT_REGION fallbacks and a
-// us-east-2 default (the frontier GA region) instead of base.ts's us-east-1. The frontier
-// provider wraps OpenAiResponsesProvider rather than extending AwsBedrockGenericProvider, so it
-// can't reuse getRegion() directly — keep this chain in sync if the canonical one changes.
-function resolveRegion(config: Record<string, any>, env?: EnvOverrides): string {
-  return (
-    config.region ||
-    env?.AWS_BEDROCK_REGION ||
-    getEnvString('AWS_BEDROCK_REGION') ||
-    env?.AWS_REGION ||
-    env?.AWS_DEFAULT_REGION ||
-    process.env.AWS_REGION ||
-    process.env.AWS_DEFAULT_REGION ||
-    DEFAULT_BEDROCK_OPENAI_REGION
-  );
-}
-
-function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string | undefined {
-  // Ignore an unresolved `{{ env.* }}` template (the referenced var wasn't set). Otherwise the
-  // literal would be sent as the bearer token and the eval would fail with a confusing 401
-  // instead of the actionable missing-key error below; fall through to the env var instead.
-  const explicitKey =
-    typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
-  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
-}
-
 /**
  * OpenAI Responses provider for Bedrock frontier models. Behaves exactly like the OpenAI
  * Platform provider (shared request/response/usage handling).
@@ -121,8 +95,12 @@ export function createBedrockOpenAiResponsesProvider(
   providerOptions: ProviderOptions & { id?: string } = {},
 ): OpenAiResponsesProvider {
   const config: Record<string, any> = providerOptions.config ?? {};
-  const region = resolveRegion(config, providerOptions.env);
-  const apiKey = resolveApiKey(config, providerOptions.env);
+  const region = resolveBedrockMantleRegion(
+    config,
+    providerOptions.env,
+    DEFAULT_BEDROCK_OPENAI_REGION,
+  );
+  const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
 
   if (!apiKey) {
     throw new Error(

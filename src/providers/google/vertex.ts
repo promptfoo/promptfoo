@@ -14,10 +14,12 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import {
+  applyClaude5RegionalPremium,
   calculateAnthropicCost,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -296,15 +298,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
-    let thinkingConfig: ClaudeThinkingConfig | undefined = requestedThinkingConfig;
-    if (samplingParamsDeprecated && thinkingConfig?.type === 'enabled') {
-      thinkingConfig = {
-        type: 'adaptive',
-        ...(thinkingConfig.display ? { display: thinkingConfig.display } : {}),
-      };
-    } else if (alwaysOnAdaptiveThinking && thinkingConfig?.type === 'disabled') {
-      thinkingConfig = undefined;
-    }
+    const thinkingConfig: ClaudeThinkingConfig | undefined = normalizeClaudeThinkingConfig(
+      this.modelName,
+      requestedThinkingConfig,
+    );
     const isThinkingEnabled =
       alwaysOnAdaptiveThinking ||
       thinkingConfig?.type === 'enabled' ||
@@ -423,15 +420,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
-      const regionalClaude5Pricing =
-        alwaysOnAdaptiveThinking && this.getRegion() !== 'global' && this.config.cost == null;
-      const pricingConfig = regionalClaude5Pricing
-        ? {
-            ...this.config,
-            inputCost: this.config.inputCost ?? 11 / 1e6,
-            outputCost: this.config.outputCost ?? 55 / 1e6,
-          }
-        : this.config;
+      // Regional and multi-region Vertex endpoints bill Claude 5 at a premium
+      // over the global endpoint.
+      const pricingConfig =
+        this.getRegion() !== 'global'
+          ? applyClaude5RegionalPremium(normalizedModelName, this.config)
+          : this.config;
       const response = {
         cached: false,
         output,

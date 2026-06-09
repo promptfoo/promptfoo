@@ -31,6 +31,7 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -268,7 +269,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
-  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = true;
+  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH: boolean = true;
 
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
@@ -590,31 +591,29 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
-    if (samplingParamsDeprecated && resolvedThinking?.type === 'enabled') {
-      if (!this.manualThinkingConversionWarned) {
-        logger.warn(
-          alwaysOnAdaptiveThinking
-            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
-            : 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
-        );
-        this.manualThinkingConversionWarned = true;
-      }
-      resolvedThinking = {
-        type: 'adaptive',
-        ...('display' in resolvedThinking && resolvedThinking.display
-          ? { display: resolvedThinking.display }
-          : {}),
-      };
+    if (
+      samplingParamsDeprecated &&
+      resolvedThinking?.type === 'enabled' &&
+      !this.manualThinkingConversionWarned
+    ) {
+      logger.warn(
+        alwaysOnAdaptiveThinking
+          ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+          : 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
+      );
+      this.manualThinkingConversionWarned = true;
     }
-    if (alwaysOnAdaptiveThinking && resolvedThinking?.type === 'disabled') {
-      if (!this.disabledThinkingRemovalWarned) {
-        logger.warn(
-          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
-        );
-        this.disabledThinkingRemovalWarned = true;
-      }
-      resolvedThinking = undefined;
+    if (
+      alwaysOnAdaptiveThinking &&
+      resolvedThinking?.type === 'disabled' &&
+      !this.disabledThinkingRemovalWarned
+    ) {
+      logger.warn(
+        'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+      );
+      this.disabledThinkingRemovalWarned = true;
     }
+    resolvedThinking = normalizeClaudeThinkingConfig(this.modelName, resolvedThinking);
     const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolvedThinking);
 
     // Validate and warn about thinking-incompatible params. Skip when the model

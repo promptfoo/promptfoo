@@ -8,7 +8,9 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   calculateAnthropicCost,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -30,7 +32,7 @@ export const coerceStrToNum = (value: string | number | undefined): number | und
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
 
 function calculateBedrockClaudeCost(modelName: string, responseJson: any): number | undefined {
-  if (!isAlwaysOnAdaptiveThinkingClaudeModel(modelName)) {
+  if (!isClaudeFableOrMythos5Model(modelName)) {
     return undefined;
   }
   return calculateAnthropicCost(
@@ -1699,15 +1701,9 @@ export const BEDROCK_MODEL = {
           ? undefined
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
-      let thinking = config?.thinking;
-      if (samplingParamsDeprecated && thinking?.type === 'enabled') {
-        thinking = {
-          type: 'adaptive' as const,
-          ...(thinking.display ? { display: thinking.display } : {}),
-        };
-      } else if (alwaysOnAdaptiveThinking && thinking?.type === 'disabled') {
-        thinking = undefined;
-      }
+      const thinking = modelName
+        ? normalizeClaudeThinkingConfig(modelName, config?.thinking)
+        : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);

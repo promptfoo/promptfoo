@@ -1,58 +1,35 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { getEnvString } from '../../envars';
 import { AnthropicMessagesProvider } from '../anthropic/messages';
-import { getBedrockMantleOrigin } from './mantle';
+import {
+  getBedrockMantleOrigin,
+  resolveBedrockMantleApiKey,
+  resolveBedrockMantleRegion,
+} from './mantle';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
 
+const BEDROCK_ANTHROPIC_MESSAGES_MODELS = ['anthropic.claude-fable-5', 'anthropic.claude-mythos-5'];
+
 export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return /^(?:anthropic\.)claude-(?:fable|mythos)-5$/.test(modelName);
+  return BEDROCK_ANTHROPIC_MESSAGES_MODELS.includes(modelName);
 }
 
 export function requiresBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return /^(?:anthropic\.)claude-mythos-5$/.test(modelName);
+  return modelName === 'anthropic.claude-mythos-5';
 }
 
 export function getBedrockAnthropicBaseUrl(region: string): string {
   return `${getBedrockMantleOrigin(region)}/anthropic`;
 }
 
-function resolveRegion(config: Record<string, any>, env?: EnvOverrides): string {
-  return (
-    config.region ||
-    env?.AWS_BEDROCK_REGION ||
-    getEnvString('AWS_BEDROCK_REGION') ||
-    env?.AWS_REGION ||
-    env?.AWS_DEFAULT_REGION ||
-    process.env.AWS_REGION ||
-    process.env.AWS_DEFAULT_REGION ||
-    DEFAULT_BEDROCK_ANTHROPIC_REGION
-  );
-}
-
-function resolveApiKey(config: Record<string, any>, env?: EnvOverrides): string | undefined {
-  const explicitKey =
-    typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
-  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
-}
-
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
-  constructor(modelName: string, options: ProviderOptions & { id?: string } = {}) {
-    super(modelName, options);
-
-    // Bedrock's Anthropic-compatible endpoint accepts API keys via x-api-key.
-    // Keep the Anthropic SDK for request/response parity and use its API-key
-    // authentication mode so it emits the expected header.
-    this.anthropic = new Anthropic({
-      apiKey: this.apiKey ?? null,
-      authToken: null,
-      baseURL: this.getApiBaseUrl(),
-    });
-  }
+  // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
+  // x-api-key (the factory guarantees one). Never fall back to a local Claude
+  // Code OAuth session — that would send an Anthropic OAuth token to the
+  // Bedrock mantle host.
+  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 }
 
 export function createBedrockAnthropicMessagesProvider(
@@ -60,8 +37,12 @@ export function createBedrockAnthropicMessagesProvider(
   providerOptions: ProviderOptions & { id?: string } = {},
 ): BedrockAnthropicMessagesProvider {
   const config: Record<string, any> = providerOptions.config ?? {};
-  const region = resolveRegion(config, providerOptions.env);
-  const apiKey = resolveApiKey(config, providerOptions.env);
+  const region = resolveBedrockMantleRegion(
+    config,
+    providerOptions.env,
+    DEFAULT_BEDROCK_ANTHROPIC_REGION,
+  );
+  const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
 
   if (!apiKey) {
     throw new Error(
@@ -84,7 +65,7 @@ export function createBedrockAnthropicMessagesProvider(
 
   if (
     !config.apiBaseUrl &&
-    /^(?:anthropic\.)claude-fable-5$/.test(modelName) &&
+    modelName === 'anthropic.claude-fable-5' &&
     !FABLE_MANTLE_REGIONS.has(region)
   ) {
     throw new Error(
