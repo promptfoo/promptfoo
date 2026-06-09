@@ -617,8 +617,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
     const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolvedThinking);
 
-    // Validate and warn about thinking-incompatible params
-    if (thinkingEnabled) {
+    // Validate and warn about thinking-incompatible params. Skip when the model
+    // deprecates sampling params entirely — the deduped model-level warning
+    // below already covers the omission, and the "disable thinking" advice is
+    // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
+    if (thinkingEnabled && !samplingParamsDeprecated) {
       if (config.top_k != null) {
         logger.warn(
           'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',

@@ -1687,6 +1687,9 @@ export const BEDROCK_MODEL = {
         undefined,
         undefined,
       );
+      // Like the sampling-param drop above, the forced-tool-choice and
+      // disabled-thinking drops below normalize silently — the Converse and
+      // Anthropic Messages providers surface the one-time warnings.
       const alwaysOnAdaptiveThinking = modelName
         ? isAlwaysOnAdaptiveThinkingClaudeModel(modelName)
         : false;

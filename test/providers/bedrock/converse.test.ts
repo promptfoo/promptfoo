@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import logger from '../../../src/logger';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
@@ -1231,6 +1232,62 @@ describe('AwsBedrockConverseProvider', () => {
       // cache write $13.75, and output $55 per million tokens.
       expect(result.cost).toBeCloseTo(0.005775, 8);
     });
+
+    it('should not apply the regional premium for a global inference-profile ARN', async () => {
+      const provider = new AwsBedrockConverseProvider(
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.anthropic.claude-fable-5',
+        { config: { region: 'us-east-1' } },
+      );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      const result = await provider.callApi('Test');
+
+      // The ARN wraps a `global.` profile, which bills at the $10/$50 base rates:
+      // (100/1M * 10) + (50/1M * 50) = 0.001 + 0.0025 = 0.0035
+      expect(result.cost).toBeCloseTo(0.0035, 6);
+    });
+
+    it.each(['us.anthropic.claude-fable-5', 'eu.anthropic.claude-fable-5'])(
+      'should apply the regional premium for %s',
+      async (modelId) => {
+        const provider = new AwsBedrockConverseProvider(modelId, {
+          config: { region: 'us-east-1' },
+        });
+
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+        const result = await provider.callApi('Test');
+
+        // Geo-prefixed inference profiles bill at the 10% premium over the
+        // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
+        expect(result.cost).toBeCloseTo(0.00385, 6);
+      },
+    );
+
+    it('should apply cache pricing at base rate with no premium for Claude Opus 4.8', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
+        config: { region: 'us-east-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 750,
+            cacheReadInputTokens: 500,
+            cacheWriteInputTokens: 100,
+          },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // Base rates ($5/$25 per MTok) with no 1.1x premium: uncached input $5,
+      // cache read $0.50, cache write $6.25, and output $25 per million tokens.
+      // 100*5e-6 + 500*5e-7 + 100*6.25e-6 + 50*25e-6 = 0.002625
+      expect(result.cost).toBeCloseTo(0.002625, 8);
+    });
   });
 
   describe('MCP helper functions (via Converse command input)', () => {
@@ -1843,6 +1900,30 @@ Third line`;
         ConverseCommand as unknown as { mock: { calls: unknown[][] } }
       ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
       expect(request.toolConfig).not.toHaveProperty('toolChoice');
+    });
+
+    it('warns only once per provider instance when forced tool choice is dropped for Claude Fable 5', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: 'any' as any,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await provider.callApi('Test');
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await provider.callApi('Test');
+
+      // The forcedToolChoiceRemovalWarned flag dedups the warning across requests
+      // on the same provider instance.
+      const forcedToolChoiceWarnings = warnSpy.mock.calls.filter((call) =>
+        /Forced tool choice/.test(String(call[0] ?? '')),
+      );
+      expect(forcedToolChoiceWarnings).toHaveLength(1);
+      warnSpy.mockRestore();
     });
 
     it('omits temperature for Opus 4.8 via AWS_BEDROCK_TEMPERATURE env fallback', async () => {

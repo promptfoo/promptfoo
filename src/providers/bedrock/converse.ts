@@ -243,11 +243,13 @@ function calculateBedrockConverseCost(
 
   // Find matching pricing
   const normalizedModelId = modelId.toLowerCase();
+  // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
+  // premium. The model ID may be a bare `global.` profile or an
+  // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
+  const isGlobalEndpoint =
+    normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const pricingMultiplier =
-    isAlwaysOnAdaptiveThinkingClaudeModel(normalizedModelId) &&
-    !normalizedModelId.startsWith('global.')
-      ? 1.1
-      : 1;
+    isAlwaysOnAdaptiveThinkingClaudeModel(normalizedModelId) && !isGlobalEndpoint ? 1.1 : 1;
   for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
     if (normalizedModelId.includes(modelPrefix)) {
       const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
@@ -827,6 +829,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private mcpInitError: Error | null = null;
   private registeredForShutdown = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
+  private forcedToolChoiceRemovalWarned = false;
 
   constructor(
     modelName: string,
@@ -1149,12 +1152,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
-    const toolChoice =
+    const dropForcedToolChoice =
       isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
-      requestedToolChoice &&
-      ('any' in requestedToolChoice || 'tool' in requestedToolChoice)
-        ? undefined
-        : requestedToolChoice;
+      requestedToolChoice !== undefined &&
+      ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
+    if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
+      logger.warn(
+        'Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of Claude Fable 5 and Claude Mythos 5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+      );
+      this.forcedToolChoiceRemovalWarned = true;
+    }
+    const toolChoice = dropForcedToolChoice ? undefined : requestedToolChoice;
 
     return {
       tools: converseTools,

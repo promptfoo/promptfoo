@@ -381,9 +381,11 @@ export function calculateAnthropicCost(
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
   const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  // Bare and geo-prefixed Bedrock IDs bill at the 10% regional premium; only
+  // the `global.` endpoint bills at base rate. Keep the geo set in sync with
+  // normalizeAnthropicModelName so every prefix it can price gets the premium.
   const usesRegionalBedrockPricing =
-    isClaudeFableOrMythos5Model(modelName) &&
-    /^(?!global\.)(?:(?:us|eu)\.)?anthropic\./.test(modelName);
+    isClaudeFableOrMythos5Model(modelName) && /^(?:(?:us|eu|jp|au)\.)?anthropic\./.test(modelName);
   const effectiveConfig =
     usesRegionalBedrockPricing && modelInfo && config.cost == null
       ? {

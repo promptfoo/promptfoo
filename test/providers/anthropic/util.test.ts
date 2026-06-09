@@ -1710,9 +1710,45 @@ describe('Anthropic utilities', () => {
 
     it('applies the Bedrock regional endpoint premium', () => {
       expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(0.0385, 6);
+      // Every geo prefix that normalizeAnthropicModelName can price bills at the
+      // same 10% regional premium; only the `global.` endpoint bills at base rate.
+      for (const geo of ['us', 'eu', 'jp', 'au']) {
+        expect(calculateAnthropicCost(`${geo}.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+          0.0385,
+          6,
+        );
+      }
       expect(calculateAnthropicCost(`global.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
         0.035,
         6,
+      );
+    });
+
+    it('suppresses the Bedrock regional premium when user cost overrides are set', () => {
+      // A flat config.cost is used verbatim for both sides — no 1.1x multiplier:
+      // 1000 * 20e-6 + 500 * 20e-6 = 0.03
+      expect(
+        calculateAnthropicCost(`anthropic.${model}`, { cost: 20 / 1e6 }, 1000, 500),
+      ).toBeCloseTo(0.03, 6);
+      // Explicit inputCost/outputCost also win over the premium-adjusted defaults:
+      // 1000 * 1e-6 + 500 * 2e-6 = 0.002
+      expect(
+        calculateAnthropicCost(
+          `anthropic.${model}`,
+          { inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+          1000,
+          500,
+        ),
+      ).toBeCloseTo(0.002, 6);
+    });
+
+    it('applies prompt cache pricing at the premium-multiplied regional rates', () => {
+      // Regional rates are $11/$55 per MTok ($10/$50 base * 1.1). Cache reads bill
+      // at 0.1x and cache writes at 1.25x the premium input rate:
+      // 1000*11e-6 + 200*1.1e-6 + 100*13.75e-6 + 500*55e-6 = 0.040095
+      expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500, 200, 100)).toBeCloseTo(
+        0.040095,
+        8,
       );
     });
   });
