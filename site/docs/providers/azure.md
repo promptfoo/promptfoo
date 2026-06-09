@@ -986,6 +986,15 @@ Available Claude deployments on Azure AI Foundry:
 | `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
 | `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku  |
 
+:::note
+Anthropic deployments on Azure require `modelProviderData` (`industry`,
+`organizationName`, `countryCode`) at creation time — Azure's provider
+data-sharing equivalent. The `az cognitiveservices account deployment create`
+command has no flag for it yet, so create the deployment via the REST API
+(api-version `2025-10-01-preview`) with
+`properties.modelProviderData: { "industry": ..., "organizationName": ..., "countryCode": ... }`.
+:::
+
 ### Claude Configuration Example
 
 ```yaml title="promptfooconfig.yaml"

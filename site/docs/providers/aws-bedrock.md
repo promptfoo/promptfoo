@@ -816,11 +816,13 @@ For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-4-
 #### Claude Fable and Mythos models
 
 [Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
-supports Bedrock Runtime and Converse with the base ID `anthropic.claude-fable-5`
-and the `us.`, `eu.`, and `global.` inference IDs. It also supports Bedrock's
-Anthropic-compatible Messages endpoint through the explicit
+supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
+inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID
+returns a `ValidationException`, and the `us.`/`eu.` geo profiles listed on the
+model card may not be provisioned in every region yet. Fable 5 also supports
+Bedrock's Anthropic-compatible Messages endpoint through the explicit
 `bedrock:messages:anthropic.claude-fable-5` provider ID in `us-east-1` and
-`eu-north-1`.
+`eu-north-1` (this route may additionally require account enablement from AWS).
 
 [Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
 is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.
@@ -835,12 +837,20 @@ providers:
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-AWS requires provider data sharing to be enabled for Fable 5 and Mythos 5. Both use
-always-on adaptive thinking, so promptfoo omits sampling controls, converts manual
-thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`) to adaptive
-thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo endpoints cost
-10% more than the global endpoint; Promptfoo applies that premium when calculating
-costs.
+AWS requires provider data sharing to be enabled for Fable 5 and Mythos 5 — without
+it every request fails with `data retention mode 'default' is not available for this
+model`. There is no console UI at launch; opt in per region via the Data Retention
+API:
+
+```bash
+aws bedrock put-account-data-retention --mode provider_data_share --region us-east-1
+```
+
+Both models use always-on adaptive thinking, so promptfoo omits sampling controls,
+converts manual thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`)
+to adaptive thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo
+endpoints cost 10% more than the global endpoint; Promptfoo applies that premium when
+calculating costs.
 
 ```yaml
 config:

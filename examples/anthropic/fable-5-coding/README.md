@@ -42,7 +42,7 @@ npx promptfoo@latest view
 
 Fable 5 is also reachable through:
 
-- AWS Bedrock — `bedrock:anthropic.claude-fable-5` (Runtime/Converse; `us.`, `eu.`, and `global.` inference IDs also work), or `bedrock:messages:anthropic.claude-fable-5` for Bedrock's Anthropic-compatible Messages endpoint in `us-east-1`/`eu-north-1`
+- AWS Bedrock — `bedrock:global.anthropic.claude-fable-5` (Runtime/Converse; requires the account to opt in to provider data sharing via `aws bedrock put-account-data-retention --mode provider_data_share`), or `bedrock:messages:anthropic.claude-fable-5` for Bedrock's Anthropic-compatible Messages endpoint in `us-east-1`/`eu-north-1`
 - Google Vertex — `vertex:claude-fable-5`
 - Azure AI Foundry — point `anthropic:messages:claude-fable-5` at `https://<resource>.services.ai.azure.com/anthropic` via `apiBaseUrl`
 

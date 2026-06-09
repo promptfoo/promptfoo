@@ -49,6 +49,19 @@ Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 5 models; promptfoo includes that premium in
 cost calculations unless `config.region` is `global`.
+
+Claude 5 models also require provider data sharing on Vertex — without it requests
+fail with a 403 asking you to set `PublisherModelConfig.data_sharing_enabled_provider`.
+Enable it once per project (in addition to Model Garden access):
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  "https://aiplatform.googleapis.com/v1beta1/projects/PROJECT_ID/locations/global/publishers/anthropic/models/claude-fable-5:setPublisherModelConfig" \
+  -d '{"publisherModelConfig":{"dataSharingEnabledProvider":"anthropic"}}'
+```
+
 Mythos 5 is limited availability; contact your Google Cloud account team for access
 and the model ID because Google does not publish one in its public model catalog.
 
