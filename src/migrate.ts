@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as path from 'path';
@@ -54,6 +55,11 @@ export type RunDbMigrationsOptions = {
 
 function resolveMigrationsFolder(): string {
   const dir = getCurrentDir();
+  const bundledMigrationsFolder = path.join(dir, 'assets', 'drizzle');
+  if (fs.existsSync(bundledMigrationsFolder)) {
+    // Bundled CLI / SEA distributions place migrations next to the executable bundle.
+    return bundledMigrationsFolder;
+  }
   if (dir.includes('dist/src')) {
     // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
     // Navigate to project root and find drizzle folder in dist

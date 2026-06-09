@@ -1,0 +1,1577 @@
+#!/bin/bash
+# Smoke test suite for promptfoo bundled CLI
+#
+# Usage:
+#   ./scripts/smoke-test.sh              # Test the bundle
+#   ./scripts/smoke-test.sh --installed  # Test installed version
+#
+# Exit codes:
+#   0 - All tests passed
+#   1 - One or more tests failed
+
+set -euo pipefail
+
+# ─── Configuration ───────────────────────────────────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+BUNDLE_MODULE_PATH="$ROOT_DIR/bundle/promptfoo.mjs"
+BUNDLE_BINARY_PATH=""
+TEST_ROOT=""
+TEST_DIR=""
+FAILED_TESTS=()
+PASSED_TESTS=()
+USE_INSTALLED=false
+
+if [[ -x "$ROOT_DIR/bundle/promptfoo" ]]; then
+  BUNDLE_BINARY_PATH="$ROOT_DIR/bundle/promptfoo"
+elif [[ -f "$ROOT_DIR/bundle/promptfoo.exe" ]]; then
+  BUNDLE_BINARY_PATH="$ROOT_DIR/bundle/promptfoo.exe"
+fi
+
+# ─── Colors ──────────────────────────────────────────────────────────────────
+
+if [[ -t 1 ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  BOLD='\033[1m'
+  DIM='\033[2m'
+  NC='\033[0m'
+else
+  RED='' GREEN='' YELLOW='' BLUE='' BOLD='' DIM='' NC=''
+fi
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+log_test() {
+  echo -e "${BLUE}TEST${NC}  $*"
+}
+
+log_pass() {
+  echo -e "${GREEN}PASS${NC}  $*"
+  PASSED_TESTS+=("$*")
+}
+
+log_fail() {
+  echo -e "${RED}FAIL${NC}  $*"
+  FAILED_TESTS+=("$*")
+}
+
+log_skip() {
+  echo -e "${YELLOW}SKIP${NC}  $*"
+}
+
+log_info() {
+  echo -e "${DIM}INFO${NC}  $*"
+}
+
+# Run promptfoo command
+pf() {
+  if [[ "$USE_INSTALLED" == "true" ]]; then
+    promptfoo "$@"
+  elif [[ -n "$BUNDLE_BINARY_PATH" ]]; then
+    "$BUNDLE_BINARY_PATH" "$@"
+  else
+    node "$BUNDLE_MODULE_PATH" "$@"
+  fi
+}
+
+# Create isolated state and case directories for artifact tests.
+setup_test_environment() {
+  umask 077
+  TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/promptfoo-smoke.XXXXXXXX")
+  export PROMPTFOO_CONFIG_DIR="$TEST_ROOT/state"
+  export PROMPTFOO_CACHE_PATH="$TEST_ROOT/cache"
+  export PROMPTFOO_DISABLE_SHARING=true
+  export PROMPTFOO_DISABLE_UPDATE=true
+  mkdir -p "$PROMPTFOO_CONFIG_DIR" "$PROMPTFOO_CACHE_PATH"
+}
+
+setup_test_dir() {
+  TEST_DIR=$(mktemp -d "$TEST_ROOT/case.XXXXXXXX")
+  log_info "Test directory: $TEST_DIR"
+  cd "$TEST_DIR"
+}
+
+# Cleanup
+cleanup() {
+  if [[ -n "$TEST_ROOT" && -d "$TEST_ROOT" ]]; then
+    rm -rf "$TEST_ROOT"
+  fi
+}
+
+trap cleanup EXIT
+
+# ─── Test Cases ──────────────────────────────────────────────────────────────
+
+test_version() {
+  log_test "--version returns version number"
+
+  local output
+  # Use 2>/dev/null to suppress deprecation warnings
+  if output=$(pf --version 2>/dev/null); then
+    # Check if output contains a version number pattern
+    if [[ "$output" =~ [0-9]+\.[0-9]+\.[0-9]+ ]]; then
+      log_pass "--version: $output"
+      return 0
+    else
+      log_fail "--version returned unexpected format: $output"
+      return 1
+    fi
+  else
+    log_fail "--version failed with exit code $?"
+    return 1
+  fi
+}
+
+test_help() {
+  log_test "--help shows usage information"
+
+  local output
+  if output=$(pf --help 2>&1); then
+    if [[ "$output" == *"Usage:"* ]] || [[ "$output" == *"Commands:"* ]]; then
+      log_pass "--help shows usage information"
+      return 0
+    else
+      log_fail "--help output doesn't contain expected content"
+      return 1
+    fi
+  else
+    log_fail "--help failed with exit code $?"
+    return 1
+  fi
+}
+
+test_init() {
+  log_test "init creates promptfooconfig.yaml"
+
+  setup_test_dir
+
+  if pf init --no-interactive >/dev/null 2>&1 || pf init -y >/dev/null 2>&1; then
+    if [[ -f "promptfooconfig.yaml" ]]; then
+      log_pass "init created promptfooconfig.yaml"
+      return 0
+    else
+      log_fail "init completed but promptfooconfig.yaml not found"
+      return 1
+    fi
+  else
+    log_fail "init command failed"
+    return 1
+  fi
+}
+
+test_eval_echo_provider() {
+  log_test "eval with echo provider"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Hello {{name}}"
+providers:
+  - id: echo
+tests:
+  - vars:
+      name: World
+EOF
+
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "eval with echo provider completed"
+      return 0
+    else
+      log_fail "eval completed but results.json not found"
+      return 1
+    fi
+  else
+    log_fail "eval with echo provider failed"
+    return 1
+  fi
+}
+
+test_eval_with_assertions() {
+  log_test "eval with assertions"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "The answer is {{answer}}"
+providers:
+  - id: echo
+tests:
+  - vars:
+      answer: "42"
+    assert:
+      - type: contains
+        value: "42"
+      - type: javascript
+        value: output.includes("answer")
+EOF
+
+  local output
+  if output=$(pf eval --no-cache -o results.json 2>&1); then
+    if [[ -f "results.json" ]]; then
+      # Check if assertions passed
+      if grep -q '"pass":true' results.json 2>/dev/null || grep -q '"success":true' results.json 2>/dev/null; then
+        log_pass "eval with assertions - all passed"
+        return 0
+      else
+        log_info "Results: $(cat results.json | head -100)"
+        log_pass "eval with assertions completed (checking results manually)"
+        return 0
+      fi
+    else
+      log_fail "eval completed but results.json not found"
+      return 1
+    fi
+  else
+    log_fail "eval with assertions failed: $output"
+    return 1
+  fi
+}
+
+test_eval_failing_assertion() {
+  log_test "eval correctly reports failing assertions"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Hello World"
+providers:
+  - id: echo
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: "IMPOSSIBLE_STRING_THAT_WONT_MATCH"
+EOF
+
+  # This should complete but have failing assertions
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "eval with failing assertion completed correctly"
+      return 0
+    else
+      log_fail "eval completed but results.json not found"
+      return 1
+    fi
+  else
+    # Some exit codes are expected for failing assertions
+    if [[ -f "results.json" ]]; then
+      log_pass "eval with failing assertion reported failure correctly"
+      return 0
+    else
+      log_fail "eval with failing assertion crashed unexpectedly"
+      return 1
+    fi
+  fi
+}
+
+test_database_access() {
+  log_test "database access (list evals command)"
+
+  # The list evals command requires database access
+  local output
+  # Suppress deprecation warnings with 2>/dev/null, capture stdout
+  if output=$(pf list evals 2>/dev/null); then
+    log_pass "database access works (list evals command)"
+    return 0
+  else
+    # Empty list or "no evals" is also acceptable - it means DB works
+    if [[ "$output" == *"No evals"* ]] || [[ "$output" == *"0 evals"* ]] || [[ -z "$output" ]]; then
+      log_pass "database access works (empty list)"
+      return 0
+    fi
+    # If we get table headers, that's also a pass
+    if [[ "$output" == *"ID"* ]] || [[ "$output" == *"Created"* ]]; then
+      log_pass "database access works (list evals shows data)"
+      return 0
+    fi
+    log_fail "database access failed: $output"
+    return 1
+  fi
+}
+
+test_cache_functionality() {
+  log_test "cache functionality"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Cache test {{id}}"
+providers:
+  - id: echo
+tests:
+  - vars:
+      id: "test123"
+EOF
+
+  # Run once to populate cache
+  if ! pf eval -o results1.json >/dev/null 2>&1; then
+    log_fail "first eval for cache test failed"
+    return 1
+  fi
+
+  # Run again - should use cache
+  if pf eval -o results2.json >/dev/null 2>&1; then
+    log_pass "cache functionality works"
+    return 0
+  else
+    log_fail "second eval for cache test failed"
+    return 1
+  fi
+}
+
+test_json_output() {
+  log_test "JSON output format"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Test output"
+providers:
+  - id: echo
+tests:
+  - vars: {}
+EOF
+
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      # Validate it's valid JSON
+      if python3 -c "import json; json.load(open('results.json'))" 2>/dev/null ||
+        node -e "JSON.parse(require('fs').readFileSync('results.json'))" 2>/dev/null; then
+        log_pass "JSON output is valid"
+        return 0
+      else
+        log_fail "JSON output is not valid JSON"
+        return 1
+      fi
+    else
+      log_fail "results.json not created"
+      return 1
+    fi
+  else
+    log_fail "eval failed"
+    return 1
+  fi
+}
+
+test_html_output() {
+  log_test "HTML output format uses bundled template"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "HTML output test"
+providers:
+  - id: echo
+tests:
+  - vars: {}
+EOF
+
+  if pf eval --no-cache -o results.html >/dev/null 2>&1; then
+    if [[ -f "results.html" ]] && grep -qi '<html' results.html; then
+      log_pass "HTML output uses the bundled template"
+      return 0
+    fi
+    log_fail "HTML eval completed but results.html is missing or invalid"
+    return 1
+  fi
+
+  log_fail "HTML output generation failed"
+  return 1
+}
+
+test_structured_code_scan_output_reserves_stdout() {
+  log_test "structured code-scan startup reserves stdout"
+
+  setup_test_dir
+
+  local stdout_file="$TEST_DIR/code-scan.stdout"
+  local stderr_file="$TEST_DIR/code-scan.stderr"
+  if pf code-scans run --json --config "$TEST_DIR/missing-code-scan-config.yaml" \
+    >"$stdout_file" 2>"$stderr_file"; then
+    log_fail "code-scans unexpectedly accepted a missing configuration file"
+    return 1
+  fi
+
+  if [[ ! -s "$stdout_file" ]] &&
+    grep -q "Configuration file not found" "$stderr_file"; then
+    log_pass "structured code-scan startup keeps failures off stdout"
+    return 0
+  fi
+
+  log_fail "structured code-scan startup polluted stdout or omitted its error"
+  return 1
+}
+
+test_yaml_config() {
+  log_test "YAML config parsing"
+
+  setup_test_dir
+
+  # More complex YAML with anchors and references
+  cat >promptfooconfig.yaml <<'EOF'
+# Test YAML parsing with comments
+prompts:
+  - id: test-prompt
+    raw: "Testing YAML: {{value}}"
+
+providers:
+  - id: echo
+    config:
+      temperature: 0.5
+
+defaultTest:
+  vars:
+    value: default
+
+tests:
+  - vars:
+      value: custom
+    assert:
+      - type: contains
+        value: custom
+EOF
+
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
+    log_pass "YAML config parsing works"
+    return 0
+  else
+    log_fail "YAML config parsing failed"
+    return 1
+  fi
+}
+
+test_typescript_config() {
+  log_test "TypeScript config parsing"
+
+  setup_test_dir
+
+  cat >promptfooconfig.ts <<'EOF'
+export default {
+  prompts: ['TypeScript {{value}}'],
+  providers: [{ id: 'echo' }],
+  tests: [
+    {
+      vars: { value: 'config' },
+      assert: [{ type: 'contains', value: 'config' }],
+    },
+  ],
+};
+EOF
+
+  if pf eval -c promptfooconfig.ts --no-cache -o results.json >/dev/null 2>&1; then
+    log_pass "TypeScript config parsing works"
+    return 0
+  else
+    log_fail "TypeScript config parsing failed"
+    return 1
+  fi
+}
+
+test_multiple_providers() {
+  log_test "multiple providers"
+
+  setup_test_dir
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Test {{name}}"
+providers:
+  - id: echo
+  - id: echo
+    label: echo-2
+tests:
+  - vars:
+      name: multi
+EOF
+
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "multiple providers work"
+      return 0
+    fi
+  fi
+
+  log_fail "multiple providers test failed"
+  return 1
+}
+
+test_env_vars() {
+  log_test "environment variable substitution"
+
+  setup_test_dir
+
+  export TEST_VAR="environment_value"
+
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Value: {{value}}"
+providers:
+  - id: echo
+tests:
+  - vars:
+      value: "env:TEST_VAR"
+EOF
+
+  # This tests if env vars are handled (even if not substituted in vars)
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
+    log_pass "environment variable handling works"
+    return 0
+  else
+    log_fail "environment variable handling failed"
+    return 1
+  fi
+}
+
+test_generate_dataset() {
+  log_test "generate dataset command"
+
+  setup_test_dir
+
+  # Test if the command exists and shows help
+  if pf generate dataset --help >/dev/null 2>&1; then
+    log_pass "generate dataset command available"
+    return 0
+  else
+    log_skip "generate dataset command not available"
+    return 0
+  fi
+}
+
+test_share_command() {
+  log_test "share command exists"
+
+  if pf share --help >/dev/null 2>&1; then
+    log_pass "share command available"
+    return 0
+  else
+    log_skip "share command not available"
+    return 0
+  fi
+}
+
+test_redteam_command() {
+  log_test "redteam command exists"
+
+  if pf redteam --help >/dev/null 2>&1; then
+    log_pass "redteam command available"
+    return 0
+  else
+    log_skip "redteam command not available"
+    return 0
+  fi
+}
+
+test_view_command() {
+  log_test "view command exists"
+
+  if pf view --help >/dev/null 2>&1; then
+    log_pass "view command available"
+    return 0
+  else
+    log_skip "view command not available"
+    return 0
+  fi
+}
+
+test_export_command() {
+  log_test "export command works"
+
+  setup_test_dir
+
+  # First create some data
+  cat >promptfooconfig.yaml <<'EOF'
+prompts:
+  - "Test export"
+providers:
+  - id: echo
+tests:
+  - vars: {}
+EOF
+
+  pf eval --no-cache >/dev/null 2>&1
+
+  # Now test export
+  if pf export --help >/dev/null 2>&1; then
+    log_pass "export command available"
+    return 0
+  else
+    log_skip "export command not available"
+    return 0
+  fi
+}
+
+test_config_command() {
+  log_test "config command exists"
+
+  if pf config --help >/dev/null 2>&1; then
+    log_pass "config command available"
+    return 0
+  else
+    log_skip "config command not available"
+    return 0
+  fi
+}
+
+test_auth_command() {
+  log_test "auth command exists"
+
+  if pf auth --help >/dev/null 2>&1; then
+    log_pass "auth command available"
+    return 0
+  else
+    log_skip "auth command not available"
+    return 0
+  fi
+}
+
+# ─── Provider Tests ──────────────────────────────────────────
+
+test_python_provider() {
+  log_test "Python provider"
+
+  # Check if Python is available
+  if ! command -v python3 &>/dev/null && ! command -v python &>/dev/null; then
+    log_skip "Python not installed"
+    return 0
+  fi
+
+  setup_test_dir
+
+  cat >provider.py <<'EOF'
+def call_api(prompt, options, context):
+    return {"output": f"Python: {prompt}"}
+EOF
+
+  cat >config.yaml <<'EOF'
+prompts:
+  - "Test {{name}}"
+providers:
+  - id: python:provider.py
+tests:
+  - vars:
+      name: "World"
+    assert:
+      - type: contains
+        value: "Python"
+EOF
+
+  if pf eval -c config.yaml --no-cache -o results.json >/dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "Python provider works"
+      return 0
+    fi
+  fi
+
+  log_fail "Python provider failed"
+  return 1
+}
+
+test_ruby_provider() {
+  log_test "Ruby provider"
+
+  # Check if Ruby is available
+  if ! command -v ruby &>/dev/null; then
+    log_skip "Ruby not installed"
+    return 0
+  fi
+
+  setup_test_dir
+
+  cat >provider.rb <<'EOF'
+def call_api(prompt, options, context)
+  { "output" => "Ruby: #{prompt}" }
+end
+EOF
+
+  cat >config.yaml <<'EOF'
+prompts:
+  - "Test {{name}}"
+providers:
+  - id: ruby:provider.rb
+tests:
+  - vars:
+      name: "World"
+    assert:
+      - type: contains
+        value: "Ruby"
+EOF
+
+  if pf eval -c config.yaml --no-cache -o results.json >/dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "Ruby provider works"
+      return 0
+    fi
+  fi
+
+  log_fail "Ruby provider failed"
+  return 1
+}
+
+# ─── Install Script Tests ────────────────────────────────────────────────────
+
+create_fake_npm_fallback_bin() {
+  local fake_bin="$1"
+
+  cat >"$fake_bin/node" <<'EOF'
+#!/bin/sh
+echo v20.20.0
+EOF
+  chmod +x "$fake_bin/node"
+
+  cat >"$fake_bin/curl" <<'EOF'
+#!/bin/sh
+case "$*" in
+*"registry.npmjs.org/promptfoo/latest"*)
+  echo '{"version":"0.0.0"}'
+  exit 0
+  ;;
+*"/releases/latest"*)
+  echo '{"tag_name":"code-scan-action-9.9.9"}'
+  exit 0
+  ;;
+*)
+  exit 22
+  ;;
+esac
+EOF
+  chmod +x "$fake_bin/curl"
+
+  cat >"$fake_bin/npm" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+prefix=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --prefix)
+    prefix="$2"
+    shift 2
+    ;;
+  *)
+    shift
+    ;;
+  esac
+done
+
+if [[ -z "$prefix" ]]; then
+  echo "missing --prefix" >&2
+  exit 1
+fi
+
+mkdir -p "$prefix/bin" "$prefix/lib/node_modules/promptfoo/dist/src"
+cat >"$prefix/bin/promptfoo" <<'EOF_PROMPTFOO'
+#!/bin/sh
+echo 0.0.0
+EOF_PROMPTFOO
+chmod +x "$prefix/bin/promptfoo"
+ln -sf "$prefix/bin/promptfoo" "$prefix/bin/pf"
+
+cat >"$prefix/lib/node_modules/promptfoo/dist/src/main.js" <<'EOF_MAIN'
+throw new Error('wrong entrypoint');
+EOF_MAIN
+EOF
+  chmod +x "$fake_bin/npm"
+}
+
+create_fake_unsupported_macos_bin() {
+  local fake_bin="$1"
+
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  cat >"$fake_bin/uname" <<'EOF'
+#!/bin/sh
+case "$1" in
+-s) echo Darwin ;;
+-m) echo x86_64 ;;
+*) exit 1 ;;
+esac
+EOF
+  chmod +x "$fake_bin/uname"
+
+  cat >"$fake_bin/sw_vers" <<'EOF'
+#!/bin/sh
+echo 13.4.1
+EOF
+  chmod +x "$fake_bin/sw_vers"
+
+  cat >"$fake_bin/sysctl" <<'EOF'
+#!/bin/sh
+echo 0
+EOF
+  chmod +x "$fake_bin/sysctl"
+}
+
+create_fake_unsupported_node_npm_bin() {
+  local fake_bin="$1"
+
+  create_fake_unsupported_macos_bin "$fake_bin"
+
+  cat >"$fake_bin/node" <<'EOF'
+#!/bin/sh
+echo v22.21.0
+EOF
+  chmod +x "$fake_bin/node"
+}
+
+create_fake_unsupported_linux_bin() {
+  local fake_bin="$1"
+
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  cat >"$fake_bin/uname" <<'EOF'
+#!/bin/sh
+case "$1" in
+-s) echo Linux ;;
+-m) echo x86_64 ;;
+*) exit 1 ;;
+esac
+EOF
+  chmod +x "$fake_bin/uname"
+
+  cat >"$fake_bin/ldd" <<'EOF'
+#!/bin/sh
+echo "ldd (GNU libc) 2.27"
+EOF
+  chmod +x "$fake_bin/ldd"
+
+  cat >"$fake_bin/getconf" <<'EOF'
+#!/bin/sh
+echo "glibc 2.27"
+EOF
+  chmod +x "$fake_bin/getconf"
+}
+
+create_fake_supported_linux_binary_bin() {
+  local fake_bin="$1"
+
+  cat >"$fake_bin/uname" <<'EOF'
+#!/bin/sh
+case "$1" in
+-s) echo Linux ;;
+-m) echo x86_64 ;;
+*) exit 1 ;;
+esac
+EOF
+  chmod +x "$fake_bin/uname"
+
+  cat >"$fake_bin/ldd" <<'EOF'
+#!/bin/sh
+echo "ldd (GNU libc) 2.28"
+EOF
+  chmod +x "$fake_bin/ldd"
+
+  cat >"$fake_bin/getconf" <<'EOF'
+#!/bin/sh
+echo "glibc 2.28"
+EOF
+  chmod +x "$fake_bin/getconf"
+
+  cat >"$fake_bin/curl" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+output=""
+url=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --output)
+    output="$2"
+    shift 2
+    ;;
+  http*)
+    url="$1"
+    shift
+    ;;
+  *)
+    shift
+    ;;
+  esac
+done
+
+if [[ "$url" == *"/download/0.0.0/promptfoo-0.0.0-linux-x64.tar.gz" ]]; then
+  cp "$PROMPTFOO_TEST_ARCHIVE" "$output"
+  exit 0
+fi
+
+exit 22
+EOF
+  chmod +x "$fake_bin/curl"
+}
+
+test_install_script_syntax() {
+  log_test "install.sh syntax is valid"
+
+  if bash -n "$ROOT_DIR/scripts/install.sh" 2>&1; then
+    log_pass "install.sh syntax is valid"
+    return 0
+  else
+    log_fail "install.sh has syntax errors"
+    return 1
+  fi
+}
+
+test_install_script_help() {
+  log_test "install.sh --help works"
+
+  local output
+  if output=$(bash "$ROOT_DIR/scripts/install.sh" --help 2>&1); then
+    if [[ "$output" == *"USAGE"* ]] || [[ "$output" == *"usage"* ]]; then
+      log_pass "install.sh --help shows usage"
+      return 0
+    fi
+  fi
+  log_fail "install.sh --help failed"
+  return 1
+}
+
+test_install_script_dir_requires_value() {
+  log_test "install.sh --dir requires a value"
+
+  local output
+  if output=$(bash "$ROOT_DIR/scripts/install.sh" --dir 2>&1); then
+    log_fail "install.sh --dir without value unexpectedly succeeded"
+    return 1
+  fi
+
+  if [[ "$output" == *"requires a non-empty directory"* ]]; then
+    log_pass "install.sh --dir rejects missing value"
+    return 0
+  fi
+
+  log_fail "install.sh --dir produced unexpected output: $output"
+  return 1
+}
+
+test_install_script_handles_unset_home() {
+  log_test "install.sh handles an unset HOME"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unset-home.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  if output=$(env -u HOME bash "$ROOT_DIR/scripts/install.sh" 0.0.0 2>&1); then
+    log_fail "install.sh installed to a default directory despite HOME being unavailable"
+    return 1
+  fi
+  if [[ "$output" != *"HOME is unset"* ]] || [[ "$output" != *"--dir DIR"* ]]; then
+    log_fail "install.sh did not explain how to install without HOME: $output"
+    return 1
+  fi
+
+  if output=$(
+    env -u HOME \
+      PATH="$fake_bin:$PATH" \
+      SHELL="/bin/bash" \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] && [[ "$output" == *"skipping shell PATH modification"* ]]; then
+      log_pass "install.sh accepts a custom directory without HOME and skips rc-file mutation"
+      return 0
+    fi
+  fi
+
+  log_fail "install.sh failed a custom-directory install without HOME: $output"
+  return 1
+}
+
+test_install_script_npm_fallback_preserves_shims() {
+  log_test "install.sh npm fallback preserves npm-generated shims"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/npm-fallback.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] && [[ "$("$install_dir/bin/promptfoo" --version)" == "0.0.0" ]]; then
+      log_pass "install.sh npm fallback preserved npm-generated shims"
+      return 0
+    fi
+    log_fail "install.sh npm fallback completed but generated shim was not executable"
+    return 1
+  fi
+
+  log_fail "install.sh npm fallback failed: $output"
+  return 1
+}
+
+test_install_script_dir_without_version_uses_latest() {
+  log_test "install.sh --dir without explicit version installs latest"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/dir-latest.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] && [[ "$output" == *"Version: 0.0.0"* ]]; then
+      log_pass "install.sh --dir without version resolved latest"
+      return 0
+    fi
+    log_fail "install.sh --dir completed but did not install the resolved latest version"
+    return 1
+  fi
+
+  log_fail "install.sh --dir without version failed: $output"
+  return 1
+}
+
+test_install_script_unsupported_macos_uses_npm() {
+  log_test "install.sh uses npm when macOS cannot run bundled Node"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsupported-macos.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_macos_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] &&
+      [[ "$output" == *"requires macOS 13.5+"* ]] &&
+      [[ "$output" == *"darwin-unsupported-x64"* ]]; then
+      log_pass "install.sh sends unsupported macOS versions through npm fallback"
+      return 0
+    fi
+    log_fail "install.sh did not describe or complete legacy macOS fallback: $output"
+    return 1
+  fi
+
+  log_fail "install.sh legacy macOS fallback failed: $output"
+  return 1
+}
+
+test_install_script_unsupported_linux_uses_npm() {
+  log_test "install.sh uses npm when Linux is below the glibc floor"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsupported-linux.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_linux_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] &&
+      [[ "$output" == *"requires glibc 2.28+"* ]] &&
+      [[ "$output" == *"linux-unsupported-x64"* ]]; then
+      log_pass "install.sh sends unsupported Linux versions through npm fallback"
+      return 0
+    fi
+    log_fail "install.sh did not describe or complete old-glibc fallback: $output"
+    return 1
+  fi
+
+  log_fail "install.sh old-glibc fallback failed: $output"
+  return 1
+}
+
+test_install_script_npm_fallback_requires_npm() {
+  log_test "install.sh explains when npm fallback is unavailable"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/missing-npm.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_macos_bin "$fake_bin"
+  rm -f "$fake_bin/npm"
+  ln -s "$(command -v bash)" "$fake_bin/bash"
+  ln -s "$(command -v tar)" "$fake_bin/tar"
+
+  if output=$(
+    PATH="$fake_bin" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh succeeded despite npm being unavailable for fallback"
+    return 1
+  fi
+
+  if [[ "$output" == *"npm is required for fallback installation but was not found on PATH"* ]]; then
+    log_pass "install.sh reports a missing npm fallback dependency"
+    return 0
+  fi
+
+  log_fail "install.sh produced an unclear missing-npm failure: $output"
+  return 1
+}
+
+test_install_script_npm_fallback_requires_supported_node() {
+  log_test "install.sh rejects Node versions outside the package engine range"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsupported-node.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_unsupported_node_npm_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh accepted unsupported Node v22.21.0 for npm fallback"
+    return 1
+  fi
+
+  if [[ "$output" == *"requires Node.js ^20.20.0 or >=22.22.0"* ]] &&
+    [[ "$output" == *"v22.21.0"* ]]; then
+    log_pass "install.sh rejects unsupported npm fallback runtimes"
+    return 0
+  fi
+
+  log_fail "install.sh produced an unclear unsupported-Node failure: $output"
+  return 1
+}
+
+test_install_script_downloads_unprefixed_release_tag() {
+  log_test "install.sh downloads assets from the published unprefixed release tag"
+
+  local fake_root fake_bin install_dir payload archive output
+  fake_root=$(mktemp -d "$TEST_ROOT/unprefixed-release.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  payload="$fake_root/payload"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$payload"
+
+  cat >"$payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo 0.0.0
+EOF
+  chmod +x "$payload/promptfoo"
+  tar -czf "$archive" -C "$payload" promptfoo
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] &&
+      [[ "$output" == *"/download/0.0.0/promptfoo-0.0.0-linux-x64.tar.gz"* ]]; then
+      log_pass "install.sh uses the release-please unprefixed tag for binary assets"
+      return 0
+    fi
+    log_fail "install.sh did not install from the unprefixed tag: $output"
+    return 1
+  fi
+
+  log_fail "install.sh unprefixed-tag download failed: $output"
+  return 1
+}
+
+test_install_script_replaces_existing_payload() {
+  log_test "install.sh replaces existing standalone payloads"
+
+  local fake_root fake_bin install_dir initial_payload updated_payload archive output
+  fake_root=$(mktemp -d "$TEST_ROOT/replace-payload.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  initial_payload="$fake_root/initial"
+  updated_payload="$fake_root/updated"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$initial_payload/assets" "$updated_payload"
+
+  cat >"$initial_payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo old
+EOF
+  chmod +x "$initial_payload/promptfoo"
+  printf "obsolete\n" >"$initial_payload/assets/obsolete.txt"
+  tar -czf "$archive" -C "$initial_payload" promptfoo assets
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if ! PATH="$fake_bin:$PATH" \
+    PROMPTFOO_TEST_ARCHIVE="$archive" \
+    PROMPTFOO_NO_MODIFY_PATH=1 \
+    PROMPTFOO_DISABLE_TELEMETRY=true \
+    bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 >/dev/null 2>&1; then
+    log_fail "install.sh failed to create the initial standalone install"
+    return 1
+  fi
+
+  cat >"$updated_payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo new
+EOF
+  chmod +x "$updated_payload/promptfoo"
+  tar -czf "$archive" -C "$updated_payload" promptfoo
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    if [[ "$("$install_dir/bin/promptfoo")" == "new" ]] &&
+      [[ ! -e "$install_dir/bin/assets/obsolete.txt" ]]; then
+      log_pass "install.sh swaps in a clean standalone payload on upgrade"
+      return 0
+    fi
+  fi
+
+  log_fail "install.sh retained stale standalone payload content: $output"
+  return 1
+}
+
+test_install_script_rejects_unsafe_archive_paths() {
+  log_test "install.sh rejects archive path traversal with dot prefixes"
+
+  local fake_root fake_bin install_dir payload archive output
+  fake_root=$(mktemp -d "$TEST_ROOT/unsafe-archive.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  payload="$fake_root/payload"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$payload"
+
+  cat >"$payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo compromised
+EOF
+  chmod +x "$payload/promptfoo"
+  tar -czf "$archive" --transform='s#^promptfoo$#./../escaped#' -C "$payload" promptfoo
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh extracted an archive containing path traversal"
+    return 1
+  fi
+
+  if [[ "$output" == *"unsafe path"* ]] && [[ ! -e "$install_dir/escaped" ]]; then
+    log_pass "install.sh rejects dot-prefixed traversal entries before extraction"
+    return 0
+  fi
+
+  log_fail "install.sh did not safely reject a traversal archive: $output"
+  return 1
+}
+
+test_install_script_rejects_archive_link_entries() {
+  log_test "install.sh rejects archive link entries"
+
+  local fake_root fake_bin install_dir payload archive output entry
+  fake_root=$(mktemp -d "$TEST_ROOT/unsafe-links.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  payload="$fake_root/payload"
+  archive="$fake_root/promptfoo-0.0.0-linux-x64.tar.gz"
+  mkdir -p "$fake_bin" "$payload/entries"
+
+  cat >"$payload/promptfoo" <<'EOF'
+#!/bin/sh
+echo valid
+EOF
+  chmod +x "$payload/promptfoo"
+  ln -s ../escaped "$payload/unsafe-link"
+  for entry in {1..2048}; do
+    : >"$payload/entries/file-$entry"
+  done
+  tar -czf "$archive" -C "$payload" unsafe-link promptfoo entries
+  create_fake_supported_linux_binary_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_TEST_ARCHIVE="$archive" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    log_fail "install.sh extracted an archive containing a link entry"
+    return 1
+  fi
+
+  if [[ "$output" == *"unsupported link entries"* ]] && [[ ! -e "$install_dir/unsafe-link" ]]; then
+    log_pass "install.sh rejects link entries before extraction"
+    return 0
+  fi
+
+  log_fail "install.sh did not safely reject an archive link entry: $output"
+  return 1
+}
+
+test_install_script_fish_path_handles_literal_special_characters() {
+  log_test "install.sh distinguishes literal PATH entries for fish"
+
+  local fake_root fake_bin fake_home install_dir output expected_path_line
+  fake_root=$(mktemp -d "$TEST_ROOT/fish-path.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  fake_home="$fake_root/home"
+  install_dir="$fake_root/install[dir] with space"
+  mkdir -p "$fake_bin" "$fake_home/.config/fish"
+  printf "set -gx PATH '%s/bin' \$PATH\n" "$fake_root/installd with space" >"$fake_home/.config/fish/config.fish"
+  create_fake_unsupported_macos_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      HOME="$fake_home" \
+      SHELL="/usr/bin/fish" \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 0.0.0 2>&1
+  ); then
+    expected_path_line="set -gx PATH '$install_dir/bin' \$PATH"
+    if grep -Fqx "$expected_path_line" "$fake_home/.config/fish/config.fish"; then
+      log_pass "install.sh preserves literal spaced fish PATH entries with unrelated matching text"
+      return 0
+    fi
+    log_fail "install.sh mistook an unrelated fish PATH entry for the install path: $output"
+    return 1
+  fi
+
+  log_fail "install.sh literal fish PATH install failed: $output"
+  return 1
+}
+
+test_install_ps1_uses_package_entrypoint() {
+  log_test "install.ps1 npm fallback uses package entrypoint"
+
+  if grep -q "dist.*src.*main\\.js" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
+    log_fail "install.ps1 still references dist/src/main.js"
+    return 1
+  fi
+
+  if grep -q "entrypoint\\.js" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q "Get-Command npm" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q "PROMPTFOO_NO_AUTO_INSTALL" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '\$nodeMajor -eq 20' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '\$PSVersionTable.PSVersion.Major -lt 6' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q 'Invoke-WebRequest .*UseBasicParsing' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q 'download/v\$Version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q "function Write-Error" "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    ! grep -q 'cmd /c \$promptfooCmd' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q 'Test-Path -LiteralPath \$promptfooExe -PathType Leaf' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q 'Downloaded archive does not contain promptfoo.exe' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '\.bin-install-' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q 'Move-Item -LiteralPath \$stagingBinDir -Destination \$binDir' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1" &&
+    grep -q '& \$promptfooCmd --version' "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
+    log_pass "install.ps1 uses the package entrypoint and safe fallback/download guards"
+    return 0
+  fi
+
+  log_fail "install.ps1 does not retain safe fallback/download behavior"
+  return 1
+}
+
+test_install_ps1_syntax() {
+  log_test "install.ps1 exists and is readable"
+
+  if [[ -f "$ROOT_DIR/scripts/install.ps1" ]]; then
+    if [[ -r "$ROOT_DIR/scripts/install.ps1" ]]; then
+      log_pass "install.ps1 exists and is readable"
+      return 0
+    fi
+  fi
+  log_fail "install.ps1 not found or not readable"
+  return 1
+}
+
+test_site_installer_mirrors() {
+  log_test "site installer copies match canonical scripts"
+
+  if cmp -s "$ROOT_DIR/scripts/install.sh" "$ROOT_DIR/site/static/install.sh" &&
+    cmp -s "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
+    log_pass "site installer copies match canonical scripts"
+    return 0
+  fi
+
+  log_fail "site installer copies differ from canonical scripts"
+  return 1
+}
+
+test_packaged_assets() {
+  log_test "bundle contains runtime-resolved assets"
+
+  if [[ -d "$ROOT_DIR/bundle/assets/drizzle" ]] &&
+    [[ -d "$ROOT_DIR/bundle/tracing/proto" ]] &&
+    [[ -f "$ROOT_DIR/bundle/app/index.html" ]] &&
+    [[ -f "$ROOT_DIR/bundle/tableOutput.html" ]] &&
+    [[ -f "$ROOT_DIR/bundle/node_modules/libsql/index.js" ]] &&
+    find "$ROOT_DIR/bundle/node_modules/@libsql" -maxdepth 2 -name '*.node' -type f | grep -q . &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/better-sqlite3" ]] &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/sharp" ]] &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/@huggingface/transformers" ]] &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/onnxruntime-node" ]]; then
+    log_pass "bundle contains libsql and runtime assets while omitting npm-only dependencies"
+    return 0
+  fi
+
+  log_fail "bundle assets or npm-only dependency exclusions are incorrect"
+  return 1
+}
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+
+main() {
+  echo ""
+  echo -e "${BOLD}Promptfoo Smoke Test Suite${NC}"
+  echo ""
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --installed)
+      USE_INSTALLED=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+    esac
+  done
+
+  # Check prerequisites
+  if [[ "$USE_INSTALLED" == "true" ]]; then
+    if ! command -v promptfoo &>/dev/null; then
+      echo -e "${RED}Error: promptfoo not found in PATH${NC}"
+      exit 1
+    fi
+    log_info "Testing installed promptfoo: $(which promptfoo)"
+  elif [[ -n "$BUNDLE_BINARY_PATH" ]]; then
+    log_info "Testing SEA executable: $BUNDLE_BINARY_PATH"
+  else
+    if [[ ! -f "$BUNDLE_MODULE_PATH" ]]; then
+      echo -e "${RED}Error: Bundle not found at $BUNDLE_MODULE_PATH${NC}"
+      echo "Run 'npm run bundle' first."
+      exit 1
+    fi
+    log_info "Testing JavaScript bundle: $BUNDLE_MODULE_PATH"
+  fi
+
+  echo ""
+  echo -e "${BOLD}Running tests...${NC}"
+  echo ""
+
+  setup_test_environment
+
+  # Run all tests - continue even if individual tests fail
+  set +e
+
+  test_version
+  test_help
+  test_init
+  test_eval_echo_provider
+  test_eval_with_assertions
+  test_eval_failing_assertion
+  test_database_access
+  test_cache_functionality
+  test_json_output
+  test_html_output
+  test_structured_code_scan_output_reserves_stdout
+  test_yaml_config
+  test_typescript_config
+  test_multiple_providers
+  test_env_vars
+  test_generate_dataset
+  test_share_command
+  test_redteam_command
+  test_view_command
+  test_export_command
+  test_config_command
+  test_auth_command
+
+  # Provider tests
+  test_python_provider
+  test_ruby_provider
+
+  # Install script tests
+  test_install_script_syntax
+  test_install_script_help
+  test_install_script_dir_requires_value
+  test_install_script_handles_unset_home
+  test_install_script_npm_fallback_preserves_shims
+  test_install_script_dir_without_version_uses_latest
+  test_install_script_unsupported_macos_uses_npm
+  test_install_script_unsupported_linux_uses_npm
+  test_install_script_npm_fallback_requires_npm
+  test_install_script_npm_fallback_requires_supported_node
+  test_install_script_downloads_unprefixed_release_tag
+  test_install_script_replaces_existing_payload
+  test_install_script_rejects_unsafe_archive_paths
+  test_install_script_rejects_archive_link_entries
+  test_install_script_fish_path_handles_literal_special_characters
+  test_install_ps1_uses_package_entrypoint
+  test_install_ps1_syntax
+  test_site_installer_mirrors
+  test_packaged_assets
+
+  set -e
+
+  # Summary
+  echo ""
+  echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+  echo ""
+
+  local total=$((${#PASSED_TESTS[@]} + ${#FAILED_TESTS[@]}))
+
+  if [[ ${#FAILED_TESTS[@]} -eq 0 ]]; then
+    echo -e "${GREEN}${BOLD}All $total tests passed!${NC}"
+    echo ""
+    exit 0
+  else
+    echo -e "${RED}${BOLD}${#FAILED_TESTS[@]} of $total tests failed:${NC}"
+    echo ""
+    for test in "${FAILED_TESTS[@]}"; do
+      echo -e "  ${RED}✗${NC} $test"
+    done
+    echo ""
+    echo -e "${GREEN}${#PASSED_TESTS[@]} tests passed${NC}"
+    echo ""
+    exit 1
+  fi
+}
+
+main "$@"

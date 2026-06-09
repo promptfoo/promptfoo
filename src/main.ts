@@ -147,14 +147,27 @@ async function main() {
   await program.parseAsync();
 }
 
-// ESM replacement for require.main === module check
-// Check if this module is being run directly (not imported)
-// The isMainModule check may throw in CJS builds where import.meta.url is not available
+/**
+ * BUILD_FORMAT is a compile-time constant injected by tsdown/esbuild.
+ * CJS builds cannot depend on import.meta.url. The standalone SEA launcher
+ * instead dynamically imports an ESM bundle through src/entrypoint.ts, and
+ * __PROMPTFOO_BUNDLED_ENTRYPOINT__ makes that imported main module execute
+ * after its preflight checks.
+ */
+declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
+declare const __PROMPTFOO_BUNDLED_ENTRYPOINT__: boolean | undefined;
+
+const isBundledEntrypoint =
+  typeof __PROMPTFOO_BUNDLED_ENTRYPOINT__ !== 'undefined' && __PROMPTFOO_BUNDLED_ENTRYPOINT__;
+
 let isMain = false;
 try {
-  isMain = isMainModule(import.meta.url, process.argv[1]);
+  isMain =
+    typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs'
+      ? true
+      : isBundledEntrypoint || isMainModule(import.meta.url, process.argv[1]);
 } catch {
-  // In CJS builds, import.meta.url throws - CJS entry point is handled differently
+  isMain = isBundledEntrypoint || (typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs');
 }
 
 if (isMain) {

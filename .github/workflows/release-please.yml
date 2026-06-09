@@ -88,9 +88,12 @@ jobs:
         always() &&
         !cancelled() &&
         needs.release-please.outputs.release_created == 'true' &&
-        needs.build.result == 'success'
+        needs.build.result == 'success' &&
+        needs.build-bundles.result == 'success'
       }}
-    needs: [build, release-please]
+    # Installers resolve "latest" through npm, so do not advance npm until
+    # standalone archives for the same version have been uploaded successfully.
+    needs: [build, build-bundles, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -176,6 +179,302 @@ jobs:
     uses: ./.github/workflows/docker.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  upload-installers:
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build.result == 'success'
+      }}
+    needs: [build, release-please]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Create app token for release upload
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        id: app-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+
+      - name: Upload install scripts to release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG_NAME" scripts/install.sh scripts/install.ps1 --clobber --repo "$REPOSITORY"
+
+  build-bundles:
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build.result == 'success'
+      }}
+    needs: [build, release-please]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            archive: tar.gz
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            archive: tar.gz
+          - os: macos-15-intel
+            platform: darwin-x64
+            archive: tar.gz
+          - os: macos-15
+            platform: darwin-arm64
+            archive: tar.gz
+          - os: windows-latest
+            platform: win32-x64
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - run: npm install -g npm@11.11.0
+      - run: npm ci
+
+      - name: Build bundle
+        run: npm run bundle:sea
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+
+      - name: Smoke-test bundled CLI
+        shell: bash
+        run: ./scripts/smoke-test.sh
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 'true'
+
+      - name: Verify Linux compatibility floor
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash ./scripts/verify-linux-bundle-compat.sh
+
+      - name: Create archive (Unix)
+        if: matrix.archive == 'tar.gz'
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${VERSION#v}"
+          archive_name="promptfoo-${version}-${PLATFORM}.tar.gz"
+          tar -czvf "$archive_name" -C bundle .
+          echo "ARCHIVE_NAME=$archive_name" >> "$GITHUB_ENV"
+
+      - name: Create archive (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          $version = $env:VERSION -replace '^v', ''
+          $archiveName = "promptfoo-${version}-${env:PLATFORM}.zip"
+          Compress-Archive -Path bundle\* -DestinationPath $archiveName
+          "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_ENV
+
+      - name: Create app token for release upload
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        id: app-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+
+      - name: Upload bundle to release
+        shell: bash
+        env:
+          ARCHIVE_NAME: ${{ env.ARCHIVE_NAME }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG_NAME" "$ARCHIVE_NAME" --clobber --repo "$REPOSITORY"
+
+  build-python:
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build-bundles.result == 'success'
+      }}
+    needs: [build-bundles, release-please]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            # The bundled Node 24 runtime requires GLIBC_2.28.
+            wheel_platform: manylinux_2_28_x86_64
+            binary_name: promptfoo
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            wheel_platform: manylinux_2_28_aarch64
+            binary_name: promptfoo
+          - os: macos-15-intel
+            platform: darwin-x64
+            # Bundled Node 24 requires macOS 13.5+, which wheel tags cannot
+            # represent without overstating compatibility. macOS 14 is safe.
+            wheel_platform: macosx_14_0_x86_64
+            binary_name: promptfoo
+          - os: macos-15
+            platform: darwin-arm64
+            wheel_platform: macosx_14_0_arm64
+            binary_name: promptfoo
+          - os: windows-latest
+            platform: win32-x64
+            wheel_platform: win_amd64
+            binary_name: promptfoo.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+        with:
+          enable-cache: true
+          version: '0.11.16'
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - run: npm install -g npm@11.11.0
+      - run: npm ci
+
+      - name: Build SEA binary
+        run: npm run bundle:sea
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+
+      - name: Prepare Python package
+        shell: bash
+        env:
+          BINARY_NAME: ${{ matrix.binary_name }}
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p python/src/promptfoo/_bin
+          cp -R bundle/. python/src/promptfoo/_bin/
+          test -f "python/src/promptfoo/_bin/${BINARY_NAME}"
+          python_version="${VERSION#v}"
+          sed -i.bak "s/__version__ = \".*\"/__version__ = \"${python_version}\"/" python/src/promptfoo/__init__.py
+          rm -f python/src/promptfoo/__init__.py.bak
+
+      - name: Verify Linux compatibility floor
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash ./scripts/verify-linux-bundle-compat.sh
+
+      - name: Build and tag wheel
+        shell: bash
+        working-directory: python
+        env:
+          WHEEL_PLATFORM: ${{ matrix.wheel_platform }}
+        run: |
+          set -euo pipefail
+          uv build --wheel
+          uv pip install wheel==0.45.1 --system
+          wheel_file="$(ls dist/*.whl)"
+          python -m wheel tags --platform-tag="$WHEEL_PLATFORM" --remove "$wheel_file"
+          ls -la dist/
+
+      - name: Smoke-test Python wheel
+        shell: bash
+        working-directory: python
+        env:
+          PROMPTFOO_CACHE_PATH: ${{ runner.temp }}/promptfoo-python-cache
+          PROMPTFOO_CONFIG_DIR: ${{ runner.temp }}/promptfoo-python-state
+          PROMPTFOO_DISABLE_SHARING: 'true'
+          PROMPTFOO_DISABLE_TELEMETRY: 'true'
+          PROMPTFOO_DISABLE_UPDATE: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$PROMPTFOO_CACHE_PATH" "$PROMPTFOO_CONFIG_DIR"
+          wheel_file="$(ls dist/*.whl)"
+          uv venv .smoke-venv
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            venv_python=".smoke-venv/Scripts/python.exe"
+            promptfoo_entry=".smoke-venv/Scripts/promptfoo.exe"
+          else
+            venv_python=".smoke-venv/bin/python"
+            promptfoo_entry=".smoke-venv/bin/promptfoo"
+          fi
+          uv pip install --python "$venv_python" "$wheel_file"
+          "$promptfoo_entry" --version
+          "$venv_python" -m promptfoo --version
+          if "$venv_python" -m promptfoo eval -c "$RUNNER_TEMP/missing-promptfoo-config.yaml"; then
+            echo "::error::python -m promptfoo did not propagate the CLI failure status"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wheel-${{ matrix.wheel_platform }}
+          path: python/dist/*.whl
+
+  publish-pypi:
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build-python.result == 'success'
+      }}
+    needs: [build-python, release-please]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        with:
+          packages-dir: dist/
 
   publish-code-scan-action:
     if: >-
