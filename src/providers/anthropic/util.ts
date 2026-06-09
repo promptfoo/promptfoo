@@ -14,6 +14,14 @@ import type {
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
+  // Claude 5 models. These are pinned IDs, not `-latest` aliases.
+  ...['claude-fable-5', 'claude-mythos-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6, // $10 / MTok
+      output: 50 / 1e6, // $50 / MTok
+    },
+  })),
   // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
   ...['claude-mythos-preview'].map((model) => ({
     id: model,
@@ -174,7 +182,24 @@ export function isClaudeOpus48Model(modelId: string): boolean {
 }
 
 /**
- * Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model level
+ * Matches the Claude 5 Fable and Mythos model IDs across Anthropic and partner
+ * provider naming schemes while excluding hypothetical numeric suffixes.
+ */
+export function isClaudeFableOrMythos5Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i.test(modelId);
+}
+
+export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean {
+  return isClaudeFableOrMythos5Model(modelId);
+}
+
+export function normalizeAnthropicModelName(modelName: string): string {
+  return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
+}
+
+/**
+ * Claude Opus 4.7+ and Claude 5 Fable/Mythos deprecate manual sampling controls
+ * at the model level
  * — `temperature`, `top_p`, and `top_k` are adaptive, and a request that pins
  * any of them returns 400 `invalid_request_error` (including promptfoo's
  * built-in `temperature` default of 0). Centralizes the "omit sampling params"
@@ -182,7 +207,11 @@ export function isClaudeOpus48Model(modelId: string): boolean {
  * support for future models lands in one place.
  */
 export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
-  return isClaudeOpus47Model(modelId) || isClaudeOpus48Model(modelId);
+  return (
+    isClaudeOpus47Model(modelId) ||
+    isClaudeOpus48Model(modelId) ||
+    isClaudeFableOrMythos5Model(modelId)
+  );
 }
 
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
@@ -196,7 +225,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
+        } else if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
           return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
         } else if (block.type === 'redacted_thinking' && showThinking) {
           return `Redacted Thinking: ${block.data}`;
@@ -350,8 +379,32 @@ export function calculateAnthropicCost(
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
 ): number | undefined {
-  if (config.cost != null && config.inputCost == null && config.outputCost == null) {
-    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  const pricingModelName = normalizeAnthropicModelName(modelName);
+  const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  const usesRegionalBedrockPricing =
+    isClaudeFableOrMythos5Model(modelName) &&
+    /^(?!global\.)(?:(?:us|eu)\.)?anthropic\./.test(modelName);
+  const effectiveConfig =
+    usesRegionalBedrockPricing && modelInfo && config.cost == null
+      ? {
+          ...config,
+          inputCost: config.inputCost ?? modelInfo.cost.input * 1.1,
+          outputCost: config.outputCost ?? modelInfo.cost.output * 1.1,
+        }
+      : config;
+
+  if (
+    effectiveConfig.cost != null &&
+    effectiveConfig.inputCost == null &&
+    effectiveConfig.outputCost == null
+  ) {
+    return calculateCostBase(
+      pricingModelName,
+      effectiveConfig,
+      promptTokens,
+      completionTokens,
+      ANTHROPIC_MODELS,
+    );
   }
 
   if (
@@ -360,7 +413,13 @@ export function calculateAnthropicCost(
     typeof promptTokens === 'undefined' ||
     typeof completionTokens === 'undefined'
   ) {
-    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+    return calculateCostBase(
+      pricingModelName,
+      effectiveConfig,
+      promptTokens,
+      completionTokens,
+      ANTHROPIC_MODELS,
+    );
   }
 
   const cacheRead = cacheReadTokens ?? 0;
@@ -376,12 +435,14 @@ export function calculateAnthropicCost(
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-6',
     'claude-sonnet-4-6-latest',
-  ].includes(modelName);
+  ].includes(pricingModelName);
 
   if (hasTieredPricing) {
     const isLongContext = effectiveInputTokens > 200_000;
-    const baseInputRate = config.inputCost ?? config.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
-    const outputRate = config.outputCost ?? config.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
+    const baseInputRate =
+      effectiveConfig.inputCost ?? effectiveConfig.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
+    const outputRate =
+      effectiveConfig.outputCost ?? effectiveConfig.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
 
     return (
       calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
@@ -391,10 +452,10 @@ export function calculateAnthropicCost(
 
   // For non-tiered models, apply cache pricing only when cache tokens are present
   if (cacheRead || cacheCreation) {
-    const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
     if (modelInfo) {
-      const inputCost = config.inputCost ?? config.cost ?? modelInfo.cost.input;
-      const outputCost = config.outputCost ?? config.cost ?? modelInfo.cost.output;
+      const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
+      const outputCost =
+        effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
       return (
         calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
         completionTokens * outputCost
@@ -402,7 +463,13 @@ export function calculateAnthropicCost(
     }
   }
 
-  return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  return calculateCostBase(
+    pricingModelName,
+    effectiveConfig,
+    promptTokens,
+    completionTokens,
+    ANTHROPIC_MODELS,
+  );
 }
 
 /**

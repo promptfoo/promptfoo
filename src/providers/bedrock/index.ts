@@ -6,6 +6,8 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
+  calculateAnthropicCost,
+  isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   outputFromMessage,
   parseMessages,
@@ -26,6 +28,20 @@ import type { TokenUsage, VarValue } from '../../types/shared';
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
+
+function calculateBedrockClaudeCost(modelName: string, responseJson: any): number | undefined {
+  if (!isAlwaysOnAdaptiveThinkingClaudeModel(modelName)) {
+    return undefined;
+  }
+  return calculateAnthropicCost(
+    modelName,
+    {},
+    responseJson.usage?.input_tokens,
+    responseJson.usage?.output_tokens,
+    responseJson.usage?.cache_read_input_tokens,
+    responseJson.usage?.cache_creation_input_tokens,
+  );
+}
 
 export type BedrockModelFamily =
   | 'claude'
@@ -92,8 +108,9 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     | {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
       }
-    | { type: 'adaptive' }
+    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
     | { type: 'disabled' };
 }
 
@@ -1643,7 +1660,7 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      // Claude Opus 4.7 and 4.8 deprecate manual sampling controls at the model
+      // Newer Claude models deprecate manual sampling controls at the model
       // level — Bedrock relays the resulting 400 as a ValidationException. Drop
       // `temperature` regardless of which IAM-region prefix the user picked.
       // (This handler never emits top_p/top_k.) `params` is a shared model
@@ -1670,11 +1687,24 @@ export const BEDROCK_MODEL = {
         undefined,
         undefined,
       );
-      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      const thinking =
-        samplingParamsDeprecated && config?.thinking?.type === 'enabled'
-          ? { type: 'adaptive' as const }
-          : config?.thinking;
+      const alwaysOnAdaptiveThinking = modelName
+        ? isAlwaysOnAdaptiveThinkingClaudeModel(modelName)
+        : false;
+      const toolChoice =
+        alwaysOnAdaptiveThinking &&
+        (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
+          ? undefined
+          : config?.tool_choice;
+      addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
+      let thinking = config?.thinking;
+      if (samplingParamsDeprecated && thinking?.type === 'enabled') {
+        thinking = {
+          type: 'adaptive' as const,
+          ...(thinking.display ? { display: thinking.display } : {}),
+        };
+      } else if (alwaysOnAdaptiveThinking && thinking?.type === 'disabled') {
+        thinking = undefined;
+      }
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
@@ -2303,6 +2333,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2377,6 +2408,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2409,6 +2441,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2463,6 +2496,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // set as Opus 4.7, with no older `apac.` prefix).
   'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // Claude Fable 5 base, global, and geo inference profiles.
+  'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -2470,6 +2506,13 @@ export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
+  if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
+        `InvokeModel. Load it as "bedrock:${modelName}" instead.`,
+    );
+  }
+
   // Check if it's an inference profile ARN
   if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
     // For inference profiles, use the model type from config to determine handler
@@ -2762,9 +2805,12 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      const cost = calculateBedrockClaudeCost(this.modelName, output);
+
       return {
         output: model.output(mergedConfig, output),
         tokenUsage,
+        cost,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {

@@ -4,6 +4,8 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
   isSamplingParamsDeprecatedClaudeModel,
@@ -637,6 +639,17 @@ describe('Anthropic utilities', () => {
       expect(result).toBe(
         'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
       );
+    });
+
+    it('should omit empty thinking blocks returned by Claude 5', () => {
+      const message = {
+        content: [
+          { type: 'thinking', thinking: '', signature: 'abc123' },
+          { type: 'text', text: 'Final answer', citations: [] },
+        ],
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(outputFromMessage(message, true)).toBe('Final answer');
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
@@ -1686,6 +1699,24 @@ describe('Anthropic utilities', () => {
     });
   });
 
+  describe.each(['claude-fable-5', 'claude-mythos-5'])('calculateAnthropicCost for %s', (model) => {
+    it('uses Claude 5 input and output pricing', () => {
+      expect(calculateAnthropicCost(model, {}, 1000, 500)).toBeCloseTo(0.035, 6);
+    });
+
+    it('applies prompt cache pricing', () => {
+      expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.03645, 6);
+    });
+
+    it('applies the Bedrock regional endpoint premium', () => {
+      expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(0.0385, 6);
+      expect(calculateAnthropicCost(`global.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+        0.035,
+        6,
+      );
+    });
+  });
+
   describe('sampling-params-deprecated model detection', () => {
     it('detects Claude Opus 4.8 across provider naming schemes', () => {
       for (const id of [
@@ -1724,6 +1755,25 @@ describe('Anthropic utilities', () => {
       expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
       // The 4.7-only predicate stays scoped to 4.7.
       expect(isClaudeOpus47Model('claude-opus-4-8')).toBe(false);
+    });
+
+    it('detects Fable 5 and Mythos 5 across provider naming schemes', () => {
+      for (const id of [
+        'claude-fable-5',
+        'anthropic:messages:claude-mythos-5',
+        'anthropic.claude-fable-5',
+        'vertex:claude-mythos-5',
+      ]) {
+        expect(isClaudeFableOrMythos5Model(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(true);
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('does not match hypothetical Claude 50 or suffix-collision model IDs', () => {
+      for (const id of ['claude-fable-50', 'claude-mythos-51', 'claude-fable-5x']) {
+        expect(isClaudeFableOrMythos5Model(id)).toBe(false);
+      }
     });
 
     it('does not treat temperature-supporting models as deprecated', () => {

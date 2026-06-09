@@ -2583,6 +2583,48 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     expect(sentBody.max_tokens).toBe(32);
   });
 
+  it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
+    const model = 'claude-fable-5';
+    provider = new VertexChatProvider(model, {
+      config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    const request = mockRequest.mock.calls[0][0];
+    const sentBody = request.data as Record<string, unknown>;
+    expect(request.url).toContain(`/publishers/anthropic/models/${model}:rawPredict`);
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.00011, 8);
+  });
+
   it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
     provider = new VertexChatProvider('claude-opus-4-6', {
       config: { max_tokens: 32, temperature: 0 },
@@ -2947,6 +2989,21 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(requestData.thinking).toEqual({ type: 'disabled' });
       // Disabled thinking is treated as not-enabled, so the default max_tokens is 512
       expect(requestData.max_tokens).toBe(512);
+    });
+
+    it('should omit disabled thinking and preserve always-on adaptive defaults for Fable 5', async () => {
+      const model = 'claude-fable-5';
+      provider = new VertexChatProvider(model, {
+        config: { thinking: { type: 'disabled' } },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.thinking).toBeUndefined();
+      expect(requestData.max_tokens).toBe(2048);
+      expect(requestData.temperature).toBeUndefined();
     });
 
     it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {
