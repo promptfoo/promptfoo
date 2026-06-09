@@ -45,8 +45,8 @@ directly with a namespaced slash command such as `/promptfoo:promptfoo-evals`.
 ### Via Codex plugin bundle
 
 For Codex, the same `plugins/promptfoo` bundle is exposed by
-`.agents/plugins/marketplace.json`. Add it to a Codex workspace and the four
-skills become available there too.
+`.agents/plugins/marketplace.json`. Add it to a Codex workspace to install the
+same four skills.
 
 ### The four skills
 

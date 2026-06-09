@@ -1712,7 +1712,7 @@ function openApiUnsafeResponseFieldSpec() {
   };
 }
 
-describe('promptfoo Codex plugin package', () => {
+describe('promptfoo plugin package (Codex + Claude Code)', () => {
   it('declares a Codex plugin manifest with a skills directory', () => {
     const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json');
     const manifest = JSON.parse(readText(manifestPath));
@@ -1844,10 +1844,6 @@ describe('promptfoo Codex plugin package', () => {
     expect(path.normalize(entry.source.path)).toBe(path.join('plugins', 'promptfoo'));
     expect(
       fs.existsSync(path.join(repoRoot, entry.source.path, '.codex-plugin', 'plugin.json')),
-    ).toBe(true);
-    // The same bundle also ships a Claude Code manifest; see the shared-bundle test below.
-    expect(
-      fs.existsSync(path.join(repoRoot, entry.source.path, '.claude-plugin', 'plugin.json')),
     ).toBe(true);
   });
 
@@ -2024,27 +2020,44 @@ describe('promptfoo Codex plugin package', () => {
       readText(path.join(pluginRoot, '.claude-plugin', 'plugin.json')),
     );
 
+    // One plugin identity across both marketplaces.
     expect(codexManifest.name).toBe('promptfoo');
     expect(claudeManifest.name).toBe('promptfoo');
-    // Claude Code auto-discovers skills from skills/; no explicit pointer needed.
-    expect(claudeManifest.skills).toBeUndefined();
     expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
 
     // The standalone single-skill Claude bundle has been retired in favor of this shared bundle.
     expect(fs.existsSync(path.join(repoRoot, 'plugins', 'promptfoo-evals'))).toBe(false);
 
-    const marketplace = JSON.parse(
+    // Claude marketplace entry — asserted with the same rigor as the Codex marketplace above.
+    const claudeMarketplace = JSON.parse(
       readText(path.join(repoRoot, '.claude-plugin', 'marketplace.json')),
     );
-    expect(marketplace.name).toBe('promptfoo');
-    expect(marketplace.plugins).toHaveLength(1);
-    const entry = marketplace.plugins[0];
-    expect(entry.name).toBe('promptfoo');
-    expect(entry.source).toBe('./plugins/promptfoo');
+    expect(claudeMarketplace.name).toBe('promptfoo');
+    expect(claudeMarketplace.owner.name).toBe('promptfoo');
+    expect(typeof claudeMarketplace.metadata.description).toBe('string');
+    expect(claudeMarketplace.plugins).toHaveLength(1);
+    expect(JSON.stringify(claudeMarketplace)).not.toContain('[TODO:');
+    const claudeEntry = claudeMarketplace.plugins[0];
+    expect(claudeEntry.name).toBe('promptfoo');
+    expect(claudeEntry.license).toBe('MIT');
 
-    // Claude Code exposes the same four skills as Codex from the shared bundle.
+    // Parity guarantee: both marketplaces must resolve to the SAME on-disk bundle.
+    const codexMarketplace = JSON.parse(
+      readText(path.join(repoRoot, '.agents', 'plugins', 'marketplace.json')),
+    );
+    const codexEntry = (codexMarketplace.plugins as MarketplacePlugin[]).find(
+      (plugin) => plugin.name === 'promptfoo',
+    );
+    if (!codexEntry) {
+      throw new Error('Missing promptfoo Codex marketplace entry');
+    }
+    const claudeBundle = path.resolve(repoRoot, claudeEntry.source);
+    expect(claudeBundle).toBe(pluginRoot);
+    expect(path.resolve(repoRoot, codexEntry.source.path)).toBe(pluginRoot);
+
+    // Claude Code auto-discovers the same four skills as Codex from the shared bundle's skills/.
     const claudeSkillDirs = fs
-      .readdirSync(path.join(repoRoot, entry.source, 'skills'), { withFileTypes: true })
+      .readdirSync(path.join(claudeBundle, 'skills'), { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
       .map((dirent) => dirent.name)
       .sort();
@@ -2087,6 +2100,22 @@ describe('promptfoo Codex plugin package', () => {
       const entries = fs.readdirSync(skillRoot);
       expect(entries).toContain('SKILL.md');
       expect(entries).not.toContain('skill.md');
+    }
+  });
+
+  it('keeps the promptfoo-evals contributor copy self-contained', () => {
+    // The repo-local copy is standalone: the sibling skills it could route to
+    // (promptfoo-provider-setup, the redteam skills) are not present under
+    // .claude/skills/, so it must not hand off to them and dangle.
+    const contributorEvals = readText(
+      path.join(repoClaudeSkillsRoot, 'promptfoo-evals', 'SKILL.md'),
+    );
+    for (const sibling of [
+      'promptfoo-provider-setup',
+      'promptfoo-redteam-setup',
+      'promptfoo-redteam-run',
+    ]) {
+      expect(contributorEvals).not.toContain(sibling);
     }
   });
 
