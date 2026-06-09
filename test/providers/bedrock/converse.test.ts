@@ -1248,22 +1248,22 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.cost).toBeCloseTo(0.0035, 6);
     });
 
-    it.each(['us.anthropic.claude-fable-5', 'eu.anthropic.claude-fable-5'])(
-      'should apply the regional premium for %s',
-      async (modelId) => {
-        const provider = new AwsBedrockConverseProvider(modelId, {
-          config: { region: 'us-east-1' },
-        });
+    it.each([
+      'us.anthropic.claude-fable-5',
+      'eu.anthropic.claude-fable-5',
+    ])('should apply the regional premium for %s', async (modelId) => {
+      const provider = new AwsBedrockConverseProvider(modelId, {
+        config: { region: 'us-east-1' },
+      });
 
-        mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
 
-        const result = await provider.callApi('Test');
+      const result = await provider.callApi('Test');
 
-        // Geo-prefixed inference profiles bill at the 10% premium over the
-        // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
-        expect(result.cost).toBeCloseTo(0.00385, 6);
-      },
-    );
+      // Geo-prefixed inference profiles bill at the 10% premium over the
+      // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
+      expect(result.cost).toBeCloseTo(0.00385, 6);
+    });
 
     it('should apply cache pricing at base rate with no premium for Claude Opus 4.8', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
