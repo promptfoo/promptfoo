@@ -277,6 +277,19 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle moonshot providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('moonshot:kimi-k2-0711-preview'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'moonshot:kimi-k2-0711-preview',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('moonshot:kimi-k2-0711-preview');
+    });
+
     it('should handle http/websocket providers correctly', async () => {
       const httpProvider = await registry.create('http://example.com', {
         options: {

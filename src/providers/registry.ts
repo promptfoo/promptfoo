@@ -65,6 +65,7 @@ import { MCPProvider } from './mcp/index';
 import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
+import { createMoonshotProvider } from './moonshot';
 import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
@@ -788,6 +789,19 @@ export const providerMap: ProviderFactory[] = [
         return new MistralEmbeddingProvider(providerOptions);
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('moonshot:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMoonshotProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
