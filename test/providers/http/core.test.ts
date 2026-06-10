@@ -3475,6 +3475,39 @@ describe('HttpProvider - Sanitization', () => {
     expect(contextStr).not.toContain('plain-secret');
   });
 
+  it('should sanitize newline-terminated form-urlencoded bodies in debug logs', async () => {
+    // A trailing newline (e.g. a body loaded from a file) makes the
+    // looksLikeUrlEncodedFormData heuristic reject the string, so only the
+    // Content-Type-gated branch redacts it. Pin that branch independently.
+    const provider = new HttpProvider(testUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'username=alice&password=plain-secret\n',
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{"result": "test"}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await provider.callApi('test prompt');
+
+    const debugCall = loggerDebugSpy.mock.calls.find(
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+    );
+    expect(debugCall).toBeDefined();
+    const contextStr = JSON.stringify(debugCall?.[1]);
+    expect(contextStr).toContain('username=alice');
+    expect(contextStr).toContain('password=%5BREDACTED%5D');
+    expect(contextStr).not.toContain('plain-secret');
+  });
+
   describe('Header sanitization in logs', () => {
     it('should sanitize sensitive headers while preserving functionality', async () => {
       const provider = new HttpProvider('https://api.example.com/test', {

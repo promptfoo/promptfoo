@@ -119,7 +119,11 @@ export function sanitizeRuntimeOptions(
   return sanitized;
 }
 
-function looksLikeCredentialValue(value: string): boolean {
+/**
+ * Check if a value looks like a secret based on common patterns.
+ * Detects API keys, tokens, and other credential patterns.
+ */
+export function looksLikeSecret(value: string): boolean {
   if (typeof value !== 'string') {
     return false;
   }
@@ -161,18 +165,6 @@ function looksLikeCredentialValue(value: string): boolean {
 
   // Google API keys (AIza...)
   if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Check if a value looks like a secret based on common patterns.
- * Detects API keys, tokens, and other credential patterns.
- */
-export function looksLikeSecret(value: string): boolean {
-  if (looksLikeCredentialValue(value)) {
     return true;
   }
 
@@ -501,10 +493,10 @@ export function sanitizeUrlEncodedString(value: string): string {
       return match;
     }
 
+    // An undecodable key (stray `%` not forming %HH) only disables the key-NAME
+    // match below — the value-pattern checks must still run, otherwise a malformed
+    // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
     const decodedKey = decodeFormComponent(rawKey);
-    if (decodedKey === undefined) {
-      return match;
-    }
     const decodedValue = decodeFormComponent(rawValue);
 
     // Recurse into JSON-shaped values so credentials buried in a
@@ -525,8 +517,8 @@ export function sanitizeUrlEncodedString(value: string): string {
 
     // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so
     // we can match the leaf name against SECRET_FIELD_NAMES.
-    const keyParts = decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    const keyIsSecret = keyParts.length > 0 && keyParts.some(isSecretField);
+    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
+    const keyIsSecret = keyParts.some(isSecretField);
 
     if (keyIsSecret || valueLooksSecret) {
       changed = true;

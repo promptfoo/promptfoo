@@ -1212,6 +1212,17 @@ describe('sanitizeObject', () => {
       expect(result).not.toContain('hunter2');
     });
 
+    it('should still redact a secret value when the key has malformed percent-encoding', () => {
+      // `api%ZZkey` throws in decodeURIComponent. The key-name match is skipped,
+      // but the value-pattern check must still run — otherwise a stray `%` in the
+      // key smuggles the secret past redaction (regression: the URLSearchParams
+      // implementation this replaced redacted these).
+      const body = 'api%ZZkey=AKIAIOSFODNN7EXAMPLE';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('api%ZZkey=%5BREDACTED%5D');
+      expect(result).not.toContain('AKIAIOSFODNN7EXAMPLE');
+    });
+
     it('should redact when "+" in the key decodes to a space', () => {
       // `api+key` URL-decodes to `api key`; normalizeFieldName must collapse
       // whitespace so this still matches SECRET_FIELD_NAMES.
