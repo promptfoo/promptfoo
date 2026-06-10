@@ -1,6 +1,26 @@
 import type { GradingResult, TokenUsage } from '../types/index';
 
 /**
+ * Placeholder substituted for an evaluated output when the output text *is* the
+ * raw image data (base64 / data URI). The real image is attached to the grading
+ * prompt separately, so this keeps multi-megabyte base64 out of the grader's
+ * text channel while still signalling that an image is present.
+ *
+ * Shared by `llmGrading.ts` and the redteam `goat` provider so the grader-facing
+ * wording stays in sync.
+ */
+export const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
+
+/**
+ * Instruction prepended to a grading prompt when image outputs are attached. It
+ * steers the grader to judge the visual content rather than any base64/data URI
+ * text in the output or the originating prompt.
+ */
+export const MULTIMODAL_GRADING_INSTRUCTION =
+  'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
+
+/**
  * Normalize token usage for matcher results. Unlike the evaluator-level
  * normalizeTokenUsage, this excludes the `assertions` field and preserves
  * the existing completionDetails shape (passing through whatever the

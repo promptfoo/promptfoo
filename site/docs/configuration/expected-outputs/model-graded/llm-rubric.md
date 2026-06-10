@@ -166,6 +166,81 @@ applies to other model-graded assertions that use a text judge; see the
 [model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
 for the full metric list.
 
+## Grading image (multimodal) outputs
+
+When a provider returns image outputs (for example image-generation models, or a target that
+attaches images to its response), `llm-rubric` automatically attaches those images to the grading
+prompt so a vision-capable grader can judge the visual content directly. The base64/data-URI text is
+replaced with a short placeholder in the text channel and the real image is sent as a proper
+multimodal message part, so multi-megabyte base64 never bloats the prompt or the stored results.
+
+Point the grader at a vision-capable model and write the rubric against what should be visible:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - openai:image:gpt-image-1
+defaultTest:
+  options:
+    // highlight-next-line
+    provider: openai:gpt-4o-mini # a vision-capable grader
+prompts:
+  - 'A red bicycle on a beach at sunset'
+tests:
+  - assert:
+      - type: llm-rubric
+        value: The image shows a red bicycle on a beach.
+```
+
+The image content is formatted for the grader's API automatically. Validated grader families:
+
+| Grader                    | Example id                                            | Image format sent        |
+| ------------------------- | ----------------------------------------------------- | ------------------------ |
+| OpenAI (chat)             | `openai:gpt-4o-mini`                                  | `image_url` data URI     |
+| OpenAI (responses)        | `openai:responses:gpt-4o-mini`                        | `input_image`            |
+| Anthropic                 | `anthropic:messages:claude-haiku-4-5`                 | base64 `image` block     |
+| Amazon Bedrock (Claude)   | `bedrock:us.anthropic.claude-haiku-4-5-...`           | base64 `image` block     |
+| Amazon Bedrock (Nova)     | `bedrock:amazon.nova-lite-v1:0`                       | Nova `image` bytes block |
+| Google AI Studio / Vertex | `google:gemini-2.5-flash`, `vertex:gemini-2.5-flash`  | `inlineData`             |
+| Promptfoo remote grader   | _(red team evals only, when no grader is configured)_ | data URI                 |
+
+Large image outputs are externalized to the local blob store before assertions run; `llm-rubric`
+resolves those blobs automatically, so this works out of the box. Only inline base64 / data-URI image
+output (or its blob reference) is supported. Remote `http(s)://` image URLs are rejected so the grader
+never fetches arbitrary URLs — configure the provider to return inline base64/data-URI image output
+instead.
+
+For ordinary (non-red-team) evals, image grading uses your **local** default grader — the
+credential-backed vision model promptfoo selects from your configured API keys (or whatever you set via
+`provider` / `--grader`). Promptfoo's remote Cloud grader is used only for red team evals when no grader
+provider is configured; it is not the default for a plain `llm-rubric` assertion.
+
+### Image grading limits
+
+These limits guard against oversized image payloads. They are enforced **client-side**, before the
+grader is called, so they constrain **both** local grader requests and uploads to Promptfoo's remote
+grader. Each value is an **integer byte count** (or count) — unit suffixes like `20MB` are not parsed
+(`20MB` is read as `20`).
+
+| Variable                                      | Default                      | Purpose                                      |
+| --------------------------------------------- | ---------------------------- | -------------------------------------------- |
+| `PROMPTFOO_GRADING_MAX_IMAGES`                | `4`                          | Max images attached to one grading prompt    |
+| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20971520` (20 MiB)          | Max decoded size of a single image           |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20971520` (20 MiB)          | Max combined decoded size of all images      |
+| `PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS`       | derived from max bytes       | Max raw base64/data-URI characters per image |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | derived from max total bytes | Max combined raw characters across images    |
+
+:::note
+These variables are applied **client-side** to every grading request — both local grader calls and
+uploads to Promptfoo's remote grader (used only for red team evals when no grader provider is
+configured). Lowering them below the remote caps tightens what is sent remotely too; for example
+`PROMPTFOO_GRADING_MAX_IMAGES=0` rejects the request locally before any upload.
+
+The remote Cloud grader additionally enforces its own **fixed** server-side caps (4 images, 20 MiB per
+image and in total) that these variables cannot raise. To grade larger images, or to keep image data on
+your own infrastructure, configure a local vision grader (as above) so the image is sent only to your
+chosen provider.
+:::
+
 ## Customizing the rubric prompt
 
 For more control over the `llm-rubric` evaluation, you can set a custom prompt using the `rubricPrompt` property:

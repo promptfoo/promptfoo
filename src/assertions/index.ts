@@ -31,6 +31,7 @@ import {
   type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
+  type GradingBlobResolver,
   type GradingResult,
   type TraceData,
   type VarValue,
@@ -413,6 +414,7 @@ export async function runAssertion({
   providerResponse,
   traceId,
   traceData,
+  resolveImageBlob,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -424,6 +426,7 @@ export async function runAssertion({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  resolveImageBlob?: GradingBlobResolver;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -611,6 +614,7 @@ export async function runAssertion({
         prompt: { raw: prompt || '', label: '' },
         vars: resolvedVars,
         ...(graderTraceparent && { traceparent: graderTraceparent }),
+        ...(resolveImageBlob && { resolveImageBlob }),
       }
     : undefined;
 
@@ -728,6 +732,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  resolveImageBlob,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -737,6 +742,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  resolveImageBlob?: GradingBlobResolver;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -811,6 +817,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      resolveImageBlob,
     });
 
     assertResult.addResult({

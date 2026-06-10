@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+import async from 'async';
 import yaml from 'js-yaml';
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
@@ -14,12 +15,13 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { graderFail, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, MULTIMODAL_GRADING_INSTRUCTION, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   ApiProvider,
   Assertion,
   CallApiContextParams,
+  GradingBlobResolver,
   GradingConfig,
   GradingResult,
   ImageOutput,
@@ -31,14 +33,9 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+// Headroom added per image for the `data:image/...;base64,` prefix when deriving
+// the raw-character cap from a byte limit.
 const DATA_URI_METADATA_MAX_CHARS = 256;
-const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
-  Math.ceil(DEFAULT_GRADING_IMAGE_MAX_BYTES / 3) * 4 + DATA_URI_METADATA_MAX_CHARS;
-const DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS =
-  Math.ceil(DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES / 3) * 4 +
-  DEFAULT_GRADING_MAX_IMAGES * DATA_URI_METADATA_MAX_CHARS;
-const MULTIMODAL_GRADING_INSTRUCTION =
-  'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/i;
 const RESPONSES_PROVIDER_CLASS_NAMES = new Set([
@@ -192,7 +189,10 @@ function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
 }
 
 function isValidBase64Payload(data: string): boolean {
-  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+  // Accept both the standard (`+`/`/`) and URL-safe (`-`/`_`) base64 alphabets.
+  // Providers that forward upstream bytes (HTTP/custom/Python) commonly emit
+  // base64url, and `ImageOutput.data` is documented as "data URI or base64".
+  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/_-]*={0,2}$/.test(data)) {
     return false;
   }
 
@@ -203,6 +203,17 @@ function isValidBase64Payload(data: string): boolean {
 
   const padding = data.slice(firstPaddingIndex);
   return padding.length <= 2 && /^=+$/.test(padding);
+}
+
+/**
+ * Canonicalize a (possibly URL-safe, possibly unpadded) base64 string to the
+ * standard alphabet with padding, so downstream data URI / Anthropic / Google
+ * payloads are always well-formed regardless of the encoding the provider used.
+ */
+function toStandardBase64(base64: string): string {
+  const standardized = base64.replace(/-/g, '+').replace(/_/g, '/');
+  const remainder = standardized.length % 4;
+  return remainder === 0 ? standardized : standardized + '='.repeat(4 - remainder);
 }
 
 function normalizeBase64ImageData(
@@ -217,7 +228,11 @@ function normalizeBase64ImageData(
   let normalizedMimeType = mimeType || 'image/png';
   let payload = trimmed;
   if (trimmed.startsWith('data:')) {
-    const [metadata, rawPayload] = trimmed.split(',', 2);
+    // Split on the first comma only; the base64 alphabet never contains a comma,
+    // so anything after it is part of the payload (`split(',', 2)` would drop it).
+    const commaIndex = trimmed.indexOf(',');
+    const metadata = commaIndex === -1 ? '' : trimmed.slice(0, commaIndex);
+    const rawPayload = commaIndex === -1 ? '' : trimmed.slice(commaIndex + 1);
     if (!rawPayload || !metadata.toLowerCase().includes(';base64')) {
       throw new Error(
         'Only base64-encoded data URI image outputs are supported for multimodal grading.',
@@ -231,10 +246,17 @@ function normalizeBase64ImageData(
     payload = rawPayload;
   }
 
-  const base64Data = payload.replace(/\s/g, '');
-  if (!isValidBase64Payload(base64Data)) {
-    throw new Error('Image output data must contain valid, non-empty base64 image data.');
+  // Strip whitespace (some providers line-wrap base64) and accept both the
+  // standard and URL-safe alphabets. URL-safe input is canonicalized to standard
+  // base64 (with padding) so downstream data URI / provider payloads are
+  // well-formed; standard base64 is left untouched to preserve existing outputs.
+  const rawBase64 = payload.replace(/\s/g, '');
+  if (!isValidBase64Payload(rawBase64)) {
+    throw new Error(
+      'Image output data is not valid base64. Provide a base64 or base64url encoded image, optionally wrapped in a data: URI.',
+    );
   }
+  const base64Data = toStandardBase64(rawBase64);
 
   const decodedBytes = getBase64DecodedBytes(base64Data);
   if (decodedBytes <= 0) {
@@ -276,12 +298,12 @@ function getBase64DecodedBytes(base64Data: string): number {
 
 function imageOutputToImageUrl(
   image: ImageOutput,
-):
-  | { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string; rawChars: number }
-  | undefined {
+): { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string } | undefined {
   if (image.blobRef || hasBlobRefImageValue(image.data)) {
+    // Blob-backed outputs should have been resolved by resolveBlobBackedImageOutputs
+    // before reaching here; if one slips through, fail loudly rather than silently drop it.
     throw new Error(
-      'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
+      'Blob-backed image output could not be resolved for multimodal grading. Ensure the blob store is reachable, or configure the image provider to return base64 or data URI image output.',
     );
   }
 
@@ -302,28 +324,32 @@ function imageOutputToImageUrl(
       dataUri: normalized.dataUri,
       base64Data: normalized.base64Data,
       mimeType: normalized.mimeType,
-      rawChars: image.data.length,
     };
   }
 
   return undefined;
 }
 
-export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
-  imageOutputs: ImageOutput[];
-  imageData: { dataUri: string; base64Data: string; mimeType: string }[];
-} {
-  if (!images?.length) {
-    return { imageOutputs: [], imageData: [] };
+function getBlobHashForImage(image: ImageOutput): string | undefined {
+  if (typeof image.blobRef?.hash === 'string' && BLOB_HASH_REGEX.test(image.blobRef.hash)) {
+    return image.blobRef.hash;
   }
+  if (typeof image.data === 'string') {
+    return BLOB_URI_REGEX.exec(image.data)?.[1];
+  }
+  return undefined;
+}
 
+type GradingImageLimits = {
+  maxImages: number;
+  maxImageBytes: number;
+  maxTotalImageBytes: number;
+  maxRawChars: number;
+  maxTotalRawChars: number;
+};
+
+function getGradingImageLimits(): GradingImageLimits {
   const maxImages = getEnvInt('PROMPTFOO_GRADING_MAX_IMAGES', DEFAULT_GRADING_MAX_IMAGES);
-  if (images.length > maxImages) {
-    throw new Error(
-      `Too many images for multimodal grading: received ${images.length}, maximum is ${maxImages}.`,
-    );
-  }
-
   const maxImageBytes = getEnvInt(
     'PROMPTFOO_GRADING_IMAGE_MAX_BYTES',
     DEFAULT_GRADING_IMAGE_MAX_BYTES,
@@ -332,28 +358,261 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES',
     DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES,
   );
+  // Derive the raw-char caps from the *resolved* byte limits (not the compile-time
+  // defaults) so raising PROMPTFOO_GRADING_IMAGE_MAX_BYTES alone is sufficient and
+  // isn't silently clamped by a separate raw-char default.
   const maxRawChars = getEnvInt(
     'PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS',
-    DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS,
+    Math.ceil(maxImageBytes / 3) * 4 + DATA_URI_METADATA_MAX_CHARS,
   );
   const maxTotalRawChars = getEnvInt(
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS',
-    DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS,
+    Math.ceil(maxTotalImageBytes / 3) * 4 + maxImages * DATA_URI_METADATA_MAX_CHARS,
   );
-  const materializedImages = images.map(imageOutputToImageUrl).filter(
-    (
-      image,
-    ): image is {
-      output: ImageOutput;
-      dataUri: string;
-      base64Data: string;
-      mimeType: string;
-      rawChars: number;
-    } => Boolean(image),
+  return { maxImages, maxImageBytes, maxTotalImageBytes, maxRawChars, maxTotalRawChars };
+}
+
+function getImageOutputRawChars(image: ImageOutput, maxRawChars: number): number {
+  let rawChars = image.data?.length ?? 0;
+  // Only inspect the payload (and count its separate mimeType) while it is still
+  // within the cap. A bounded prefix check avoids trimming an adversarial string.
+  if (image.data && rawChars <= maxRawChars && !/^\s*data:/i.test(image.data.slice(0, 64))) {
+    rawChars += image.mimeType?.length ?? 0;
+  }
+  return rawChars;
+}
+
+function assertImageRawCharLimit(rawChars: number, maxRawChars: number): void {
+  if (rawChars > maxRawChars) {
+    throw new Error(
+      `Image output raw data exceeds multimodal grading size limit: ${rawChars} characters, maximum is ${maxRawChars}.`,
+    );
+  }
+}
+
+function assertTotalImageRawCharLimit(totalRawChars: number, maxTotalRawChars: number): void {
+  if (totalRawChars > maxTotalRawChars) {
+    throw new Error(
+      `Image outputs raw data exceeds multimodal grading total size limit: ${totalRawChars} characters, maximum is ${maxTotalRawChars}.`,
+    );
+  }
+}
+
+function getDataUriRawChars(byteLength: number, mimeType: string): number {
+  const base64Chars = Math.ceil(byteLength / 3) * 4;
+  return 'data:'.length + mimeType.length + ';base64,'.length + base64Chars;
+}
+
+// Reads are already count-capped to maxImages (default 4); this bounds memory if the cap is raised.
+const BLOB_READ_CONCURRENCY = 4;
+
+/**
+ * Resolve blob-backed image outputs to inline base64 data URIs so they can be
+ * attached to the grading prompt. The evaluator externalizes any image output
+ * larger than `BLOB_MIN_SIZE` (1KiB) to `images[].blobRef` before assertions run,
+ * so without this step the headline "grade an image output" workflow would error.
+ *
+ * Resource guards run in stages so no work is wasted on rejected payloads: the
+ * image-count cap and the declared `blobRef.sizeBytes` cap reject before any read;
+ * each blob's actual read size is checked before encoding; and the cumulative actual
+ * byte total is verified BEFORE any base64 expansion. Reads are bounded-concurrency.
+ * The blob bytes are fetched via a resolver injected by the evaluator (threaded through
+ * the grading call contract) so this core matcher never imports the blob store. Inline
+ * images are returned untouched; the resolved data URI is transient and not persisted.
+ */
+export async function resolveBlobBackedImageOutputs(
+  images?: ImageOutput[],
+  resolveImageBlob?: GradingBlobResolver,
+): Promise<ImageOutput[] | undefined> {
+  if (!images?.length) {
+    return images;
+  }
+
+  const { maxImages, maxImageBytes, maxTotalImageBytes, maxRawChars, maxTotalRawChars } =
+    getGradingImageLimits();
+
+  // (a) Count cap BEFORE any blob read.
+  if (images.length > maxImages) {
+    throw new Error(
+      `Too many images for multimodal grading: received ${images.length}, maximum is ${maxImages}.`,
+    );
+  }
+
+  // Compute each image's blob hash once (it scans image.data via regex) and reuse below.
+  const hashedImages = images.map((image) => ({ image, hash: getBlobHashForImage(image) }));
+  if (!hashedImages.some(({ hash }) => hash)) {
+    return images;
+  }
+
+  // Inline images share the same cumulative budgets as blob-backed images. Validate
+  // and account for them before any blob read or base64 expansion.
+  let totalActualBytes = 0;
+  let totalRawChars = 0;
+  for (const { image, hash } of hashedImages) {
+    if (hash) {
+      continue;
+    }
+
+    const rawChars = getImageOutputRawChars(image, maxRawChars);
+    assertImageRawCharLimit(rawChars, maxRawChars);
+    totalRawChars += rawChars;
+    assertTotalImageRawCharLimit(totalRawChars, maxTotalRawChars);
+
+    const normalized = imageOutputToImageUrl(image);
+    if (!normalized) {
+      continue;
+    }
+    const decodedBytes = getBase64DecodedBytes(normalized.base64Data);
+    if (decodedBytes > maxImageBytes) {
+      throw new Error(
+        `Image output exceeds multimodal grading size limit: ${decodedBytes} bytes, maximum is ${maxImageBytes}.`,
+      );
+    }
+    totalActualBytes += decodedBytes;
+    if (totalActualBytes > maxTotalImageBytes) {
+      throw new Error(
+        `Image outputs exceed multimodal grading total size limit: ${totalActualBytes} bytes, maximum is ${maxTotalImageBytes}.`,
+      );
+    }
+  }
+
+  // (b) Reject by DECLARED blobRef.sizeBytes BEFORE reading (per-image + cumulative).
+  let declaredTotalBytes = totalActualBytes;
+  for (const { image, hash } of hashedImages) {
+    if (!hash) {
+      continue;
+    }
+    const sizeBytes = typeof image.blobRef?.sizeBytes === 'number' ? image.blobRef.sizeBytes : 0;
+    if (sizeBytes > maxImageBytes) {
+      throw new Error(
+        `Image output exceeds multimodal grading size limit: ${sizeBytes} bytes, maximum is ${maxImageBytes}.`,
+      );
+    }
+    declaredTotalBytes += sizeBytes;
+    if (declaredTotalBytes > maxTotalImageBytes) {
+      throw new Error(
+        `Image outputs exceed multimodal grading total size limit: ${declaredTotalBytes} bytes, maximum is ${maxTotalImageBytes}.`,
+      );
+    }
+  }
+
+  // (c) Read + per-image actual-size check (bounded concurrency), WITHOUT encoding yet.
+  type ResolvedSlot = { image: ImageOutput; blob?: { data: Buffer; mimeType?: string } };
+  const slots: ResolvedSlot[] = await async.mapLimit(
+    hashedImages,
+    BLOB_READ_CONCURRENCY,
+    async ({ image, hash }: { image: ImageOutput; hash?: string }): Promise<ResolvedSlot> => {
+      if (!hash) {
+        return { image };
+      }
+      if (!resolveImageBlob) {
+        throw new Error(
+          'Blob-backed image output could not be resolved for multimodal grading: no blob resolver provided. ' +
+            'This is wired automatically by the evaluator; configure the image provider to return base64 or a data URI if running the matcher standalone.',
+        );
+      }
+
+      let blob: { data: Buffer; mimeType?: string };
+      try {
+        blob = await resolveImageBlob(hash);
+      } catch (error) {
+        throw new Error(
+          `Failed to load blob-backed image output for multimodal grading (blob ${hash.slice(0, 12)}…): ${error}`,
+        );
+      }
+
+      // Declared size may lie; the store may hold up to BLOB_MAX_SIZE while grading caps lower.
+      if (blob.data.length > maxImageBytes) {
+        throw new Error(
+          `Image output exceeds multimodal grading size limit: ${blob.data.length} bytes, maximum is ${maxImageBytes}.`,
+        );
+      }
+      return { image, blob };
+    },
   );
 
-  let totalImageBytes = 0;
+  // (d) Cumulative ACTUAL-byte cap BEFORE any base64 expansion.
+  for (const { blob } of slots) {
+    if (!blob) {
+      continue;
+    }
+    totalActualBytes += blob.data.length;
+    if (totalActualBytes > maxTotalImageBytes) {
+      throw new Error(
+        `Image outputs exceed multimodal grading total size limit: ${totalActualBytes} bytes, maximum is ${maxTotalImageBytes}.`,
+      );
+    }
+  }
+
+  // (e) Enforce the exact raw-character caps before allocating base64 strings.
+  for (const { image, blob } of slots) {
+    if (!blob) {
+      continue;
+    }
+    const mimeType = image.mimeType || blob.mimeType || 'image/png';
+    const rawChars = getDataUriRawChars(blob.data.length, mimeType);
+    assertImageRawCharLimit(rawChars, maxRawChars);
+    totalRawChars += rawChars;
+    assertTotalImageRawCharLimit(totalRawChars, maxTotalRawChars);
+  }
+
+  // (f) Encode now that per-image and cumulative byte/raw totals are within bounds.
+  return slots.map(({ image, blob }) => {
+    if (!blob) {
+      return image;
+    }
+    const mimeType = image.mimeType || blob.mimeType || 'image/png';
+    return {
+      ...image,
+      data: `data:${mimeType};base64,${blob.data.toString('base64')}`,
+      mimeType,
+      blobRef: undefined,
+    };
+  });
+}
+
+/** Normalized image payload ready to be attached to a grading prompt. */
+export type GradingImageData = { dataUri: string; base64Data: string; mimeType: string };
+
+export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
+  imageOutputs: ImageOutput[];
+  imageData: GradingImageData[];
+} {
+  if (!images?.length) {
+    return { imageOutputs: [], imageData: [] };
+  }
+
+  const { maxImages, maxImageBytes, maxTotalImageBytes, maxRawChars, maxTotalRawChars } =
+    getGradingImageLimits();
+  if (images.length > maxImages) {
+    throw new Error(
+      `Too many images for multimodal grading: received ${images.length}, maximum is ${maxImages}.`,
+    );
+  }
+
+  // Enforce the raw-character caps on the *original* payloads BEFORE any normalization,
+  // so a whitespace-padded or adversarial output can't force a multi-hundred-MB
+  // allocation/scan in normalizeBase64ImageData's whitespace strip. A raw base64 payload
+  // also contributes its separate mimeType to the on-wire data URI, so count that too;
+  // a data: URI already carries its prefix inside image.data, so it isn't double-counted.
   let totalRawChars = 0;
+  for (const image of images) {
+    const rawChars = getImageOutputRawChars(image, maxRawChars);
+    assertImageRawCharLimit(rawChars, maxRawChars);
+    totalRawChars += rawChars;
+    assertTotalImageRawCharLimit(totalRawChars, maxTotalRawChars);
+  }
+
+  const materializedImages = images
+    .map(imageOutputToImageUrl)
+    .filter(
+      (
+        image,
+      ): image is { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string } =>
+        Boolean(image),
+    );
+
+  let totalImageBytes = 0;
   for (const image of materializedImages) {
     const decodedBytes = getBase64DecodedBytes(image.base64Data);
     if (decodedBytes > maxImageBytes) {
@@ -361,22 +620,10 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
         `Image output exceeds multimodal grading size limit: ${decodedBytes} bytes, maximum is ${maxImageBytes}.`,
       );
     }
-    const imageRawChars = Math.max(image.rawChars, image.dataUri.length);
-    if (imageRawChars > maxRawChars) {
-      throw new Error(
-        `Image output raw data exceeds multimodal grading size limit: ${imageRawChars} characters, maximum is ${maxRawChars}.`,
-      );
-    }
     totalImageBytes += decodedBytes;
     if (totalImageBytes > maxTotalImageBytes) {
       throw new Error(
         `Image outputs exceed multimodal grading total size limit: ${totalImageBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
-    totalRawChars += imageRawChars;
-    if (totalRawChars > maxTotalRawChars) {
-      throw new Error(
-        `Image outputs raw data exceeds multimodal grading total size limit: ${totalRawChars} characters, maximum is ${maxTotalRawChars}.`,
       );
     }
   }
@@ -712,18 +959,12 @@ function appendImagesToChatPrompt(
   ]);
 }
 
-async function buildGradingProviderPrompt(
+function buildGradingProviderPrompt(
   renderedPrompt: string,
-  images?: ImageOutput[],
+  imageData?: GradingImageData[],
   provider?: ApiProvider,
-): Promise<{ prompt: string; imageCount: number }> {
-  if (!images?.length) {
-    return { prompt: renderedPrompt, imageCount: 0 };
-  }
-
-  const { imageData } = materializeImageOutputsForGrading(images);
-
-  if (imageData.length === 0) {
+): { prompt: string; imageCount: number } {
+  if (!imageData?.length) {
     return { prompt: renderedPrompt, imageCount: 0 };
   }
 
@@ -787,7 +1028,7 @@ export async function runJsonGradingPrompt({
   providerCallContext,
   throwOnError,
   vars,
-  images,
+  imageData,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -797,7 +1038,7 @@ export async function runJsonGradingPrompt({
   providerCallContext?: CallApiContextParams;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
-  images?: ImageOutput[];
+  imageData?: GradingImageData[];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
@@ -811,9 +1052,9 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
-  const { prompt: providerPrompt, imageCount } = await buildGradingProviderPrompt(
+  const { prompt: providerPrompt, imageCount } = buildGradingProviderPrompt(
     renderedPrompt,
-    images,
+    imageData,
     finalProvider,
   );
   const resp = await callProviderWithContext(

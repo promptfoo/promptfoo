@@ -546,6 +546,7 @@ export class CustomProvider implements ApiProvider {
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+              ...(context?.resolveImageBlob ? { resolveImageBlob: context.resolveImageBlob } : {}),
             };
             const { grade, rubric } = await grader.getResult(
               attackPrompt,

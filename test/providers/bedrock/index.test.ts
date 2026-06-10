@@ -1850,6 +1850,30 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
 describe('BEDROCK_MODEL AMAZON_NOVA', () => {
   const modelHandler = BEDROCK_MODEL.AMAZON_NOVA;
 
+  it.each([
+    ['Nova', BEDROCK_MODEL.AMAZON_NOVA],
+    ['Nova 2', BEDROCK_MODEL.AMAZON_NOVA_2],
+  ])('keeps parsed system blocks flat for %s plain-text prompts', async (_name, handler) => {
+    const params = await handler.params({}, 'system: Be concise\nuser: Hello');
+
+    expect(params.system).toEqual([{ text: 'Be concise' }]);
+    expect(params.messages).toEqual([{ role: 'user', content: [{ text: 'Hello' }] }]);
+  });
+
+  it.each([
+    ['Nova', BEDROCK_MODEL.AMAZON_NOVA],
+    ['Nova 2', BEDROCK_MODEL.AMAZON_NOVA_2],
+  ])('preserves system content-block arrays for %s', async (_name, handler) => {
+    const prompt = JSON.stringify([
+      { role: 'system', content: [{ text: 'Be concise' }] },
+      { role: 'user', content: 'Hello' },
+    ]);
+
+    const params = await handler.params({}, prompt);
+
+    expect(params.system).toEqual([{ text: 'Be concise' }]);
+  });
+
   it('should format system message correctly when using JSON array input', async () => {
     const config = {};
     const prompt = JSON.stringify([

@@ -868,6 +868,56 @@ describe('CrescendoProvider', () => {
     });
   });
 
+  it('passes image outputs from the target response into the grading context', async () => {
+    const getResult = vi.fn(async () => ({
+      grade: { pass: true },
+      rubric: 'rendered rubric',
+    }));
+    mockGetGraderById.mockImplementation(() => ({ getResult }) as any);
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: '{{objective}}', label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock', purpose: 'test purpose' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        generatedQuestion: 'draw something',
+        rationaleBehindJailbreak: 'rationale',
+        lastResponseSummary: '',
+      }),
+    });
+
+    const images = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+    mockTargetProvider.callApi.mockResolvedValueOnce({ output: 'generated image', images });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 0, rationale: 'n/a' }),
+    });
+
+    await provider.callApi('ignored', context);
+
+    expect(getResult).toHaveBeenCalled();
+    const gradingCall = getResult.mock.calls[0] as unknown as unknown[];
+    expect(gradingCall?.[7]).toMatchObject({
+      providerResponse: { images },
+      imageOutputs: images,
+    });
+  });
+
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
     mockGetGraderById.mockImplementation(function () {

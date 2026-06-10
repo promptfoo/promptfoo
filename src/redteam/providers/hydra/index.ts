@@ -819,6 +819,7 @@ export class HydraProvider implements ApiProvider {
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+            ...(context?.resolveImageBlob ? { resolveImageBlob: context.resolveImageBlob } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
               : {}),

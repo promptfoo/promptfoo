@@ -66,6 +66,8 @@ import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
+// Kept local (rather than imported from matchers/shared) to avoid a redteam -> core
+// cross-layer dependency. Keep in sync with ATTACHED_IMAGE_OUTPUT_PLACEHOLDER there.
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
 
@@ -719,6 +721,7 @@ export default class GoatProvider implements ApiProvider {
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
+            ...(context?.resolveImageBlob ? { resolveImageBlob: context.resolveImageBlob } : {}),
           };
 
           // First try to get exfil data from provider response metadata (Playwright provider)

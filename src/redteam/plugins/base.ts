@@ -451,6 +451,7 @@ export abstract class RedteamGraderBase {
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
+      resolveImageBlob,
       ...templateGradingContext
     } = gradingContext ?? {};
 
@@ -562,6 +563,7 @@ export abstract class RedteamGraderBase {
               output: llmOutput,
               images: imagesForGrading,
             },
+            resolveImageBlob,
           })
         : await matchesLlmRubric(finalRubric, llmOutput, grading)
     ) as GradingResult;

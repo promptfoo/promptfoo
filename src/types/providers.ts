@@ -72,6 +72,13 @@ export interface ProviderOptions {
   inputs?: Inputs;
 }
 
+/**
+ * Resolves a blob hash to its bytes + MIME type. Injected by the runtime (the
+ * evaluator) into the grading call contract so the core grading matcher can
+ * resolve blob-backed image outputs without importing the blob store.
+ */
+export type GradingBlobResolver = (hash: string) => Promise<{ data: Buffer; mimeType?: string }>;
+
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
@@ -103,6 +110,11 @@ export interface CallApiContextParams {
    */
   promptIdx?: number;
   repeatIndex?: number;
+  /**
+   * Resolver for blob-backed image outputs, injected by the evaluator so model-graded
+   * assertions can inline externalized images without the matcher importing storage.
+   */
+  resolveImageBlob?: GradingBlobResolver;
 }
 
 export interface CallApiOptionsParams {

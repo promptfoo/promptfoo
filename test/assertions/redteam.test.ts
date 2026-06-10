@@ -265,6 +265,75 @@ describe('handleRedteam', () => {
     });
   });
 
+  it('forwards the image blob resolver and trace context to the redteam grader', async () => {
+    const assertion = { type: 'promptfoo:redteam:harmful:hate' as const };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: { pluginId: 'harmful:hate' },
+    };
+    const providerResponse = { output: 'Some output', metadata: {} };
+    const trace = {
+      traceId: 'trace-id',
+      evaluationId: 'eval-id',
+      testCaseId: 'test-id',
+      spans: [],
+    };
+    const resolveImageBlob = vi.fn();
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Safe' },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      providerCallContext: {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        resolveImageBlob,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'Some output',
+      outputString: 'Some output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(getResultSpy).toHaveBeenCalledWith(
+      'test prompt',
+      'Some output',
+      test,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      expect.objectContaining({
+        providerResponse,
+        resolveImageBlob,
+        traceData: trace,
+        traceSummary: expect.stringContaining('"traceId": "trace-id"'),
+      }),
+    );
+  });
+
   it('falls back to the multi-input payload when the rendered prompt is missing', async () => {
     const assertion = {
       type: 'promptfoo:redteam:prompt-extraction' as const,
@@ -420,5 +489,43 @@ describe('handleRedteam', () => {
       },
     );
     expect(grade.pass).toBe(false);
+  });
+
+  it('rejects grading when no rendered or fallback prompt is available', async () => {
+    const assertion = { type: 'promptfoo:redteam:harmful:hate' as const };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: { pluginId: 'harmful:hate' },
+    };
+    const providerResponse = { output: 'Some output', metadata: {} };
+
+    await expect(
+      handleRedteam({
+        assertion,
+        baseType: getAssertionBaseType(assertion),
+        assertionValueContext: {
+          prompt: '',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        inverse: isAssertionInverse(assertion),
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Some output',
+        outputString: 'Some output',
+        prompt: undefined,
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      }),
+    ).rejects.toThrow('must have a prompt');
   });
 });

@@ -21,13 +21,21 @@ import {
   loadRubricPrompt,
   materializeImageOutputsForGrading,
   renderLlmRubricPrompt,
+  resolveBlobBackedImageOutputs,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import {
+  ATTACHED_IMAGE_OUTPUT_PLACEHOLDER,
+  fail,
+  graderFail,
+  normalizeMatcherTokenUsage,
+  tryParse,
+} from './shared';
 
 import type {
   Assertion,
   CallApiContextParams,
+  GradingBlobResolver,
   GradingConfig,
   GradingResult,
   ProviderResponse,
@@ -37,9 +45,6 @@ import type {
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
 };
-
-const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
-  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
@@ -125,11 +130,14 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
 }
 
 function getDataUriPayload(data: string): string | undefined {
-  const [metadata, payload] = data.trim().split(',', 2);
-  if (!payload || !metadata.toLowerCase().startsWith('data:image/')) {
+  // Split on the first comma only (base64 never contains one); `split(',', 2)`
+  // would truncate a payload that did.
+  const trimmed = data.trim();
+  const commaIndex = trimmed.indexOf(',');
+  if (commaIndex === -1 || !trimmed.slice(0, commaIndex).toLowerCase().startsWith('data:image/')) {
     return undefined;
   }
-  return payload;
+  return trimmed.slice(commaIndex + 1) || undefined;
 }
 
 function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
@@ -146,6 +154,14 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
+  // The evaluator externalizes large image outputs, so `output` is often a blob URI
+  // (e.g. `promptfoo://blob/<hash>`) rather than the base64 itself. Replace it too.
+  if (/^promptfoo:\/\/blob\/[a-f0-9]{64}/i.test(trimmedOutput)) {
+    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  }
+
+  // Compare against the original (pre-normalization) image payloads so a raw
+  // base64url output still matches its attached image and gets the placeholder.
   if (
     imageOutputs.some((image) => {
       if (!image.data) {
@@ -171,6 +187,7 @@ export async function matchesLlmRubric(
     throwOnError?: boolean;
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
+    resolveImageBlob?: GradingBlobResolver;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -186,8 +203,19 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
-  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
-  const gradingOutput = getGradingOutputForImages(llmOutput, imageOutputs);
+  // Resolve any blob-backed image outputs (the evaluator externalizes images > 1KiB
+  // to blobRefs before assertions run) so they can be attached to the grader. The
+  // resolver is injected by the evaluator through the grading call contract.
+  const resolvedImages = await resolveBlobBackedImageOutputs(
+    options?.providerResponse?.images,
+    options?.resolveImageBlob,
+  );
+  // Materialize once here and reuse downstream; runJsonGradingPrompt no longer
+  // re-validates/re-decodes the (potentially multi-MB) image payloads.
+  const { imageOutputs, imageData } = materializeImageOutputsForGrading(resolvedImages);
+  const gradingOutput = imageOutputs.length
+    ? getGradingOutputForImages(llmOutput, options?.providerResponse?.images)
+    : llmOutput;
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -223,7 +251,7 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
-      images: imageOutputs,
+      imageData,
       vars: {
         output: tryParse(gradingOutput),
         rubric,

@@ -1277,6 +1277,44 @@ describe('RedteamGraderBase', () => {
     );
   });
 
+  it('should forward the injected blob resolver from grading context to the multimodal grader', async () => {
+    const mockResult: GradingResult = { pass: true, score: 1, reason: 'Test passed' };
+    const hash = 'a'.repeat(64);
+    const imageOutputs = [
+      {
+        blobRef: {
+          uri: `promptfoo://blob/${hash}`,
+          hash,
+          mimeType: 'image/png',
+          sizeBytes: 5,
+          provider: 'filesystem',
+        },
+      },
+    ];
+    const resolveImageBlob = vi.fn();
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'generated image',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+      undefined /* additionalRubric */,
+      undefined /* skipRefusalCheck */,
+      { imageOutputs, resolveImageBlob, providerResponse: { output: 'generated image' } },
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.any(String),
+      'generated image',
+      expect.any(Object),
+      undefined,
+      undefined,
+      expect.objectContaining({ resolveImageBlob }),
+    );
+  });
+
   it('should prefer remote grading when test options only contain a target provider', async () => {
     cliState.config = {
       redteam: {},
