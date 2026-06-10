@@ -738,7 +738,7 @@ describe('createShareableUrl', () => {
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
     });
 
-    it('does not inline trace blobs into the initial self-hosted share payload', async () => {
+    it('inlines authorized result blobs but not trace blobs or copied cross-eval blobs', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
         Boolean(defaultValue),
@@ -753,15 +753,23 @@ describe('createShareableUrl', () => {
 
       const authorizedHash = '1'.repeat(64);
       const copiedHash = '2'.repeat(64);
+      const resultHash = '6'.repeat(64);
       const authorizedUri = `promptfoo://blob/${authorizedHash}`;
       const copiedUri = `promptfoo://blob/${copiedHash}`;
+      const resultUri = `promptfoo://blob/${resultHash}`;
       const authorizedBytes = Buffer.from('authorized-trace-bytes');
       const copiedBytes = Buffer.from('sensitive-other-eval-bytes');
+      const resultBytes = Buffer.from('authorized-result-bytes');
+      const bytesByHash: Record<string, Buffer> = {
+        [authorizedHash]: authorizedBytes,
+        [copiedHash]: copiedBytes,
+        [resultHash]: resultBytes,
+      };
       const otherEvalId = `eval-${randomUUID()}`;
       const resultRow = {
         id: 'result-1',
         promptIdx: 0,
-        response: { output: copiedUri },
+        response: { output: `${resultUri} ${copiedUri}` },
         testIdx: 0,
       } as EvalResult;
 
@@ -792,13 +800,13 @@ describe('createShareableUrl', () => {
       ]);
 
       const getByHash = vi.fn<BlobStorageProvider['getByHash']>(async (hash) => ({
-        data: hash === authorizedHash ? authorizedBytes : copiedBytes,
+        data: bytesByHash[hash],
         metadata: {
           createdAt: '2026-06-10T00:00:00.000Z',
           key: hash,
           mimeType: 'image/png',
           provider: 'test-stub',
-          sizeBytes: hash === authorizedHash ? authorizedBytes.length : copiedBytes.length,
+          sizeBytes: bytesByHash[hash].length,
         },
       }));
       setBlobStorageProvider({
@@ -817,20 +825,14 @@ describe('createShareableUrl', () => {
         { id: mockEval.id as string, config: {}, results: {} },
         { id: otherEvalId, config: {}, results: {} },
       ]);
-      await db.insert(blobAssetsTable).values([
-        {
-          hash: authorizedHash,
+      await db.insert(blobAssetsTable).values(
+        Object.entries(bytesByHash).map(([hash, bytes]) => ({
+          hash,
           mimeType: 'image/png',
           provider: 'test-stub',
-          sizeBytes: authorizedBytes.length,
-        },
-        {
-          hash: copiedHash,
-          mimeType: 'image/png',
-          provider: 'test-stub',
-          sizeBytes: copiedBytes.length,
-        },
-      ]);
+          sizeBytes: bytes.length,
+        })),
+      );
       await db.insert(blobReferencesTable).values([
         {
           id: randomUUID(),
@@ -843,6 +845,13 @@ describe('createShareableUrl', () => {
           id: randomUUID(),
           blobHash: copiedHash,
           evalId: otherEvalId,
+          kind: 'image',
+          location: 'response.output',
+        },
+        {
+          id: randomUUID(),
+          blobHash: resultHash,
+          evalId: mockEval.id as string,
           kind: 'image',
           location: 'response.output',
         },
@@ -865,14 +874,19 @@ describe('createShareableUrl', () => {
         const initialBody = JSON.parse(mockFetch.mock.calls[0][1].body);
         const chunkBody = JSON.parse(mockFetch.mock.calls[1][1].body);
         expect(initialBody.traces[0].metadata.image).toBe(authorizedUri);
-        expect(chunkBody[0].response.output).toBe(copiedUri);
+        // Positive control for the results path: the same-eval blob is inlined while the
+        // copied cross-eval URI in the same string is left untouched.
+        expect(chunkBody[0].response.output).toBe(
+          `data:image/png;base64,${resultBytes.toString('base64')} ${copiedUri}`,
+        );
         expect(mockFetch.mock.calls.map(([, options]) => options.body).join('\n')).not.toContain(
           authorizedBytes.toString('base64'),
         );
         expect(mockFetch.mock.calls.map(([, options]) => options.body).join('\n')).not.toContain(
           copiedBytes.toString('base64'),
         );
-        expect(getByHash).not.toHaveBeenCalled();
+        expect(getByHash).toHaveBeenCalledTimes(1);
+        expect(getByHash).toHaveBeenCalledWith(resultHash);
         expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
       } finally {
         resetBlobStorageProvider();
@@ -881,7 +895,7 @@ describe('createShareableUrl', () => {
           .where(inArray(blobReferencesTable.evalId, [mockEval.id as string, otherEvalId]));
         await db
           .delete(blobAssetsTable)
-          .where(inArray(blobAssetsTable.hash, [authorizedHash, copiedHash]));
+          .where(inArray(blobAssetsTable.hash, Object.keys(bytesByHash)));
         await db
           .delete(evalsTable)
           .where(inArray(evalsTable.id, [mockEval.id as string, otherEvalId]));
@@ -1043,6 +1057,13 @@ describe('createShareableUrl', () => {
         localEvalId: mockEvalWithTraces.id,
         remoteEvalId: 'mock-eval-id',
       });
+      // Result coordinates win for blobs in both places only if the result and trace
+      // uploads dedupe through one shared cache, so pin the single construction and the
+      // cache identity across both calls.
+      expect(uploadBlobRefsForShare).toHaveBeenCalledTimes(2);
+      expect(createRemoteBlobUploadCache).toHaveBeenCalledTimes(1);
+      const uploadCalls = vi.mocked(uploadBlobRefsForShare).mock.calls;
+      expect(uploadCalls[0][1]).toBe(uploadCalls[1][1]);
     });
 
     it('uploads Cloud trace blobs when result blobs use the inline override', async () => {
