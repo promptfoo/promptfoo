@@ -305,6 +305,7 @@ describe('doGenerateRedteam', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getProviderIds).mockReturnValue(['test-provider']);
     // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
     resetCommonMocks();
     mockProvider = createMockProvider({
@@ -3975,6 +3976,7 @@ describe('target ID extraction for retry strategy', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getProviderIds).mockReturnValue(['test-provider']);
 
     mockProvider = createMockProvider({
       response: { output: 'test output' },
@@ -4140,6 +4142,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should preserve target context for a map-form Cloud provider', async () => {
+    vi.mocked(getProviderIds).mockReturnValue(['promptfoo://provider/cloud-target-123']);
     vi.mocked(isCloudProvider).mockImplementation((providerId) =>
       providerId.startsWith('promptfoo://provider/'),
     );
@@ -4303,6 +4306,11 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should filter out providers without id', async () => {
+    vi.mocked(getProviderIds)
+      .mockReturnValueOnce(['test-provider'])
+      .mockImplementationOnce(() => {
+        throw new Error('Invalid provider');
+      });
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {

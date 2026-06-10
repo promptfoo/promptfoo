@@ -41,7 +41,6 @@ import { getCustomPolicies } from '../../util/generation';
 import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
-import { normalizeProviderRef } from '../../util/providerRef';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
 import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -164,9 +163,22 @@ function getTargetIdsFromProviders(providers: Partial<UnifiedConfig>['providers'
     return [];
   }
 
-  return providers.flatMap((provider, index) => {
-    const descriptor = normalizeProviderRef(provider, { index });
-    return descriptor.kind === 'unknown' || descriptor.kind === 'function' ? [] : [descriptor.id];
+  return providers.flatMap((provider) => {
+    if (typeof provider === 'string') {
+      return [provider];
+    }
+    if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) {
+      return [];
+    }
+    if (typeof provider.id === 'string') {
+      return [provider.id];
+    }
+
+    try {
+      return getProviderIds([provider]);
+    } catch {
+      return [];
+    }
   });
 }
 
