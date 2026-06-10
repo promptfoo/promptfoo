@@ -141,6 +141,12 @@ export async function poisonDocument(
 }
 
 export async function doPoisonDocuments(options: PoisonOptions) {
+  // Fail before touching the filesystem or network; generatePoisonedDocument
+  // re-checks as defense in depth.
+  if (neverGenerateRemote()) {
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('RAG poisoning'));
+  }
+
   const outputPath = options.output || 'poisoned-config.yaml';
   const outputDir = options.outputDir || 'poisoned-documents';
 
