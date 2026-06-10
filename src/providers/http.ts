@@ -1534,6 +1534,21 @@ function sanitizeTransformedRequestForMetadata(
     .join('\n');
 }
 
+function logTransformedPrompt(
+  transformedPrompt: unknown,
+  prompt: unknown,
+  headers?: Record<string, string>,
+): void {
+  const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
+    transformedPrompt,
+    headers,
+  );
+  const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
+  logger.debug(
+    `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
+  );
+}
+
 function formatRawRequestForDebugMetadata(
   parsedRequest: ReturnType<typeof parseRawRequest>,
   bodyContent?: string,
@@ -2712,14 +2727,7 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
-    const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
-      transformedPrompt,
-      headers,
-    );
-    const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
-    );
+    logTransformedPrompt(transformedPrompt, prompt, headers);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
@@ -2962,17 +2970,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
-    const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
-      transformedPrompt,
-      parsedRequest.headers,
-    );
-    const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(
-      prompt,
-      parsedRequest.headers,
-    );
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
-    );
+    logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
