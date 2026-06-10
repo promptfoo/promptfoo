@@ -156,10 +156,24 @@ export function mockGlobal<T>(name: string, value: T): () => void {
   };
 }
 
+/**
+ * Creates a unique temporary directory in the operating system temp location.
+ *
+ * @param prefix - Optional directory name prefix. Defaults to `promptfoo-test-`.
+ * @returns The absolute path to the newly created temporary directory.
+ */
 export function createTempDir(prefix = 'promptfoo-test-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+/**
+ * Removes a temporary directory created during tests.
+ *
+ * If `tempDir` is undefined, this function is a no-op. Otherwise, it retries recursive removal
+ * briefly to tolerate transient file-handle contention on Windows.
+ *
+ * @param tempDir - Absolute or relative path to the temporary directory to remove.
+ */
 export function removeTempDir(tempDir: string | undefined): void {
   if (!tempDir) {
     return;
