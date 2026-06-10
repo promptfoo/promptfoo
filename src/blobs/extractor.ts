@@ -357,7 +357,7 @@ async function externalizeMetadataAudio(
   // Routing through `storeOnce` (instead of calling `maybeStore` directly) means
   // a metadata-mirrored audio payload reuses the blob written for any other
   // path (`response.audio.data`, `turns[N].audio.data`, etc.) when the bytes
-  // match — one store, one cloud upload.
+  // match — one store.
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),

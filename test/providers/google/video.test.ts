@@ -452,11 +452,25 @@ describe('GoogleVideoProvider', () => {
         },
       });
 
-      const result = await provider.callApi('A cinematic shot of a lighthouse in a storm');
+      const result = await provider.callApi('A cinematic shot of a lighthouse in a storm', {
+        evaluationId: 'eval-google-video-download',
+        promptIdx: 9,
+        testIdx: 10,
+      } as unknown as CallApiContextParams);
 
       expect(result.error).toBeUndefined();
       expect(result.video?.model).toBe('veo-3.1-generate-preview');
       expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
+      expect(mockStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'video/mp4',
+        expect.objectContaining({
+          evalId: 'eval-google-video-download',
+          kind: 'video',
+          promptIdx: 9,
+          testIdx: 10,
+        }),
+      );
       expect(mockResolveProjectId).not.toHaveBeenCalled();
       expect(mockFetchWithTimeout).toHaveBeenCalledTimes(3);
       expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(

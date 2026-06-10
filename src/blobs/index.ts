@@ -125,6 +125,24 @@ export async function isBlobAllowedForShare(hash: string, evalId: string): Promi
   return Boolean(reference);
 }
 
+/**
+ * Read local blob bytes for sharing, but only when the eval has trusted provenance for
+ * the hash. Single chokepoint for every share path (remote upload and inline).
+ */
+export async function getShareAuthorizedBlob(
+  hash: string,
+  localEvalId: string,
+): Promise<StoredBlob | null> {
+  if (!(await isBlobAllowedForShare(hash, localEvalId))) {
+    logger.warn('[Share] Skipping blob reference that is not authorized for this eval', {
+      evalId: localEvalId,
+      hash,
+    });
+    return null;
+  }
+  return getBlobByHash(hash);
+}
+
 export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
   const provider = getBlobStorageProvider();
   return provider.getUrl(hash, expiresInSeconds);
@@ -172,13 +190,11 @@ export async function recordBlobReference(
     .get();
 
   if (existing) {
-    const strongerReference: { kind?: string; location?: string } = {};
-    if (refContext.kind && !existing.kind) {
-      strongerReference.kind = refContext.kind;
-    }
-    if (refContext.location === 'import' && existing.location !== 'import') {
-      strongerReference.location = 'import';
-    }
+    const strongerReference: { kind?: string; location?: string } = {
+      ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
+      ...(refContext.location === 'import' &&
+        existing.location !== 'import' && { location: 'import' }),
+    };
     if (Object.keys(strongerReference).length > 0) {
       await db
         .update(blobReferencesTable)

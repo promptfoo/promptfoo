@@ -16,6 +16,7 @@ import {
   stripAuthFromUrl,
 } from '../src/share';
 import { makeRequest } from '../src/util/cloud';
+import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
@@ -76,6 +77,10 @@ vi.mock('../src/globalConfig/cloud', () => {
 vi.mock('../src/blobs/shareUpload', () => ({
   createRemoteBlobUploadCache: vi.fn(),
   uploadBlobRefsForShare: vi.fn(),
+}));
+vi.mock('../src/util/inlineBlobsForShare', () => ({
+  createBlobInlineCache: vi.fn(() => new Map()),
+  inlineBlobRefsForShare: vi.fn(async (value: unknown) => value),
 }));
 vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: vi.fn((...args) => mockFetch(...args)),
@@ -721,6 +726,35 @@ describe('createShareableUrl', () => {
       );
       expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+    });
+
+    it('inlines blob refs scoped to the local eval for default self-hosted shares', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      // Honor env-var defaults so PROMPTFOO_SHARE_INLINE_BLOBS falls back to its
+      // self-hosted default (true) instead of the flat-false mock used elsewhere.
+      vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
+        Boolean(defaultValue),
+      );
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: mockEval.id }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      const result = await createShareableUrl(mockEval as Eval);
+
+      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      expect(inlineBlobRefsForShare).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(Map),
+        mockEval.id,
+      );
+      expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
     });
 
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
