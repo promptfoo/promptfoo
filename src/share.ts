@@ -626,7 +626,7 @@ async function sendResultChunksForShare(
       evalRecord.id,
       remoteEvalId,
       inlineCache,
-      inlineCache ? null : remoteBlobUploadCache,
+      remoteBlobUploadCache,
       traceIds,
       blobUploader,
     );
@@ -751,7 +751,7 @@ async function sendChunkedResults(
       resultsPerChunk,
       remoteEvalId,
       inlineCache,
-      remoteBlobUploadCache,
+      remoteBlobUploadCache: inlineCache && !isCloudEnabled ? null : remoteBlobUploadCache,
       traceIds,
       blobUploader,
       sendResultChunk,

@@ -1268,8 +1268,20 @@ describe('createShareableUrl', () => {
       const initialBody = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(initialBody.traces[0].metadata.media).toBe(blobUri);
       expect(inlineBlobRefsForShare).toHaveBeenCalled();
-      expect(uploadBlobRefsForShare).toHaveBeenCalledOnce();
-      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(
+      expect(uploadBlobRefsForShare).toHaveBeenNthCalledWith(
+        1,
+        resultRow,
+        expect.any(Map),
+        {
+          localEvalId: mockEvalWithTraces.id,
+          promptIdx: 4,
+          remoteEvalId: 'mock-eval-id',
+          testIdx: 3,
+        },
+        undefined,
+      );
+      expect(uploadBlobRefsForShare).toHaveBeenNthCalledWith(
+        2,
         traces[0],
         expect.any(Map),
         {
@@ -1280,6 +1292,9 @@ describe('createShareableUrl', () => {
         },
         undefined,
       );
+      expect(uploadBlobRefsForShare).toHaveBeenCalledTimes(2);
+      const uploadCalls = vi.mocked(uploadBlobRefsForShare).mock.calls;
+      expect(uploadCalls[0][1]).toBe(uploadCalls[1][1]);
     });
 
     it('sends eval with empty traces array when no traces are available', async () => {
