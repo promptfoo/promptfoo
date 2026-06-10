@@ -4161,7 +4161,7 @@ describe('Language configuration', () => {
       expect(multiInputMessage).toContain('context');
     });
 
-    it('should exclude all MULTI_INPUT_EXCLUDED_PLUGINS in multi-input mode', async () => {
+    it('should exclude only plugins that still do not support multi-input mode', async () => {
       await synthesize({
         language: 'en',
         numTests: 1,
@@ -4170,6 +4170,7 @@ describe('Language configuration', () => {
           { id: 'cross-session-leak', numTests: 1 },
           { id: 'special-token-injection', numTests: 1 },
           { id: 'system-prompt-override', numTests: 1 },
+          { id: 'ascii-smuggling', numTests: 1 },
           { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
         ],
         prompts: ['Test {{query}}'],
@@ -4178,17 +4179,18 @@ describe('Language configuration', () => {
         inputs: { query: 'user query', context: 'additional context' },
       });
 
-      // Check that all 4 MULTI_INPUT_EXCLUDED_PLUGINS are in skip message
+      // Check that only the explicit non-dataset exclusions are in the skip message.
       const skipMessage = vi
         .mocked(logger.info)
         .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 4 plugin'));
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 2 plugin'));
 
       expect(skipMessage).toBeDefined();
       expect(skipMessage).toContain('cca');
       expect(skipMessage).toContain('cross-session-leak');
-      expect(skipMessage).toContain('special-token-injection');
-      expect(skipMessage).toContain('system-prompt-override');
+      expect(skipMessage).not.toContain('special-token-injection');
+      expect(skipMessage).not.toContain('system-prompt-override');
+      expect(skipMessage).not.toContain('ascii-smuggling');
     });
   });
 });

@@ -239,7 +239,7 @@ export const blobReferencesTable = sqliteTable(
     testIdx: integer('test_idx'),
     promptIdx: integer('prompt_idx'),
     location: text('location'), // e.g., response.audio.data, turns[0].audio.data
-    kind: text('kind'), // audio | image
+    kind: text('kind'), // audio | image | video
     createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
