@@ -4,6 +4,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
+import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -372,6 +373,33 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+async function prepareChunkForShare(
+  chunk: EvalResult[],
+  localEvalId: string,
+  remoteEvalId: string,
+  inlineCache: ReturnType<typeof createBlobInlineCache> | null,
+  remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+): Promise<EvalResult[]> {
+  const chunkToSend = inlineCache
+    ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
+    : chunk;
+
+  if (remoteBlobUploadCache) {
+    await Promise.all(
+      chunk.map((result) =>
+        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
+          localEvalId,
+          remoteEvalId,
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+        }),
+      ),
+    );
+  }
+
+  return chunkToSend;
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -383,9 +411,13 @@ async function sendChunkedResults(
 
   await checkCloudPermissions(evalRecord.config);
 
+  // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
+  // bytes into the payload instead. At most one of these caches is active.
   const inlineBlobs =
     isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
+  const remoteBlobUploadCache =
+    cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
@@ -393,7 +425,7 @@ async function sendChunkedResults(
     return null;
   }
   if (inlineBlobs && inlineCache) {
-    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
+    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache, evalRecord.id);
   }
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
@@ -472,10 +504,13 @@ async function sendChunkedResults(
           chunkNumber++;
           logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-          const chunkToSend =
-            inlineBlobs && inlineCache
-              ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-              : currentChunk;
+          const chunkToSend = await prepareChunkForShare(
+            currentChunk,
+            evalRecord.id,
+            evalId,
+            inlineCache,
+            remoteBlobUploadCache,
+          );
 
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
@@ -488,10 +523,13 @@ async function sendChunkedResults(
       chunkNumber++;
       logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-      const chunkToSend =
-        inlineBlobs && inlineCache
-          ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-          : currentChunk;
+      const chunkToSend = await prepareChunkForShare(
+        currentChunk,
+        evalRecord.id,
+        evalId,
+        inlineCache,
+        remoteBlobUploadCache,
+      );
 
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }
@@ -499,6 +537,16 @@ async function sendChunkedResults(
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
+
+    if (remoteBlobUploadCache && remoteBlobUploadCache.size > 0) {
+      const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
+      const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
+      if (failedUploads > 0) {
+        logger.warn(
+          `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
+        );
+      }
+    }
 
     return evalId;
   } catch (e) {

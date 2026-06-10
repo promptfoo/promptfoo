@@ -107,7 +107,7 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium,block-no-verify\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -184,9 +184,6 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "@inquirer/core": {
-      "mute-stream": "3.0.0"
-    },
     "webpack": "5.107.2",
     "dompurify": "3.4.7",
     "monaco-editor": {
@@ -195,7 +192,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.157",
+    "@anthropic-ai/claude-agent-sdk": "0.3.158",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -227,6 +224,7 @@
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
+    "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
@@ -253,7 +251,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.157",
+    "@anthropic-ai/claude-agent-sdk": "0.3.158",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -372,7 +370,7 @@
     "socket.io-client": "^4.8.3",
     "text-extensions": "^3.1.0",
     "tsx": "^4.21.0",
-    "undici": "^7.25.0",
+    "undici": ">=7.27.1 <8",
     "winston": "^3.19.0",
     "ws": "^8.19.0",
     "zod": "^4.3.6"

@@ -490,8 +490,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
             : ['openai:gpt-5-mini', 'openai:gpt-5'],
       },
       {
-        name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
+        name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
+          'anthropic:messages:claude-fable-5',
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-4-6',
           'anthropic:messages:claude-opus-4-1-20250805',
