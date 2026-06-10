@@ -25,10 +25,17 @@ import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
-import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
+import {
+  countTests,
+  normalizePrompts,
+  normalizePromptsForJob,
+  normalizeProviders,
+} from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { UnifiedConfig } from '@promptfoo/types';
+
+import type { GenerationPrompt } from '../api/generation';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -127,6 +134,28 @@ const EvaluateTestSuiteCreator = () => {
   }, []);
 
   const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
+
+  // Generation APIs only need raw prompt text and a stable label.
+  const promptsAsArray = React.useMemo(
+    (): GenerationPrompt[] =>
+      normalizePromptsForJob(prompts).flatMap((prompt) => {
+        if (typeof prompt === 'string') {
+          return prompt.trim() === '' ? [] : [{ raw: prompt, label: prompt }];
+        }
+
+        const raw = typeof prompt.raw === 'string' ? prompt.raw : undefined;
+        if (!raw?.trim()) {
+          return [];
+        }
+        return [
+          {
+            raw,
+            label: typeof prompt.label === 'string' && prompt.label.trim() ? prompt.label : raw,
+          },
+        ];
+      }),
+    [prompts],
+  );
 
   const varsList = React.useMemo(
     () => extractVarsFromPrompts(normalizedPrompts),
@@ -632,6 +661,7 @@ const EvaluateTestSuiteCreator = () => {
                     >
                       <TestCasesSection
                         varsList={varsList}
+                        prompts={promptsAsArray}
                         onOpenYamlEditor={() => setEditorTab('yaml')}
                       />
                     </ErrorBoundary>

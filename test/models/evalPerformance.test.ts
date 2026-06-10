@@ -198,7 +198,7 @@ describe('evalPerformance', () => {
   });
 
   describe('cache invalidation on result write (issue #9348)', () => {
-    const makeResult = (_evalId: string, testIdx: number) =>
+    const makeResult = (testIdx: number) =>
       ({
         description: `test-${testIdx}`,
         promptIdx: 0,
@@ -243,7 +243,7 @@ describe('evalPerformance', () => {
       expect(before).toBe(0);
 
       // Insert a result — this should bust the cache automatically
-      await eval_.addResult(makeResult(eval_.id, 0));
+      await eval_.addResult(makeResult(0));
 
       // Must see fresh count without any manual clearCountCache() call
       const after = await getCachedResultsCount(eval_.id);
@@ -259,7 +259,7 @@ describe('evalPerformance', () => {
       const before = await getTotalResultRowCount(eval_.id);
       expect(before).toBe(0);
 
-      await eval_.addResult(makeResult(eval_.id, 0));
+      await eval_.addResult(makeResult(0));
 
       const after = await getTotalResultRowCount(eval_.id);
       expect(after).toBe(1);
@@ -276,7 +276,7 @@ describe('evalPerformance', () => {
 
       const EvalResult = (await import('../../src/models/evalResult')).default;
       await EvalResult.createManyFromEvaluateResult(
-        [makeResult(eval_.id, 0), makeResult(eval_.id, 1)] as any,
+        [makeResult(0), makeResult(1)] as any,
         eval_.id,
       );
 

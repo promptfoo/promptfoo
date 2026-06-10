@@ -1,5 +1,6 @@
 import assertions from './assertions/index';
 import * as cache from './cache';
+import * as generation from './generation';
 import guardrails from './guardrails';
 import { evaluate } from './node';
 import { loadApiProvider, loadApiProviders } from './providers/index';
@@ -60,12 +61,22 @@ const redteam = {
   run: runRedteam,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
+export {
+  assertions,
+  cache,
+  evaluate,
+  generation,
+  guardrails,
+  loadApiProvider,
+  loadApiProviders,
+  redteam,
+};
 
 export default {
   assertions,
   cache,
   evaluate,
+  generation,
   guardrails,
   loadApiProvider,
   loadApiProviders,

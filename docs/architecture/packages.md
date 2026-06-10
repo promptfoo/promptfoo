@@ -17,7 +17,7 @@ model the internal boundaries that would support a future multi-package split.
 | `view-server`      | `src/server`                                                     | Local server and API routes                     |
 | `cli`              | `src/main.ts`, `src/commands`                                    | Command-line orchestration                      |
 | `app`              | `src/app`                                                        | Browser UI and build configuration              |
-| `legacy-runtime`   | Mixed top-level runtime modules                                  | Transitional modules awaiting narrower owners   |
+| `legacy-runtime`   | Mixed top-level runtime modules, including generation            | Transitional modules awaiting narrower owners   |
 
 The source of truth for these temporary private layers is
 `architecture/layers.json`.

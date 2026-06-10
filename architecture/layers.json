@@ -163,6 +163,7 @@
         "src/feedback.ts",
         "src/googleSheets.ts",
         "src/guardrails.ts",
+        "src/generation",
         "src/importers",
         "src/integrations",
         "src/logger.browser.ts",

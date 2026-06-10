@@ -10,9 +10,15 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useToast } from '@app/hooks/useToast';
+import { Sparkles } from 'lucide-react';
 import AssertsForm from './AssertsForm';
+import { GenerateAssertionsDialog } from './generation';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
+
+import type { GenerationPrompt } from '../api/generation';
 
 interface TestCaseFormProps {
   open: boolean;
@@ -20,15 +26,30 @@ interface TestCaseFormProps {
   varsList: string[];
   initialValues?: TestCase;
   onCancel: () => void;
+  prompts?: GenerationPrompt[];
+  existingTests?: TestCase[];
 }
 
-const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCaseFormProps) => {
+const TestCaseForm = ({
+  open,
+  onAdd,
+  varsList,
+  initialValues,
+  onCancel,
+  prompts = [],
+  existingTests = [],
+}: TestCaseFormProps) => {
+  const { showToast } = useToast();
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
   const [assertsFormKey, setAssertsFormKey] = useState(0);
+  const [generateAssertionsOpen, setGenerateAssertionsOpen] = useState(false);
 
   React.useEffect(() => {
+    if (!open) {
+      return;
+    }
     if (initialValues) {
       setDescription(initialValues.description || '');
       setVars(initialValues.vars || {});
@@ -38,7 +59,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
       setVars({});
       setAsserts([]);
     }
-  }, [initialValues]);
+  }, [initialValues, open]);
 
   const handleAdd = (close: boolean) => {
     onAdd(
@@ -57,6 +78,18 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
     setAsserts([]);
     setAssertsFormKey((prevKey) => prevKey + 1);
   };
+
+  const handleGeneratedAssertions = (generatedAssertions: Assertion[]) => {
+    const newAsserts = [...asserts, ...generatedAssertions];
+    setAsserts(newAsserts);
+    setAssertsFormKey((prevKey) => prevKey + 1);
+    showToast(
+      `Added ${generatedAssertions.length} assertion${generatedAssertions.length === 1 ? '' : 's'}`,
+      'success',
+    );
+  };
+
+  const hasPrompts = prompts.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
@@ -88,15 +121,32 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
             varsList={varsList}
             initialValues={initialValues?.vars as Record<string, string>}
           />
-          <AssertsForm
-            key={assertsFormKey}
-            onAdd={(asserts) => setAsserts(asserts)}
-            initialValues={
-              ((initialValues?.assert || []).filter(
-                (item) => item.type !== 'assert-set',
-              ) as Assertion[]) || []
-            }
-          />
+          {/* Assertions Section with Generate Button */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Assertions</h3>
+              {hasPrompts && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setGenerateAssertionsOpen(true)}
+                    >
+                      <Sparkles className="size-4 mr-2 text-primary" />
+                      Generate with AI
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Generate assertions based on your prompts</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            <AssertsForm
+              key={assertsFormKey}
+              onAdd={(newAsserts) => setAsserts(newAsserts)}
+              initialValues={asserts.filter((item) => item.type !== 'assert-set') as Assertion[]}
+            />
+          </div>
         </div>
 
         <DialogFooter data-testid="test-case-dialog-footer" className="shrink-0 gap-2 sm:gap-0">
@@ -113,6 +163,15 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Generate Assertions Dialog */}
+      <GenerateAssertionsDialog
+        open={generateAssertionsOpen}
+        onClose={() => setGenerateAssertionsOpen(false)}
+        onGenerated={handleGeneratedAssertions}
+        prompts={prompts}
+        existingTests={existingTests}
+      />
     </Dialog>
   );
 };

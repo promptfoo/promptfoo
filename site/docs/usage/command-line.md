@@ -808,6 +808,11 @@ BETA: Generate synthetic test cases based on existing prompts and variables.
 | `--numTestCasesPerPersona <number>` | Number of test cases per persona                           | 3                    |
 | `--provider <provider>`             | Provider to use for generating test cases                  | default grader       |
 | `--no-cache`                        | Do not read or write results to disk cache                 | false                |
+| `--enhanced`                        | Use enhanced persona-based dataset generation              | false                |
+| `--edge-cases`                      | Include edge case generation                               | false                |
+| `--diversity`                       | Enable diversity measurement and optimization              | false                |
+| `--diversity-target <number>`       | Target diversity score (0-1)                               | 0.7                  |
+| `--iterative`                       | Iteratively fill coverage gaps                             | false                |
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -834,16 +839,20 @@ When brainstorming assertions:
 - Generates python code for any objective assertions
 - Uses a specified natural language assertion type (pi, llm-rubric, or g-eval) for any subjective assertion.
 
-| Option                      | Description                                                     | Default              |
-| --------------------------- | --------------------------------------------------------------- | -------------------- |
-| `-t, --type <type>`         | The assertion type to use for generated subjective assertions.  | pi                   |
-| `-c, --config <path>`       | Path to the configuration file that contains at least 1 prompt. | promptfooconfig.yaml |
-| `-w, --write`               | Write the generated assertions directly to the config file      | false                |
-| `-i, --instructions <text>` | Custom instructions for assertion generation                    |                      |
-| `-o, --output <path>`       | Path to write the generated assertions                          | stdout               |
-| `--numAssertions <number>`  | Number of assertions to generate                                | 5                    |
-| `--provider <provider>`     | Provider to use for generating assertions                       | default grader       |
-| `--no-cache`                | Do not read or write results to disk cache                      | false                |
+| Option                      | Description                                                     | Default                                        |
+| --------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| `-t, --type <type>`         | The assertion type to use for generated subjective assertions.  | pi with `WITHPI_API_KEY`; otherwise llm-rubric |
+| `-c, --config <path>`       | Path to the configuration file that contains at least 1 prompt. | promptfooconfig.yaml                           |
+| `-w, --write`               | Write the generated assertions directly to the config file      | false                                          |
+| `-i, --instructions <text>` | Custom instructions for assertion generation                    |                                                |
+| `-o, --output <path>`       | Path to write the generated assertions                          | stdout                                         |
+| `--numAssertions <number>`  | Number of assertions to generate                                | 5                                              |
+| `--provider <provider>`     | Provider to use for generating assertions                       | default grader                                 |
+| `--no-cache`                | Do not read or write results to disk cache                      | false                                          |
+| `--enhanced`                | Use enhanced assertion generation                               | false                                          |
+| `--coverage`                | Enable coverage analysis to map assertions to requirements      | false                                          |
+| `--validate`                | Validate assertions against sample outputs                      | false                                          |
+| `--negative-tests`          | Generate negative test assertions (should-not patterns)         | false                                          |
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -851,11 +860,29 @@ For example, this command will modify your default config file (usually `promptf
 promptfoo generate assertions -w
 ```
 
-This command will generate `pi` and `python` assertions for a specific config and write them to a file, while following special instructions:
+This command will generate subjective and `python` assertions for a specific config and write them to a file, while following special instructions:
 
 ```sh
 promptfoo generate assertions -c my_config.yaml -o new_tests.yaml -i 'I need assertions about pronunciation'
 ```
+
+## `promptfoo generate tests`
+
+Generate a complete test suite with both datasets and assertions.
+
+| Option                  | Description                 | Default              |
+| ----------------------- | --------------------------- | -------------------- |
+| `-c, --config <path>`   | Path to configuration file  | promptfooconfig.yaml |
+| `-o, --output <path>`   | Output file path (.yaml)    | stdout               |
+| `-w, --write`           | Write to configuration file | false                |
+| `--provider <provider>` | LLM provider for generation |                      |
+| `--dataset-only`        | Skip assertion generation   | false                |
+| `--assertions-only`     | Skip dataset generation     | false                |
+| `--parallel`            | Run both in parallel        | false                |
+| _Dataset options_       | See `generate dataset`      |                      |
+| _Assertion options_     | See `generate assertions`   |                      |
+
+See [Test generation](/docs/configuration/test-generation) for full documentation.
 
 ## `promptfoo generate redteam`
 
