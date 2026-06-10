@@ -20,6 +20,7 @@ import {
   materializeInputVariablesWithMetadata,
 } from '../inputVariables';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -858,13 +859,13 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
-        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
+        ...remoteGenerationContextPayload(config.targetId),
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
-        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
+        ...remoteGenerationContextPayload(config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });

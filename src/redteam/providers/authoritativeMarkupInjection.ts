@@ -11,6 +11,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 
 import type {
@@ -73,7 +74,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       i: 0,
       prompt: context?.prompt?.raw,
       task: 'authoritative-markup-injection',
-      ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+      ...remoteGenerationContextPayload(this.config.targetId),
       version: VERSION,
       email: getUserEmail(),
       purpose: context?.test?.metadata?.purpose,

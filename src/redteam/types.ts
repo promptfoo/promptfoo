@@ -226,6 +226,7 @@ export interface PluginActionParams {
   config?: PluginConfig;
   /** Cloud target database ID used by remote task handlers to resolve target context. */
   targetId?: string;
+  redteamGenerationContext?: RedteamGenerationContext;
 }
 
 // Context for testing multiple security contexts/states
@@ -290,6 +291,7 @@ export interface RedteamFileConfig extends CommonOptions {
 
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
+  redteamGenerationContext?: RedteamGenerationContext;
   /** Cloud target database ID used to preserve target-owned task context during generation. */
   cloudTargetDatabaseId?: string;
   entities?: string[];
@@ -303,6 +305,13 @@ export interface SynthesizeOptions extends CommonOptions {
   strategies: RedteamStrategyObject[];
   targetIds: string[];
   showProgressBar?: boolean;
+}
+
+export interface RedteamGenerationContext {
+  /** Provider IDs used for filtering, retry, and target identity. */
+  providerTargetIds: string[];
+  /** Cloud target database ID sent to Promptfoo Cloud task handlers. */
+  cloudTargetId?: string;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;

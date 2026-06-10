@@ -21,6 +21,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -357,7 +358,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
-            ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+            ...remoteGenerationContextPayload(this.config.targetId),
             modifiers: context?.test?.metadata?.modifiers,
             traceSummary: previousTraceSummary,
           });
@@ -389,7 +390,7 @@ export default class GoatProvider implements ApiProvider {
             : messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
-          ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+          ...remoteGenerationContextPayload(this.config.targetId),
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:

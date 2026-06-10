@@ -20,6 +20,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -188,7 +189,7 @@ export class HydraProvider implements ApiProvider {
       task: 'hydra-decision',
       jsonOnly: true,
       preferSmallModel: false,
-      ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+      ...remoteGenerationContextPayload(this.config.targetId),
       // Pass inputs schema for multi-input mode
       inputs: this.config.inputs,
     });

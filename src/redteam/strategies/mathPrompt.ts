@@ -13,6 +13,7 @@ import {
   getRemoteGenerationUrl,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -60,7 +61,7 @@ export async function generateMathPrompt(
         testCases: batch,
         injectVar,
         config,
-        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
+        ...remoteGenerationContextPayload(config.targetId),
         email: getUserEmail(),
       };
 

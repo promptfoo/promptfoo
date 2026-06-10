@@ -12,6 +12,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -48,7 +49,7 @@ export async function textToAudio(
       language,
       version: VERSION,
       email: getUserEmail(),
-      ...(options?.targetId ? { targetId: options.targetId } : {}),
+      ...remoteGenerationContextPayload(options?.targetId),
     };
 
     interface AudioGenerationResponse {

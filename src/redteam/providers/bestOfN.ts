@@ -14,6 +14,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
 
@@ -88,7 +89,7 @@ export default class BestOfNProvider implements ApiProvider {
           headers: getRemoteGenerationHeaders(),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
-            ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+            ...remoteGenerationContextPayload(this.config.targetId),
             prompt: context.vars[this.config.injectVar],
             nSteps: this.config.nSteps,
             maxCandidatesPerStep: this.config.maxCandidatesPerStep,

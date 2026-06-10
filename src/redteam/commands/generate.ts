@@ -58,6 +58,7 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
+import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContext';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
@@ -111,75 +112,6 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
       `Continuing with partial results. Use ${chalk.bold('--strict')} flag to fail on plugin generation errors.`,
     ),
   );
-}
-
-function getCloudTargetDatabaseIdFromProviders(
-  providers: Partial<UnifiedConfig>['providers'],
-): string | undefined {
-  if (!providers) {
-    return undefined;
-  }
-
-  const providerList = Array.isArray(providers) ? providers : [providers];
-  for (const provider of providerList) {
-    if (typeof provider === 'string') {
-      if (isCloudProvider(provider)) {
-        return getCloudDatabaseId(provider);
-      }
-      continue;
-    }
-
-    if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) {
-      continue;
-    }
-
-    const providerConfig = provider as {
-      id?: unknown;
-      config?: { linkedTargetId?: unknown };
-    };
-    const linkedTargetId = providerConfig.config?.linkedTargetId;
-    if (typeof linkedTargetId === 'string' && isCloudProvider(linkedTargetId)) {
-      return getCloudDatabaseId(linkedTargetId);
-    }
-    if (typeof providerConfig.id === 'string' && isCloudProvider(providerConfig.id)) {
-      return getCloudDatabaseId(providerConfig.id);
-    }
-
-    for (const providerId of Object.keys(provider)) {
-      if (isCloudProvider(providerId)) {
-        return getCloudDatabaseId(providerId);
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function getTargetIdsFromProviders(providers: Partial<UnifiedConfig>['providers']): string[] {
-  if (typeof providers === 'string') {
-    return [providers];
-  }
-  if (!Array.isArray(providers)) {
-    return [];
-  }
-
-  return providers.flatMap((provider) => {
-    if (typeof provider === 'string') {
-      return [provider];
-    }
-    if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) {
-      return [];
-    }
-    if (typeof provider.id === 'string') {
-      return [provider.id];
-    }
-
-    try {
-      return getProviderIds([provider]);
-    } catch {
-      return [];
-    }
-  });
 }
 
 function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
@@ -670,8 +602,10 @@ async function doGenerateRedteamInternal(
 
   // Extract target IDs from the config providers (targets get rewritten to providers)
   // IDs are used for retry strategy to match failed tests by target ID
-  const targetIds = getTargetIdsFromProviders(selectedProviderConfigs);
-  const cloudTargetDatabaseId = getCloudTargetDatabaseIdFromProviders(selectedProviderConfigs);
+  const redteamGenerationContext =
+    getRedteamGenerationContextFromProviders(selectedProviderConfigs);
+  const targetIds = redteamGenerationContext.providerTargetIds;
+  const cloudTargetDatabaseId = redteamGenerationContext.cloudTargetId;
 
   logger.debug(
     `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
@@ -747,6 +681,7 @@ async function doGenerateRedteamInternal(
             maxConcurrency: config.maxConcurrency,
             delay: config.delay,
             abortSignal: options.abortSignal,
+            redteamGenerationContext,
             cloudTargetDatabaseId,
             targetIds,
             showProgressBar: options.progressBar !== false,
@@ -812,6 +747,7 @@ async function doGenerateRedteamInternal(
         maxConcurrency: config.maxConcurrency,
         delay: config.delay,
         abortSignal: options.abortSignal,
+        redteamGenerationContext,
         cloudTargetDatabaseId,
         targetIds,
         showProgressBar: options.progressBar !== false,

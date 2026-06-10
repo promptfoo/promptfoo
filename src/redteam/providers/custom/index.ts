@@ -10,6 +10,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -224,7 +225,7 @@ export class CustomProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
-          ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -244,7 +245,7 @@ export class CustomProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
-          ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({

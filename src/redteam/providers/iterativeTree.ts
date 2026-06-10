@@ -25,6 +25,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -1322,13 +1323,13 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
-        ...(typeof this.config.targetId === 'string' ? { targetId: this.config.targetId } : {}),
+        ...remoteGenerationContextPayload(this.config.targetId),
       });
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
         jsonOnly: true,
         preferSmallModel: false,
-        ...(typeof this.config.targetId === 'string' ? { targetId: this.config.targetId } : {}),
+        ...remoteGenerationContextPayload(this.config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });

@@ -7,6 +7,7 @@ import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
+import type { RedteamGenerationContext } from '../redteam/remoteGenerationContext';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -33,6 +34,9 @@ type AgentProviderOptions = ProviderOptions & {
      * Useful for testing specific conversation states or reproducing bugs.
      */
     initialMessages?: Message[] | string;
+    /** Cloud target database ID used to resolve target-owned redteam task context. */
+    targetId?: string;
+    redteamGenerationContext?: RedteamGenerationContext;
   };
 };
 
@@ -44,6 +48,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
+  private readonly redteamGenerationContext?: RedteamGenerationContext;
   private readonly stateful: boolean;
   private readonly configInitialMessages?: Message[] | string;
 
@@ -57,6 +62,9 @@ export class SimulatedUser implements ApiProvider {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
+    this.redteamGenerationContext =
+      config.redteamGenerationContext ??
+      (config.targetId ? { providerTargetIds: [], cloudTargetId: config.targetId } : undefined);
     this.stateful = config.stateful ?? false;
     this.configInitialMessages = config.initialMessages;
   }
@@ -260,7 +268,10 @@ export class SimulatedUser implements ApiProvider {
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
-    const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
+    const userProvider = new PromptfooSimulatedUserProvider(
+      { instructions, redteamGenerationContext: this.redteamGenerationContext },
+      this.taskId,
+    );
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 

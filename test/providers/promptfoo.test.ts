@@ -490,6 +490,35 @@ describe('PromptfooSimulatedUserProvider', () => {
     });
   });
 
+  it('should include target context in task requests', async () => {
+    const providerWithTarget = new PromptfooSimulatedUserProvider(
+      {
+        instructions: 'test instructions',
+        targetId: 'cloud-target-123',
+      },
+      REDTEAM_SIMULATED_USER_TASK_ID,
+    );
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+        tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await providerWithTarget.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
+
+    const requestBody = JSON.parse(String(vi.mocked(fetchWithRetries).mock.calls[0][1]?.body));
+    expect(requestBody).toMatchObject({
+      task: REDTEAM_SIMULATED_USER_TASK_ID,
+      targetId: 'cloud-target-123',
+    });
+  });
+
   it('should handle API error response', async () => {
     const mockResponse = new Response('API Error', {
       status: 400,

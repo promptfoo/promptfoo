@@ -19,6 +19,7 @@ import {
   materializeInputVariablesWithMetadata,
 } from '../../inputVariables';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -222,7 +223,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
-          ...(typeof this.config.targetId === 'string' ? { targetId: this.config.targetId } : {}),
+          ...remoteGenerationContextPayload(this.config.targetId),
           // Pass inputs schema for multi-input mode
           inputs: this.config.inputs,
         });
@@ -244,7 +245,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
-          ...(typeof this.config.targetId === 'string' ? { targetId: this.config.targetId } : {}),
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first

@@ -11,6 +11,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -58,7 +59,7 @@ async function generateCompositePrompts(
         // Composite pipeline configuration
         ...(config.techniques && { techniques: config.techniques }),
         ...(config.evasions && { evasions: config.evasions }),
-        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
+        ...remoteGenerationContextPayload(config.targetId),
         ...(config.alwaysIncludeTechniques && {
           alwaysIncludeTechniques: config.alwaysIncludeTechniques,
         }),

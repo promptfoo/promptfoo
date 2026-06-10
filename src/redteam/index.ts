@@ -43,6 +43,10 @@ import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/ut
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
+  remoteGenerationContextPayload,
+  resolveRedteamGenerationContext,
+} from './remoteGenerationContext';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -61,13 +65,13 @@ import type { Inputs } from '../types/shared';
 import type {
   FailedPluginInfo,
   Policy,
+  RedteamGenerationContext,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-const CLOUD_TARGET_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -83,13 +87,6 @@ function getMaterializedMultiInputPromptMetadata(
   return typeof prompt === 'string'
     ? { [MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY]: prompt }
     : undefined;
-}
-
-function getCloudTargetDatabaseId(targetIds: string[]): string | undefined {
-  const cloudTargetId = targetIds.find((targetId) =>
-    targetId.startsWith(CLOUD_TARGET_PROVIDER_PREFIX),
-  );
-  return cloudTargetId?.slice(CLOUD_TARGET_PROVIDER_PREFIX.length);
 }
 
 function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
@@ -601,7 +598,7 @@ async function applyStrategies(
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
-  targetId?: string,
+  redteamGenerationContext?: RedteamGenerationContext,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -681,7 +678,7 @@ async function applyStrategies(
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
-        ...(targetId ? { targetId } : {}),
+        ...remoteGenerationContextPayload(redteamGenerationContext),
       },
       strategy.id,
     );
@@ -970,6 +967,7 @@ export async function synthesize({
   prompts,
   provider,
   purpose: purposeOverride,
+  redteamGenerationContext: inputRedteamGenerationContext,
   strategies,
   targetIds,
   showProgressBar: showProgressBarOverride,
@@ -1000,8 +998,12 @@ export async function synthesize({
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
 
-  const cloudTargetDatabaseId =
-    explicitCloudTargetDatabaseId ?? getCloudTargetDatabaseId(targetIds);
+  const redteamGenerationContext = resolveRedteamGenerationContext({
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    targetIds,
+  });
+  const cloudTargetId = redteamGenerationContext.cloudTargetId;
 
   if (maxConcurrency > MAX_MAX_CONCURRENCY) {
     maxConcurrency = MAX_MAX_CONCURRENCY;
@@ -1373,7 +1375,8 @@ export async function synthesize({
           injectVar,
           n: plugin.numTests,
           delayMs: delay || 0,
-          targetId: cloudTargetDatabaseId,
+          targetId: cloudTargetId,
+          redteamGenerationContext,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
@@ -1471,7 +1474,7 @@ export async function synthesize({
               purpose,
               plugin.id,
               policy,
-              cloudTargetDatabaseId,
+              cloudTargetId,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1609,7 +1612,7 @@ export async function synthesize({
               purpose,
               plugin.id,
               policy,
-              cloudTargetDatabaseId,
+              cloudTargetId,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1663,7 +1666,7 @@ export async function synthesize({
     }
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      targetIds,
+      targetIds: redteamGenerationContext.providerTargetIds,
       ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
@@ -1674,7 +1677,7 @@ export async function synthesize({
       purpose,
       undefined,
       maxCharsPerMessage,
-      cloudTargetDatabaseId,
+      redteamGenerationContext,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1699,7 +1702,7 @@ export async function synthesize({
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
-      cloudTargetDatabaseId,
+      redteamGenerationContext,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

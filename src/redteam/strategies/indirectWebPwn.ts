@@ -4,6 +4,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -248,7 +249,7 @@ async function createWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
-        ...(targetId ? { targetId } : {}),
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000, // 60s timeout for LLM generation
@@ -302,7 +303,7 @@ async function updateWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
-        ...(targetId ? { targetId } : {}),
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000,

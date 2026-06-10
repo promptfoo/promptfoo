@@ -17,6 +17,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from './remoteGeneration';
+import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
@@ -374,7 +375,7 @@ export async function extractGoalFromPrompt(
     purpose,
     ...(pluginDescription && { pluginContext: pluginDescription }),
     ...(policy && { policy }),
-    ...(targetId && { targetId }),
+    ...remoteGenerationContextPayload(targetId),
   };
 
   interface ExtractIntentResponse {

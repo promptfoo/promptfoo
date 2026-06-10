@@ -26,6 +26,10 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import {
+  type RedteamGenerationContext,
+  remoteGenerationContextPayload,
+} from '../remoteGenerationContext';
+import {
   assertRemoteMaterializationHandled,
   type RemoteMaterializationResponse,
   requiresRemoteMaterialization,
@@ -340,7 +344,7 @@ async function fetchRemoteTestCases(
   injectVar: string,
   n: number,
   config: PluginConfig,
-  targetId?: string,
+  redteamGenerationContext?: RedteamGenerationContext | string,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -375,7 +379,7 @@ async function fetchRemoteTestCases(
     n,
     purpose,
     task: key,
-    ...(targetId ? { targetId } : {}),
+    ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
   });
@@ -426,6 +430,7 @@ function createPluginFactory<T extends PluginConfig>(
       delayMs,
       config,
       targetId,
+      redteamGenerationContext,
     }: PluginActionParams) => {
       const configWithDefaults = applyDefaultGraderExamples(key, config as T);
 
@@ -446,7 +451,7 @@ function createPluginFactory<T extends PluginConfig>(
         injectVar,
         n,
         configWithDefaults ?? {},
-        targetId,
+        redteamGenerationContext ?? targetId,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
@@ -638,7 +643,14 @@ function createRemotePlugin<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ purpose, injectVar, n, config, targetId }: PluginActionParams) => {
+    action: async ({
+      purpose,
+      injectVar,
+      n,
+      config,
+      targetId,
+      redteamGenerationContext,
+    }: PluginActionParams) => {
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
@@ -652,7 +664,7 @@ function createRemotePlugin<T extends PluginConfig>(
         injectVar,
         n,
         configWithDefaults ?? {},
-        targetId,
+        redteamGenerationContext ?? targetId,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({

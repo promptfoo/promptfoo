@@ -9,6 +9,7 @@
  */
 
 import logger from '../../logger';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { MediaData } from '../../storage/types';
 import type { TestCaseWithPlugin } from '../../types';
@@ -148,7 +149,7 @@ export async function applyRuntimeTransforms(
       // The strategy expects an array of test cases and returns transformed test cases
       const result = await strategy.action([testCase], injectVar, {
         ...layerConfig,
-        ...(context?.targetId ? { targetId: context.targetId } : {}),
+        ...remoteGenerationContextPayload(context?.targetId),
       });
       const transformed = result[0];
 

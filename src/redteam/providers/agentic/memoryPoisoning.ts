@@ -6,6 +6,7 @@ import invariant from '../../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
 import { messagesToRedteamHistory } from '../shared';
 
@@ -68,7 +69,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
         {
           body: JSON.stringify({
             task: 'agentic:memory-poisoning-scenario',
-            ...(this.targetId ? { targetId: this.targetId } : {}),
+            ...remoteGenerationContextPayload(this.targetId),
             purpose,
             version: VERSION,
             email: getUserEmail(),
