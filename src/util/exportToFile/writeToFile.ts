@@ -76,6 +76,9 @@ export class JsonlFileWriter {
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let closeError = this.streamError;
+      const onError = (error: Error) => {
+        closeError ??= error;
+      };
       const settle = () => {
         if (settled) {
           return;
@@ -88,9 +91,6 @@ export class JsonlFileWriter {
         } else {
           resolve();
         }
-      };
-      const onError = (error: Error) => {
-        closeError ??= error;
       };
       stream.once('error', onError);
       stream.once('close', settle);
