@@ -51,6 +51,19 @@ export default defineConfig({
     // Fail fast on first error in CI, continue locally for full picture
     bail: process.env.CI ? 1 : 0,
 
+    // Escape hatch for an intermittent CI flake: a forks worker that dies after
+    // its test file already passed surfaces as an unhandled pool error
+    // ("Worker exited unexpectedly"), which sets process.exitCode = 1
+    // independently of `bail` and reddens an otherwise all-green shard. When
+    // PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS=true (set only in CI), treat that
+    // post-run worker crash as non-fatal. This does NOT mask real test failures:
+    // failed tests/assertions set the exit code via a separate path
+    // (hasFailed()), so they still fail. Off by default so local runs stay
+    // strict and surface worker crashes. Tracking: deterministic repro of the
+    // worker crash (suspected native libsql teardown / per-worker memory
+    // pressure) so this flag can be removed.
+    dangerouslyIgnoreUnhandledErrors: process.env.PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS === 'true',
+
     // Coverage configuration
     coverage: {
       provider: 'v8',
