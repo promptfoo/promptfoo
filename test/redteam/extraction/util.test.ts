@@ -10,6 +10,7 @@ import {
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { CONNECTION_BLOCK_HINT } from '../../../src/util/fetch/errors';
 import {
   createMockProvider,
   createProviderResponse,
@@ -131,6 +132,26 @@ describe('fetchRemoteGeneration', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "Error using remote generation for task 'purpose': Error: Network error",
     );
+  });
+
+  it('surfaces the hidden cause and network hint when the connection is cut (promptfoo#9679)', async () => {
+    // The bug: a Cloudflare/proxy block surfaces as `TypeError: terminated`
+    // with the real reason in `cause`; the old log dropped it. Pin that this
+    // call site now routes through describeFetchError.
+    const cause = Object.assign(new Error('other side closed'), {
+      name: 'SocketError',
+      code: 'UND_ERR_SOCKET',
+    });
+    const terminated = Object.assign(new TypeError('terminated'), { cause });
+    vi.mocked(fetchWithCache).mockRejectedValue(terminated);
+
+    await expect(fetchRemoteGeneration('purpose', ['prompt'])).rejects.toThrow('terminated');
+    const logged = vi
+      .mocked(logger.warn)
+      .mock.calls.map((c) => String(c[0]))
+      .join('\n');
+    expect(logged).toContain('Cause: SocketError: other side closed');
+    expect(logged).toContain(CONNECTION_BLOCK_HINT);
   });
 
   it('should throw an error when response parsing fails', async () => {

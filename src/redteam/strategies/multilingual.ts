@@ -331,7 +331,7 @@ async function generateMultilingual(
 
     return deduplicatedResults;
   } catch (error) {
-    logger.debug(`Remote multilingual generation failed: ${describeFetchError(error)}`);
+    logger.warn(`Remote multilingual generation failed: ${describeFetchError(error)}`);
     return [];
   }
 }

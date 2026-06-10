@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
+import { formatFetchError } from '../../util/fetch/errors';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
@@ -12,8 +13,11 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
       const result = await fetchRemoteGeneration('entities' as RedTeamTask, prompts);
       return result as string[];
     } catch (error) {
+      // fetchRemoteGeneration already logged the full error and the
+      // connection-block hint (if any), so format without re-appending it —
+      // surface cause/code here instead of a bare `TypeError: terminated`.
       logger.warn(
-        `[Entity Extraction] Failed, returning 0 entities. Error using remote generation: ${error}`,
+        `[Entity Extraction] Failed, returning 0 entities. Error using remote generation: ${formatFetchError(error)}`,
       );
       return [];
     }

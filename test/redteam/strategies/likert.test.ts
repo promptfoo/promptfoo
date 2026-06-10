@@ -10,6 +10,7 @@ import {
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
 import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
+import { CONNECTION_BLOCK_HINT } from '../../../src/util/fetch/errors';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -132,6 +133,28 @@ describe('likert strategy', () => {
 
     expect(result).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith(`Error in Likert generation: ${networkError}`);
+  });
+
+  it('routes connection failures through describeFetchError (surfaces cause + network hint)', async () => {
+    // Regression guard for promptfoo#9679: a dropped connection must log the
+    // hidden cause AND the actionable network-block hint, not a bare
+    // `TypeError: terminated`. Pins that this call site uses describeFetchError.
+    const cause = Object.assign(new Error('other side closed'), {
+      name: 'SocketError',
+      code: 'UND_ERR_SOCKET',
+    });
+    const terminated = Object.assign(new TypeError('terminated'), { cause });
+    vi.mocked(fetchWithCache).mockRejectedValue(terminated);
+
+    const result = await addLikertTestCases(testCases, 'prompt', {});
+
+    expect(result).toHaveLength(0);
+    const logged = vi
+      .mocked(logger.error)
+      .mock.calls.map((c) => String(c[0]))
+      .join('\n');
+    expect(logged).toContain('Cause: SocketError: other side closed');
+    expect(logged).toContain(CONNECTION_BLOCK_HINT);
   });
 
   it('should handle empty test cases', async () => {

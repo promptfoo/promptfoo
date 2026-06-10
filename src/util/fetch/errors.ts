@@ -330,13 +330,36 @@ export const CONNECTION_BLOCK_HINT =
   'Check your network or proxy settings, or try a different network.';
 
 /**
+ * Undici's outer message for a connection-layer failure is one of a small set
+ * of fixed phrases. Matched with word boundaries so a code-like substring (e.g.
+ * the hard-quota code `access_terminated`, which embeds `terminated`) does not
+ * trip the connection-block hint. The boundaries still match the wrapped form
+ * `Request failed after N retries: TypeError: terminated (Cause: ...)` that
+ * `fetchWithRetries` produces, so the real failure path is unaffected.
+ */
+const CONNECTION_BLOCK_MESSAGE_PATTERN =
+  /\b(?:terminated|fetch failed|other side closed|socket hang up)\b/;
+
+/**
  * Detects fetch failures that happened at the connection layer (refused, reset,
  * or dropped) rather than as a parseable HTTP response. Inspects both the outer
  * error and its `cause`, since undici hides the real `code`/`message` in
  * `cause` (the outer error is just `terminated` / `fetch failed`).
+ *
+ * Related but distinct from {@link isTransientConnectionError}, which decides
+ * whether to *retry* (and inspects TLS/EPROTO codes); this one decides whether
+ * to show a user-facing network-block hint and additionally reads `error.cause`.
+ * Keep the two in sync when adding new connection-layer codes.
  */
 export function isConnectionError(error: unknown): boolean {
   if (!(error instanceof Error)) {
+    return false;
+  }
+  // A rate-limit/quota response is a clean HTTP error, not a dropped
+  // connection. Guard it explicitly: a hard-quota code such as
+  // `access_terminated` would otherwise embed `terminated` in the message and
+  // attach a misleading "check your network" hint to a billing problem.
+  if (isHttpRateLimitError(error)) {
     return false;
   }
   const err = error as SystemError;
@@ -346,18 +369,35 @@ export function isConnectionError(error: unknown): boolean {
     return true;
   }
   const haystack = `${err.message ?? ''} ${cause?.message ?? ''}`.toLowerCase();
-  return (
-    haystack.includes('terminated') ||
-    haystack.includes('fetch failed') ||
-    haystack.includes('other side closed') ||
-    haystack.includes('socket hang up')
-  );
+  return CONNECTION_BLOCK_MESSAGE_PATTERN.test(haystack);
+}
+
+/**
+ * Renders an error's `cause` for logging. An `Error` cause stringifies to
+ * `Name: message` (so a `SocketError` shows its class), other objects are
+ * JSON-encoded to avoid a useless `[object Object]`, and primitives stringify
+ * directly.
+ */
+function formatErrorCause(cause: unknown): string {
+  if (cause instanceof Error) {
+    return String(cause);
+  }
+  if (typeof cause === 'object' && cause !== null) {
+    try {
+      return JSON.stringify(cause);
+    } catch {
+      return String(cause);
+    }
+  }
+  return String(cause);
 }
 
 /**
  * Formats a fetch/network error's name, message, and the otherwise-hidden
  * `cause` and `code` into a single log-friendly string. Raw interpolation of an
- * `Error` only yields `name: message`, dropping the diagnostic detail.
+ * `Error` only yields `name: message`, dropping the diagnostic detail. The
+ * `code` falls back to `cause.code` because undici reports the real code (e.g.
+ * `ECONNREFUSED` on an `AggregateError`) on the cause, not the outer error.
  */
 export function formatFetchError(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -365,11 +405,12 @@ export function formatFetchError(error: unknown): string {
   }
   const err = error as SystemError;
   let message = `${err.name}: ${err.message}`;
-  if (err.cause) {
-    message += ` (Cause: ${err.cause})`;
+  if (err.cause !== undefined && err.cause !== null) {
+    message += ` (Cause: ${formatErrorCause(err.cause)})`;
   }
-  if (err.code) {
-    message += ` (Code: ${err.code})`;
+  const code = err.code ?? (err.cause as SystemError | undefined)?.code;
+  if (code) {
+    message += ` (Code: ${code})`;
   }
   return message;
 }
