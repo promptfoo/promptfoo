@@ -62,6 +62,10 @@ describe('OpenAI Provider', () => {
       });
     });
 
+    // These two cases assert the FULL header object with toEqual on purpose: the bug
+    // being guarded is a *duplicate* case-variant header sneaking into the output, so
+    // the test must fail if any extra key (e.g. a second canonical-case header) appears.
+    // toMatchObject would allow such an extra key through and miss the regression.
     it('should treat originator overrides case-insensitively', () => {
       expect(
         provider.getOpenAiRequestHeaders({
