@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -8,7 +8,7 @@ import yaml from 'js-yaml';
 import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -59,6 +59,7 @@ import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
+import { computeTargetHash, getConfigHash } from '../util/configHash';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -184,12 +185,6 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
     Enable Basic to include plugin tests as-is, or review the selected strategies for generation errors.
   `;
 }
-
-async function getConfigHash(configPath: string): Promise<string> {
-  const content = await fs.readFile(configPath, 'utf8');
-  return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
-}
-
 function createHeaderComments({
   title,
   timestampLabel,
@@ -279,8 +274,9 @@ async function doGenerateRedteamInternal(
   let commandLineOptions: Record<string, any> | undefined;
   let resolvedConfig: Partial<UnifiedConfig> | undefined;
 
-  // Write a remote config to a temporary file
-  if (options.configFromCloud) {
+  // Write a remote config to a temporary file only when the caller did not
+  // provide a separate config path.
+  if (options.configFromCloud && !options.config) {
     // Write configFromCloud to a temporary file
     const filename = `redteam-generate-${Date.now()}.yaml`;
     const tmpFile = path.join('', filename);
@@ -288,6 +284,36 @@ async function doGenerateRedteamInternal(
     await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud));
     configPath = tmpFile;
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
+  }
+
+  let currentTargetHash: string | undefined;
+  if (options.configFromCloud && options.cloudConfigId) {
+    currentTargetHash = computeTargetHash(
+      options.cloudConfigId,
+      options.cloudTargetId,
+      options.configFromCloud,
+    );
+    logger.debug(`[Cache] Computed targetHash: ${currentTargetHash}`);
+    logger.debug(`[Cache] Output path: ${outputPath}, exists: ${fsSync.existsSync(outputPath)}`);
+
+    if (!options.force && !outputPath.endsWith('.burp') && fsSync.existsSync(outputPath)) {
+      try {
+        const redteamContent = yaml.load(
+          fsSync.readFileSync(outputPath, 'utf8'),
+        ) as Partial<UnifiedConfig>;
+        const storedTargetHash = redteamContent.metadata?.targetHash;
+        logger.debug(`[Cache] Stored targetHash: ${storedTargetHash}`);
+
+        if (storedTargetHash === currentTargetHash) {
+          logger.warn(
+            'No changes detected in cloud target configuration. Reusing existing test cases (use --force to regenerate)',
+          );
+          return redteamContent;
+        }
+      } catch (error) {
+        logger.debug(`Could not read existing output file for targetHash check: ${error}`);
+      }
+    }
   }
 
   // Skip generation when a YAML output already matches the current config hash.
@@ -839,6 +865,7 @@ async function doGenerateRedteamInternal(
             ? { configHash: await getConfigHash(configPath) }
             : { configHash: 'force-regenerate' }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
+          ...(currentTargetHash ? { targetHash: currentTargetHash } : {}),
         },
       };
       const author = getAuthor();
@@ -901,7 +928,8 @@ async function doGenerateRedteamInternal(
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...(existingConfig.metadata || {}),
-        configHash: await getConfigHash(configPath),
+        configHash: getConfigHash(configPath),
+        ...(currentTargetHash ? { targetHash: currentTargetHash } : {}),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1063,6 +1091,8 @@ export function redteamGenerateCommand(
         if (opts.target && !isUuid(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
+        opts.cloudConfigId = opts.config;
+        opts.cloudTargetId = opts.target;
         const configObj = await getConfigFromCloud(opts.config, opts.target);
 
         // backwards compatible for old cloud servers
