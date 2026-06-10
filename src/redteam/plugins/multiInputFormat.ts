@@ -167,8 +167,10 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
     return prompt.trim();
   };
 
-  // Split by newline or semicolon
-  const promptLines = generatedPrompts.split(/[\n;]+/);
+  // Split by newline, and preserve backwards compatibility for same-line lists
+  // only when a semicolon introduces another accepted Prompt: marker. SQL-style
+  // payloads legitimately contain semicolons inside a single prompt.
+  const promptLines = generatedPrompts.split(/\n+|;\s*(?=(?:\d+[\.\)\-]?\s*)?\**Prompt\s*:\**)/i);
 
   return promptLines
     .map(parsePrompt)

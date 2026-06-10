@@ -39,6 +39,8 @@ The Prompt Extraction plugin generates test cases that:
 4. Present scenarios where revealing the system prompt might seem necessary or justified.
 5. Exploit potential misunderstandings about the AI's role or capabilities to elicit information about its instructions.
 
+Default single-input generation balances distinct extraction families rather than relying on near-duplicate requests. For batches of at least five tests, semantic frontier diagnostics report coverage of core disclosure requests and protected-control-plane requests.
+
 Each generated test case is then associated with assertions to evaluate the AI's response:
 
 ## Example Test Cases

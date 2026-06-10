@@ -26,6 +26,7 @@ import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
 
+import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
@@ -244,6 +245,91 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should aggregate token usage and count unmetered generation provider calls', async () => {
+      mockProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first',
+          tokenUsage: { completion: 5, numRequests: 1, prompt: 10, total: 15 },
+        })
+        .mockResolvedValueOnce({
+          output: 'second',
+          tokenUsage: { completion: 3, numRequests: 1, prompt: 7, total: 10 },
+        })
+        .mockResolvedValueOnce({ output: 'third' });
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        await provider.callApi('first prompt');
+        await provider.callApi('second prompt');
+        await provider.callApi('third prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'token-plugin' });
+
+      const result = await synthesize({
+        entities: [],
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'token-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      findSpy.mockRestore();
+      expect(result.generationTokenUsage).toEqual({
+        cached: 0,
+        completion: 8,
+        numRequests: 3,
+        prompt: 17,
+        total: 25,
+      });
+    });
+
+    it('should preserve custom provider receivers while tracking generation usage', async () => {
+      class PrivateFieldProvider implements ApiProvider {
+        #providerId = 'private-generation-provider';
+
+        id() {
+          return this.#providerId;
+        }
+
+        async callApi() {
+          return { output: 'Prompt: generated test case' };
+        }
+      }
+
+      const provider = new PrivateFieldProvider();
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        expect(trackedProvider.id()).toBe('private-generation-provider');
+        await trackedProvider.callApi('generation prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'private-provider-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'private-provider-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage?.numRequests).toBe(1);
+      } finally {
+        findSpy.mockRestore();
+      }
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
@@ -609,6 +695,59 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
+    });
+
+    it('should render semantic frontier diagnostics when generated tests expose them', async () => {
+      const semanticFrontier = {
+        active: true,
+        complete: false,
+        minimumPortfolioSize: 3,
+        bands: {
+          'sensitive-field': {
+            featureCount: 2,
+            observedFeatureCount: 1,
+            observedFeatureIds: ['requestsPrescriptionDetails'],
+            reachableFeatureCount: 1,
+            reachableFeatureIds: ['requestsPrescriptionDetails'],
+            unreachableFeatureIds: ['requestsRefillDates'],
+          },
+        },
+      };
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { semanticFrontier },
+          vars: { query: 'frontier-aware prompt one' },
+        },
+        {
+          metadata: { semanticFrontier },
+          vars: { query: 'frontier-aware prompt two' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'pii:social' });
+
+      await synthesize({
+        language: 'en',
+        numTests: 2,
+        plugins: [{ id: 'pii:social', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      expect(cleanReport).toContain('Semantic Frontier Diagnostics:');
+      expect(cleanReport).toContain('pii:social');
+      expect(cleanReport).toContain('0/1');
+      expect(cleanReport).toContain('Degraded');
+      expect(cleanReport).toContain('requestsRefillDates');
     });
 
     it('should use default fan-out values when strategy config omits n', async () => {

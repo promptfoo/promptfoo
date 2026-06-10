@@ -142,6 +142,34 @@ describe('mathPrompt', () => {
       expect(result).toHaveLength(customConcepts.length);
     });
 
+    it('routes locally loaded providers through the generation usage wrapper', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      const loadedProvider = createMockProvider({
+        id: 'loaded',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'untracked' }),
+        }),
+      });
+      const trackedProvider = createMockProvider({
+        id: 'tracked',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'tracked' }),
+        }),
+      });
+      const wrapGenerationProvider = vi.fn().mockReturnValue(trackedProvider);
+
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(loadedProvider);
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+        __wrapGenerationProvider: wrapGenerationProvider,
+      });
+
+      expect(wrapGenerationProvider).toHaveBeenCalledWith(loadedProvider);
+      expect(trackedProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(String(result[0]?.vars?.prompt)).toContain('tracked');
+    });
+
     it('should validate mathConcepts config', async () => {
       await expect(addMathPrompt([], 'prompt', { mathConcepts: 'invalid' })).rejects.toThrow(
         'MathPrompt strategy: `mathConcepts` must be an array of strings',

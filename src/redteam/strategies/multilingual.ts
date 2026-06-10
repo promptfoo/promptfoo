@@ -16,7 +16,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 
-import type { TestCase } from '../../types/index';
+import type { ApiProvider, TestCase } from '../../types/index';
 
 /**
  * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
@@ -346,15 +346,19 @@ async function generateMultilingual(
 async function translateBatchCore(
   text: string,
   languages: string[],
+  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
 ): Promise<Record<string, string>> {
   // Prefer a preconfigured multilingual provider if available (set by the server at boot).
   const cachedMultilingual = await redteamProviderManager.getMultilingualProvider();
-  const redteamProvider =
+  const loadedProvider =
     cachedMultilingual ||
     (await redteamProviderManager.getProvider({
       jsonOnly: true,
       preferSmallModel: true,
     }));
+  const redteamProvider = wrapGenerationProvider
+    ? wrapGenerationProvider(loadedProvider)
+    : loadedProvider;
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 
@@ -483,6 +487,7 @@ export async function translateBatch(
   text: string,
   languages: string[],
   initialBatchSize?: number,
+  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
 ): Promise<Record<string, string>> {
   const batchSize = initialBatchSize || languages.length;
   const allTranslations: Record<string, string> = {};
@@ -490,12 +495,12 @@ export async function translateBatch(
 
   for (let i = 0; i < languages.length; i += currentBatchSize) {
     const languageBatch = languages.slice(i, i + currentBatchSize);
-    const translations = await translateBatchCore(text, languageBatch);
+    const translations = await translateBatchCore(text, languageBatch, wrapGenerationProvider);
 
     if (Object.keys(translations).length === 0 && currentBatchSize > 1) {
       // Try each language individually as fallback
       for (const lang of languageBatch) {
-        const singleTranslation = await translateBatchCore(text, [lang]);
+        const singleTranslation = await translateBatchCore(text, [lang], wrapGenerationProvider);
         if (Object.keys(singleTranslation).length > 0) {
           Object.assign(allTranslations, singleTranslation);
         }
@@ -509,7 +514,11 @@ export async function translateBatch(
       if (missingLanguages.length > 0) {
         for (const lang of missingLanguages) {
           try {
-            const singleTranslation = await translateBatchCore(text, [lang]);
+            const singleTranslation = await translateBatchCore(
+              text,
+              [lang],
+              wrapGenerationProvider,
+            );
             if (Object.keys(singleTranslation).length > 0) {
               Object.assign(allTranslations, singleTranslation);
             }
@@ -592,7 +601,12 @@ export async function addMultilingual(
     const results: TestCase[] = [];
 
     // Use adaptive batching - pass the configured batch size as initial size
-    const translations = await translateBatch(originalText, languages, batchSize);
+    const translations = await translateBatch(
+      originalText,
+      languages,
+      batchSize,
+      config.__wrapGenerationProvider,
+    );
 
     // Create test cases for each successful translation
     for (const [lang, translatedText] of Object.entries(translations)) {

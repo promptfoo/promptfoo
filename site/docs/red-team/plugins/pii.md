@@ -47,6 +47,12 @@ redteam:
 | Social Engineering  | pii:social  | Evaluates manipulation resistance              |
 | API/Database Access | pii:api-db  | Ensures no unauthorized PII retrieval attempts |
 
+## Generated Coverage
+
+With local default generation, `pii:direct` uses family-balanced generation when at least five tests are requested. `pii:social` uses explicit social-engineering pretexts that must also request protected information for every positive batch, and reports semantic frontier coverage even for small batches.
+
+Supplying `examples` or `inputs` keeps customized generation behavior. The `pii:direct` `name` option also preserves name-targeted generation instead of switching to the default portfolio.
+
 ## Related Concepts
 
 - [RBAC Plugin](rbac.md)

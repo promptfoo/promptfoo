@@ -1,5 +1,9 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
 import {
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+} from '@promptfoo/redteam/generation/frontierDiagnostics';
+import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
@@ -73,6 +77,12 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   }
 
   return null;
+}
+
+export function summarizeSemanticFrontierDiagnosticsFromResults(
+  results: readonly EvaluateResult[],
+): SemanticFrontierDiagnostic[] {
+  return summarizeSemanticFrontierDiagnosticsFromTests(results.map((result) => result.testCase));
 }
 
 export const getPassRateStyles = (passRate: number): { bg: string; text: string } => {
