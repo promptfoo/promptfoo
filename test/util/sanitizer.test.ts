@@ -1223,6 +1223,13 @@ describe('sanitizeObject', () => {
       expect(result).not.toContain('AKIAIOSFODNN7EXAMPLE');
     });
 
+    it('does not over-redact a non-secret value when the key has malformed percent-encoding', () => {
+      // The malformed-key fallthrough must not redact indiscriminately: with neither a
+      // secret key name nor a secret-looking value, the pair is preserved verbatim.
+      const body = 'na%ZZme=John+Doe';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
     it('should redact when "+" in the key decodes to a space', () => {
       // `api+key` URL-decodes to `api key`; normalizeFieldName must collapse
       // whitespace so this still matches SECRET_FIELD_NAMES.
