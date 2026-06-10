@@ -27,7 +27,7 @@ import telemetry from '../../src/telemetry';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 

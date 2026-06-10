@@ -291,7 +291,7 @@ async function resolveNestedProviders(
 
 async function maybeShareEval(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
-  evalResult: Awaited<ReturnType<typeof doEvaluate>>,
+  evalResult: Eval,
 ): Promise<void> {
   if (!testSuiteConfig.writeLatestResults || !testSuiteConfig.sharing) {
     return;
@@ -366,7 +366,7 @@ export async function evaluateWithSource(
         : testSuiteConfig.outputPath;
     warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
     // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
-    // case too — matching the doEval call site in src/commands/eval.ts.
+    // case too — matching the doEval call site in src/node/doEval.ts.
     if (outputPaths.length) {
       await writeMultipleOutputs(outputPaths, evalRecord, null);
     }
