@@ -79,6 +79,8 @@ describe('server OpenAPI generation', () => {
     const document = createServerOpenApiDocument();
     const paths = document.paths ?? {};
     const addEvalResultsOperation = paths['/api/eval/{id}/results']?.post as any;
+    const addEvalTracesOperation = paths['/api/eval/{id}/traces']?.post as any;
+    const uploadBlobOperation = paths['/api/blobs']?.post as any;
     const createEvalJobOperation = paths['/api/eval/job']?.post as any;
     const evalTableOperation = paths['/api/eval/{id}/table']?.get as any;
     const getMediaOperation = paths['/api/media/{type}/{filename}']?.get as any;
@@ -114,6 +116,18 @@ describe('server OpenAPI generation', () => {
     );
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
+    );
+    expect(addEvalTracesOperation?.responses['204']).toEqual(
+      expect.objectContaining({ description: 'Traces added' }),
+    );
+    expect(addEvalTracesOperation?.responses['409']).toEqual(
+      expect.objectContaining({ description: 'Trace ID already belongs to another evaluation' }),
+    );
+    expect(
+      uploadBlobOperation?.requestBody?.content?.['application/json']?.schema?.required,
+    ).toEqual(expect.arrayContaining(['data', 'mimeType']));
+    expect(uploadBlobOperation?.responses['413']).toEqual(
+      expect.objectContaining({ description: 'Blob exceeds maximum size' }),
     );
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
@@ -200,6 +214,8 @@ describe('server OpenAPI generation', () => {
       paths['/api/model-audit/scans/{id}']?.get,
       paths['/api/model-audit/scans/{id}']?.delete,
       paths['/api/providers/test']?.post,
+      paths['/api/eval/{id}/traces']?.post,
+      paths['/api/blobs']?.post,
       paths['/api/blobs/{hash}']?.get,
     ];
 

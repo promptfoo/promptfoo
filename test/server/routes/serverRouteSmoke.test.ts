@@ -487,6 +487,13 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/eval/{id}/traces',
+    path: '/api/eval/eval-1/traces',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/eval/{id}/results',
     path: '/api/eval/eval-1/results',
     body: {},
@@ -724,6 +731,14 @@ const smokeCases: SmokeCase[] = [
     expectedStatus: 200,
   },
   { method: 'get', openApiPath: '/api/version', path: '/api/version', expectedStatus: 200 },
+  {
+    method: 'post',
+    openApiPath: '/api/blobs',
+    path: '/api/blobs',
+    body: {},
+    setup: () => mocks.isBlobStorageEnabled.mockReturnValue(true),
+    expectedStatus: 400,
+  },
   {
     method: 'get',
     openApiPath: '/api/blobs/library',

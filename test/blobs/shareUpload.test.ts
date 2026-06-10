@@ -188,4 +188,33 @@ describe('share-time blob upload', () => {
       }),
     );
   });
+
+  it('uses a target-specific uploader after authorizing the local blob', async () => {
+    const hash = '7'.repeat(64);
+    const uploader = vi.fn().mockResolvedValue({
+      deduplicated: false,
+      ref: {
+        hash,
+        mimeType: 'image/png',
+        provider: 'filesystem',
+        sizeBytes: 11,
+        uri: `promptfoo://blob/${hash}`,
+      },
+    });
+
+    await uploadBlobRefsForShare(
+      `promptfoo://blob/${hash}`,
+      createRemoteBlobUploadCache(),
+      { localEvalId: 'local-eval', remoteEvalId: 'remote-eval' },
+      uploader,
+    );
+
+    expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval');
+    expect(uploader).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval',
+      kind: 'image',
+      location: 'share',
+    });
+    expect(uploadBlobRemote).not.toHaveBeenCalled();
+  });
 });

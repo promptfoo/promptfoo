@@ -236,6 +236,82 @@ export class TraceStore {
     }
   }
 
+  async importTraces(evaluationId: string, traces: TraceData[]): Promise<boolean> {
+    const db = await this.getDatabase();
+
+    return db.transaction(async (tx) => {
+      const existingSpanIdsByTrace = new Map<string, Set<string>>();
+
+      for (const trace of traces) {
+        const existing = await tx
+          .select({ evaluationId: tracesTable.evaluationId })
+          .from(tracesTable)
+          .where(eq(tracesTable.traceId, trace.traceId))
+          .limit(1);
+
+        if (existing.length > 0) {
+          if (existing[0].evaluationId !== evaluationId) {
+            return false;
+          }
+
+          const spans = await tx
+            .select({ spanId: spansTable.spanId })
+            .from(spansTable)
+            .where(eq(spansTable.traceId, trace.traceId));
+          existingSpanIdsByTrace.set(trace.traceId, new Set(spans.map((span) => span.spanId)));
+        }
+      }
+
+      for (const trace of traces) {
+        const existingSpanIds = existingSpanIdsByTrace.get(trace.traceId);
+        if (!existingSpanIds) {
+          await tx
+            .insert(tracesTable)
+            .values({
+              id: crypto.randomUUID(),
+              traceId: trace.traceId,
+              evaluationId,
+              testCaseId: trace.testCaseId,
+              createdAt: Date.now(),
+              metadata: trace.metadata,
+            })
+            .run();
+        }
+
+        const seenSpanIds = new Set(existingSpanIds);
+        const spansToAdd = trace.spans.filter((span) => {
+          if (seenSpanIds.has(span.spanId)) {
+            return false;
+          }
+          seenSpanIds.add(span.spanId);
+          return true;
+        });
+
+        if (spansToAdd.length > 0) {
+          await tx
+            .insert(spansTable)
+            .values(
+              spansToAdd.map((span) => ({
+                id: crypto.randomUUID(),
+                traceId: trace.traceId,
+                spanId: span.spanId,
+                parentSpanId: span.parentSpanId,
+                name: span.name,
+                startTime: span.startTime,
+                endTime: span.endTime,
+                attributes: span.attributes,
+                statusCode: span.statusCode,
+                statusMessage: span.statusMessage,
+              })),
+            )
+            .run();
+        }
+      }
+
+      return true;
+    });
+  }
+
   async addSpans(
     traceId: string,
     spans: SpanData[],

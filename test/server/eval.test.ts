@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
@@ -6,6 +7,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import { getTraceStore } from '../../src/tracing/store';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -132,6 +134,118 @@ describe('eval routes', () => {
       if (createdEval) {
         testEvalIds.add(createdEval.id);
       }
+    });
+  });
+
+  describe('POST /:id/traces', () => {
+    function trace(traceId: string) {
+      return {
+        traceId,
+        evaluationId: 'source-eval',
+        testCaseId: 'test-case-1',
+        metadata: { source: 'self-hosted-share' },
+        spans: [
+          {
+            spanId: 'span-1',
+            name: 'provider call',
+            startTime: 1000,
+            endTime: 2000,
+            attributes: { model: 'test-model' },
+            status: { code: 'error' as const, message: 'provider failed' },
+          },
+        ],
+      };
+    }
+
+    it('persists a trace and makes retries idempotent', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traceId = randomUUID().replaceAll('-', '');
+      const payload = [trace(traceId)];
+
+      const firstResponse = await api.post(`/api/eval/${eval_.id}/traces`).send(payload);
+      const retryResponse = await api.post(`/api/eval/${eval_.id}/traces`).send(payload);
+
+      expect(firstResponse.status).toBe(204);
+      expect(retryResponse.status).toBe(204);
+      const storedTrace = await getTraceStore().getTrace(traceId, {
+        sanitizeAttributes: false,
+      });
+      expect(storedTrace).toMatchObject({
+        traceId,
+        evaluationId: eval_.id,
+        testCaseId: 'test-case-1',
+        metadata: { source: 'self-hosted-share' },
+      });
+      expect(storedTrace?.spans).toHaveLength(1);
+      expect(storedTrace?.spans[0]).toMatchObject({
+        spanId: 'span-1',
+        attributes: { model: 'test-model' },
+        statusCode: 2,
+        statusMessage: 'provider failed',
+      });
+    });
+
+    it('recovers missing spans when a prior attempt created only the trace', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traceId = randomUUID().replaceAll('-', '');
+      const traceStore = getTraceStore();
+      await traceStore.createTrace({
+        traceId,
+        evaluationId: eval_.id,
+        testCaseId: 'test-case-1',
+        metadata: { source: 'self-hosted-share' },
+      });
+
+      const response = await api.post(`/api/eval/${eval_.id}/traces`).send([trace(traceId)]);
+
+      expect(response.status).toBe(204);
+      const storedTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+      expect(storedTrace?.spans).toHaveLength(1);
+      expect(storedTrace?.spans[0]).toMatchObject({
+        spanId: 'span-1',
+        statusCode: 2,
+        statusMessage: 'provider failed',
+      });
+    });
+
+    it('rejects a trace ID already owned by another eval', async () => {
+      const firstEval = await EvalFactory.create();
+      const secondEval = await EvalFactory.create();
+      testEvalIds.add(firstEval.id);
+      testEvalIds.add(secondEval.id);
+      const traceId = randomUUID().replaceAll('-', '');
+
+      const firstResponse = await api
+        .post(`/api/eval/${firstEval.id}/traces`)
+        .send([trace(traceId)]);
+      const conflictingResponse = await api
+        .post(`/api/eval/${secondEval.id}/traces`)
+        .send([trace(traceId)]);
+
+      expect(firstResponse.status).toBe(204);
+      expect(conflictingResponse.status).toBe(409);
+      expect(conflictingResponse.body).toEqual({ error: 'Trace ID already exists' });
+      expect(await getTraceStore().getTracesByEvaluation(secondEval.id)).toEqual([]);
+    });
+
+    it('rolls back the trace row when span insertion fails', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traceId = randomUUID().replaceAll('-', '');
+      const invalidTrace = trace(traceId);
+      invalidTrace.spans[0].name = null as unknown as string;
+
+      await expect(eval_.appendTraces([invalidTrace])).rejects.toThrow();
+      expect(await getTraceStore().getTrace(traceId)).toBeNull();
+
+      await expect(eval_.appendTraces([trace(traceId)])).resolves.toBe(true);
+      expect(await getTraceStore().getTrace(traceId)).toMatchObject({
+        traceId,
+        evaluationId: eval_.id,
+        spans: [{ spanId: 'span-1', name: 'provider call' }],
+      });
     });
   });
 

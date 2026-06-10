@@ -1,10 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { URL } from 'url';
 
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
-import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
+import {
+  createRemoteBlobUploadCache,
+  createShareBlobUploader,
+  type ShareBlobUploader,
+  uploadBlobRefsForShare,
+} from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -35,7 +41,7 @@ export interface ShareOptions {
 }
 
 /** Error types that indicate chunk size issues */
-type ChunkSizeError = 'PAYLOAD_TOO_LARGE' | 'NETWORK_TIMEOUT' | 'UNKNOWN';
+type ChunkSizeError = 'PAYLOAD_TOO_LARGE' | 'NETWORK_TIMEOUT' | 'UNSUPPORTED_ENDPOINT' | 'UNKNOWN';
 
 /** Result of attempting to send a chunk */
 interface ChunkSendResult {
@@ -44,11 +50,15 @@ interface ChunkSendResult {
   originalError?: Error;
 }
 
+class UnsupportedShareEndpointError extends Error {}
+
 /** Configuration for adaptive chunking */
 interface AdaptiveChunkConfig {
   minResultsPerChunk: number;
   maxResultsPerChunk: number;
 }
+
+const TARGET_SHARE_CHUNK_SIZE = 0.9 * 1024 * 1024;
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
   const sharingConfigOnEval =
@@ -112,13 +122,9 @@ function getResultSize(result: unknown): number {
   return Buffer.byteLength(JSON.stringify(result), 'utf8');
 }
 
-function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000): number {
-  // Get the result size of the first sampleSize results
-  const sampleSizes = results.slice(0, Math.min(sampleSize, results.length)).map(getResultSize);
-  // find the largest result size
-  const maxSize = Math.max(...sampleSizes);
-  // return the largest result size
-  return maxSize;
+function findLargestItemSize(items: unknown[], sampleSize: number = 1000): number {
+  const sampleSizes = items.slice(0, Math.min(sampleSize, items.length)).map(getResultSize);
+  return Math.max(...sampleSizes);
 }
 
 // This sends the eval record to the remote server
@@ -198,18 +204,19 @@ async function sendEvalRecord(
   return responseJson.id;
 }
 
-async function sendChunkOfResults(
-  chunk: EvalResult[],
-  url: string,
+async function sendJsonChunk<T>(
+  chunk: T[],
+  targetUrl: string,
   evalId: string,
   headers: Record<string, string>,
+  itemName: string,
 ): Promise<ChunkSendResult> {
-  const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(chunk);
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
+  const itemLabel = `${itemName}${chunk.length === 1 ? '' : 's'}`;
 
   logger.debug(
-    `Sending chunk of ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB) to ${targetUrl}`,
+    `Sending chunk of ${chunk.length} ${itemLabel} (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB) to ${targetUrl}`,
   );
 
   try {
@@ -240,7 +247,21 @@ async function sendChunkOfResults(
           success: false,
           errorType: 'PAYLOAD_TOO_LARGE',
           originalError: new Error(
-            `413 Payload Too Large: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB)`,
+            `413 Payload Too Large: ${chunk.length} ${itemLabel} (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB)`,
+          ),
+        };
+      }
+
+      const endpointIsUnsupported =
+        itemName === 'trace' &&
+        (response.status === 405 ||
+          (response.status === 404 && !responseBody.includes('Eval not found')));
+      if (endpointIsUnsupported) {
+        return {
+          success: false,
+          errorType: 'UNSUPPORTED_ENDPOINT',
+          originalError: new UnsupportedShareEndpointError(
+            `Self-hosted server does not support trace sharing (${response.status})`,
           ),
         };
       }
@@ -258,7 +279,7 @@ async function sendChunkOfResults(
   } catch (error) {
     // Network-level failures (timeout, connection reset, etc.)
     if (error instanceof TypeError && error.message === 'fetch failed') {
-      logger.debug(`Network timeout/failure for chunk of ${chunk.length} results`);
+      logger.debug(`Network timeout/failure for chunk of ${chunk.length} ${itemLabel}`);
       return {
         success: false,
         errorType: 'NETWORK_TIMEOUT',
@@ -275,36 +296,41 @@ async function sendChunkOfResults(
 }
 
 /**
- * Attempts to send a chunk of results, splitting it in half on retryable failures.
+ * Attempts to send a chunk, splitting it in half on retryable failures.
  * Uses recursive splitting to handle chunks that are too large.
  */
-async function sendChunkWithRetry(
-  chunk: EvalResult[],
-  url: string,
-  evalId: string,
-  headers: Record<string, string>,
+async function sendChunkWithRetry<T>(
+  chunk: T[],
+  sendChunk: (chunk: T[]) => Promise<ChunkSendResult>,
+  itemName: string,
   config: AdaptiveChunkConfig,
   onProgress: (sentCount: number) => void,
   depth: number = 0,
   maxDepth?: number,
 ): Promise<number> {
+  if (chunk.length === 0) {
+    return 0;
+  }
+
   // Compute max depth based on chunk size if not provided (allows splitting until minResultsPerChunk)
   const effectiveMaxDepth =
     maxDepth ?? Math.ceil(Math.log2(chunk.length / config.minResultsPerChunk)) + 1;
 
   if (depth > effectiveMaxDepth) {
-    throw new Error(`Maximum retry depth exceeded. Cannot send chunk of ${chunk.length} results.`);
+    throw new Error(
+      `Maximum retry depth exceeded. Cannot send chunk of ${chunk.length} ${itemName}s.`,
+    );
   }
 
-  if (chunk.length === 0) {
-    return 0;
-  }
-
-  const result = await sendChunkOfResults(chunk, url, evalId, headers);
+  const result = await sendChunk(chunk);
 
   if (result.success) {
     onProgress(chunk.length);
     return chunk.length;
+  }
+
+  if (result.errorType === 'UNSUPPORTED_ENDPOINT') {
+    throw result.originalError ?? new UnsupportedShareEndpointError();
   }
 
   // On retryable failures, split the chunk and retry each half
@@ -312,8 +338,8 @@ async function sendChunkWithRetry(
     // If we're already at minimum size, we cannot split further
     if (chunk.length <= config.minResultsPerChunk) {
       throw new Error(
-        `Failed to send even a single result. Error: ${result.originalError?.message}. ` +
-          `This may indicate a result that is too large to upload.`,
+        `Failed to send even a single ${itemName}. Error: ${result.originalError?.message}. ` +
+          `This may indicate a ${itemName} that is too large to upload.`,
       );
     }
 
@@ -322,16 +348,15 @@ async function sendChunkWithRetry(
     const secondHalf = chunk.slice(midpoint);
 
     logger.info(
-      `Chunk of ${chunk.length} results failed (${result.errorType}). ` +
+      `Chunk of ${chunk.length} ${itemName}s failed (${result.errorType}). ` +
         `Splitting into ${firstHalf.length} + ${secondHalf.length} and retrying...`,
     );
 
     // Send first half, then second half
     const firstSent = await sendChunkWithRetry(
       firstHalf,
-      url,
-      evalId,
-      headers,
+      sendChunk,
+      itemName,
       config,
       onProgress,
       depth + 1,
@@ -339,9 +364,8 @@ async function sendChunkWithRetry(
     );
     const secondSent = await sendChunkWithRetry(
       secondHalf,
-      url,
-      evalId,
-      headers,
+      sendChunk,
+      itemName,
       config,
       onProgress,
       depth + 1,
@@ -372,36 +396,87 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+type BlobInlineCache = ReturnType<typeof createBlobInlineCache>;
+type RemoteBlobUploadCache = ReturnType<typeof createRemoteBlobUploadCache>;
+type EvalTraces = Awaited<ReturnType<Eval['getTraces']>>;
+type TraceIdMap = Map<string, string>;
+
+function getRemoteTraceId(traceIds: TraceIdMap, localTraceId: string): string {
+  let remoteTraceId = traceIds.get(localTraceId);
+  if (!remoteTraceId) {
+    remoteTraceId = randomUUID().replaceAll('-', '');
+    traceIds.set(localTraceId, remoteTraceId);
+  }
+  return remoteTraceId;
+}
+
+function remapResultTraceLinkage(
+  chunk: EvalResult[],
+  traceIds: TraceIdMap | null,
+  remoteEvalId: string,
+): EvalResult[] {
+  if (!traceIds) {
+    return chunk;
+  }
+
+  return chunk.map((result) => {
+    if (!result.traceId) {
+      return result;
+    }
+    return {
+      ...result,
+      traceId: getRemoteTraceId(traceIds, result.traceId),
+      evaluationId: remoteEvalId,
+    } as EvalResult;
+  });
+}
+
+function remapTracesForShare(
+  traces: EvalTraces,
+  traceIds: TraceIdMap,
+  remoteEvalId: string,
+): EvalTraces {
+  return traces.map((trace) => ({
+    ...trace,
+    traceId: getRemoteTraceId(traceIds, trace.traceId),
+    evaluationId: remoteEvalId,
+  }));
+}
+
 async function prepareChunkForShare(
   chunk: EvalResult[],
   localEvalId: string,
   remoteEvalId: string,
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+  traceIds: TraceIdMap | null,
+  blobUploader?: ShareBlobUploader,
 ): Promise<EvalResult[]> {
+  const remappedChunk = remapResultTraceLinkage(chunk, traceIds, remoteEvalId);
   const chunkToSend = inlineCache
-    ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
-    : chunk;
+    ? await inlineBlobRefsForShare(remappedChunk, inlineCache, localEvalId)
+    : remappedChunk;
 
   if (remoteBlobUploadCache) {
     await Promise.all(
-      chunk.map((result) =>
-        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
-          localEvalId,
-          remoteEvalId,
-          promptIdx: result.promptIdx,
-          testIdx: result.testIdx,
-        }),
+      remappedChunk.map((result) =>
+        uploadBlobRefsForShare(
+          result,
+          remoteBlobUploadCache,
+          {
+            localEvalId,
+            remoteEvalId,
+            promptIdx: result.promptIdx,
+            testIdx: result.testIdx,
+          },
+          blobUploader,
+        ),
       ),
     );
   }
 
   return chunkToSend;
 }
-
-type BlobInlineCache = ReturnType<typeof createBlobInlineCache>;
-type RemoteBlobUploadCache = ReturnType<typeof createRemoteBlobUploadCache>;
-type EvalTraces = Awaited<ReturnType<Eval['getTraces']>>;
 
 function createShareBlobCaches(): {
   inlineCache: BlobInlineCache | null;
@@ -412,9 +487,8 @@ function createShareBlobCaches(): {
 
   return {
     inlineCache: inlineBlobs ? createBlobInlineCache() : null,
-    // Trace blobs are never inlined into the unchunked initial request. Keep a
-    // Cloud upload cache available even when result blobs explicitly use inlining.
-    remoteBlobUploadCache: cloudConfig.isEnabled() ? createRemoteBlobUploadCache() : null,
+    // Trace blobs are transferred separately even when result blobs use inlining.
+    remoteBlobUploadCache: isBlobStorageEnabled() ? createRemoteBlobUploadCache() : null,
   };
 }
 
@@ -423,15 +497,73 @@ async function uploadTraceBlobRefsForShare(
   remoteBlobUploadCache: RemoteBlobUploadCache | null,
   localEvalId: string,
   remoteEvalId: string,
+  blobUploader?: ShareBlobUploader,
 ): Promise<void> {
   if (!remoteBlobUploadCache) {
     return;
   }
 
-  await uploadBlobRefsForShare(traces, remoteBlobUploadCache, {
-    localEvalId,
-    remoteEvalId,
-  });
+  await Promise.all(
+    traces.map((trace) => {
+      const promptIdx =
+        typeof trace.metadata?.promptIdx === 'number' ? trace.metadata.promptIdx : undefined;
+      const testIdx =
+        typeof trace.metadata?.testIdx === 'number' ? trace.metadata.testIdx : undefined;
+
+      return uploadBlobRefsForShare(
+        trace,
+        remoteBlobUploadCache,
+        {
+          localEvalId,
+          remoteEvalId,
+          promptIdx,
+          testIdx,
+        },
+        blobUploader,
+      );
+    }),
+  );
+}
+
+async function sendTraceChunksForShare(
+  traces: EvalTraces,
+  url: string,
+  evalId: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  if (traces.length === 0) {
+    return;
+  }
+
+  const tracesPerChunk = Math.max(
+    1,
+    Math.floor(TARGET_SHARE_CHUNK_SIZE / findLargestItemSize(traces)),
+  );
+  const chunkConfig: AdaptiveChunkConfig = {
+    minResultsPerChunk: 1,
+    maxResultsPerChunk: tracesPerChunk,
+  };
+  const targetUrl = `${url}/${evalId}/traces`;
+
+  try {
+    for (let offset = 0; offset < traces.length; offset += tracesPerChunk) {
+      await sendChunkWithRetry(
+        traces.slice(offset, offset + tracesPerChunk),
+        (chunk) => sendJsonChunk(chunk, targetUrl, evalId, headers, 'trace'),
+        'trace',
+        chunkConfig,
+        () => {},
+      );
+    }
+  } catch (error) {
+    if (error instanceof UnsupportedShareEndpointError) {
+      logger.warn(
+        'The self-hosted server does not support trace sharing. The eval was shared without traces; upgrade the server to transfer trace data.',
+      );
+      return;
+    }
+    throw error;
+  }
 }
 
 async function warnForFailedBlobUploads(
@@ -450,6 +582,71 @@ async function warnForFailedBlobUploads(
   }
 }
 
+interface ResultChunkShareOptions {
+  resultsPerChunk: number;
+  remoteEvalId: string;
+  inlineCache: BlobInlineCache | null;
+  remoteBlobUploadCache: RemoteBlobUploadCache | null;
+  traceIds: TraceIdMap | null;
+  blobUploader?: ShareBlobUploader;
+  sendResultChunk: (chunk: EvalResult[]) => Promise<ChunkSendResult>;
+  chunkConfig: AdaptiveChunkConfig;
+  onProgress: (sentCount: number) => void;
+}
+
+async function sendResultChunksForShare(
+  evalRecord: Eval,
+  options: ResultChunkShareOptions,
+): Promise<number> {
+  const {
+    resultsPerChunk,
+    remoteEvalId,
+    inlineCache,
+    remoteBlobUploadCache,
+    traceIds,
+    blobUploader,
+    sendResultChunk,
+    chunkConfig,
+    onProgress,
+  } = options;
+  let currentChunk: EvalResult[] = [];
+  let chunkNumber = 0;
+
+  const flushChunk = async (final: boolean): Promise<void> => {
+    if (currentChunk.length === 0) {
+      return;
+    }
+
+    chunkNumber++;
+    logger.debug(
+      `${final ? 'Sending final' : 'Sending'} chunk ${chunkNumber} with ${currentChunk.length} results`,
+    );
+    const chunkToSend = await prepareChunkForShare(
+      currentChunk,
+      evalRecord.id,
+      remoteEvalId,
+      inlineCache,
+      inlineCache ? null : remoteBlobUploadCache,
+      traceIds,
+      blobUploader,
+    );
+    await sendChunkWithRetry(chunkToSend, sendResultChunk, 'result', chunkConfig, onProgress);
+    currentChunk = [];
+  };
+
+  for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
+    for (const result of batch) {
+      currentChunk.push(result);
+      if (currentChunk.length >= resultsPerChunk) {
+        await flushChunk(false);
+      }
+    }
+  }
+
+  await flushChunk(true);
+  return chunkNumber;
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -461,6 +658,7 @@ async function sendChunkedResults(
 
   await checkCloudPermissions(evalRecord.config);
 
+  const isCloudEnabled = cloudConfig.isEnabled();
   const { inlineCache, remoteBlobUploadCache } = createShareBlobCaches();
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
@@ -474,13 +672,12 @@ async function sendChunkedResults(
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
   // Calculate chunk sizes based on sample
-  const largestSize = findLargestResultSize(sampleResults);
+  const largestSize = findLargestItemSize(sampleResults);
   logger.debug(`Largest result size from sample: ${largestSize} bytes`);
 
   // Determine how many results per chunk
-  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
   const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
-  const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
+  const calculatedChunkSize = Math.max(1, Math.floor(TARGET_SHARE_CHUNK_SIZE / largestSize));
   // Validate env chunk size - must be a positive integer, otherwise fall back to calculated
   const resultsPerChunk =
     typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
@@ -497,9 +694,16 @@ async function sendChunkedResults(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (cloudConfig.isEnabled()) {
+  if (isCloudEnabled) {
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
+
+  const blobUploader: ShareBlobUploader | undefined = isCloudEnabled
+    ? undefined
+    : createShareBlobUploader({
+        url: new URL('../blobs', `${url}/`).toString(),
+        headers,
+      });
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
@@ -521,10 +725,14 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     const traces = await evalRecord.getTraces();
+    const traceIds: TraceIdMap | null = isCloudEnabled ? null : new Map();
 
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, traces);
+    evalId = await sendEvalRecord(evalRecord, url, headers, isCloudEnabled ? traces : []);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
+    const remoteEvalId = evalId;
+    const sendResultChunk = (chunk: EvalResult[]) =>
+      sendJsonChunk(chunk, `${url}/${remoteEvalId}/results`, remoteEvalId, headers, 'result');
 
     // Progress callback for adaptive retry
     let totalSent = 0;
@@ -539,50 +747,36 @@ async function sendChunkedResults(
       }
     };
 
-    // Send chunks using batched cursor with adaptive retry
-    let currentChunk: EvalResult[] = [];
-    let chunkNumber = 0;
-
-    for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
-      for (const result of batch) {
-        currentChunk.push(result);
-        if (currentChunk.length >= resultsPerChunk) {
-          chunkNumber++;
-          logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
-
-          const chunkToSend = await prepareChunkForShare(
-            currentChunk,
-            evalRecord.id,
-            evalId,
-            inlineCache,
-            inlineCache ? null : remoteBlobUploadCache,
-          );
-
-          await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
-          currentChunk = [];
-        }
-      }
-    }
-
-    // Send final chunk
-    if (currentChunk.length > 0) {
-      chunkNumber++;
-      logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
-
-      const chunkToSend = await prepareChunkForShare(
-        currentChunk,
-        evalRecord.id,
-        evalId,
-        inlineCache,
-        inlineCache ? null : remoteBlobUploadCache,
-      );
-
-      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
-    }
+    const chunkNumber = await sendResultChunksForShare(evalRecord, {
+      resultsPerChunk,
+      remoteEvalId,
+      inlineCache,
+      remoteBlobUploadCache,
+      traceIds,
+      blobUploader,
+      sendResultChunk,
+      chunkConfig,
+      onProgress,
+    });
 
     // Upload trace-only blob refs after results so a blob referenced in both places keeps
     // the richer prompt/test coordinates recorded by the result upload.
-    await uploadTraceBlobRefsForShare(traces, remoteBlobUploadCache, evalRecord.id, evalId);
+    await uploadTraceBlobRefsForShare(
+      traces,
+      remoteBlobUploadCache,
+      evalRecord.id,
+      remoteEvalId,
+      blobUploader,
+    );
+
+    if (traceIds) {
+      await sendTraceChunksForShare(
+        remapTracesForShare(traces, traceIds, remoteEvalId),
+        url,
+        remoteEvalId,
+        headers,
+      );
+    }
 
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,

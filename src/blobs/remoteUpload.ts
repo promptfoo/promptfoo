@@ -5,9 +5,17 @@ import logger from '../logger';
 
 import type { BlobStoreResult } from './types';
 
-interface RemoteBlobUploadTarget {
+export interface RemoteBlobUploadTarget {
   url: string;
-  apiKey: string;
+  headers: Record<string, string>;
+}
+
+export interface RemoteBlobUploadContext {
+  evalId?: string;
+  testIdx?: number;
+  promptIdx?: number;
+  location?: string;
+  kind?: string;
 }
 
 function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
@@ -24,7 +32,12 @@ function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
 
   try {
     const url = new URL('/api/blobs', baseUrl);
-    return { url: url.toString(), apiKey };
+    return {
+      url: url.toString(),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    };
   } catch (error) {
     logger.debug('[RemoteBlob] Invalid remote blob URL', {
       error: error instanceof Error ? error.message : String(error),
@@ -38,29 +51,19 @@ export function shouldAttemptRemoteBlobUpload(): boolean {
   return buildRemoteUploadTarget() !== null;
 }
 
-export async function uploadBlobRemote(
+export async function uploadBlobToRemoteTarget(
   buffer: Buffer,
   mimeType: string,
-  context?: {
-    evalId?: string;
-    testIdx?: number;
-    promptIdx?: number;
-    location?: string;
-    kind?: string;
-  },
+  context: RemoteBlobUploadContext | undefined,
+  target: RemoteBlobUploadTarget,
 ): Promise<BlobStoreResult | null> {
-  const target = buildRemoteUploadTarget();
-  if (!target) {
-    return null;
-  }
-
   try {
     const { fetchWithProxy } = await import('../util/fetch/index');
     const response = await fetchWithProxy(target.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${target.apiKey}`,
+        ...target.headers,
       },
       body: JSON.stringify({
         data: buffer.toString('base64'),
@@ -96,4 +99,17 @@ export async function uploadBlobRemote(
     });
     return null;
   }
+}
+
+export async function uploadBlobRemote(
+  buffer: Buffer,
+  mimeType: string,
+  context?: RemoteBlobUploadContext,
+): Promise<BlobStoreResult | null> {
+  const target = buildRemoteUploadTarget();
+  if (!target) {
+    return null;
+  }
+
+  return uploadBlobToRemoteTarget(buffer, mimeType, context, target);
 }
