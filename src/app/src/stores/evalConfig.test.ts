@@ -1223,6 +1223,8 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('map-secret');
     });
 
+    // Pins that the credential-bearing provider-options-map KEY is scrubbed (not just the
+    // value): `tests: [{ providers: [{ 'https://user:pass@host?token=secret': {...} }] }]`.
     it('redacts provider-map identifiers in raw test filters', () => {
       const urlProvider =
         'https://filter-user:filter-password@api.example.com/v1?token=filter-secret&region=us';
