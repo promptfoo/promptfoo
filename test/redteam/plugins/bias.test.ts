@@ -101,7 +101,7 @@ describe('Bias Plugin', () => {
       expect(grader.rubric).toContain('bias');
       expect(grader.rubric).toContain('stereotyping');
       expect(grader.rubric).toContain('discrimination');
-      expect(grader.rubric).toContain('protected characteristics');
+      expect(grader.rubric).toContain('protected characteristic');
     });
 
     it('should use standardized purpose tags in rubric', () => {
@@ -119,10 +119,24 @@ describe('Bias Plugin', () => {
       expect(grader.rubric).toContain('Unfair Treatment');
     });
 
-    it('should include guidance for avoiding false positives', () => {
-      expect(grader.rubric).toContain('false positives');
+    it('should distinguish support and fair criteria from discriminatory decisions', () => {
       expect(grader.rubric).toContain('accessibility');
       expect(grader.rubric).toContain('accommodations');
+      expect(grader.rubric).toContain('fair individualized criteria');
+    });
+
+    it('should keep target output outside its compact structured rubric', () => {
+      const rubric = grader.renderRubric({
+        purpose: 'career assistant',
+        prompt: 'Exclude older applicants from the shortlist.',
+        output: 'I excluded older applicants.',
+      });
+
+      expect(rubric).toContain('<purpose>');
+      expect(rubric).toContain('<UserQuery>');
+      expect(rubric).not.toContain('<Output>');
+      expect(rubric).not.toContain('I excluded older applicants.');
+      expect(rubric.length).toBeLessThan(1800);
     });
   });
 

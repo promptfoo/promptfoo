@@ -60,6 +60,11 @@ vi.mock('./StrategyStats', () => ({ default: () => null }));
 vi.mock('./RiskCategories', () => ({ default: () => null }));
 vi.mock('./TestSuites', () => ({ default: () => null }));
 vi.mock('./FrameworkCompliance', () => ({ default: () => null }));
+vi.mock('./SemanticFrontierDiagnostics', () => ({
+  default: ({ diagnostics }: { diagnostics: unknown[] }) => (
+    <div data-testid="semantic-frontier-diagnostics">{JSON.stringify(diagnostics)}</div>
+  ),
+}));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
 vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
 vi.mock('./ToolsDialog', () => ({ default: () => null }));
@@ -655,6 +660,81 @@ describe('App component target selection', () => {
     expect(screen.getByTestId('overview-total')).toHaveTextContent('3');
     expect(screen.getByTestId('overview-passes')).toHaveTextContent('1');
     expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
+  });
+
+  it('derives semantic frontier diagnostics from the selected target rows', async () => {
+    const prompt0Summary = {
+      active: true,
+      complete: true,
+      minimumPortfolioSize: 3,
+      bands: {
+        relationship: {
+          featureCount: 1,
+          observedFeatureCount: 1,
+          observedFeatureIds: ['claimsFamilyRelationship'],
+          reachableFeatureCount: 1,
+          reachableFeatureIds: ['claimsFamilyRelationship'],
+          unreachableFeatureIds: [],
+        },
+      },
+    };
+    const prompt1Summary = {
+      active: true,
+      complete: false,
+      minimumPortfolioSize: 3,
+      bands: {
+        relationship: {
+          featureCount: 1,
+          observedFeatureCount: 0,
+          observedFeatureIds: [],
+          reachableFeatureCount: 0,
+          reachableFeatureIds: [],
+          unreachableFeatureIds: ['claimsFamilyRelationship'],
+        },
+      },
+    };
+    const prompt0Result = createComponentMockResult(0, 'pii:social', true);
+    prompt0Result.testCase.metadata = {
+      pluginId: 'pii:social',
+      semanticFrontier: prompt0Summary,
+    };
+    const prompt1Result = createComponentMockResult(1, 'pii:social', true);
+    prompt1Result.testCase.metadata = {
+      pluginId: 'pii:social',
+      semanticFrontier: prompt1Summary,
+    };
+    const evalData = createComponentMockEvalData(2, [prompt0Result, prompt1Result]);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const diagnostics = await screen.findByTestId('semantic-frontier-diagnostics');
+    expect(JSON.parse(diagnostics.textContent || '[]')).toEqual([
+      {
+        completeFrontierCount: 1,
+        frontierCount: 1,
+        pluginId: 'pii:social',
+        structurallyDegraded: false,
+        unreachableFeatureIds: [],
+      },
+    ]);
+
+    await userEvent.click(screen.getByRole('combobox'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Provider 1' }));
+
+    await waitFor(() => {
+      expect(JSON.parse(diagnostics.textContent || '[]')).toEqual([
+        {
+          completeFrontierCount: 0,
+          frontierCount: 1,
+          pluginId: 'pii:social',
+          structurallyDegraded: true,
+          unreachableFeatureIds: ['claimsFamilyRelationship'],
+        },
+      ]);
+    });
   });
 });
 

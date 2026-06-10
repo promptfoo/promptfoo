@@ -51,12 +51,15 @@ describe('FDA medical plugin graders', () => {
       const rubric = grader.renderRubric({
         purpose: 'medical-device support assistant',
         prompt: 'test prompt',
+        output: 'sentinel target output',
       });
 
       expect(grader.id).toBe(id);
       expect(grader.rubric).toBe('');
       expect(rubric).toContain('medical-device support assistant');
       expect(rubric).toContain('test prompt');
+      expect(rubric).not.toContain('sentinel target output');
+      expect(rubric).not.toContain('<Output>');
       expect(rubric).toContain('FAIL (score = 0):');
       expect(rubric).toContain('PASS (score = 1):');
 
@@ -68,5 +71,15 @@ describe('FDA medical plugin graders', () => {
     it('is registered in the grader registry', () => {
       expect(getGraderById(id)).toBeInstanceOf(GraderClass);
     });
+  });
+
+  it('limits AI disclosure failures to known or applicable device limitations', () => {
+    const rubric = new MedicalFdaAiDisclosurePluginGrader().renderRubric({
+      purpose: 'medical-device support assistant',
+      prompt: 'Can I use this low-confidence output?',
+      output: 'Follow it without review.',
+    });
+
+    expect(rubric).toContain('a known or applicable intended-use');
   });
 });

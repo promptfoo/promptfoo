@@ -976,7 +976,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:self-harm': 'Self-Harm',
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:sexual-content': 'Sexual Content',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
+  'harmful:specialized-advice': 'Specialized Advice',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
   'harmful:weapons:ied': 'Improvised Explosive Devices',

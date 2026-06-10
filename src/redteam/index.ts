@@ -37,6 +37,10 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import {
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+} from './generation/frontierDiagnostics';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -50,6 +54,7 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
+import { accumulateGenerationResponseTokenUsage } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -60,6 +65,7 @@ import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
 import type { Inputs } from '../types/shared';
 import type {
   FailedPluginInfo,
+  GenerationTokenUsage,
   Policy,
   RedteamPluginObject,
   RedteamStrategyObject,
@@ -67,6 +73,25 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
+
+function trackGenerationTokenUsage(
+  provider: ApiProvider,
+  tokenUsage: GenerationTokenUsage,
+): ApiProvider {
+  const callApi = provider.callApi.bind(provider);
+  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
+    const response = await callApi(...args);
+    accumulateGenerationResponseTokenUsage(tokenUsage, response);
+    return response;
+  };
+  trackedCallApi.label = provider.callApi.label;
+
+  return new Proxy(provider, {
+    get(target, property, receiver) {
+      return property === 'callApi' ? trackedCallApi : Reflect.get(target, property, receiver);
+    },
+  });
+}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -277,6 +302,7 @@ function getStatus(requested: number, generated: number): string {
 function generateReport(
   pluginResults: Record<string, { requested: number; generated: number }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
+  semanticFrontierDiagnostics: readonly SemanticFrontierDiagnostic[],
 ): string {
   const table = new Table({
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
@@ -313,7 +339,46 @@ function generateReport(
       ]);
     });
 
-  return `\nTest Generation Report:\n${table.toString()}`;
+  const semanticFrontierReport = generateSemanticFrontierReport(semanticFrontierDiagnostics);
+
+  return `\nTest Generation Report:\n${table.toString()}${semanticFrontierReport}`;
+}
+
+function getSemanticFrontierStatus(diagnostic: SemanticFrontierDiagnostic): string {
+  if (diagnostic.structurallyDegraded) {
+    return chalk.red('Degraded');
+  }
+  if (diagnostic.completeFrontierCount < diagnostic.frontierCount) {
+    return chalk.yellow('Incomplete');
+  }
+  return chalk.green('Complete');
+}
+
+function generateSemanticFrontierReport(
+  diagnostics: readonly SemanticFrontierDiagnostic[],
+): string {
+  if (diagnostics.length === 0) {
+    return '';
+  }
+
+  const table = new Table({
+    head: ['Plugin', 'Frontiers', 'Complete', 'Status', 'Unreachable Features'].map((h) =>
+      chalk.dim(chalk.white(h)),
+    ),
+    colWidths: [28, 12, 12, 14, 42],
+  });
+
+  diagnostics.forEach((diagnostic) => {
+    table.push([
+      diagnostic.pluginId,
+      diagnostic.frontierCount,
+      `${diagnostic.completeFrontierCount}/${diagnostic.frontierCount}`,
+      getSemanticFrontierStatus(diagnostic),
+      diagnostic.unreachableFeatureIds.join(', ') || 'none',
+    ]);
+  });
+
+  return `\n\nSemantic Frontier Diagnostics:\n${table.toString()}`;
 }
 
 /**
@@ -514,6 +579,7 @@ function addLanguageToPluginMetadata(
   test: TestCase,
   lang: string | undefined,
   plugin: RedteamPluginObject,
+  injectVar: string,
   maxCharsPerMessage?: number,
   testGenerationInstructions?: string,
 ): TestCase {
@@ -541,6 +607,7 @@ function addLanguageToPluginMetadata(
     metadata: {
       ...test.metadata,
       pluginId: plugin.id,
+      injectVar,
       ...(includePluginConfig && {
         pluginConfig: {
           ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
@@ -970,6 +1037,7 @@ export async function synthesize({
   testCases: TestCaseWithPlugin[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
+  generationTokenUsage?: GenerationTokenUsage;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1051,9 +1119,17 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const redteamProvider = await redteamProviderManager.getProvider({
+  const providerForGeneration = await redteamProviderManager.getProvider({
     provider,
   });
+  const generationTokenUsage: GenerationTokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
+  const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1381,6 +1457,7 @@ export async function synthesize({
                 test,
                 lang,
                 plugin,
+                injectVar,
                 maxCharsPerMessage,
                 testGenerationInstructions,
               ),
@@ -1539,6 +1616,7 @@ export async function synthesize({
                 t,
                 lang,
                 plugin,
+                injectVar,
                 maxCharsPerMessage,
                 testGenerationInstructions,
               ),
@@ -1692,12 +1770,25 @@ export async function synthesize({
     logger.info('');
   }
 
-  logger.info(generateReport(pluginResults, strategyResults));
+  logger.info(
+    generateReport(
+      pluginResults,
+      strategyResults,
+      summarizeSemanticFrontierDiagnosticsFromTests(finalTestCases),
+    ),
+  );
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
   const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
     .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
     .map(([pluginId, { requested }]) => ({ pluginId, requested }));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar, failedPlugins };
+  return {
+    purpose,
+    entities,
+    testCases: finalTestCases,
+    injectVar,
+    failedPlugins,
+    generationTokenUsage,
+  };
 }
