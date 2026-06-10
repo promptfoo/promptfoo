@@ -126,9 +126,8 @@ async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
+  traces: Awaited<ReturnType<Eval['getTraces']>>,
 ): Promise<string> {
-  // Fetch traces for the eval
-  const traces = await evalRecord.getTraces();
   const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
 
   // Inject current team ID into config metadata if cloud is enabled
@@ -400,6 +399,67 @@ async function prepareChunkForShare(
   return chunkToSend;
 }
 
+type BlobInlineCache = ReturnType<typeof createBlobInlineCache>;
+type RemoteBlobUploadCache = ReturnType<typeof createRemoteBlobUploadCache>;
+type EvalTraces = Awaited<ReturnType<Eval['getTraces']>>;
+
+function createShareBlobCaches(): {
+  inlineCache: BlobInlineCache | null;
+  remoteBlobUploadCache: RemoteBlobUploadCache | null;
+} {
+  const inlineBlobs =
+    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
+
+  return {
+    inlineCache: inlineBlobs ? createBlobInlineCache() : null,
+    remoteBlobUploadCache:
+      cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null,
+  };
+}
+
+async function prepareTracesForShare(
+  evalRecord: Eval,
+  inlineCache: BlobInlineCache | null,
+): Promise<{ traces: EvalTraces; tracesToSend: EvalTraces }> {
+  const traces = await evalRecord.getTraces();
+  const tracesToSend = inlineCache
+    ? await inlineBlobRefsForShare(traces, inlineCache, evalRecord.id)
+    : traces;
+  return { traces, tracesToSend };
+}
+
+async function uploadTraceBlobRefsForShare(
+  traces: EvalTraces,
+  remoteBlobUploadCache: RemoteBlobUploadCache | null,
+  localEvalId: string,
+  remoteEvalId: string,
+): Promise<void> {
+  if (!remoteBlobUploadCache) {
+    return;
+  }
+
+  await uploadBlobRefsForShare(traces, remoteBlobUploadCache, {
+    localEvalId,
+    remoteEvalId,
+  });
+}
+
+async function warnForFailedBlobUploads(
+  remoteBlobUploadCache: RemoteBlobUploadCache | null,
+): Promise<void> {
+  if (!remoteBlobUploadCache || remoteBlobUploadCache.size === 0) {
+    return;
+  }
+
+  const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
+  const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
+  if (failedUploads > 0) {
+    logger.warn(
+      `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
+    );
+  }
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -411,20 +471,14 @@ async function sendChunkedResults(
 
   await checkCloudPermissions(evalRecord.config);
 
-  // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
-  // bytes into the payload instead. At most one of these caches is active.
-  const inlineBlobs =
-    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
-  const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
-  const remoteBlobUploadCache =
-    cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
+  const { inlineCache, remoteBlobUploadCache } = createShareBlobCaches();
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;
   }
-  if (inlineBlobs && inlineCache) {
+  if (inlineCache) {
     sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache, evalRecord.id);
   }
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
@@ -476,8 +530,10 @@ async function sendChunkedResults(
 
   let evalId: string | undefined;
   try {
+    const { traces, tracesToSend } = await prepareTracesForShare(evalRecord, inlineCache);
+
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers, tracesToSend);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -534,19 +590,15 @@ async function sendChunkedResults(
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }
 
+    // Upload trace-only blob refs after results so a blob referenced in both places keeps
+    // the richer prompt/test coordinates recorded by the result upload.
+    await uploadTraceBlobRefsForShare(traces, remoteBlobUploadCache, evalRecord.id, evalId);
+
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
 
-    if (remoteBlobUploadCache && remoteBlobUploadCache.size > 0) {
-      const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
-      const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
-      if (failedUploads > 0) {
-        logger.warn(
-          `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
-        );
-      }
-    }
+    await warnForFailedBlobUploads(remoteBlobUploadCache);
 
     return evalId;
   } catch (e) {

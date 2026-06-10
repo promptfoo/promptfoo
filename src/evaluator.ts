@@ -832,12 +832,14 @@ async function callProviderForRunEval({
   abortSignal,
   evalId,
   filters,
+  promptIdx,
   promptForRender,
   provider,
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
   test,
+  testIdx,
   traceContext,
   vars,
 }: Pick<
@@ -845,10 +847,12 @@ async function callProviderForRunEval({
   | 'abortSignal'
   | 'evalId'
   | 'nunjucksFilters'
+  | 'promptIdx'
   | 'provider'
   | 'rateLimitRegistry'
   | 'repeatIndex'
   | 'test'
+  | 'testIdx'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
@@ -868,12 +872,14 @@ async function callProviderForRunEval({
         abortSignal,
         evalId,
         filters,
+        promptIdx,
         promptForRender,
         provider,
         rateLimitRegistry,
         renderedPrompt,
         repeatIndex,
         test,
+        testIdx,
         traceContext,
         vars,
       });
@@ -891,17 +897,26 @@ async function callActiveProvider({
   abortSignal,
   evalId,
   filters,
+  promptIdx,
   promptForRender,
   provider,
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
   test,
+  testIdx,
   traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
+  | 'abortSignal'
+  | 'evalId'
+  | 'promptIdx'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testIdx'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
@@ -920,9 +935,11 @@ async function callActiveProvider({
     evalId,
     filters,
     originalProvider,
+    promptIdx,
     promptForRender,
     repeatIndex,
     test,
+    testIdx,
     traceContext,
     vars,
   });
@@ -942,18 +959,22 @@ function buildCallApiContext({
   evalId,
   filters,
   originalProvider,
+  promptIdx,
   promptForRender,
   repeatIndex,
   test,
+  testIdx,
   traceContext,
   vars,
 }: {
   evalId?: string;
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
+  promptIdx: number;
   promptForRender: Prompt;
   repeatIndex: number;
   test: AtomicTestCase;
+  testIdx: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -965,7 +986,9 @@ function buildCallApiContext({
     test,
     logger: logger as unknown as winston.Logger,
     getCache,
+    promptIdx,
     repeatIndex,
+    testIdx,
   };
 
   if (evalId) {
@@ -1478,11 +1501,13 @@ async function runEvalInternal({
         ...state.promptForRender,
         config: rendered.setup.prompt.config,
       },
+      promptIdx: promptIndex,
       provider,
       rateLimitRegistry,
       renderedPrompt: rendered.renderedPrompt,
       repeatIndex,
       test,
+      testIdx: testIndex,
       traceContext,
       vars: state.vars,
     });

@@ -214,4 +214,33 @@ describe('recordBlobReference provenance upgrades', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].location).toBe('import');
   });
+
+  it('backfills missing result coordinates without overwriting existing provenance', async () => {
+    await recordBlobReference(hash, {
+      evalId,
+      kind: 'image',
+      location: 'provider',
+    });
+    await recordBlobReference(hash, {
+      evalId,
+      location: 'response.output',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+    await recordBlobReference(hash, {
+      evalId,
+      location: 'response.output',
+      promptIdx: 9,
+      testIdx: 8,
+    });
+
+    const rows = await getReferenceRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: 'image',
+      location: 'provider',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+  });
 });

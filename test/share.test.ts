@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
+import { inArray } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetBlobStorageProvider, setBlobStorageProvider } from '../src/blobs';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../src/blobs/shareUpload';
 import * as constants from '../src/constants';
+import { getDb } from '../src/database';
+import { blobAssetsTable, blobReferencesTable, evalsTable } from '../src/database/tables';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import { runDbMigrations } from '../src/migrate';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -18,6 +23,7 @@ import {
 import { makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
+import type { BlobStorageProvider } from '../src/blobs';
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
 import type ModelAudit from '../src/models/modelAudit';
@@ -388,6 +394,10 @@ describe('model audit sharing', () => {
 });
 
 describe('createShareableUrl', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
@@ -728,33 +738,154 @@ describe('createShareableUrl', () => {
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
     });
 
-    it('inlines blob refs scoped to the local eval for default self-hosted shares', async () => {
+    it('inlines authorized trace blobs but not copied cross-eval result blobs', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-      // Honor env-var defaults so PROMPTFOO_SHARE_INLINE_BLOBS falls back to its
-      // self-hosted default (true) instead of the flat-false mock used elsewhere.
       vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
         Boolean(defaultValue),
       );
 
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: mockEval.id }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      const result = await createShareableUrl(mockEval as Eval);
-
-      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
-      expect(inlineBlobRefsForShare).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(Map),
-        mockEval.id,
+      const actualInlineModule = await vi.importActual<
+        typeof import('../src/util/inlineBlobsForShare')
+      >('../src/util/inlineBlobsForShare');
+      vi.mocked(inlineBlobRefsForShare).mockImplementation(
+        actualInlineModule.inlineBlobRefsForShare,
       );
-      expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
+
+      const authorizedHash = '1'.repeat(64);
+      const copiedHash = '2'.repeat(64);
+      const authorizedUri = `promptfoo://blob/${authorizedHash}`;
+      const copiedUri = `promptfoo://blob/${copiedHash}`;
+      const authorizedBytes = Buffer.from('authorized-trace-bytes');
+      const copiedBytes = Buffer.from('sensitive-other-eval-bytes');
+      const otherEvalId = `eval-${randomUUID()}`;
+      const resultRow = {
+        id: 'result-1',
+        promptIdx: 0,
+        response: { output: copiedUri },
+        testIdx: 0,
+      } as EvalResult;
+
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(() => {
+        const iterator = {
+          called: false,
+          next: async () => {
+            if (!iterator.called) {
+              iterator.called = true;
+              return { done: false, value: [resultRow] };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+        return iterator;
+      });
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          traceId: 'trace-with-media',
+          evaluationId: mockEval.id as string,
+          metadata: { image: authorizedUri },
+          spans: [],
+        },
+      ]);
+
+      const getByHash = vi.fn<BlobStorageProvider['getByHash']>(async (hash) => ({
+        data: hash === authorizedHash ? authorizedBytes : copiedBytes,
+        metadata: {
+          createdAt: '2026-06-10T00:00:00.000Z',
+          key: hash,
+          mimeType: 'image/png',
+          provider: 'test-stub',
+          sizeBytes: hash === authorizedHash ? authorizedBytes.length : copiedBytes.length,
+        },
+      }));
+      setBlobStorageProvider({
+        providerId: 'test-stub',
+        store: async () => {
+          throw new Error('not implemented');
+        },
+        getByHash,
+        exists: async () => true,
+        deleteByHash: async () => {},
+        getUrl: async () => null,
+      });
+
+      const db = await getDb();
+      await db.insert(evalsTable).values([
+        { id: mockEval.id as string, config: {}, results: {} },
+        { id: otherEvalId, config: {}, results: {} },
+      ]);
+      await db.insert(blobAssetsTable).values([
+        {
+          hash: authorizedHash,
+          mimeType: 'image/png',
+          provider: 'test-stub',
+          sizeBytes: authorizedBytes.length,
+        },
+        {
+          hash: copiedHash,
+          mimeType: 'image/png',
+          provider: 'test-stub',
+          sizeBytes: copiedBytes.length,
+        },
+      ]);
+      await db.insert(blobReferencesTable).values([
+        {
+          id: randomUUID(),
+          blobHash: authorizedHash,
+          evalId: mockEval.id as string,
+          kind: 'image',
+          location: 'trace.metadata',
+        },
+        {
+          id: randomUUID(),
+          blobHash: copiedHash,
+          evalId: otherEvalId,
+          kind: 'image',
+          location: 'response.output',
+        },
+      ]);
+
+      try {
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ id: mockEval.id }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({}),
+          });
+
+        const result = await createShareableUrl(mockEval as Eval, { silent: true });
+
+        expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+        const initialBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+        const chunkBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(initialBody.traces[0].metadata.image).toBe(
+          `data:image/png;base64,${authorizedBytes.toString('base64')}`,
+        );
+        expect(chunkBody[0].response.output).toBe(copiedUri);
+        expect(mockFetch.mock.calls.map(([, options]) => options.body).join('\n')).not.toContain(
+          copiedBytes.toString('base64'),
+        );
+        expect(getByHash).toHaveBeenCalledOnce();
+        expect(getByHash).toHaveBeenCalledWith(authorizedHash);
+        expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
+      } finally {
+        resetBlobStorageProvider();
+        await db
+          .delete(blobReferencesTable)
+          .where(inArray(blobReferencesTable.evalId, [mockEval.id as string, otherEvalId]));
+        await db
+          .delete(blobAssetsTable)
+          .where(inArray(blobAssetsTable.hash, [authorizedHash, copiedHash]));
+        await db
+          .delete(evalsTable)
+          .where(inArray(evalsTable.id, [mockEval.id as string, otherEvalId]));
+      }
     });
 
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
@@ -818,12 +949,20 @@ describe('createShareableUrl', () => {
       vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       const mockEvalWithTraces = buildMockEval();
+      const hash = '3'.repeat(64);
+      const blobUri = `promptfoo://blob/${hash}`;
+      const resultRow = {
+        id: 'result-with-trace-media',
+        promptIdx: 2,
+        response: { output: blobUri },
+        testIdx: 1,
+      } as EvalResult;
       const mockTraces = [
         {
           traceId: 'trace-123',
           evaluationId: mockEvalWithTraces.id as string,
           testCaseId: 'test-case-1',
-          metadata: { test: 'metadata' },
+          metadata: { media: blobUri, test: 'metadata' },
           spans: [
             {
               spanId: 'span-1',
@@ -836,6 +975,23 @@ describe('createShareableUrl', () => {
         },
       ];
       mockEvalWithTraces.getTraces = vi.fn().mockResolvedValue(mockTraces);
+      mockEvalWithTraces.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      mockEvalWithTraces.fetchResultsBatched = vi.fn().mockImplementation(() => {
+        const iterator = {
+          called: false,
+          next: async () => {
+            if (!iterator.called) {
+              iterator.called = true;
+              return { done: false, value: [resultRow] };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+        return iterator;
+      });
 
       // Mock the initial eval send
       mockFetch.mockResolvedValueOnce({
@@ -867,7 +1023,7 @@ describe('createShareableUrl', () => {
         traceId: 'trace-123',
         evaluationId: mockEvalWithTraces.id,
         testCaseId: 'test-case-1',
-        metadata: { test: 'metadata' },
+        metadata: { media: blobUri, test: 'metadata' },
       });
       expect(requestBody.traces[0].spans).toHaveLength(1);
       expect(requestBody.traces[0].spans[0]).toMatchObject({
@@ -877,8 +1033,17 @@ describe('createShareableUrl', () => {
         endTime: 2000,
         statusCode: 1,
       });
+      expect(uploadBlobRefsForShare).toHaveBeenNthCalledWith(1, resultRow, expect.any(Map), {
+        localEvalId: mockEvalWithTraces.id,
+        promptIdx: 2,
+        remoteEvalId: 'mock-eval-id',
+        testIdx: 1,
+      });
+      expect(uploadBlobRefsForShare).toHaveBeenNthCalledWith(2, mockTraces, expect.any(Map), {
+        localEvalId: mockEvalWithTraces.id,
+        remoteEvalId: 'mock-eval-id',
+      });
     });
-
     it('sends eval with empty traces array when no traces are available', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
