@@ -25,8 +25,6 @@ import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
-export { stripDecompressionHeaders };
-
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
 // with different request-scoped concurrency caps do not evict each other.
