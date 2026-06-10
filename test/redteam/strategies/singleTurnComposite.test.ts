@@ -30,7 +30,10 @@ vi.mock('../../../src/logger', () => ({
 
 describe('singleTurnComposite strategy', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks (not clearAllMocks) so the module-scope persistent mock
+    // setters below survive random test order — required by the root test
+    // hygiene check for new test files.
+    vi.resetAllMocks();
     vi.mocked(getUserEmail).mockReturnValue('test@example.com');
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('http://test-url');
