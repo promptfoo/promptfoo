@@ -72,6 +72,78 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
+// When promptfoo's undici 7 agent is used with Node 26's built-in undici 8 fetch,
+// the decompress interceptor decompresses the body but leaves Content-Encoding in
+// controller.rawHeaders. undici 7.27.1+ preserves rawHeaders through the v7→v8
+// bridge, so Node 26's fetch sees Content-Encoding and tries to decompress again
+// (double-decompression → TypeError: terminated). This interceptor must be composed
+// AFTER decompress so it strips rawHeaders once the body is already decoded.
+//
+// Uses a class (not object spread) so all handler methods share the original
+// handler's `this` — spreading a class instance copies only own-property values
+// at that instant, which breaks any state set later by onResponseStart.
+class StripEncodingHandler implements Dispatcher.DispatchHandler {
+  readonly #handler: Dispatcher.DispatchHandler;
+
+  constructor(handler: Dispatcher.DispatchHandler) {
+    this.#handler = handler;
+  }
+
+  onRequestStart(controller: Dispatcher.DispatchController, context: object) {
+    return this.#handler.onRequestStart?.(controller, context);
+  }
+
+  onRequestUpgrade(
+    controller: Dispatcher.DispatchController,
+    statusCode: number,
+    headers: Record<string, string | string[]>,
+    socket: import('stream').Duplex,
+  ) {
+    return this.#handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
+  }
+
+  onResponseStart(
+    controller: Dispatcher.DispatchController,
+    statusCode: number,
+    headers: Record<string, string | string[]>,
+    statusMessage?: string,
+  ): void {
+    const ctrl = controller as Dispatcher.DispatchController & {
+      rawHeaders?: Buffer[] | null;
+    };
+    if (Array.isArray(ctrl.rawHeaders)) {
+      const filtered: Buffer[] = [];
+      for (let i = 0; i + 1 < ctrl.rawHeaders.length; i += 2) {
+        const name = ctrl.rawHeaders[i].toString().toLowerCase();
+        if (name !== 'content-encoding' && name !== 'content-length') {
+          filtered.push(ctrl.rawHeaders[i], ctrl.rawHeaders[i + 1]);
+        }
+      }
+      ctrl.rawHeaders = filtered;
+    }
+    return this.#handler.onResponseStart?.(controller, statusCode, headers, statusMessage);
+  }
+
+  onResponseData(controller: Dispatcher.DispatchController, chunk: Buffer) {
+    return this.#handler.onResponseData?.(controller, chunk);
+  }
+
+  onResponseEnd(
+    controller: Dispatcher.DispatchController,
+    trailers: Record<string, string | string[]>,
+  ) {
+    return this.#handler.onResponseEnd?.(controller, trailers);
+  }
+
+  onResponseError(controller: Dispatcher.DispatchController, err: Error) {
+    return this.#handler.onResponseError?.(controller, err);
+  }
+}
+
+export function stripDecompressionHeaders(): Dispatcher.DispatchInterceptor {
+  return (dispatch) => (opts, handler) => dispatch(opts, new StripEncodingHandler(handler));
+}
+
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const existing = cachedAgents.get(concurrency);
@@ -84,7 +156,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +182,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
