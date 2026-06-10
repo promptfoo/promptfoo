@@ -60,6 +60,7 @@ export async function generateMathPrompt(
         testCases: batch,
         injectVar,
         config,
+        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
         email: getUserEmail(),
       };
 

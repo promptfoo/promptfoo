@@ -4139,6 +4139,46 @@ describe('target ID extraction for retry strategy', () => {
     );
   });
 
+  it('should preserve target context for a map-form Cloud provider', async () => {
+    vi.mocked(isCloudProvider).mockImplementation((providerId) =>
+      providerId.startsWith('promptfoo://provider/'),
+    );
+    vi.mocked(getCloudDatabaseId).mockImplementation((providerId) =>
+      providerId.replace('promptfoo://provider/', ''),
+    );
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: [{ 'promptfoo://provider/cloud-target-123': {} }],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+      selectedProviderConfigs: [{ 'promptfoo://provider/cloud-target-123': {} }],
+    });
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    });
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cloudTargetDatabaseId: 'cloud-target-123',
+        targetIds: ['promptfoo://provider/cloud-target-123'],
+      }),
+    );
+  });
+
   it('should derive target context from the provider selected by a filter', async () => {
     vi.mocked(getProviderIds).mockReturnValueOnce(['promptfoo://provider/selected-target']);
     vi.mocked(isCloudProvider).mockImplementation((providerId) =>

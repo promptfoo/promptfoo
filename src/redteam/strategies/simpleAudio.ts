@@ -32,7 +32,7 @@ export interface TextToAudioResult {
 export async function textToAudio(
   text: string,
   language: string = 'en',
-  options?: { evalId?: string; storeToStorage?: boolean },
+  options?: { evalId?: string; storeToStorage?: boolean; targetId?: string },
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
@@ -48,6 +48,7 @@ export async function textToAudio(
       language,
       version: VERSION,
       email: getUserEmail(),
+      ...(options?.targetId ? { targetId: options.targetId } : {}),
     };
 
     interface AudioGenerationResponse {
@@ -145,7 +146,10 @@ export async function addAudioToBase64(
       'en';
 
     // Convert text to audio using the remote API
-    const audioResult = await textToAudio(originalText, language, { evalId });
+    const audioResult = await textToAudio(originalText, language, {
+      evalId,
+      targetId: typeof config.targetId === 'string' ? config.targetId : undefined,
+    });
 
     audioTestCases.push({
       ...testCase,

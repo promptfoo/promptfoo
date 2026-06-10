@@ -79,6 +79,27 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result).toEqual({ output: ['test output'] });
   });
 
+  it('should include target context in harmful generation requests', async () => {
+    provider = new PromptfooHarmfulCompletionProvider({
+      ...options,
+      targetId: 'cloud-target-123',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ output: 'test output' }), { status: 200 }),
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"targetId":"cloud-target-123"'),
+      }),
+      expect.any(Number),
+      expect.any(Number),
+    );
+  });
+
   it('should filter out null and undefined values from output array', async () => {
     const mockResponse = new Response(
       JSON.stringify({ output: ['value1', null, 'value2', undefined] }),

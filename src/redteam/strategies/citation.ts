@@ -49,6 +49,7 @@ async function generateCitations(
         injectVar,
         topic: testCase.vars[injectVar],
         config,
+        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
         email: getUserEmail(),
       };
 

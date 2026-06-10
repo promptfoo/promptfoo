@@ -601,6 +601,7 @@ async function applyStrategies(
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
+  targetId?: string,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -680,6 +681,7 @@ async function applyStrategies(
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
+        ...(targetId ? { targetId } : {}),
       },
       strategy.id,
     );
@@ -1672,6 +1674,7 @@ export async function synthesize({
       purpose,
       undefined,
       maxCharsPerMessage,
+      cloudTargetDatabaseId,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1696,6 +1699,7 @@ export async function synthesize({
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
+      cloudTargetDatabaseId,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

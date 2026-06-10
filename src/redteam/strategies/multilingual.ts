@@ -132,6 +132,7 @@ async function processRemoteChunk(
     testCases,
     injectVar,
     config,
+    ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
     email: getUserEmail(),
   };
 

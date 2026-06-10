@@ -3913,6 +3913,7 @@ describe('Language configuration', () => {
 
         try {
           await synthesize({
+            cloudTargetDatabaseId: 'cloud-target-123',
             numTests: 1,
             plugins: [{ id: 'test-plugin', numTests: 1 }],
             prompts: ['Test prompt'],
@@ -3924,6 +3925,7 @@ describe('Language configuration', () => {
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
           expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+          expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
           getProviderSpy.mockRestore();
           getGradingProviderSpy.mockRestore();

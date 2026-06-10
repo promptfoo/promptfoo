@@ -58,6 +58,7 @@ async function generateCompositePrompts(
         // Composite pipeline configuration
         ...(config.techniques && { techniques: config.techniques }),
         ...(config.evasions && { evasions: config.evasions }),
+        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
         ...(config.alwaysIncludeTechniques && {
           alwaysIncludeTechniques: config.alwaysIncludeTechniques,
         }),

@@ -41,6 +41,7 @@ import { getCustomPolicies } from '../../util/generation';
 import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import { normalizeProviderRef } from '../../util/providerRef';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
 import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -144,6 +145,12 @@ function getCloudTargetDatabaseIdFromProviders(
     if (typeof providerConfig.id === 'string' && isCloudProvider(providerConfig.id)) {
       return getCloudDatabaseId(providerConfig.id);
     }
+
+    for (const providerId of Object.keys(provider)) {
+      if (isCloudProvider(providerId)) {
+        return getCloudDatabaseId(providerId);
+      }
+    }
   }
 
   return undefined;
@@ -157,10 +164,10 @@ function getTargetIdsFromProviders(providers: Partial<UnifiedConfig>['providers'
     return [];
   }
 
-  return providers
-    .filter((provider) => typeof provider !== 'function')
-    .map((provider) => (typeof provider === 'string' ? provider : provider.id))
-    .filter((id): id is string => typeof id === 'string');
+  return providers.flatMap((provider, index) => {
+    const descriptor = normalizeProviderRef(provider, { index });
+    return descriptor.kind === 'unknown' || descriptor.kind === 'function' ? [] : [descriptor.id];
+  });
 }
 
 function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {

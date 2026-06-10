@@ -53,6 +53,7 @@ async function generateGcgPrompts(
         task: 'gcg',
         query: testCase.vars[injectVar],
         ...(config.n && { n: config.n }),
+        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
         email: getUserEmail(),
       };
 

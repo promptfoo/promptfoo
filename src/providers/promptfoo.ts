@@ -29,6 +29,7 @@ interface PromptfooHarmfulCompletionOptions {
   n: number;
   purpose: string;
   config?: PluginConfig;
+  targetId?: string;
 }
 
 /**
@@ -40,12 +41,14 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   n: number;
   purpose: string;
   config?: PluginConfig;
+  targetId?: string;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
     this.harmCategory = options.harmCategory;
     this.n = options.n;
     this.purpose = options.purpose;
     this.config = options.config;
+    this.targetId = options.targetId;
   }
 
   id(): string {
@@ -83,6 +86,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       version: VERSION,
       config: this.config,
+      ...(this.targetId ? { targetId: this.targetId } : {}),
     };
 
     try {
