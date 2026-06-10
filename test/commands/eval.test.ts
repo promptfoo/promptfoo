@@ -810,6 +810,40 @@ describe('evalCommand', () => {
     loadDefaultConfigSpy.mockRestore();
   });
 
+  it('should merge only the resolving directory config when another directory is config-less', async () => {
+    const cmdObj = { config: ['/resolves', '/empty-suite', '/base.yaml'], write: false };
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockImplementation(
+      async (target) =>
+        ({
+          isDirectory: () => target === '/resolves' || target === '/empty-suite',
+        }) as any,
+    );
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockImplementation(async (dir?: string) =>
+        dir === '/resolves'
+          ? ({
+              defaultConfig: { prompts: ['from-resolving-dir'] },
+              defaultConfigPath: '/resolves/promptfooconfig.yaml',
+            } as any)
+          : ({
+              defaultConfig: { prompts: ['should-not-merge'] },
+              defaultConfigPath: undefined,
+            } as any),
+      );
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(cmdObj.config).toEqual(['/resolves/promptfooconfig.yaml', '/base.yaml']);
+    // Only the resolving directory's config is merged; the config-less directory
+    // contributes nothing even though loadDefaultConfig returned a payload for it.
+    const mergedDefaults = vi.mocked(resolveConfigs).mock.calls[0][1] as { prompts?: string[] };
+    expect(mergedDefaults.prompts).toEqual(['from-resolving-dir']);
+
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
   it('should fail early when no config files remain after dropping config-less directories', async () => {
     const cmdObj = { config: ['/empty-suite'], write: false };
     const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
