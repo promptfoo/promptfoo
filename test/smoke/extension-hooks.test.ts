@@ -40,6 +40,30 @@ function runCli(
   };
 }
 
+function findPythonPath(): string | undefined {
+  const candidates: Array<[string, string[]]> = [];
+  if (process.env.PROMPTFOO_PYTHON) {
+    candidates.push([process.env.PROMPTFOO_PYTHON, ['-c', 'import sys; print(sys.executable)']]);
+  }
+  if (process.platform === 'win32') {
+    candidates.push(['py', ['-3', '-c', 'import sys; print(sys.executable)']]);
+  }
+  candidates.push(
+    ['python3', ['-c', 'import sys; print(sys.executable)']],
+    ['python', ['-c', 'import sys; print(sys.executable)']],
+  );
+
+  for (const [command, args] of candidates) {
+    const result = spawnSync(command, args, { encoding: 'utf-8', timeout: 5000 });
+    if (result.status === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+  }
+  return undefined;
+}
+
+const PYTHON_PATH = findPythonPath();
+
 describe('Extension Hook Smoke Tests', () => {
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
@@ -49,38 +73,49 @@ describe('Extension Hook Smoke Tests', () => {
   });
 
   afterAll(() => {
-    if (fs.existsSync(OUTPUT_DIR)) {
-      fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
-    }
+    fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
   });
 
-  it('executes a Python prompt function when a Python extension hook returns its context (issue #9653)', () => {
-    const configPath = path.join(FIXTURES_DIR, 'configs/python-prompt-with-extension.yaml');
-    const outputPath = path.join(OUTPUT_DIR, 'python-prompt-with-extension-output.json');
+  it.skipIf(!PYTHON_PATH)(
+    'executes a Python prompt function when a Python extension hook returns its context (issue #9653)',
+    () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/python-prompt-with-extension.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'python-prompt-with-extension-output.json');
 
-    const { exitCode, stdout, stderr } = runCli(
-      ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-      { cwd: path.join(FIXTURES_DIR, 'configs') },
-    );
+      const { exitCode } = runCli(
+        [
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+          '--no-share',
+          '--no-table',
+          '--no-progress-bar',
+        ],
+        {
+          cwd: path.join(FIXTURES_DIR, 'configs'),
+          env: {
+            PROMPTFOO_CONFIG_DIR: OUTPUT_DIR,
+            PROMPTFOO_PYTHON: PYTHON_PATH,
+            PROMPTFOO_DISABLE_SHARING: 'true',
+            PROMPTFOO_DISABLE_TELEMETRY: 'true',
+            PROMPTFOO_DISABLE_UPDATE: 'true',
+          },
+        },
+      );
 
-    // Python prompt functions and hooks require Python to be installed.
-    // If Python is not available, this test will fail gracefully.
-    if (exitCode !== 0) {
-      const output = stdout + stderr;
-      if (output.includes('python') || output.includes('Python')) {
-        return;
-      }
-    }
+      expect(exitCode).toBe(0);
 
-    expect(exitCode).toBe(0);
+      const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      const result = parsed.results.results[0];
 
-    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
-    const result = parsed.results.results[0];
-
-    // The executed prompt function produces chat messages. If the hook's JSON
-    // round-trip had dropped the function, the raw Python source would have
-    // been rendered into the prompt instead.
-    expect(result.prompt.raw).toContain('What is Linear Algebra?');
-    expect(result.prompt.raw).not.toContain('def create_prompt');
-  });
+      // The executed prompt function produces chat messages. If the hook's JSON
+      // round-trip had dropped the function, the raw Python source would have
+      // been rendered into the prompt instead.
+      expect(result.prompt.raw).toContain('What is Linear Algebra?');
+      expect(result.prompt.raw).not.toContain('def create_prompt');
+    },
+  );
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { stripDecompressionHeaders } from '../../../src/util/fetch/index';
+import { stripDecompressionHeaders } from '../../../src/util/fetch/stripDecompressionHeaders';
 import type { Dispatcher } from 'undici';
 
 type RawHeaderPairs = [string, string][];
+type ResponseCallbackMode = 'started' | 'start' | 'both';
 
 function makeRawHeaders(pairs: RawHeaderPairs): Buffer[] {
   return pairs.flatMap(([name, value]) => [Buffer.from(name), Buffer.from(value)]);
@@ -28,11 +29,13 @@ function dispatchResponseStart({
   parsedHeaders,
   statusCode = 200,
   dispatchResult = true,
+  callbackMode = 'both',
 }: {
   rawHeaders?: Buffer[] | null;
   parsedHeaders: Record<string, string | string[]>;
   statusCode?: number;
   dispatchResult?: boolean;
+  callbackMode?: ResponseCallbackMode;
 }) {
   const events: { method: string; args: unknown[] }[] = [];
   const innerHandler: Dispatcher.DispatchHandler = {
@@ -49,12 +52,15 @@ function dispatchResponseStart({
   const controller = { rawHeaders } as unknown as Dispatcher.DispatchController & {
     rawHeaders?: Buffer[] | null;
   };
-  // The synthetic dispatch fires both callbacks so the test can pin that each
-  // one is forwarded; real undici handlers see only one API generation, so the
-  // ordering here is a harness artifact, not an undici contract.
+  // Real undici handlers use one callback generation. Tests can select either
+  // generation explicitly; "both" is only a compact harness mode.
   const dispatch: Parameters<Dispatcher.DispatchInterceptor>[0] = (_opts, handler) => {
-    handler.onResponseStarted?.();
-    handler.onResponseStart?.(controller, statusCode, parsedHeaders, 'OK');
+    if (callbackMode === 'both' || callbackMode === 'started') {
+      handler.onResponseStarted?.();
+    }
+    if (callbackMode === 'both' || callbackMode === 'start') {
+      handler.onResponseStart?.(controller, statusCode, parsedHeaders, 'OK');
+    }
     return dispatchResult;
   };
   const composed = stripDecompressionHeaders()(dispatch);
@@ -144,7 +150,7 @@ describe('stripDecompressionHeaders', () => {
   it.each([
     undefined,
     null,
-  ])('passes through when controller.rawHeaders is %s (undici <7.27.1 bridge)', (rawHeaders) => {
+  ])('passes through when controller.rawHeaders is %s (not an array)', (rawHeaders) => {
     const { controller, events } = dispatchResponseStart({
       rawHeaders,
       parsedHeaders: { 'content-type': 'application/json' },
@@ -203,6 +209,7 @@ describe('stripDecompressionHeaders', () => {
     const { controller, events } = dispatchResponseStart({
       rawHeaders: makeRawHeaders([['content-type', 'application/json']]),
       parsedHeaders,
+      callbackMode: 'start',
     });
 
     const start = events.find((e) => e.method === 'onResponseStart');
