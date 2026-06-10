@@ -107,7 +107,7 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium,block-no-verify\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -224,6 +224,7 @@
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
+    "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
