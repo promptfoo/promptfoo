@@ -552,14 +552,20 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         completion: data.usage.output_tokens ?? 0,
       };
 
-      // Track Anthropic prompt caching details (stored in completionDetails since there is no dedicated inputDetails field)
-      if (
+      const thinkingTokens = data.usage.output_tokens_details?.thinking_tokens;
+      const hasCacheDetails =
         data.usage.cache_read_input_tokens != null ||
-        data.usage.cache_creation_input_tokens != null
-      ) {
+        data.usage.cache_creation_input_tokens != null;
+
+      if (thinkingTokens != null || hasCacheDetails) {
         usage.completionDetails = {
-          cacheReadInputTokens: cacheRead,
-          cacheCreationInputTokens: cacheCreation,
+          ...(thinkingTokens != null && { reasoning: thinkingTokens }),
+          // Cache *input* token counts go under completionDetails because Promptfoo's
+          // TokenUsage contract has no input-details field.
+          ...(hasCacheDetails && {
+            cacheReadInputTokens: cacheRead,
+            cacheCreationInputTokens: cacheCreation,
+          }),
         };
       }
 

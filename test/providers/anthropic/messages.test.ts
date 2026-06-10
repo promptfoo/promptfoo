@@ -1452,6 +1452,63 @@ describe('AnthropicMessagesProvider', () => {
       ]);
     });
 
+    it('sums thinking tokens across MCP continuation rounds', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({
+        content: 'Found Acme Solar and Gridwise.',
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            output_tokens_details: { thinking_tokens: 3 },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
+          stop_reason: 'end_turn',
+          usage: {
+            input_tokens: 7,
+            output_tokens: 4,
+            output_tokens_details: { thinking_tokens: 2 },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      // Reasoning must aggregate like output_tokens does, not report the last round only
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 17,
+        completion: 9,
+        total: 26,
+        completionDetails: { reasoning: 5 },
+      });
+    });
+
     it('does not cache MCP continuation results by default', async () => {
       enableCache();
       provider = createProvider('claude-3-5-sonnet-latest', {

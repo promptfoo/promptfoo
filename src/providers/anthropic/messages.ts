@@ -231,6 +231,14 @@ function mergeAnthropicUsage(
         (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
       cache_read_input_tokens:
         (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+      output_tokens_details:
+        acc.output_tokens_details || usage.output_tokens_details
+          ? {
+              thinking_tokens:
+                (acc.output_tokens_details?.thinking_tokens ?? 0) +
+                (usage.output_tokens_details?.thinking_tokens ?? 0),
+            }
+          : null,
     }),
     firstUsage,
   );
