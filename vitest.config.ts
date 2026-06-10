@@ -54,15 +54,25 @@ export default defineConfig({
     // Escape hatch for an intermittent CI flake: a forks worker that dies after
     // its test file already passed surfaces as an unhandled pool error
     // ("Worker exited unexpectedly"), which sets process.exitCode = 1
-    // independently of `bail` and reddens an otherwise all-green shard. When
-    // PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS=true (set only in CI), treat that
-    // post-run worker crash as non-fatal. This does NOT mask real test failures:
-    // failed tests/assertions set the exit code via a separate path
-    // (hasFailed()), so they still fail. Off by default so local runs stay
-    // strict and surface worker crashes. Tracking: deterministic repro of the
+    // independently of `bail` and reddens an otherwise all-green shard.
+    //
+    // NOTE: this is a blunt instrument. Vitest has no option to ignore only the
+    // worker-exit case, so enabling it suppresses ALL unhandled errors vitest
+    // collects with no owning test (late async errors, unhandled rejections) —
+    // not just the worker crash. It does NOT mask real test failures: failed
+    // tests/assertions set the exit code via a separate path (hasFailed()), so
+    // they still fail. We accept suppressing the broader unhandled-error class
+    // in CI because the alternative is a ~25% flake rate that blocks every PR
+    // and trains people to ignore red CI.
+    //
+    // Double-gated so it can ONLY engage in CI (both `CI` and the explicit
+    // opt-in must be set): local/dev runs always stay strict and surface
+    // unhandled errors and worker crashes. Tracking: deterministic repro of the
     // worker crash (suspected native libsql teardown / per-worker memory
     // pressure) so this flag can be removed.
-    dangerouslyIgnoreUnhandledErrors: process.env.PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS === 'true',
+    dangerouslyIgnoreUnhandledErrors: Boolean(
+      process.env.CI && process.env.PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS === 'true',
+    ),
 
     // Coverage configuration
     coverage: {
