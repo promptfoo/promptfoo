@@ -214,7 +214,13 @@ function coerceMcpToolInput(input: unknown): Record<string, unknown> {
 function mergeAnthropicUsage(
   messages: Anthropic.Messages.Message[],
 ): Anthropic.Messages.Message['usage'] | undefined {
-  const usageEntries = messages.map((message) => message.usage).filter((usage) => usage != null);
+  type AnthropicUsageWithThinkingDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
+    output_tokens_details?: { thinking_tokens?: number | null } | null;
+  };
+
+  const usageEntries = messages
+    .map((message) => message.usage)
+    .filter((usage): usage is AnthropicUsageWithThinkingDetails => usage != null);
 
   if (usageEntries.length === 0) {
     return undefined;
@@ -223,23 +229,27 @@ function mergeAnthropicUsage(
   const [firstUsage, ...remainingUsageEntries] = usageEntries;
 
   return remainingUsageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
-    (acc, usage) => ({
-      ...usage,
-      input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),
-      output_tokens: acc.output_tokens + (usage.output_tokens ?? 0),
-      cache_creation_input_tokens:
-        (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
-      cache_read_input_tokens:
-        (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
-      output_tokens_details:
-        acc.output_tokens_details || usage.output_tokens_details
-          ? {
-              thinking_tokens:
-                (acc.output_tokens_details?.thinking_tokens ?? 0) +
-                (usage.output_tokens_details?.thinking_tokens ?? 0),
-            }
-          : null,
-    }),
+    (acc, usage) => {
+      const accWithDetails = acc as AnthropicUsageWithThinkingDetails;
+      const thinkingTokens =
+        accWithDetails.output_tokens_details || usage.output_tokens_details
+          ? (accWithDetails.output_tokens_details?.thinking_tokens ?? 0) +
+            (usage.output_tokens_details?.thinking_tokens ?? 0)
+          : undefined;
+
+      return {
+        ...usage,
+        input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),
+        output_tokens: acc.output_tokens + (usage.output_tokens ?? 0),
+        cache_creation_input_tokens:
+          (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
+        cache_read_input_tokens:
+          (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+        ...(thinkingTokens === undefined
+          ? {}
+          : { output_tokens_details: { thinking_tokens: thinkingTokens } }),
+      } as AnthropicUsageWithThinkingDetails;
+    },
     firstUsage,
   );
 }
