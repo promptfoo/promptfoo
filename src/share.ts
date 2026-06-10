@@ -131,8 +131,8 @@ async function sendEvalRecord(
   const traces = await evalRecord.getTraces();
   const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
 
-  // Inject current team ID into config metadata if cloud is enabled
-  // This ensures the eval is created in the correct team (not the default team)
+  // Preserve the verified runtime team on server-issued unified configs. For
+  // other configs, use the current CLI team to avoid falling back to default.
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
@@ -142,14 +142,18 @@ async function sendEvalRecord(
   if (cloudConfig.isEnabled()) {
     const currentOrgId = cloudConfig.getCurrentOrganizationId();
     const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
-    if (currentTeamId) {
+    const unifiedConfigTeamId = redactedConfig?.metadata?.configId
+      ? redactedConfig.metadata.teamId
+      : undefined;
+    const effectiveTeamId = unifiedConfigTeamId ?? currentTeamId;
+    if (effectiveTeamId) {
       evalData = {
         ...evalData,
         config: {
           ...(redactedConfig || {}),
           metadata: {
             ...(redactedConfig?.metadata || {}),
-            teamId: currentTeamId,
+            teamId: effectiveTeamId,
           },
         },
       };

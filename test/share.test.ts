@@ -440,6 +440,67 @@ describe('createShareableUrl', () => {
     expect(mockEval.useOldResults).toHaveBeenCalled();
   });
 
+  it('preserves the runtime team from a server-issued unified config', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('current-team');
+
+    const mockEval = buildMockEval();
+    mockEval.config = {
+      ...(mockEval.config ?? {}),
+      metadata: {
+        configId: 'org-scoped-template',
+        teamId: 'provider-team',
+      },
+    };
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.config.metadata).toMatchObject({
+      configId: 'org-scoped-template',
+      teamId: 'provider-team',
+    });
+  });
+
+  it('uses the current CLI team when runtime metadata is absent', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('current-team');
+
+    const mockEval = buildMockEval();
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.config.metadata.teamId).toBe('current-team');
+  });
+
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
