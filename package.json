@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.14",
+  "version": "0.121.15",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -86,7 +86,7 @@
     "lint:tests": "npx @biomejs/biome lint test",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
-    "local": "tsx src/main.ts",
+    "local": "tsx src/localEntrypoint.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
@@ -107,7 +107,7 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium,block-no-verify\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -184,18 +184,15 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "@inquirer/core": {
-      "mute-stream": "3.0.0"
-    },
     "webpack": "5.107.2",
-    "dompurify": "3.4.5",
+    "dompurify": "3.4.7",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.5"
+      "dompurify": "3.4.7"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.150",
+    "@anthropic-ai/claude-agent-sdk": "0.3.159",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -205,9 +202,9 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.4.15",
+    "@biomejs/biome": "2.4.16",
     "@fal-ai/client": "~1.10.1",
-    "@ibm-cloud/watsonx-ai": "^1.7.12",
+    "@ibm-cloud/watsonx-ai": "^1.7.13",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -227,6 +224,7 @@
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
+    "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
@@ -253,7 +251,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.150",
+    "@anthropic-ai/claude-agent-sdk": "0.3.159",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -267,7 +265,7 @@
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^13.0.1",
     "@huggingface/transformers": "^4.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.12",
+    "@ibm-cloud/watsonx-ai": "^1.7.13",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.11.3",
@@ -298,7 +296,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.98.0",
+    "@anthropic-ai/sdk": "0.100.1",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -372,7 +370,7 @@
     "socket.io-client": "^4.8.3",
     "text-extensions": "^3.1.0",
     "tsx": "^4.21.0",
-    "undici": "^7.25.0",
+    "undici": ">=7.27.1 <8",
     "winston": "^3.19.0",
     "ws": "^8.19.0",
     "zod": "^4.3.6"

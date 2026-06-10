@@ -13,6 +13,7 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -1867,7 +1868,9 @@ async function createHttpsAgent(
   // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
 }
 
 export class HttpProvider implements ApiProvider {

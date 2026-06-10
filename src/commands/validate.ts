@@ -15,6 +15,7 @@ import {
 } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
+import { safeJsonStringify } from '../util/json';
 import { isUuid } from '../util/uuid';
 import type { Command } from 'commander';
 
@@ -64,12 +65,14 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
       logger.error(chalk.red(`  ✗ Connectivity test`));
       logger.error(chalk.red(`    ${result.error}`));
       return { success: false, error: result.error };
-    } else if (result.output) {
+    } else if (result.output !== null && result.output !== undefined) {
       logger.info(chalk.green(`  ✓ Connectivity test`));
-      const responsePreview = JSON.stringify(result.output).substring(0, 100);
-      logger.info(
-        chalk.dim(`    Response: ${responsePreview}${responsePreview.length >= 100 ? '...' : ''}`),
-      );
+      // safeJsonStringify keeps the preview non-throwing (circular refs, BigInt);
+      // String() covers values it cannot serialize at all.
+      const fullResponse = safeJsonStringify(result.output) ?? String(result.output);
+      const isTruncated = fullResponse.length > 100;
+      const responsePreview = fullResponse.substring(0, 100);
+      logger.info(chalk.dim(`    Response: ${responsePreview}${isTruncated ? '...' : ''}`));
       return { success: true };
     } else {
       logger.warn(chalk.yellow(`  ✗ Connectivity test`));
