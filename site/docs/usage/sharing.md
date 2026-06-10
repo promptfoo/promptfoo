@@ -164,11 +164,10 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-To disable sharing completely:
-
-These controls prevent both the eval snapshot and referenced media/blob data from being uploaded
-to a sharing destination. Media blobs are still stored locally so they remain available in the
-local viewer and can be uploaded by a later explicit `promptfoo share` command.
+To disable sharing completely, use any of the controls below. These controls prevent both the
+eval snapshot and referenced media/blob data from being uploaded to a sharing destination. Media
+blobs are still stored locally, so they remain available in the local viewer and are included if
+you later run an explicit `promptfoo share` command.
 
 ### Disable for One Eval
 

@@ -50,8 +50,8 @@ Note that `goal` is optional, but can be used to specify the type of poisoning y
 The poison command sends the complete document contents, requested goal, and account email to the
 configured remote-generation endpoint. It has no local fallback. Setting either
 `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or
-`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` prevents the command from sending the document
-and exits with an error instead.
+`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` prevents the command from sending the document;
+the command exits with an error instead.
 
 You can also use folders or globs to target multiple documents:
 
