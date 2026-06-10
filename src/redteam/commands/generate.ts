@@ -254,9 +254,20 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
   `;
 }
 
-async function getConfigHash(configPath: string): Promise<string> {
+async function getConfigHash(
+  configPath: string,
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
-  return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
+  const filters = {
+    ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
+    ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+  };
+  const hashInput =
+    Object.keys(filters).length > 0
+      ? JSON.stringify({ version: VERSION, content, filters })
+      : `${VERSION}:${content}`;
+  return createHash('md5').update(hashInput).digest('hex');
 }
 
 function createHeaderComments({
@@ -373,7 +384,7 @@ async function doGenerateRedteamInternal(
       await fs.readFile(outputPath, 'utf8'),
     ) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = await getConfigHash(configPath);
+    const currentHash = await getConfigHash(configPath, options);
 
     if (storedHash === currentHash) {
       logger.warn(
@@ -903,7 +914,7 @@ async function doGenerateRedteamInternal(
         metadata: {
           ...(existingYaml.metadata || {}),
           ...(configPath && redteamTests.length > 0
-            ? { configHash: await getConfigHash(configPath) }
+            ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
@@ -968,7 +979,7 @@ async function doGenerateRedteamInternal(
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...(existingConfig.metadata || {}),
-        configHash: await getConfigHash(configPath),
+        configHash: await getConfigHash(configPath, options),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();

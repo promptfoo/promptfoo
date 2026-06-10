@@ -45,7 +45,7 @@ import type {
   RedteamCliGenerateOptions,
   RedteamPluginObject,
 } from '../../../src/redteam/types';
-import type { ApiProvider, TestCaseWithPlugin } from '../../../src/types/index';
+import type { ApiProvider, TestCaseWithPlugin, UnifiedConfig } from '../../../src/types/index';
 
 // Type for synthesize mock return value to avoid type inference issues in CI
 type SynthesizeMockResult = {
@@ -396,6 +396,70 @@ describe('doGenerateRedteam', () => {
       'output.yaml',
       expect.any(Array),
     );
+  });
+
+  it.each([
+    ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
+    ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],
+    ['filter option', { filterProviders: 'team-a' }, { filterTargets: 'team-a' }],
+  ] as const)('should regenerate when the %s changes for an existing output', async (_, initialFilters, changedFilters) => {
+    const configPath = 'config.yaml';
+    const outputPath = 'output.yaml';
+    const configContent = yaml.dump({
+      providers: ['promptfoo://provider/team-a', 'promptfoo://provider/team-b'],
+      redteam: { plugins: ['harmful:hate'] },
+    });
+    let generatedOutput: Partial<UnifiedConfig> | undefined;
+
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => {
+      const path = String(filePath);
+      return path === configPath || (path === outputPath && generatedOutput !== undefined);
+    });
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      return String(filePath) === outputPath ? yaml.dump(generatedOutput) : configContent;
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: outputPath,
+      config: configPath,
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      ...initialFilters,
+    };
+
+    await doGenerateRedteam(options);
+    generatedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
+    const firstHash = generatedOutput.metadata?.configHash;
+    expect(firstHash).toEqual(expect.any(String));
+
+    vi.clearAllMocks();
+    await doGenerateRedteam(options);
+
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+    );
+
+    vi.clearAllMocks();
+    await doGenerateRedteam({ ...options, ...changedFilters });
+
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    const changedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
+    expect(changedOutput.metadata?.configHash).not.toBe(firstHash);
   });
 
   it('should write to config file when write option is true', async () => {
