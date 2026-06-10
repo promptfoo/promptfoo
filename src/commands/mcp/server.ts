@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import express from 'express';
 import logger from '../../logger';
+import { csrfProtection } from '../../server/middleware/csrfProtection';
 import telemetry from '../../telemetry';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { registerResources } from './resources';
@@ -18,6 +19,39 @@ import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
+import type { NextFunction, Request, Response } from 'express';
+
+export const DEFAULT_MCP_HTTP_HOST = '127.0.0.1';
+const ALLOWED_MCP_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+
+function getHostnameFromHostHeader(host: string): string | undefined {
+  const bracketedIpv6 = host.match(/^(\[[^\]]+\])(?::\d+)?$/);
+  if (bracketedIpv6) {
+    return bracketedIpv6[1].toLowerCase();
+  }
+
+  const hostnameWithOptionalPort = host.match(/^([^:@/]+)(?::\d+)?$/);
+  return hostnameWithOptionalPort?.[1].toLowerCase();
+}
+
+export function mcpHostProtection(req: Request, res: Response, next: NextFunction): void {
+  const hostname = req.headers.host ? getHostnameFromHostHeader(req.headers.host) : undefined;
+  if (hostname && ALLOWED_MCP_HTTP_HOSTS.has(hostname)) {
+    next();
+    return;
+  }
+
+  logger.warn('[MCP] Blocked request with non-local Host header', {
+    host: req.headers.host,
+    method: req.method,
+    path: req.path,
+  });
+  res.status(403).json({ error: 'MCP HTTP requests require a local Host header' });
+}
+
+function formatHttpHostForUrl(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+}
 
 function setMcpTransport(transport: 'http' | 'stdio'): void {
   Object.assign(process.env, { MCP_TRANSPORT: transport });
@@ -129,7 +163,9 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   setMcpTransport('http');
 
   const app = express();
+  app.use(mcpHostProtection);
   app.use(express.json());
+  app.use(csrfProtection);
 
   const mcpServer = await createMcpServer();
 
@@ -159,14 +195,17 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
-    const httpServer = app.listen(port, () => {
-      logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
-      logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
-      logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+    const host = DEFAULT_MCP_HTTP_HOST;
+    const urlHost = formatHttpHostForUrl(host);
+    const httpServer = app.listen(port, host, () => {
+      logger.info(`Promptfoo MCP server running at http://${urlHost}:${port}`);
+      logger.info(`MCP endpoint: http://${urlHost}:${port}/mcp`);
+      logger.info(`SSE endpoint: http://${urlHost}:${port}/mcp/sse`);
 
       // Track server start
       telemetry.record('feature_used', {
         feature: 'mcp_server_started',
+        host,
         transport: 'http',
         port,
       });
@@ -181,6 +220,8 @@ export async function startHttpMcpServer(port: number): Promise<void> {
         return;
       }
       isShuttingDown = true;
+      process.removeListener('SIGINT', shutdown);
+      process.removeListener('SIGTERM', shutdown);
 
       logger.info('Shutting down MCP server...');
       const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -261,6 +302,9 @@ export async function startStdioMcpServer(): Promise<void> {
           return;
         }
         isShuttingDown = true;
+        process.removeListener('SIGINT', shutdown);
+        process.removeListener('SIGTERM', shutdown);
+        process.stdin.removeListener('end', shutdown);
 
         // Add timeout to prevent indefinite hangs, matching HTTP server pattern
         const SHUTDOWN_TIMEOUT_MS = 5000;

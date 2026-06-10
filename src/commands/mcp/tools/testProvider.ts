@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProvider, loadApiProviders } from '../../../providers/index';
+import { validateProviderReference } from '../lib/security';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -216,8 +217,10 @@ export function registerTestProviderTool(server: McpServer) {
 
 async function loadProvider(provider: string | { id: string; config?: Record<string, unknown> }) {
   if (typeof provider === 'string') {
+    validateProviderReference(provider);
     return await loadApiProvider(provider);
   } else {
+    validateProviderReference(provider);
     const providers = await loadApiProviders([provider]);
     if (!providers[0]) {
       throw new Error(`Failed to load provider configuration`);

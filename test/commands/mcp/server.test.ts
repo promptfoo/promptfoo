@@ -9,30 +9,6 @@ vi.mock('node:crypto', () => ({
   randomUUID: mockRandomUUID,
 }));
 
-const expressMocks = vi.hoisted(() => {
-  const close = vi.fn((callback: (error?: Error) => void) => callback());
-  const listen = vi.fn((_port: number, callback: () => void) => {
-    callback();
-    return { close };
-  });
-  const app = {
-    use: vi.fn(),
-    post: vi.fn(),
-    get: vi.fn(),
-    listen,
-  };
-  const json = vi.fn();
-  const express = Object.assign(
-    vi.fn(() => app),
-    { json },
-  );
-  return { app, close, express, json, listen };
-});
-
-vi.mock('express', () => ({
-  default: expressMocks.express,
-}));
-
 // Mock dependencies before importing the module
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -128,6 +104,41 @@ const mcpServerMocks = vi.hoisted(() => {
   return { mcpServerCalls, MockMcpServer, mockMcpServerImplementation };
 });
 
+const expressMocks = vi.hoisted(() => {
+  const postHandlers: Record<string, any> = {};
+  const getHandlers: Record<string, any> = {};
+  const httpServer = {
+    close: vi.fn((callback?: (error?: Error) => void) => callback?.()),
+  };
+  const app = {
+    get: vi.fn(),
+    listen: vi.fn(),
+    post: vi.fn(),
+    use: vi.fn(),
+  };
+  const expressFactory = Object.assign(
+    vi.fn(() => app),
+    {
+      json: vi.fn(() => 'json-middleware'),
+    },
+  );
+
+  return { app, expressFactory, getHandlers, httpServer, postHandlers };
+});
+
+const transportMocks = vi.hoisted(() => {
+  const instances: Array<{ handleRequest: ReturnType<typeof vi.fn> }> = [];
+  const StreamableHTTPServerTransport = vi.fn(function MockStreamableHTTPServerTransport(
+    this: { handleRequest: ReturnType<typeof vi.fn> },
+    _options?: { sessionIdGenerator?: () => string },
+  ) {
+    this.handleRequest = vi.fn().mockResolvedValue(undefined);
+    instances.push(this);
+  });
+
+  return { instances, StreamableHTTPServerTransport };
+});
+
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: mcpServerMocks.MockMcpServer,
 }));
@@ -136,16 +147,12 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn().mockImplementation(() => ({})),
 }));
 
-const streamableHttpMocks = vi.hoisted(() => ({
-  constructor: vi.fn().mockImplementation(function MockStreamableHTTPServerTransport() {
-    return {
-      handleRequest: vi.fn(),
-    };
-  }),
+vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
+  StreamableHTTPServerTransport: transportMocks.StreamableHTTPServerTransport,
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
-  StreamableHTTPServerTransport: streamableHttpMocks.constructor,
+vi.mock('express', () => ({
+  default: expressMocks.expressFactory,
 }));
 
 const { mcpServerCalls } = mcpServerMocks;
@@ -160,9 +167,25 @@ describe('MCP Server', () => {
     mcpServerMocks.MockMcpServer.mockReset().mockImplementation(
       mcpServerMocks.mockMcpServerImplementation,
     );
-    streamableHttpMocks.constructor.mockClear();
     mockRandomUUID.mockClear();
     mcpServerCalls.length = 0;
+    transportMocks.instances.length = 0;
+    Object.keys(expressMocks.postHandlers).forEach((key) => delete expressMocks.postHandlers[key]);
+    Object.keys(expressMocks.getHandlers).forEach((key) => delete expressMocks.getHandlers[key]);
+    expressMocks.app.use.mockReset().mockReturnValue(expressMocks.app);
+    expressMocks.app.post.mockReset().mockImplementation((path, handler) => {
+      expressMocks.postHandlers[path] = handler;
+      return expressMocks.app;
+    });
+    expressMocks.app.get.mockReset().mockImplementation((path, handler) => {
+      expressMocks.getHandlers[path] = handler;
+      return expressMocks.app;
+    });
+    expressMocks.app.listen.mockReset().mockImplementation((_port, _host, callback) => {
+      callback?.();
+      return expressMocks.httpServer;
+    });
+    expressMocks.httpServer.close.mockReset().mockImplementation((callback) => callback?.());
   });
 
   describe('createMcpServer', () => {
@@ -285,6 +308,94 @@ describe('MCP Server', () => {
   });
 
   describe('startHttpMcpServer', () => {
+    it('should bind HTTP transport to loopback by default', async () => {
+      const { DEFAULT_MCP_HTTP_HOST, startHttpMcpServer } = await import(
+        '../../../src/commands/mcp/server'
+      );
+
+      const serverPromise = startHttpMcpServer(3100);
+      await new Promise((resolve) => setImmediate(resolve));
+      process.emit('SIGINT');
+      await serverPromise;
+
+      expect(expressMocks.app.listen).toHaveBeenCalledWith(
+        3100,
+        DEFAULT_MCP_HTTP_HOST,
+        expect.any(Function),
+      );
+    });
+
+    it('should install browser origin protection on HTTP transport', async () => {
+      const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+
+      const serverPromise = startHttpMcpServer(3100);
+      await new Promise((resolve) => setImmediate(resolve));
+      process.emit('SIGINT');
+      await serverPromise;
+
+      expect(expressMocks.app.use).toHaveBeenNthCalledWith(1, expect.any(Function));
+      expect(expressMocks.app.use).toHaveBeenNthCalledWith(2, 'json-middleware');
+      expect(expressMocks.app.use).toHaveBeenNthCalledWith(3, expect.any(Function));
+    });
+
+    it('should reject DNS-rebinding Host headers', async () => {
+      const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+
+      const serverPromise = startHttpMcpServer(3100);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const hostProtection = expressMocks.app.use.mock.calls[0][0];
+      const request = {
+        headers: { host: 'attacker.example:3100' },
+        method: 'POST',
+        path: '/mcp',
+      };
+      const response = {
+        json: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+      };
+      const next = vi.fn();
+
+      hostProtection(request, response, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(response.status).toHaveBeenCalledWith(403);
+      expect(response.json).toHaveBeenCalledWith({
+        error: 'MCP HTTP requests require a local Host header',
+      });
+
+      process.emit('SIGINT');
+      await serverPromise;
+    });
+
+    it('should handle MCP requests on loopback transport', async () => {
+      const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+
+      const serverPromise = startHttpMcpServer(3100);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const mcpHandler = expressMocks.postHandlers['/mcp'];
+      const request = {
+        body: { jsonrpc: '2.0' },
+        get: vi.fn(),
+      };
+      const response = {
+        json: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+      };
+
+      await mcpHandler(request, response);
+
+      expect(transportMocks.instances[0].handleRequest).toHaveBeenCalledWith(
+        request,
+        response,
+        request.body,
+      );
+
+      process.emit('SIGINT');
+      await serverPromise;
+    });
+
     it('creates cryptographically random session identifiers', async () => {
       const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
       let shutdown: (() => void) | undefined;
@@ -301,10 +412,10 @@ describe('MCP Server', () => {
         serverPromise = startHttpMcpServer(3100);
 
         await vi.waitFor(() => {
-          expect(streamableHttpMocks.constructor).toHaveBeenCalledOnce();
+          expect(transportMocks.StreamableHTTPServerTransport).toHaveBeenCalledOnce();
         });
 
-        const transportOptions = streamableHttpMocks.constructor.mock.calls[0][0] as {
+        const transportOptions = transportMocks.StreamableHTTPServerTransport.mock.calls[0][0] as {
           sessionIdGenerator: () => string;
         };
         expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
