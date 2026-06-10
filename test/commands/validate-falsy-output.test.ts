@@ -47,6 +47,21 @@ describe('validate target falsy outputs', () => {
     expect(process.exitCode).toBe(0);
   });
 
+  it('accepts output that JSON.stringify cannot serialize', async () => {
+    const provider = createMockProvider({
+      id: 'echo',
+      response: { output: BigInt(7) },
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+    await doValidateTarget({ target: 'echo' }, defaultConfig);
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Response: 7'));
+    expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+    expect(process.exitCode).toBe(0);
+  });
+
   it('rejects null provider output', async () => {
     const provider = createMockProvider({
       id: 'echo',
