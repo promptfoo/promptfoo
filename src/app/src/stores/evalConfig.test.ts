@@ -1285,6 +1285,50 @@ describe('evalConfig store', () => {
       expect(persisted.scenarios[0].tests[0].providers[0].config).toEqual(expectedConfig);
       expect(JSON.stringify(persisted)).not.toContain('object-provider-secret');
       expect(JSON.stringify(persisted)).not.toContain('object-provider-token');
+
+      // Persistence redaction must not mutate the live store: eval runs read the
+      // in-memory config and need the real credentials.
+      const inMemory = useStore.getState().config as any;
+      expect(inMemory.tests[0].providers[0].config.apiKey).toBe('object-provider-secret');
+      expect(inMemory.tests[0].providers[0].config.headers.Authorization).toBe(
+        'Bearer object-provider-token',
+      );
+    });
+
+    it('redacts a single non-array provider in raw test filters', () => {
+      // Schema says providers is an array, but the raw YAML editor can persist a
+      // single provider object or map; no shape may bypass redaction.
+      useStore.getState().setConfig({
+        tests: [
+          {
+            providers: {
+              id: 'http',
+              config: { apiKey: 'single-provider-secret', endpoint: 'https://example.com' },
+            },
+          },
+          {
+            providers: {
+              'https://map-user:map-pass@api.example.com/v1': { config: { region: 'us' } },
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].providers.config).toEqual({ endpoint: 'https://example.com' });
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('single-provider-secret');
+      expect(persistedJson).not.toContain('map-user');
+      expect(persistedJson).not.toContain('map-pass');
+    });
+
+    it('keeps ordinary provider ids intact in test filters', () => {
+      useStore.getState().setConfig({
+        tests: [{ providers: ['openai:gpt-4o', 'file://provider.py'] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].providers).toEqual(['openai:gpt-4o', 'file://provider.py']);
     });
 
     it('redacts provider identifiers in raw editor providerPromptMap fields', () => {

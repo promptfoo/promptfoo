@@ -702,24 +702,26 @@ const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> 
   Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
   Object.values(value).every(isRecord);
 
+const omitConfiguredProviderCredentials = (
+  provider: unknown,
+  templatePaths?: Set<string>,
+): unknown =>
+  isProviderOptionsMap(provider)
+    ? Object.fromEntries(
+        Object.entries(provider).map(([id, options]) => [
+          scrubProviderIdentifier(id, templatePaths),
+          omitProviderCredentials(options, undefined, templatePaths),
+        ]),
+      )
+    : omitProviderCredentials(provider, undefined, templatePaths);
+
 const omitConfiguredProvidersCredentials = (
   providers: unknown,
   templatePaths?: Set<string>,
-): unknown => {
-  if (!Array.isArray(providers)) {
-    return omitProviderCredentials(providers, undefined, templatePaths);
-  }
-  return providers.map((provider) =>
-    isProviderOptionsMap(provider)
-      ? Object.fromEntries(
-          Object.entries(provider).map(([id, options]) => [
-            scrubProviderIdentifier(id, templatePaths),
-            omitProviderCredentials(options, undefined, templatePaths),
-          ]),
-        )
-      : omitProviderCredentials(provider, undefined, templatePaths),
-  );
-};
+): unknown =>
+  Array.isArray(providers)
+    ? providers.map((provider) => omitConfiguredProviderCredentials(provider, templatePaths))
+    : omitConfiguredProviderCredentials(providers, templatePaths);
 
 const omitAssertionProviderCredentials = (
   assertions: unknown,
@@ -801,8 +803,10 @@ const omitTestCaseProviderCredentials = (
     ...(hasOwn(testCase, 'provider')
       ? { provider: omitProviderCredentials(testCase.provider, undefined, templatePaths) }
       : {}),
-    ...(Array.isArray(testCase.providers)
+    ...(hasOwn(testCase, 'providers')
       ? {
+          // Raw-editor YAML can carry a single (non-array) provider here despite the
+          // schema; redact it the same way so no shape bypasses persistence scrubbing.
           providers: omitConfiguredProvidersCredentials(testCase.providers, templatePaths),
         }
       : {}),
