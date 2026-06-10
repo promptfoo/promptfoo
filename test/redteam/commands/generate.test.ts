@@ -4100,6 +4100,43 @@ describe('target ID extraction for retry strategy', () => {
     );
   });
 
+  it('should preserve target context for a scalar Cloud provider', async () => {
+    vi.mocked(isCloudProvider).mockImplementation((providerId) =>
+      providerId.startsWith('promptfoo://provider/'),
+    );
+    vi.mocked(getCloudDatabaseId).mockReturnValue('cloud-target-123');
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: 'promptfoo://provider/cloud-target-123',
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    });
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cloudTargetDatabaseId: 'cloud-target-123',
+        targetIds: ['promptfoo://provider/cloud-target-123'],
+      }),
+    );
+  });
+
   it('should handle mixed string and object providers', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',

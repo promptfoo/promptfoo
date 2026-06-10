@@ -116,11 +116,12 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
 function getCloudTargetDatabaseIdFromProviders(
   providers: Partial<UnifiedConfig>['providers'],
 ): string | undefined {
-  if (!Array.isArray(providers)) {
+  if (!providers) {
     return undefined;
   }
 
-  for (const provider of providers) {
+  const providerList = Array.isArray(providers) ? providers : [providers];
+  for (const provider of providerList) {
     if (typeof provider === 'string') {
       if (isCloudProvider(provider)) {
         return getCloudDatabaseId(provider);
@@ -146,6 +147,20 @@ function getCloudTargetDatabaseIdFromProviders(
   }
 
   return undefined;
+}
+
+function getTargetIdsFromProviders(providers: Partial<UnifiedConfig>['providers']): string[] {
+  if (typeof providers === 'string') {
+    return [providers];
+  }
+  if (!Array.isArray(providers)) {
+    return [];
+  }
+
+  return providers
+    .filter((provider) => typeof provider !== 'function')
+    .map((provider) => (typeof provider === 'string' ? provider : provider.id))
+    .filter((id): id is string => typeof id === 'string');
 }
 
 function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
@@ -618,19 +633,7 @@ async function doGenerateRedteamInternal(
 
   // Extract target IDs from the config providers (targets get rewritten to providers)
   // IDs are used for retry strategy to match failed tests by target ID
-  const targetIds: string[] =
-    (Array.isArray(resolvedConfig?.providers)
-      ? resolvedConfig.providers
-          .filter((target) => typeof target !== 'function')
-          .map((target) => {
-            if (typeof target === 'string') {
-              return target; // Use the provider string as ID
-            }
-            const providerObj = target as { id?: string };
-            return providerObj.id;
-          })
-          .filter((id): id is string => typeof id === 'string')
-      : []) ?? [];
+  const targetIds = getTargetIdsFromProviders(resolvedConfig?.providers);
   const cloudTargetDatabaseId = getCloudTargetDatabaseIdFromProviders(resolvedConfig?.providers);
 
   logger.debug(
