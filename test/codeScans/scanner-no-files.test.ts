@@ -84,8 +84,7 @@ describe('Scanner machine-readable output', () => {
     loadConfigError?: Error;
     processDiffError?: Error;
   } = {}) {
-    let currentLogLevel = 'info';
-    currentLogLevel = initialLogLevel;
+    let currentLogLevel = initialLogLevel;
 
     const disconnect = vi.fn();
 

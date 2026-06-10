@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 
 if (requestsStructuredCodeScanOutput(process.argv.slice(2))) {
-  Object.assign(process.env, { LOG_LEVEL: 'error' });
+  // Match the shipped entrypoint: quiet the logger AND route whatever it still
+  // emits (error-level survives LOG_LEVEL=error) to stderr, so it cannot corrupt
+  // the SARIF/JSON payload on stdout.
+  Object.assign(process.env, { LOG_LEVEL: 'error', PROMPTFOO_LOG_TO_STDERR: 'true' });
 }
 
 process.argv[1] = fileURLToPath(new URL('./main.ts', import.meta.url));

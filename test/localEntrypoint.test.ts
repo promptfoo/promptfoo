@@ -37,16 +37,21 @@ describe('localEntrypoint', () => {
     await import('../src/localEntrypoint');
 
     expect(process.env.LOG_LEVEL).toBe('error');
+    // Route surviving error-level logs to stderr so they can't corrupt the
+    // SARIF/JSON payload on stdout — matching the shipped entrypoint.
+    expect(process.env.PROMPTFOO_LOG_TO_STDERR).toBe('true');
     expect(process.argv[1]).toBe(expectedMainPath);
   });
 
   it('preserves the caller log level for non-structured commands', async () => {
-    restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+    restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug', PROMPTFOO_LOG_TO_STDERR: undefined });
     process.argv = ['node', '/tmp/localEntrypoint.ts', 'eval', '--verbose'];
 
     await import('../src/localEntrypoint');
 
     expect(process.env.LOG_LEVEL).toBe('debug');
+    // Must not force stderr routing for ordinary commands.
+    expect(process.env.PROMPTFOO_LOG_TO_STDERR).toBeUndefined();
     expect(process.argv[1]).toBe(expectedMainPath);
   });
 });
